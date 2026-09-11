@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'android/source_parts/**'
+      - 'android/v0.3.0/**'
       - '.github/workflows/android-apk.yml'
       - 'EpiMediaHub_v0.9.7.ipk'
 
@@ -21,7 +22,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct Android v0.2.0 source
+      - name: Reconstruct Android v0.2.0 base source
         shell: bash
         run: |
           set -euo pipefail
@@ -30,6 +31,13 @@ jobs:
           base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
           echo "192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c  .ci-android/source.tar.gz" | sha256sum -c -
           tar -xzf .ci-android/source.tar.gz -C .ci-android
+
+      - name: Apply Android v0.3.0 source overlays
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a android/v0.3.0/app/. .ci-android/EpiMediaHubAndroid/app/
+          python3 android/v0.3.0/patch_screens.py .ci-android/EpiMediaHubAndroid
 
       - name: Align Java and Kotlin to JVM 17
         shell: bash
@@ -50,7 +58,6 @@ jobs:
                   raise SystemExit('buildFeatures anchor not found')
               s = s.replace(needle, insert + needle)
               p.write_text(s)
-          print(p.read_text())
           PY
 
       - name: Import the 59 EpiMediaHub themes from Enigma2 v0.9.7
@@ -65,7 +72,7 @@ jobs:
           PLUGIN="$PWD/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub"
           APP="$GITHUB_WORKSPACE/.ci-android/EpiMediaHubAndroid/app/src/main"
           DRAW="$APP/res/drawable-nodpi"
-          mkdir -p "$DRAW" "$APP/assets"
+          mkdir -p "$DRAW" "$APP/res/raw"
 
           for file in "$PLUGIN"/themes/*.png; do
             name="$(basename "$file")"
@@ -73,15 +80,13 @@ jobs:
           done
           for file in "$PLUGIN"/themes/marks/*.png; do
             name="$(basename "$file")"
-            cp "$file" "$DRAW/theme_mark_$name"
+            cp "$file" "$DRAW/mark_$name"
           done
 
-          cp "$PLUGIN/themes/catalog.json" "$APP/assets/theme_catalog.json"
-          cp "$PLUGIN/plugin.png" "$DRAW/epimediahub_icon.png"
-          cp "$PLUGIN/header.png" "$DRAW/tv_banner.png"
+          cp "$PLUGIN/themes/catalog.json" "$APP/res/raw/theme_catalog.json"
 
-          themes=$(find "$DRAW" -maxdepth 1 -type f -name 'theme_*.png' ! -name 'theme_mark_*.png' | wc -l)
-          marks=$(find "$DRAW" -maxdepth 1 -type f -name 'theme_mark_*.png' | wc -l)
+          themes=$(find "$DRAW" -maxdepth 1 -type f -name 'theme_*.png' | wc -l)
+          marks=$(find "$DRAW" -maxdepth 1 -type f -name 'mark_*.png' | wc -l)
           echo "Theme backgrounds: $themes"
           echo "Theme marks: $marks"
           test "$themes" -eq 59
@@ -114,16 +119,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp .ci-android/EpiMediaHubAndroid/app/build/outputs/apk/debug/app-debug.apk dist/EpiMediaHub_Android_v0.2.0-debug.apk
+          cp .ci-android/EpiMediaHubAndroid/app/build/outputs/apk/debug/app-debug.apk dist/EpiMediaHub_Android_v0.3.0-debug.apk
           cp .ci-android/EpiMediaHubAndroid/app/build/outputs/apk/debug/app-debug.apk dist/EpiMediaHub-Android.apk
-          sha256sum dist/EpiMediaHub_Android_v0.2.0-debug.apk | tee dist/SHA256SUMS.txt
+          sha256sum dist/EpiMediaHub_Android_v0.3.0-debug.apk | tee dist/SHA256SUMS.txt
 
       - name: Upload APK build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Android-v0.2.0-debug
+          name: EpiMediaHub-Android-v0.3.0-debug
           path: |
-            dist/EpiMediaHub_Android_v0.2.0-debug.apk
+            dist/EpiMediaHub_Android_v0.3.0-debug.apk
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
@@ -139,13 +144,13 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$ASSET" --clobber
             gh release edit "$TAG" \
-              --title "EpiMediaHub Android v0.2.0" \
-              --notes "Stable direct APK endpoint for Android TV, Google TV and Android mobile. The asset filename stays unchanged so Downloader links/codes can keep pointing to the same URL."
+              --title "EpiMediaHub Android v0.3.0" \
+              --notes "Modernized Android TV/mobile UI, direct Xtream credential entry and local PIN-protected PC browser playlist management. The stable Downloader APK URL remains unchanged."
           else
             gh release create "$TAG" "$ASSET" \
               --target "$GITHUB_SHA" \
-              --title "EpiMediaHub Android v0.2.0" \
-              --notes "Stable direct APK endpoint for Android TV, Google TV and Android mobile. The asset filename stays unchanged so Downloader links/codes can keep pointing to the same URL."
+              --title "EpiMediaHub Android v0.3.0" \
+              --notes "Modernized Android TV/mobile UI, direct Xtream credential entry and local PIN-protected PC browser playlist management. The stable Downloader APK URL remains unchanged."
           fi
 
       - name: Show stable Downloader URL
