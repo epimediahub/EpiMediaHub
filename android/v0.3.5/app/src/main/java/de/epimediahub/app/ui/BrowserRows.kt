@@ -1,7 +1,6 @@
 package de.epimediahub.app.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
@@ -30,11 +29,11 @@ import de.epimediahub.app.model.MediaEntry
 import de.epimediahub.app.model.MediaKind
 
 @Composable
-fun CategoryListRow(title: String, accent: Color, onClick: () -> Unit) {
+fun CategoryListRow(title: String, accent: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(14.dp)
     Surface(
-        modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }.focusable().clickable(onClick = onClick),
+        modifier = modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }.focusable().clickable(onClick = onClick),
         color = if (focused) Color(0xFF17283A) else Color(0xF20A111B),
         contentColor = Color.White,
         shape = shape,
@@ -51,11 +50,11 @@ fun CategoryListRow(title: String, accent: Color, onClick: () -> Unit) {
 }
 
 @Composable
-fun LiveChannelRow(media: MediaEntry, nowText: String, accent: Color, onClick: () -> Unit) {
+fun LiveChannelRow(media: MediaEntry, nowText: String, accent: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(14.dp)
     Surface(
-        modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }.focusable().clickable(onClick = onClick),
+        modifier = modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }.focusable().clickable(onClick = onClick),
         color = if (focused) Color(0xFF17283A) else Color(0xF50D131C),
         contentColor = Color.White,
         shape = shape,
@@ -78,13 +77,13 @@ fun LiveChannelRow(media: MediaEntry, nowText: String, accent: Color, onClick: (
 }
 
 @Composable
-fun MediaInfoRow(media: MediaEntry, loading: Boolean, accent: Color, isTv: Boolean, onClick: () -> Unit) {
+fun MediaInfoRow(media: MediaEntry, loading: Boolean, accent: Color, isTv: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(16.dp)
     val posterWidth = if (isTv) 112.dp else 94.dp
     val posterHeight = if (isTv) 160.dp else 142.dp
     Surface(
-        modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }.focusable().clickable(onClick = onClick),
+        modifier = modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }.focusable().clickable(onClick = onClick),
         color = if (focused) Color(0xFF17283A) else Color(0xF50D131C),
         contentColor = Color.White,
         shape = shape,
