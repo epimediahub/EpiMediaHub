@@ -5,7 +5,6 @@ on:
   push:
     branches: [main]
     paths:
-      - 'android/source_parts/**'
       - 'android/v0.3.0/**'
       - '.github/workflows/android-apk.yml'
       - 'EpiMediaHub_v0.9.7.ipk'
@@ -22,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct Android v0.2.0 base source
+      - name: Reconstruct Gradle project shell
         shell: bash
         run: |
           set -euo pipefail
@@ -36,43 +35,18 @@ jobs:
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
           echo "Android project: $PROJECT_ROOT"
 
-      - name: Apply Android v0.3.0 source overlays
+      - name: Install complete v0.3.0 application source
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
-          if [ ! -f "$EXPECTED" ]; then
-            LEGACY="$(grep -RIl --include='*.kt' 'fun SettingsScreen' "$PROJECT_ROOT/app/src/main" | head -n1 || true)"
-            echo "Legacy screens source: $LEGACY"
-            test -n "$LEGACY"
-            mkdir -p "$(dirname "$EXPECTED")"
-            mv "$LEGACY" "$EXPECTED"
-          fi
+          rm -rf "$PROJECT_ROOT/app/src/main/java"
+          rm -f "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
           cp -a android/v0.3.0/app/. "$PROJECT_ROOT/app/"
-          python3 android/v0.3.0/patch_screens.py "$PROJECT_ROOT"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainActivity.kt"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/LocalWebAdmin.kt"
 
-      - name: Align Java and Kotlin to JVM 17
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-          p = Path(os.environ['PROJECT_ROOT']) / 'app/build.gradle.kts'
-          s = p.read_text()
-          if 'sourceCompatibility = JavaVersion.VERSION_17' not in s:
-              needle = '    buildFeatures { compose = true }\n'
-              insert = '''    compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-
-          '''
-              if needle not in s:
-                  raise SystemExit('buildFeatures anchor not found')
-              p.write_text(s.replace(needle, insert + needle))
-          PY
-
-      - name: Import the 59 EpiMediaHub themes from Enigma2 v0.9.7
+      - name: Import 59 themes and EpiMediaHub artwork
         shell: bash
         run: |
           set -euo pipefail
@@ -80,27 +54,29 @@ jobs:
           cd .ci-android/ipk
           ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.7.ipk"
           tar -xzf data.tar.gz
-
           PLUGIN="$PWD/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub"
           APP="$GITHUB_WORKSPACE/$PROJECT_ROOT/app/src/main"
           DRAW="$APP/res/drawable-nodpi"
           mkdir -p "$DRAW" "$APP/res/raw"
 
-          for file in "$PLUGIN"/themes/*.png; do
-            name="$(basename "$file")"
-            cp "$file" "$DRAW/theme_$name"
-          done
-          for file in "$PLUGIN"/themes/marks/*.png; do
-            name="$(basename "$file")"
-            cp "$file" "$DRAW/mark_$name"
-          done
-
+          for file in "$PLUGIN"/themes/*.png; do name="$(basename "$file")"; cp "$file" "$DRAW/theme_$name"; done
+          for file in "$PLUGIN"/themes/marks/*.png; do name="$(basename "$file")"; cp "$file" "$DRAW/mark_$name"; done
           cp "$PLUGIN/themes/catalog.json" "$APP/res/raw/theme_catalog.json"
+
+          cp "$PLUGIN/header.png" "$DRAW/brand_header.png"
+          cp "$PLUGIN/header.png" "$DRAW/tv_banner.png"
+          cp "$PLUGIN/plugin.png" "$DRAW/app_icon.png"
+          cp "$PLUGIN/splash.png" "$DRAW/splash.png"
+          cp "$PLUGIN/home_live.png" "$DRAW/icon_live.png"
+          cp "$PLUGIN/home_movies.png" "$DRAW/icon_movies.png"
+          cp "$PLUGIN/home_series.png" "$DRAW/icon_series.png"
+          cp "$PLUGIN/home_search.png" "$DRAW/icon_search.png"
+          cp "$PLUGIN/home_settings.png" "$DRAW/icon_settings.png"
+          cp "$PLUGIN/home_playlist.png" "$DRAW/icon_playlist.png"
 
           themes=$(find "$DRAW" -maxdepth 1 -type f -name 'theme_*.png' | wc -l)
           marks=$(find "$DRAW" -maxdepth 1 -type f -name 'mark_*.png' | wc -l)
-          echo "Theme backgrounds: $themes"
-          echo "Theme marks: $marks"
+          echo "Theme backgrounds: $themes; marks: $marks"
           test "$themes" -eq 59
           test "$marks" -eq 59
 
@@ -158,17 +134,10 @@ jobs:
           ASSET="dist/EpiMediaHub-Android.apk"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$ASSET" --clobber
-            gh release edit "$TAG" \
-              --title "EpiMediaHub Android v0.3.0" \
-              --notes "Modernized Android TV/mobile UI, direct Xtream credential entry and local PIN-protected PC browser playlist management. The stable Downloader APK URL remains unchanged."
+            gh release edit "$TAG" --title "EpiMediaHub Android v0.3.0" --notes "Modernized rounded Android TV/mobile UI, direct Xtream credential entry and local PIN-protected PC browser playlist management. Stable Downloader URL unchanged."
           else
-            gh release create "$TAG" "$ASSET" \
-              --target "$GITHUB_SHA" \
-              --title "EpiMediaHub Android v0.3.0" \
-              --notes "Modernized Android TV/mobile UI, direct Xtream credential entry and local PIN-protected PC browser playlist management. The stable Downloader APK URL remains unchanged."
+            gh release create "$TAG" "$ASSET" --target "$GITHUB_SHA" --title "EpiMediaHub Android v0.3.0" --notes "Modernized rounded Android TV/mobile UI, direct Xtream credential entry and local PIN-protected PC browser playlist management. Stable Downloader URL unchanged."
           fi
 
       - name: Show stable Downloader URL
-        shell: bash
-        run: |
-          echo "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk"
+        run: echo "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk"
