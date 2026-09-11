@@ -40,6 +40,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          EXPECTED="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+          if [ ! -f "$EXPECTED" ]; then
+            LEGACY="$(grep -RIl --include='*.kt' 'fun SettingsScreen' "$PROJECT_ROOT/app/src/main" | head -n1 || true)"
+            echo "Legacy screens source: $LEGACY"
+            test -n "$LEGACY"
+            mkdir -p "$(dirname "$EXPECTED")"
+            mv "$LEGACY" "$EXPECTED"
+          fi
           cp -a android/v0.3.0/app/. "$PROJECT_ROOT/app/"
           python3 android/v0.3.0/patch_screens.py "$PROJECT_ROOT"
 
