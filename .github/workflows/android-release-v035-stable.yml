@@ -1,0 +1,49 @@
+name: Release signed EpiMediaHub Android v0.3.5 stable
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android/release-v035-stable-trigger.txt'
+
+concurrency:
+  group: epimediahub-android-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release-v035-stable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Build, sign, verify and publish v0.3.5
+        shell: bash
+        run: bash android/v0.3.5/release.sh
+      - name: Upload signed v0.3.5 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-Android-v0.3.5-signed
+          path: |
+            dist/EpiMediaHub_Android_v0.3.5-release.apk
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
