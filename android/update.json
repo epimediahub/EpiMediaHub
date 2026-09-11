@@ -1,7 +1,7 @@
 {
-  "version": "0.3.1",
-  "versionCode": 31,
+  "version": "0.3.2",
+  "versionCode": 32,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "f32a295b026727880a1e0681be45a913c1619dd95865d630b16b9d0f888ae035",
-  "notes": "Neue zentrale Zurück-Navigation: auf Unterseiten führt BACK genau eine EpiMediaHub-Seite zurück. Automatische Updateprüfung alle 24 Stunden; neue APKs werden in der App angeboten, heruntergeladen, per SHA-256 geprüft und anschließend an den Android-Paketinstaller übergeben."
+  "sha256": "5d3d9bc8e4bf215fa34962a8c8aacc6406971d9a1e05d67db8626d626551ecdc",
+  "notes": "PC-Einrichtung und Designs sind jetzt direkt auf der Startseite. Die Xtream-Eingabe ist vollständig scrollbar, damit auch der Verbinden-Button auf TV und Mobilgeräten erreichbar bleibt. Zusätzlich wurde die Stream-Pufferung für Live-TV und VOD optimiert, um Ruckler durch kurze Netzwerkschwankungen zu reduzieren."
 }
