@@ -2,6 +2,6 @@
   "version": "0.3.1",
   "versionCode": 31,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "52724c6d485174d0abe52bebcb6ca7b2a5e91be94fe498316e46069e92644d56",
-  "notes": "Neue zentrale Zurück-Navigation: auf Unterseiten führt BACK immer genau eine EpiMediaHub-Seite zurück. Zusätzlich prüft die App automatisch alle 24 Stunden auf Updates und kann neue APKs direkt herunterladen und nach SHA-256-Prüfung an Android zur Installation übergeben."
+  "sha256": "f32a295b026727880a1e0681be45a913c1619dd95865d630b16b9d0f888ae035",
+  "notes": "Neue zentrale Zurück-Navigation: auf Unterseiten führt BACK genau eine EpiMediaHub-Seite zurück. Automatische Updateprüfung alle 24 Stunden; neue APKs werden in der App angeboten, heruntergeladen, per SHA-256 geprüft und anschließend an den Android-Paketinstaller übergeben."
 }
