@@ -159,7 +159,10 @@ fun ItemsScreen(vm:MainViewModel,kind:MediaKind,cat:MediaCategory,accent:Color,i
                         loading=u.detailLoading.contains(m.resumeKey),
                         accent=accent,
                         isTv=isTv,
-                        onClick={if(kind==MediaKind.SERIES)({vm.navigate(Screen.Episodes(detail))}) else ({vm.play(detail)})}
+                        onClick={
+                            if(kind==MediaKind.SERIES) vm.navigate(Screen.Episodes(detail))
+                            else vm.play(detail)
+                        }
                     )
                 }
             }
