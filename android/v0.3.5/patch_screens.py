@@ -61,7 +61,7 @@ fun ItemsScreen(vm:MainViewModel,kind:MediaKind,cat:MediaCategory,accent:Color,i
             Row(Modifier.fillMaxSize().padding(horizontal=14.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)){
                 LibrarySideBar(vm,kind,cat,accent,Modifier.width(265.dp).fillMaxHeight())
                 Surface(Modifier.weight(1f).fillMaxHeight(),color=Color(0xF20A0F17),shape=RoundedCornerShape(18.dp),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(.08f))){
-                    LazyColumn(state=listState,Modifier.fillMaxSize().padding(10.dp),contentPadding=PaddingValues(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(if(kind==MediaKind.LIVE)7.dp else 11.dp)){
+                    LazyColumn(state=listState,modifier=Modifier.fillMaxSize().padding(10.dp),contentPadding=PaddingValues(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(if(kind==MediaKind.LIVE)7.dp else 11.dp)){
                         itemsIndexed(u.items,key={_,m->m.kind.name+m.id}){index,m->
                             if(kind==MediaKind.LIVE){
                                 val now=nowEvent(u.epg[m.id].orEmpty())
@@ -87,7 +87,7 @@ fun ItemsScreen(vm:MainViewModel,kind:MediaKind,cat:MediaCategory,accent:Color,i
                     OutlinedButton(onClick={vm.openKindSearch(kind)},modifier=Modifier.weight(1f)){Text("Suche")}
                     OutlinedButton(onClick={vm.openKindFavorites(kind)},modifier=Modifier.weight(1f)){Text("Favoriten")}
                 }
-                LazyColumn(state=listState,Modifier.fillMaxSize().padding(horizontal=10.dp),contentPadding=PaddingValues(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+                LazyColumn(state=listState,modifier=Modifier.fillMaxSize().padding(horizontal=10.dp),contentPadding=PaddingValues(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
                     itemsIndexed(u.items,key={_,m->m.kind.name+m.id}){index,m->
                         if(kind==MediaKind.LIVE){
                             val now=nowEvent(u.epg[m.id].orEmpty())
@@ -108,10 +108,11 @@ fun ItemsScreen(vm:MainViewModel,kind:MediaKind,cat:MediaCategory,accent:Color,i
 private fun LibrarySideBar(vm:MainViewModel,kind:MediaKind,cat:MediaCategory,accent:Color,modifier:Modifier=Modifier){
     val u by vm.ui.collectAsState()
     val favCount=u.favorites.count{matchesSection(it,kind)}
+    val favLabel=if(favCount>0) "Favoriten ($favCount)" else "Favoriten"
     Surface(modifier=modifier,color=Color(0xF20A0F17),shape=RoundedCornerShape(18.dp),border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(.08f))){
         LazyColumn(Modifier.fillMaxSize().padding(9.dp),verticalArrangement=Arrangement.spacedBy(5.dp)){
             item{SideBarRow("Suche",false,accent,Icons.Default.Search){vm.openKindSearch(kind)}}
-            item{SideBarRow("Favoriten${if(favCount>0)" ($favCount)" else ""}",false,accent,Icons.Default.FavoriteBorder){vm.openKindFavorites(kind)}}
+            item{SideBarRow(favLabel,false,accent,Icons.Default.FavoriteBorder){vm.openKindFavorites(kind)}}
             item{Box(Modifier.fillMaxWidth().padding(vertical=5.dp).height(1.dp).background(Color.White.copy(.08f)))}
             items(u.categories,key={it.id}){c->SideBarRow(c.name,c.id==cat.id,accent,Icons.Default.Folder){if(c.id!=cat.id)vm.switchLibraryCategory(kind,c)}}
         }
@@ -133,7 +134,9 @@ private fun matchesSection(media:MediaEntry,kind:MediaKind)=media.kind==kind||(k
 
 search_favorites=r'''@Composable
 fun SearchScreen(vm:MainViewModel,accent:Color,isTv:Boolean){
-    val u by vm.ui.collectAsState();val kind=u.contentFilterKind;var q by remember{mutableStateOf("")}
+    val u by vm.ui.collectAsState()
+    val kind=u.contentFilterKind
+    var q by remember{mutableStateOf("")}
     BackHandler{vm.back()}
     Column(Modifier.fillMaxSize()){
         EpiTopBar("${kind?.let{sectionTitle(it)+" · "}.orEmpty()}SUCHE",R.drawable.brand_header,{vm.back()})
@@ -141,8 +144,15 @@ fun SearchScreen(vm:MainViewModel,accent:Color,isTv:Boolean){
         LoadingOrError(u.loading,u.error)
         LazyColumn(Modifier.fillMaxSize().padding(horizontal=if(isTv)70.dp else 14.dp),contentPadding=PaddingValues(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
             items(u.searchResults,key={it.resumeKey}){m->
-                if(m.kind==MediaKind.LIVE)LiveChannelRow(m,"Live TV",accent){vm.play(m)}
-                else{LaunchedEffect(m.resumeKey){vm.ensureDetails(m)};val d=u.details[m.resumeKey]?:m;MediaInfoRow(d,u.detailLoading.contains(m.resumeKey),accent,isTv){if(m.kind==MediaKind.SERIES)vm.navigate(Screen.Episodes(d))else vm.play(d)}}
+                if(m.kind==MediaKind.LIVE){
+                    LiveChannelRow(m,"Live TV",accent){vm.play(m)}
+                }else{
+                    LaunchedEffect(m.resumeKey){vm.ensureDetails(m)}
+                    val d=u.details[m.resumeKey]?:m
+                    MediaInfoRow(d,u.detailLoading.contains(m.resumeKey),accent,isTv){
+                        if(m.kind==MediaKind.SERIES)vm.navigate(Screen.Episodes(d)) else vm.play(d)
+                    }
+                }
             }
         }
     }
@@ -150,15 +160,27 @@ fun SearchScreen(vm:MainViewModel,accent:Color,isTv:Boolean){
 
 @Composable
 fun FavoritesScreen(vm:MainViewModel,accent:Color,isTv:Boolean){
-    val u by vm.ui.collectAsState();val kind=u.contentFilterKind;val list=if(kind==null)u.favorites else u.favorites.filter{matchesSection(it,kind)}
+    val u by vm.ui.collectAsState()
+    val kind=u.contentFilterKind
+    val list=if(kind==null)u.favorites else u.favorites.filter{matchesSection(it,kind)}
     BackHandler{vm.back()}
     Column(Modifier.fillMaxSize()){
         EpiTopBar("${kind?.let{sectionTitle(it)+" · "}.orEmpty()}FAVORITEN",R.drawable.brand_header,{vm.back()})
-        if(list.isEmpty())EmptyState("Keine Favoriten","Favoriten aus diesem Bereich erscheinen hier.")
-        else LazyColumn(Modifier.fillMaxSize().padding(horizontal=if(isTv)70.dp else 14.dp,vertical=8.dp),contentPadding=PaddingValues(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-            items(list,key={it.resumeKey}){m->
-                if(m.kind==MediaKind.LIVE)LiveChannelRow(m,"Live TV",accent){vm.play(m)}
-                else{LaunchedEffect(m.resumeKey){vm.ensureDetails(m)};val d=u.details[m.resumeKey]?:m;MediaInfoRow(d,u.detailLoading.contains(m.resumeKey),accent,isTv){if(m.kind==MediaKind.SERIES)vm.navigate(Screen.Episodes(d))else vm.play(d)}}
+        if(list.isEmpty()){
+            EmptyState("Keine Favoriten","Favoriten aus diesem Bereich erscheinen hier.")
+        }else{
+            LazyColumn(Modifier.fillMaxSize().padding(horizontal=if(isTv)70.dp else 14.dp,vertical=8.dp),contentPadding=PaddingValues(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+                items(list,key={it.resumeKey}){m->
+                    if(m.kind==MediaKind.LIVE){
+                        LiveChannelRow(m,"Live TV",accent){vm.play(m)}
+                    }else{
+                        LaunchedEffect(m.resumeKey){vm.ensureDetails(m)}
+                        val d=u.details[m.resumeKey]?:m
+                        MediaInfoRow(d,u.detailLoading.contains(m.resumeKey),accent,isTv){
+                            if(m.kind==MediaKind.SERIES)vm.navigate(Screen.Episodes(d)) else vm.play(d)
+                        }
+                    }
+                }
             }
         }
     }
