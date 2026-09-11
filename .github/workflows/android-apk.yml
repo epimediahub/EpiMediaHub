@@ -31,20 +31,25 @@ jobs:
           base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
           echo "192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c  .ci-android/source.tar.gz" | sha256sum -c -
           tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+          echo "Android project: $PROJECT_ROOT"
 
       - name: Apply Android v0.3.0 source overlays
         shell: bash
         run: |
           set -euo pipefail
-          cp -a android/v0.3.0/app/. .ci-android/EpiMediaHubAndroid/app/
-          python3 android/v0.3.0/patch_screens.py .ci-android/EpiMediaHubAndroid
+          cp -a android/v0.3.0/app/. "$PROJECT_ROOT/app/"
+          python3 android/v0.3.0/patch_screens.py "$PROJECT_ROOT"
 
       - name: Align Java and Kotlin to JVM 17
         shell: bash
         run: |
           python3 - <<'PY'
+          import os
           from pathlib import Path
-          p = Path('.ci-android/EpiMediaHubAndroid/app/build.gradle.kts')
+          p = Path(os.environ['PROJECT_ROOT']) / 'app/build.gradle.kts'
           s = p.read_text()
           if 'sourceCompatibility = JavaVersion.VERSION_17' not in s:
               needle = '    buildFeatures { compose = true }\n'
@@ -56,8 +61,7 @@ jobs:
           '''
               if needle not in s:
                   raise SystemExit('buildFeatures anchor not found')
-              s = s.replace(needle, insert + needle)
-              p.write_text(s)
+              p.write_text(s.replace(needle, insert + needle))
           PY
 
       - name: Import the 59 EpiMediaHub themes from Enigma2 v0.9.7
@@ -70,7 +74,7 @@ jobs:
           tar -xzf data.tar.gz
 
           PLUGIN="$PWD/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub"
-          APP="$GITHUB_WORKSPACE/.ci-android/EpiMediaHubAndroid/app/src/main"
+          APP="$GITHUB_WORKSPACE/$PROJECT_ROOT/app/src/main"
           DRAW="$APP/res/drawable-nodpi"
           mkdir -p "$DRAW" "$APP/res/raw"
 
@@ -111,16 +115,19 @@ jobs:
           gradle-version: '8.10.2'
 
       - name: Build debug APK
-        working-directory: .ci-android/EpiMediaHubAndroid
-        run: gradle :app:assembleDebug --stacktrace --no-daemon
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          gradle :app:assembleDebug --stacktrace --no-daemon
 
       - name: Prepare APK artifact
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp .ci-android/EpiMediaHubAndroid/app/build/outputs/apk/debug/app-debug.apk dist/EpiMediaHub_Android_v0.3.0-debug.apk
-          cp .ci-android/EpiMediaHubAndroid/app/build/outputs/apk/debug/app-debug.apk dist/EpiMediaHub-Android.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/debug/app-debug.apk" dist/EpiMediaHub_Android_v0.3.0-debug.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/debug/app-debug.apk" dist/EpiMediaHub-Android.apk
           sha256sum dist/EpiMediaHub_Android_v0.3.0-debug.apk | tee dist/SHA256SUMS.txt
 
       - name: Upload APK build artifact
