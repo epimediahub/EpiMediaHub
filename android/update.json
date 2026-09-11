@@ -1,7 +1,7 @@
 {
-  "version": "0.3.2",
-  "versionCode": 32,
+  "version": "0.3.3",
+  "versionCode": 33,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "5d3d9bc8e4bf215fa34962a8c8aacc6406971d9a1e05d67db8626d626551ecdc",
-  "notes": "PC-Einrichtung und Designs sind jetzt direkt auf der Startseite. Die Xtream-Eingabe ist vollständig scrollbar, damit auch der Verbinden-Button auf TV und Mobilgeräten erreichbar bleibt. Zusätzlich wurde die Stream-Pufferung für Live-TV und VOD optimiert, um Ruckler durch kurze Netzwerkschwankungen zu reduzieren."
+  "sha256": "4ee464bee9d05e5296c3db6020045896f32fbcb25e19876d238fddc3c494fdcf",
+  "notes": "Sichtbarer App-Updater mit manueller Sofortprüfung plus automatischer 24h-Prüfung. Live-TV und Kategorien sind jetzt übersichtliche Listen mit gut lesbaren Sendernamen. Filme und Serien erscheinen als breite Poster-Listen mit Xtream-Detaildaten wie Jahr, Laufzeit, Bewertung, Schauspielern, Regie und Beschreibung."
 }
