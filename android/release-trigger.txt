@@ -1,0 +1,2 @@
+Trigger signed Android release v0.3.1
+Requested after permanent signing secrets were configured.
