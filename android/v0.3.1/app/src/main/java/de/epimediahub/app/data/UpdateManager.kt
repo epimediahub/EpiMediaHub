@@ -47,7 +47,7 @@ object AppUpdateManager {
             .build()
         WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
             WORK_NAME,
-            ExistingPeriodicWorkPolicy.UPDATE,
+            ExistingPeriodicWorkPolicy.KEEP,
             request
         )
     }
