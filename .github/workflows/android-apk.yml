@@ -10,7 +10,7 @@ on:
       - 'EpiMediaHub_v0.9.7.ipk'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-debug-apk:
@@ -115,9 +115,10 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           cp .ci-android/EpiMediaHubAndroid/app/build/outputs/apk/debug/app-debug.apk dist/EpiMediaHub_Android_v0.2.0-debug.apk
+          cp .ci-android/EpiMediaHubAndroid/app/build/outputs/apk/debug/app-debug.apk dist/EpiMediaHub-Android.apk
           sha256sum dist/EpiMediaHub_Android_v0.2.0-debug.apk | tee dist/SHA256SUMS.txt
 
-      - name: Upload APK
+      - name: Upload APK build artifact
         uses: actions/upload-artifact@v4
         with:
           name: EpiMediaHub-Android-v0.2.0-debug
@@ -126,3 +127,28 @@ jobs:
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish stable Downloader APK
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="android-latest"
+          ASSET="dist/EpiMediaHub-Android.apk"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber
+            gh release edit "$TAG" \
+              --title "EpiMediaHub Android v0.2.0" \
+              --notes "Stable direct APK endpoint for Android TV, Google TV and Android mobile. The asset filename stays unchanged so Downloader links/codes can keep pointing to the same URL."
+          else
+            gh release create "$TAG" "$ASSET" \
+              --target "$GITHUB_SHA" \
+              --title "EpiMediaHub Android v0.2.0" \
+              --notes "Stable direct APK endpoint for Android TV, Google TV and Android mobile. The asset filename stays unchanged so Downloader links/codes can keep pointing to the same URL."
+          fi
+
+      - name: Show stable Downloader URL
+        shell: bash
+        run: |
+          echo "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk"
