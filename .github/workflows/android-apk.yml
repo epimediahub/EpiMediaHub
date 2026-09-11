@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'android/v0.3.0/**'
+      - 'android/v0.3.1/**'
       - '.github/workflows/android-apk.yml'
       - 'EpiMediaHub_v0.9.7.ipk'
 
@@ -64,13 +65,14 @@ jobs:
           include(":app")
           EOF
 
-      - name: Install complete v0.3.0 application source
+      - name: Install Android v0.3.1 application source
         shell: bash
         run: |
           set -euo pipefail
           rm -rf "$PROJECT_ROOT/app/src/main/java"
           rm -f "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
           cp -a android/v0.3.0/app/. "$PROJECT_ROOT/app/"
+          cp -a android/v0.3.1/app/. "$PROJECT_ROOT/app/"
           python3 - <<'PY'
           import os
           from pathlib import Path
@@ -79,11 +81,18 @@ jobs:
           s = s.replace('onClick={if(kind==MediaKind.SERIES){{vm.navigate(Screen.Episodes(m))}}else{{vm.play(m)}}}', 'onClick={if(kind==MediaKind.SERIES) vm.navigate(Screen.Episodes(m)) else vm.play(m)}')
           s = s.replace('onClick={if(m.kind==MediaKind.SERIES){{vm.navigate(Screen.Episodes(m))}}else{{vm.play(m)}}}', 'onClick={if(m.kind==MediaKind.SERIES) vm.navigate(Screen.Episodes(m)) else vm.play(m)}')
           s = s.replace('LinearProgressIndicator({it},Modifier.fillMaxWidth().padding(top=6.dp))', 'LinearProgressIndicator(progress={it},modifier=Modifier.fillMaxWidth().padding(top=6.dp))')
+          s = s.replace('Android v0.3.0', 'Android v0.3.1')
+          s = s.replace('Modernisierte Oberfläche · Xtream-Eingabe · lokale Browser-Verwaltung', 'Rundere Oberfläche · sichere Zurück-Navigation · Xtream · PC-Verwaltung · 24h-Updateprüfung')
           p.write_text(s)
           PY
           test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainActivity.kt"
-          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
-          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/LocalWebAdmin.kt"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+          test -f "$PROJECT_ROOT/app/src/main/res/xml/file_paths.xml"
+          grep -q 'BackHandler(enabled = hasInternalBackTarget)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -q 'u.screen != Screen.Home' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -q 'PeriodicWorkRequestBuilder<UpdateCheckWorker>(24, TimeUnit.HOURS)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+          grep -q 'versionName = "0.3.1"' "$PROJECT_ROOT/app/build.gradle.kts"
 
       - name: Import 59 themes and EpiMediaHub artwork
         shell: bash
@@ -149,16 +158,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp "$PROJECT_ROOT/app/build/outputs/apk/debug/app-debug.apk" dist/EpiMediaHub_Android_v0.3.0-debug.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/debug/app-debug.apk" dist/EpiMediaHub_Android_v0.3.1-debug.apk
           cp "$PROJECT_ROOT/app/build/outputs/apk/debug/app-debug.apk" dist/EpiMediaHub-Android.apk
-          sha256sum dist/EpiMediaHub_Android_v0.3.0-debug.apk | tee dist/SHA256SUMS.txt
+          sha256sum dist/EpiMediaHub_Android_v0.3.1-debug.apk | tee dist/SHA256SUMS.txt
 
       - name: Upload APK build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Android-v0.3.0-debug
+          name: EpiMediaHub-Android-v0.3.1-debug
           path: |
-            dist/EpiMediaHub_Android_v0.3.0-debug.apk
+            dist/EpiMediaHub_Android_v0.3.1-debug.apk
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
@@ -173,9 +182,35 @@ jobs:
           ASSET="dist/EpiMediaHub-Android.apk"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$ASSET" --clobber
-            gh release edit "$TAG" --title "EpiMediaHub Android v0.3.0" --notes "Modernized rounded Android TV/mobile UI, direct Xtream credential entry and local PIN-protected PC browser playlist management. Stable Downloader URL unchanged."
+            gh release edit "$TAG" --title "EpiMediaHub Android v0.3.1" --notes "Central Android/Google-TV back navigation fix plus automatic 24-hour in-app update checks with secure SHA-256 verified APK download. Stable Downloader URL unchanged."
           else
-            gh release create "$TAG" "$ASSET" --target "$GITHUB_SHA" --title "EpiMediaHub Android v0.3.0" --notes "Modernized rounded Android TV/mobile UI, direct Xtream credential entry and local PIN-protected PC browser playlist management. Stable Downloader URL unchanged."
+            gh release create "$TAG" "$ASSET" --target "$GITHUB_SHA" --title "EpiMediaHub Android v0.3.1" --notes "Central Android/Google-TV back navigation fix plus automatic 24-hour in-app update checks with secure SHA-256 verified APK download. Stable Downloader URL unchanged."
+          fi
+
+      - name: Publish Android update manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="$(sha256sum dist/EpiMediaHub-Android.apk | awk '{print $1}')"
+          python3 - "$SHA" <<'PY'
+          import json, sys
+          from pathlib import Path
+          sha = sys.argv[1]
+          data = {
+              "version": "0.3.1",
+              "versionCode": 31,
+              "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
+              "sha256": sha,
+              "notes": "Neue zentrale Zurück-Navigation: auf Unterseiten führt BACK immer genau eine EpiMediaHub-Seite zurück. Zusätzlich prüft die App automatisch alle 24 Stunden auf Updates und kann neue APKs direkt herunterladen und nach SHA-256-Prüfung an Android zur Installation übergeben."
+          }
+          Path("android/update.json").write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add android/update.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update Android updater manifest to v0.3.1"
+            git push
           fi
 
       - name: Show stable Downloader URL
