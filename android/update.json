@@ -1,7 +1,7 @@
 {
-  "version": "0.3.4",
-  "versionCode": 34,
+  "version": "0.3.5",
+  "versionCode": 35,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "3ecf016a8348a552da91a2231fdb5beac393a2957cb34b24f329b6332f23fed4",
-  "notes": "Update-Funktionstest von v0.3.3 auf v0.3.4. Dieser Build enthält weiterhin die neue Listenansicht für Live-TV, Filme und Serien sowie die Xtream-Detailinformationen."
+  "sha256": "9d7b9904f5984580758d89975e9feed776e9ecea5ace6c70d682f804d07a7f12",
+  "notes": "Reduzierte Startseite mit Live TV, Filme, Serien und Einstellungen. IBO-inspirierter TV-Browser mit Kategorien links und Inhalten rechts. Suche und Favoriten liegen im jeweiligen Bereich. Nach dem Beenden eines Senders kehrt die Liste zum zuletzt abgespielten Sender zurück und fokussiert ihn wieder."
 }
