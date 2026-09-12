@@ -1,0 +1,61 @@
+name: Build Enigma Family One-File
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-enigma-family.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout EpiMediaHub
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils libcairo2 git
+          python -m pip install --upgrade pip
+          python -m pip install pillow cairosvg
+
+      - name: Fetch authentic logo source collections
+        run: |
+          git clone --depth 1 https://github.com/JoseArroyave/football-logos.git /tmp/football-logos
+          git clone --depth 1 https://github.com/vehiclespecs/brand-logos.git /tmp/car-logos
+          npm install --prefix /tmp/simple-icons simple-icons@latest
+          git clone --depth 1 https://github.com/detain/svg-logos.git /tmp/svg-logos
+
+      - name: Build EpiMediaHub v0.9.9
+        run: |
+          python tools/build_family_release.py \
+            --base EpiMediaHub_v0.9.8.ipk \
+            --football-root /tmp/football-logos/logos \
+            --car-root /tmp/car-logos \
+            --fashion-root /tmp/simple-icons/node_modules/simple-icons/icons \
+            --fashion-fallback-root /tmp/svg-logos/svg \
+            --output EpiMediaHub_v0.9.9.ipk
+          sha256sum EpiMediaHub_v0.9.9.ipk
+          ar t EpiMediaHub_v0.9.9.ipk
+
+      - name: Upload one-file IPK
+        uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub_v0.9.9_onefile
+          path: |
+            EpiMediaHub_v0.9.9.ipk
+            EpiMediaHub_v0.9.9.ipk.sha256
+          if-no-files-found: error
+          retention-days: 30
