@@ -2,8 +2,8 @@
 import argparse
 import difflib
 import hashlib
+import io
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -11,8 +11,8 @@ import tempfile
 import unicodedata
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
 import cairosvg
+from PIL import Image, ImageDraw, ImageFilter
 
 VERSION = "0.9.9"
 PLUGIN_REL = Path("usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub")
@@ -38,7 +38,7 @@ FOOTBALL = {
     "leverkusen": ("germany", ["Bayer Leverkusen", "Leverkusen"]),
     "frankfurt": ("germany", ["Eintracht Frankfurt", "Frankfurt"]),
     "leipzig": ("germany", ["RB Leipzig", "Leipzig"]),
-    "fc_koeln": ("germany", ["1 FC Köln", "FC Köln", "FC Cologne", "Koln"]),
+    "fc_koeln": ("germany", ["1 FC Köln", "FC Köln", "FC Cologne", "Cologne", "Koln"]),
     "psg": ("france", ["Paris Saint-Germain", "Paris Saint Germain", "PSG"]),
     "marseille": ("france", ["Olympique Marseille", "Marseille"]),
     "lyon": ("france", ["Olympique Lyon", "Lyon"]),
@@ -75,11 +75,13 @@ CARS = {
     "aston_martin": ["Aston Martin"],
 }
 
-FASHION = {
-    "gg_luxury": ("Gucci", ["gucci"]),
-    "paris_monogram": ("Louis Vuitton", ["louisvuitton", "louis-vuitton", "louis vuitton"]),
-    "milano_triangle": ("Prada", ["prada"]),
-    "baroque_gold": ("Versace", ["versace"]),
+# These are deliberately explicit. Fashion logos must never be selected with
+# fuzzy matching because a near filename can silently produce a wrong brand.
+FASHION_FILES = {
+    "gg_luxury": ("Gucci · Family", "gucci.svg"),
+    "paris_monogram": ("Louis Vuitton · Family", "louis_vuitton.svg"),
+    "milano_triangle": ("Prada · Family", "prada.svg"),
+    "baroque_gold": ("Versace · Family", "versace.svg"),
 }
 
 
@@ -154,13 +156,14 @@ def load_logo(path):
     path = Path(path)
     if path.suffix.lower() == ".svg":
         png = cairosvg.svg2png(url=str(path), output_width=1200)
-        import io
         image = Image.open(io.BytesIO(png)).convert("RGBA")
     else:
         image = Image.open(path).convert("RGBA")
     bbox = image.getchannel("A").getbbox()
     if bbox:
         image = image.crop(bbox)
+    if not bbox or image.width < 2 or image.height < 2:
+        raise RuntimeError("Logo has no usable visible area: %s" % path)
     return image
 
 
@@ -181,7 +184,8 @@ def paste_center(canvas, image, box):
 def build_mark(logo, out_path):
     canvas = Image.new("RGBA", (180, 80), (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas, "RGBA")
-    draw.rounded_rectangle((1, 1, 178, 78), radius=14, fill=(255, 255, 255, 232), outline=(255, 255, 255, 245), width=1)
+    draw.rounded_rectangle((1, 1, 178, 78), radius=14,
+                           fill=(255, 255, 255, 232), outline=(255, 255, 255, 245), width=1)
     paste_center(canvas, logo, (10, 7, 170, 73))
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     canvas.save(out_path, "PNG", optimize=True)
@@ -191,21 +195,26 @@ def build_background(base_path, logo, out_path):
     base = Image.open(base_path).convert("RGBA")
     if base.size != (1280, 720):
         base = base.resize((1280, 720), Image.Resampling.LANCZOS)
+
+    # Only the artwork area is changed; Enigma2 screen layout remains untouched.
     region = (770, 95, 1215, 575)
     blurred = base.crop(region).filter(ImageFilter.GaussianBlur(radius=26))
-    shade = Image.new("RGBA", blurred.size, (0, 0, 0, 105))
-    blurred = Image.alpha_composite(blurred, shade)
+    blurred = Image.alpha_composite(blurred, Image.new("RGBA", blurred.size, (0, 0, 0, 105)))
     base.paste(blurred, region[:2])
-    card = Image.new("RGBA", base.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(card, "RGBA")
-    draw.rounded_rectangle((835, 145, 1155, 515), radius=28, fill=(255, 255, 255, 232), outline=(255, 255, 255, 248), width=2)
+
     shadow = Image.new("RGBA", base.size, (0, 0, 0, 0))
     sd = ImageDraw.Draw(shadow, "RGBA")
     sd.rounded_rectangle((843, 155, 1163, 525), radius=30, fill=(0, 0, 0, 95))
     shadow = shadow.filter(ImageFilter.GaussianBlur(12))
     base = Image.alpha_composite(base, shadow)
+
+    card = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(card, "RGBA")
+    draw.rounded_rectangle((835, 145, 1155, 515), radius=28,
+                           fill=(255, 255, 255, 232), outline=(255, 255, 255, 248), width=2)
     base = Image.alpha_composite(base, card)
     paste_center(base, logo, (865, 175, 1125, 485))
+
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     base.convert("RGB").save(out_path, "PNG", optimize=True)
 
@@ -221,43 +230,77 @@ def extract_ipk(ipk, work):
     run("ar", "x", str(Path(ipk).resolve()), cwd=ardir)
     run("tar", "-xzf", "data.tar.gz", "-C", str(data), cwd=ardir)
     run("tar", "-xzf", "control.tar.gz", "-C", str(control), cwd=ardir)
-    return ardir, data, control
+    return data, control
 
 
 def patch_text_files(data, control):
     plugin = data / PLUGIN_REL / "plugin.py"
     text = plugin.read_text(encoding="utf-8")
     text = text.replace('PLUGIN_VERSION = "0.9.8"', 'PLUGIN_VERSION = "0.9.9"')
-    text = text.replace("# -------------------- Themes / skins (v0.9.8) --------------------", "# -------------------- Themes / skins (v0.9.9) --------------------")
+    text = text.replace("# -------------------- Themes / skins (v0.9.8) --------------------",
+                        "# -------------------- Themes / skins (v0.9.9) --------------------")
     if '"0.9.9": {' not in text:
-        anchor = 'RELEASE_NOTES = {'
+        anchor = "RELEASE_NOTES = {"
         idx = text.find(anchor)
         if idx >= 0:
             insert_at = text.find("{", idx) + 1
             note = '''\n    "0.9.9": {\n        "de": ["Interne Design-Ressourcen aktualisiert.", "Bestehendes Enigma2-Layout und Bedienung bleiben unverändert."],\n        "en": ["Updated internal design resources.", "Existing Enigma2 layout and controls remain unchanged."],\n        "tr": ["Dahili tasarım kaynakları güncellendi.", "Mevcut Enigma2 düzeni ve kontrolleri değişmedi."],\n        "it": ["Risorse grafiche interne aggiornate.", "Layout e controlli Enigma2 esistenti restano invariati."],\n        "es": ["Recursos de diseño internos actualizados.", "El diseño y los controles de Enigma2 permanecen sin cambios."]\n    },'''
             text = text[:insert_at] + note + text[insert_at:]
     plugin.write_text(text, encoding="utf-8")
+
     control_file = control / "control"
     c = control_file.read_text(encoding="utf-8")
     c = re.sub(r"(?m)^Version:\s*.*$", "Version: 0.9.9", c)
-    c = re.sub(r"(?m)^Description:\s*.*$", "Description: Epi MediaHub - v0.9.9 integrated design resources", c)
+    c = re.sub(r"(?m)^Description:\s*.*$",
+               "Description: Epi MediaHub - v0.9.9 integrated Family skin resources", c)
     control_file.write_text(c, encoding="utf-8")
 
 
 def update_catalog(plugin_dir):
     catalog_path = plugin_dir / "themes" / "catalog.json"
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-    labels = {
-        "family_gg_luxury": "Gucci · Family",
-        "family_paris_monogram": "Louis Vuitton · Family",
-        "family_milano_triangle": "Prada · Family",
-        "family_baroque_gold": "Versace · Family",
-    }
-    for key, label in labels.items():
-        if key in catalog.get("themes", {}):
-            catalog["themes"][key]["label"] = label
+    for key, (label, _filename) in FASHION_FILES.items():
+        family_id = "family_" + key
+        if family_id in catalog.get("themes", {}):
+            catalog["themes"][family_id]["label"] = label
     catalog_path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return catalog
+
+
+def resolve_sources(args):
+    sources = {}
+    for theme, (country, aliases) in FOOTBALL.items():
+        sources[theme] = resolve_logo(args.football_root, aliases, subdir=country, min_score=0.56)
+    for theme, aliases in CARS.items():
+        sources[theme] = resolve_logo(args.car_root, aliases, min_score=0.60)
+
+    fashion_root = Path(args.fashion_root)
+    for theme, (label, filename) in FASHION_FILES.items():
+        source = fashion_root / filename
+        if not source.is_file():
+            raise RuntimeError("Missing explicit fashion logo for %s: %s" % (label, source))
+        print("resolve exact:", label, "->", source)
+        sources[theme] = source
+    return sources
+
+
+def verify_package_tree(plugin_dir, catalog):
+    family_ids = [k for k, v in catalog.get("themes", {}).items() if v.get("family")]
+    if len(family_ids) != 56:
+        raise RuntimeError("Expected 56 Family themes, got %d" % len(family_ids))
+    marks_dir = plugin_dir / "themes" / "marks"
+    family_dir = plugin_dir / "themes" / "family"
+    for family_id in family_ids:
+        mark = marks_dir / (family_id + ".png")
+        bg = family_dir / (family_id + ".png")
+        if not mark.is_file() or not bg.is_file():
+            raise RuntimeError("Missing generated assets for %s" % family_id)
+        with Image.open(mark) as im:
+            if im.size != (180, 80):
+                raise RuntimeError("Bad mark size for %s: %r" % (family_id, im.size))
+        with Image.open(bg) as im:
+            if im.size != (1280, 720):
+                raise RuntimeError("Bad background size for %s: %r" % (family_id, im.size))
 
 
 def main():
@@ -266,74 +309,62 @@ def main():
     ap.add_argument("--football-root", required=True)
     ap.add_argument("--car-root", required=True)
     ap.add_argument("--fashion-root", required=True)
-    ap.add_argument("--fashion-fallback-root", default="")
     ap.add_argument("--output", required=True)
     args = ap.parse_args()
+
     base_ipk = Path(args.base).resolve()
     output = Path(args.output).resolve()
     with tempfile.TemporaryDirectory(prefix="epimedia099-") as td:
-        ardir, data, control = extract_ipk(base_ipk, td)
+        data, control = extract_ipk(base_ipk, td)
         plugin_dir = data / PLUGIN_REL
         themes_dir = plugin_dir / "themes"
         marks_dir = themes_dir / "marks"
         family_dir = themes_dir / "family"
+
         patch_text_files(data, control)
         catalog = update_catalog(plugin_dir)
-        sources = {}
-        for theme, (country, aliases) in FOOTBALL.items():
-            sources[theme] = resolve_logo(args.football_root, aliases, subdir=country, min_score=0.56)
-        for theme, aliases in CARS.items():
-            sources[theme] = resolve_logo(args.car_root, aliases, min_score=0.60)
-        for theme, (_label, aliases) in FASHION.items():
-            try:
-                sources[theme] = resolve_logo(args.fashion_root, aliases, min_score=0.62)
-            except Exception:
-                if not args.fashion_fallback_root:
-                    raise
-                sources[theme] = resolve_logo(args.fashion_fallback_root, aliases, min_score=0.60)
-        expected = set(FOOTBALL) | set(CARS) | set(FASHION)
-        if len(sources) != len(expected):
-            raise RuntimeError("Source resolution incomplete: %d/%d" % (len(sources), len(expected)))
+        sources = resolve_sources(args)
+
+        expected = set(FOOTBALL) | set(CARS) | set(FASHION_FILES)
+        if set(sources) != expected:
+            raise RuntimeError("Source resolution mismatch: %d/%d" % (len(sources), len(expected)))
+
         for base_theme, source_path in sorted(sources.items()):
             family_id = "family_" + base_theme
-            if family_id not in catalog.get("themes", {}):
-                raise RuntimeError("Missing family catalog entry: %s" % family_id)
-            base_meta = catalog["themes"].get(base_theme)
-            if not base_meta:
-                raise RuntimeError("Missing base theme: %s" % base_theme)
+            family_meta = catalog.get("themes", {}).get(family_id)
+            base_meta = catalog.get("themes", {}).get(base_theme)
+            if not family_meta or not base_meta:
+                raise RuntimeError("Missing catalog entry for %s / %s" % (base_theme, family_id))
             base_bg = themes_dir / base_meta.get("background", "%s.png" % base_theme)
+            if not base_bg.is_file():
+                raise RuntimeError("Missing base background: %s" % base_bg)
             logo = load_logo(source_path)
             build_mark(logo, marks_dir / (family_id + ".png"))
             build_background(base_bg, logo, family_dir / (family_id + ".png"))
-        family_ids = [k for k, v in catalog.get("themes", {}).items() if v.get("family")]
-        if len(family_ids) != 56:
-            raise RuntimeError("Expected 56 Family themes, got %d" % len(family_ids))
-        for family_id in family_ids:
-            mark = marks_dir / (family_id + ".png")
-            bg = family_dir / (family_id + ".png")
-            if not mark.is_file() or not bg.is_file():
-                raise RuntimeError("Missing generated assets for %s" % family_id)
-            if Image.open(mark).size != (180, 80):
-                raise RuntimeError("Bad mark size for %s" % family_id)
-            if Image.open(bg).size != (1280, 720):
-                raise RuntimeError("Bad background size for %s" % family_id)
+
+        verify_package_tree(plugin_dir, catalog)
         run("python3", "-m", "py_compile", str(plugin_dir / "plugin.py"))
         pycache = plugin_dir / "__pycache__"
         if pycache.exists():
             shutil.rmtree(pycache)
+
         pkg = Path(td) / "pkg"
         pkg.mkdir()
         (pkg / "debian-binary").write_text("2.0\n", encoding="ascii")
-        run("tar", "--owner=0", "--group=0", "-czf", str(pkg / "control.tar.gz"), "-C", str(control), ".")
-        run("tar", "--owner=0", "--group=0", "-czf", str(pkg / "data.tar.gz"), "-C", str(data), ".")
+        run("tar", "--owner=0", "--group=0", "-czf", str(pkg / "control.tar.gz"),
+            "-C", str(control), ".")
+        run("tar", "--owner=0", "--group=0", "-czf", str(pkg / "data.tar.gz"),
+            "-C", str(data), ".")
         if output.exists():
             output.unlink()
         run("ar", "r", str(output), "debian-binary", "control.tar.gz", "data.tar.gz", cwd=pkg)
+
     digest = hashlib.sha256(output.read_bytes()).hexdigest()
     print("OUTPUT", output)
     print("SIZE", output.stat().st_size)
     print("SHA256", digest)
-    output.with_suffix(output.suffix + ".sha256").write_text("%s  %s\n" % (digest, output.name), encoding="ascii")
+    output.with_suffix(output.suffix + ".sha256").write_text(
+        "%s  %s\n" % (digest, output.name), encoding="ascii")
 
 
 if __name__ == "__main__":
