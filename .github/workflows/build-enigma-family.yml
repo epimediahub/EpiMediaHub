@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/build-enigma-family.yml'
+      - 'tools/build_family_release.py'
   workflow_dispatch:
 
 permissions:
@@ -27,16 +28,35 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y binutils libcairo2 git
+          sudo apt-get install -y binutils libcairo2 git curl
           python -m pip install --upgrade pip
           python -m pip install pillow cairosvg
 
-      - name: Fetch authentic logo source collections
+      - name: Fetch authentic football and car logo collections
         run: |
           git clone --depth 1 https://github.com/JoseArroyave/football-logos.git /tmp/football-logos
           git clone --depth 1 https://github.com/vehiclespecs/brand-logos.git /tmp/car-logos
-          npm install --prefix /tmp/simple-icons simple-icons@latest
-          git clone --depth 1 https://github.com/detain/svg-logos.git /tmp/svg-logos
+
+      - name: Fetch fixed authentic fashion logos
+        run: |
+          mkdir -p /tmp/fashion-logos
+          curl -fL --retry 3 -A 'EpiMediaHub-private-family-build/0.9.9' \
+            'https://commons.wikimedia.org/wiki/Special:Redirect/file/Gucci_logo.svg' \
+            -o /tmp/fashion-logos/gucci.svg
+          curl -fL --retry 3 -A 'EpiMediaHub-private-family-build/0.9.9' \
+            'https://commons.wikimedia.org/wiki/Special:Redirect/file/Louis_Vuitton_SVG_Monogram_Logo.svg' \
+            -o /tmp/fashion-logos/louis_vuitton.svg
+          curl -fL --retry 3 -A 'EpiMediaHub-private-family-build/0.9.9' \
+            'https://commons.wikimedia.org/wiki/Special:Redirect/file/Prada-Logo.svg' \
+            -o /tmp/fashion-logos/prada.svg
+          curl -fL --retry 3 -A 'EpiMediaHub-private-family-build/0.9.9' \
+            'https://commons.wikimedia.org/wiki/Special:Redirect/file/Versace-3.svg' \
+            -o /tmp/fashion-logos/versace.svg
+          file /tmp/fashion-logos/*
+          test -s /tmp/fashion-logos/gucci.svg
+          test -s /tmp/fashion-logos/louis_vuitton.svg
+          test -s /tmp/fashion-logos/prada.svg
+          test -s /tmp/fashion-logos/versace.svg
 
       - name: Build EpiMediaHub v0.9.9
         run: |
@@ -44,8 +64,7 @@ jobs:
             --base EpiMediaHub_v0.9.8.ipk \
             --football-root /tmp/football-logos/logos \
             --car-root /tmp/car-logos \
-            --fashion-root /tmp/simple-icons/node_modules/simple-icons/icons \
-            --fashion-fallback-root /tmp/svg-logos/svg \
+            --fashion-root /tmp/fashion-logos \
             --output EpiMediaHub_v0.9.9.ipk
           sha256sum EpiMediaHub_v0.9.9.ipk
           ar t EpiMediaHub_v0.9.9.ipk
