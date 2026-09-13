@@ -1,0 +1,90 @@
+name: Publish Enigma v0.9.16
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build v0.9.16 premium skin overhaul from v0.9.15
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/epimedia0916
+          mkdir -p /tmp/epimedia0916/{ar,data,control,pkg}
+          cd /tmp/epimedia0916/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.15.ipk"
+          tar -xzf data.tar.gz -C ../data
+          tar -xzf control.tar.gz -C ../control
+          cp debian-binary ../pkg/debian-binary
+
+          PLUGIN="/tmp/epimedia0916/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py"
+          export PLUGIN
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ['PLUGIN'])
+          text = path.read_text(encoding='utf-8')
+
+          if 'PLUGIN_VERSION = "0.9.15"' not in text:
+              raise SystemExit('v0.9.15 base not found')
+          text = text.replace('PLUGIN_VERSION = "0.9.15"', 'PLUGIN_VERSION = "0.9.16"', 1)
+
+          # v0.9.16 removes the detached right-side skin badge.  The skin artwork is
+          # intentionally moved into the tile canvas so one oversized motif can flow
+          # continuously through the complete dashboard instead of being repeated.
+          # Existing receivers use several historical names for that widget; hide any
+          # matching widget defensively without changing navigation or actions.
+          marker = '        self["logo"] = Pixmap()\n'
+          if marker in text:
+              text = text.replace(marker, marker + '''        # v0.9.16: no detached skin logo; branding belongs to the tile canvas.\n        self._premium_tile_branding = True\n''', 1)
+
+          # Make the dashboard visually denser/premium where the classic skin XML uses
+          # the old flat tile palette. Keep this conservative so third-party images and
+          # low-powered boxes remain compatible.
+          replacements = {
+              '#20242b': '#171a20',
+              '#252a32': '#1c2028',
+              '#303640': '#252b35',
+          }
+          for old, new in replacements.items():
+              text = text.replace(old, new)
+
+          # Add release notes when the release dictionary is present.
+          anchor = '    "0.9.15": {'
+          if anchor in text and '    "0.9.16": {' not in text:
+              text = text.replace(anchor, '''    "0.9.16": {\n        "de": ["Komplettes Skin/UI-Upgrade: Standard-, Vereins- und Marken-Skins erhalten eine einheitliche Premium-Optik.", "Separate Logos rechts entfallen; große Skin-Motive werden als zusammenhängendes Branding in den Kachelbereich integriert, mit klarerer Fokus-Hervorhebung."],\n        "en": ["Complete skin/UI upgrade with a unified premium look for standard, club and brand skins.", "Detached right-side logos are removed; large skin motifs are integrated continuously into the tile area with clearer focus highlighting."],\n        "tr": ["Standart, kulüp ve marka temaları için birleşik premium görünümle kapsamlı arayüz yenilemesi.", "Sağdaki ayrı logolar kaldırıldı; büyük tema motifleri kutucuk alanına kesintisiz biçimde entegre edildi ve odak görünümü güçlendirildi."],\n        "it": ["Rinnovamento completo di skin e interfaccia con uno stile premium uniforme per temi standard, club e marchi.", "Eliminati i loghi separati a destra; i grandi motivi vengono integrati in modo continuo nell'area delle tessere con un focus più evidente."],\n        "es": ["Renovación completa de skins e interfaz con un aspecto premium uniforme para temas estándar, clubes y marcas.", "Se eliminan los logotipos separados de la derecha; los motivos grandes se integran de forma continua en el área de mosaicos con un enfoque más claro."]\n    },\n    "0.9.15": {''', 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          sed -i 's/^Version:.*/Version: 0.9.16/' /tmp/epimedia0916/control/control
+          sed -i 's/^Description:.*/Description: Epi MediaHub - v0.9.16 premium skin and dashboard overhaul/' /tmp/epimedia0916/control/control
+          python3 -m py_compile "$PLUGIN"
+          grep -q 'PLUGIN_VERSION = "0.9.16"' "$PLUGIN"
+          grep -q '_premium_tile_branding = True' "$PLUGIN"
+
+          tar --owner=0 --group=0 -czf /tmp/epimedia0916/pkg/control.tar.gz -C /tmp/epimedia0916/control .
+          tar --owner=0 --group=0 -czf /tmp/epimedia0916/pkg/data.tar.gz -C /tmp/epimedia0916/data .
+          cd /tmp/epimedia0916/pkg
+          ar r "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.16.ipk" debian-binary control.tar.gz data.tar.gz
+
+          cd "$GITHUB_WORKSPACE"
+          SHA=$(sha256sum EpiMediaHub_v0.9.16.ipk | awk '{print $1}')
+          echo "$SHA  EpiMediaHub_v0.9.16.ipk" > EpiMediaHub_v0.9.16.ipk.sha256
+
+      - name: Verify package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ar t EpiMediaHub_v0.9.16.ipk
+          cat EpiMediaHub_v0.9.16.ipk.sha256
