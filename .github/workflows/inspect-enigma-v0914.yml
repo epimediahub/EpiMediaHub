@@ -1,0 +1,47 @@
+name: Inspect Enigma v0.9.14
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-enigma-v0914.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect category scrolling and live history code
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/inspect0914
+          mkdir -p /tmp/inspect0914/ar /tmp/inspect0914/data
+          cd /tmp/inspect0914/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.14.ipk"
+          tar -xzf data.tar.gz -C ../data
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/inspect0914/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py')
+          lines=p.read_text(encoding='utf-8').splitlines()
+          needles=('class EpiCategoryScreen','class EpiContentScreen','onSelectionChanged','selectionChanged','recent','history','watched','last_play','last_channel','playLive','playSelected','kind == "live"','kind == \'live\'','favorites')
+          hits=[]
+          for i,line in enumerate(lines):
+              if any(n in line for n in needles):
+                  hits.append(i)
+          ranges=[]
+          for i in hits:
+              a=max(0,i-55); b=min(len(lines),i+120)
+              if ranges and a <= ranges[-1][1]+8:
+                  ranges[-1]=(ranges[-1][0],max(ranges[-1][1],b))
+              else:
+                  ranges.append((a,b))
+          for a,b in ranges:
+              print(f'===== LINES {a+1}-{b} =====')
+              for j in range(a,b):
+                  print(f'{j+1:05d}: {lines[j]}')
+          PY
