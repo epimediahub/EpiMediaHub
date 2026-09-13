@@ -1,0 +1,24 @@
+name: Publish Enigma v0.9.18
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-enigma-v0918.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build and publish v0.9.18
+        shell: bash
+        run: bash build_tools/build_v0918_exitfix.sh
