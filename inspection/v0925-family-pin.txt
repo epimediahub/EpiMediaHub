@@ -1,0 +1,1806 @@
+===== lines 158-227 =====
+00158: ACTOR_CACHE_FILE = os.path.join(DATA_DIR, "actor_category_cache.json")
+00159: SAGA_CACHE_DIR = os.path.join(DATA_DIR, "saga_categories")
+00160: SAGA_CACHE_FILE = os.path.join(DATA_DIR, "saga_category_cache.json")
+00161: WEATHER_CACHE_FILE = os.path.join(DATA_DIR, "weather_cache.json")
+00162: LEGACY_CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+00163: LEGACY_PLAYLIST_FILE = os.path.join(DATA_DIR, "playlist.m3u")
+00164: LEGACY_FAVORITES_FILE = os.path.join(DATA_DIR, "favorites.json")
+00165: LEGACY_SSH_URL_FILE = os.path.join(DATA_DIR, "playlist_url.txt")
+00166: 
+00167: # -------------------- Themes / skins (v0.9.9) --------------------
+00168: # Theme artwork ships with the plugin. The currently selected background is
+00169: # copied to one stable /tmp path so every screen can reference the same pixmap.
+00170: # Changing a theme therefore does not require rebuilding all Enigma2 skin XML.
+00171: THEME_DIR = os.path.join(PLUGIN_DIR, "themes")
+00172: THEME_CATALOG_FILE = os.path.join(THEME_DIR, "catalog.json")
+00173: ACTIVE_THEME_BACKGROUND = "/tmp/epimediahub_active_theme.png"
+00174: ACTIVE_THEME_MARK = "/tmp/epimediahub_active_theme_mark.png"
+00175: ACTIVE_THEME_CENTER_MARK = "/tmp/epimediahub_active_theme_center_mark.png"
+00176: ACTIVE_THEME_HOME_MOTIF = "/tmp/epimediahub_active_home_motif.png"
+00177: ACTIVE_THEME_BANNER_MARK = "/tmp/epimediahub_active_banner_mark.png"
+00178: PLAYLIST_STATUS_ONLINE = os.path.join(PLUGIN_DIR, "playlist_status_online.png")
+00179: PLAYLIST_STATUS_OFFLINE = os.path.join(PLUGIN_DIR, "playlist_status_offline.png")
+00180: 
+00181: # Hidden Family Skin access. Only the SHA-256 digest is shipped; the code itself
+00182: # is never written to settings.json. Unlock state is persisted locally.
+00183: FAMILY_PIN_HASH = "ed946f65d2c785d90e827c5ffd879ce3b49c68d4c88013074176a7e73bc58bcf"
+00184: 
+00185: 
+00186: 
+00187: def _load_theme_catalog_early():
+00188:     try:
+00189:         with open(THEME_CATALOG_FILE, "r") as handle:
+00190:             value = json.load(handle)
+00191:         if isinstance(value, dict) and isinstance(value.get("themes"), dict):
+00192:             return value
+00193:     except Exception:
+00194:         pass
+00195:     return {
+00196:         "groups": [{"id": "standard", "label": "Epi MediaHub", "themes": ["default"]}],
+00197:         "themes": {"default": {"label": "Epi Dark", "group": "standard", "accent": "#1E88D8", "background": "default.png"}},
+00198:     }
+00199: 
+00200: 
+00201: THEME_CATALOG = _load_theme_catalog_early()
+00202: 
+00203: 
+00204: def _theme_id_from_settings_early():
+00205:     try:
+00206:         with open(GLOBAL_SETTINGS_FILE, "r") as handle:
+00207:             settings = json.load(handle)
+00208:         value = str(settings.get("skin_theme", "default")).strip()
+00209:     except Exception:
+00210:         value = "default"
+00211:     if value not in THEME_CATALOG.get("themes", {}):
+00212:         value = "default"
+00213:     return value
+00214: 
+00215: 
+00216: def theme_meta(theme_id=None):
+00217:     theme_id = theme_id or _theme_id_from_settings_early()
+00218:     themes = THEME_CATALOG.get("themes", {})
+00219:     return themes.get(theme_id) or themes.get("default", {})
+00220: 
+00221: 
+00222: def theme_display_name(theme_id=None):
+00223:     return str(theme_meta(theme_id).get("label", "Epi Dark"))
+00224: 
+00225: 
+00226: def theme_accent(theme_id=None):
+00227:     value = str(theme_meta(theme_id).get("accent", "#1E88D8"))
+
+===== lines 720-789 =====
+00720:         return default
+00721: 
+00722: 
+00723: def write_json(path, value):
+00724:     ensure_data_dir()
+00725:     try:
+00726:         with open(path, "w") as handle:
+00727:             json.dump(value, handle, indent=2)
+00728:         try:
+00729:             os.chmod(path, 0o600)
+00730:         except Exception:
+00731:             pass
+00732:         return True
+00733:     except Exception:
+00734:         return False
+00735: 
+00736: 
+00737: 
+00738: def load_global_settings():
+00739:     settings = read_json(GLOBAL_SETTINGS_FILE, {})
+00740:     if not isinstance(settings, dict):
+00741:         settings = {}
+00742:     settings.setdefault("tmdb_api_key", "")
+00743:     settings.setdefault("app_language", "system")
+00744:     settings.setdefault("skin_theme", "default")
+00745:     settings.setdefault("family_skins_unlocked", False)
+00746:     settings.setdefault("metadata_language", "de-DE")
+00747:     settings.setdefault("actor_category_images", True)
+00748:     settings.setdefault("resume_enabled", True)
+00749:     settings.setdefault("parental_enabled", False)
+00750:     settings.setdefault("parental_pin_hash", "")
+00751:     settings.setdefault("parental_auto_adult", True)
+00752:     settings.setdefault("update_manifest_url", "https://raw.githubusercontent.com/epimediahub/EpiMediaHub/main/update.json")
+00753:     settings.setdefault("auto_update_check", True)
+00754:     # Optional boot autostart. Kept disabled by default so installing/updating
+00755:     # Epi MediaHub never changes the receiver's normal startup behaviour.
+00756:     settings.setdefault("autostart_app", False)
+00757:     settings.setdefault("last_update_check", 0)
+00758:     settings.setdefault("last_update_error", "")
+00759:     settings.setdefault("last_update_success", "")
+00760:     # The release-notes window is shown once after each installed app version.
+00761:     settings.setdefault("last_seen_version", "")
+00762:     settings.setdefault("fast_api_timeout", 20)
+00763:     # Weather is intentionally lightweight and asynchronous. Empty location
+00764:     # means IP-based automatic location detection by wttr.in.
+00765:     settings.setdefault("weather_enabled", True)
+00766:     settings.setdefault("weather_location", "")
+00767:     return settings
+00768: 
+00769: def save_global_settings(settings):
+00770:     global _APP_LANGUAGE_CACHE
+00771:     _APP_LANGUAGE_CACHE = None
+00772:     return write_json(GLOBAL_SETTINGS_FILE, settings)
+00773: 
+00774: 
+00775: # -------------------- App language / localisation --------------------
+00776: 
+00777: _APP_LANGUAGE_CACHE = None
+00778: SUPPORTED_APP_LANGUAGES = ("de", "en", "tr", "it", "es")
+00779: 
+00780: 
+00781: def system_app_language():
+00782:     try:
+00783:         value = clean_text(enigma_language.getLanguage() if enigma_language is not None else "")
+00784:     except Exception:
+00785:         value = ""
+00786:     value = value.lower().replace("-", "_")
+00787:     prefix = value.split("_", 1)[0]
+00788:     return prefix if prefix in SUPPORTED_APP_LANGUAGES else "de"
+00789: 
+
+===== lines 6054-6123 =====
+06054:                     self._epi_resume_position = 0
+06055:             except Exception:
+06056:                 pass
+06057: 
+06058:         def savePosition(self):
+06059:             if not self._epi_profile_id or not self._epi_entry_url:
+06060:                 return
+06061:             try:
+06062:                 service = self.session.nav.getCurrentService()
+06063:                 seek = service.seek() if service else None
+06064:                 if seek is None:
+06065:                     return
+06066:                 pos_result = seek.getPlayPosition()
+06067:                 len_result = seek.getLength()
+06068:                 position = int(pos_result[1]) if pos_result and len(pos_result) > 1 and pos_result[0] == 0 else 0
+06069:                 length = int(len_result[1]) if len_result and len(len_result) > 1 and len_result[0] == 0 else 0
+06070:                 save_resume_position(self._epi_profile_id, self._epi_entry_url, position, length)
+06071:             except Exception:
+06072:                 pass
+06073: 
+06074: else:
+06075:     EpiMoviePlayer = None
+06076: 
+06077: 
+06078: 
+06079: class EpiPinScreen(Screen):
+06080:     skin = PIN_SKIN
+06081: 
+06082:     def __init__(self, session, title=None):
+06083:         Screen.__init__(self, session)
+06084:         self.value = ""
+06085:         self["logo"] = Pixmap()
+06086:         self["title"] = Label(title or tr("pin_default"))
+06087:         self["pin"] = Label("")
+06088:         self["info"] = Label(tr("pin_help"))
+06089:         actions = {
+06090:             "ok": self.accept,
+06091:             "cancel": self.cancel,
+06092:             "left": self.backspace,
+06093:         }
+06094:         for digit in range(10):
+06095:             actions[str(digit)] = self._digit_handler(str(digit))
+06096:         self["actions"] = ActionMap(
+06097:             ["OkCancelActions", "NumberActions", "DirectionActions"],
+06098:             actions,
+06099:             -1
+06100:         )
+06101:         self.refresh()
+06102: 
+06103:     def _digit_handler(self, digit):
+06104:         return lambda: self.addDigit(digit)
+06105: 
+06106:     def addDigit(self, digit):
+06107:         if len(self.value) < 4:
+06108:             self.value += digit
+06109:             self.refresh()
+06110:         if len(self.value) >= 4:
+06111:             # Keep the PIN visible as four stars; confirmation still happens
+06112:             # with OK so accidental key presses do not submit immediately.
+06113:             pass
+06114: 
+06115:     def backspace(self):
+06116:         self.value = self.value[:-1]
+06117:         self.refresh()
+06118: 
+06119:     def refresh(self):
+06120:         shown = ["*" if index < len(self.value) else "_" for index in range(4)]
+06121:         self["pin"].setText("   ".join(shown))
+06122: 
+06123:     def accept(self):
+
+===== lines 6687-6756 =====
+06687:              "green": self.addProfile, "yellow": self.editSelected, "blue": self.openHelp,
+06688:              "menu": self.openHelp}, -1
+06689:         )
+06690:         self._expiry_job = None
+06691:         self._expiry_stop = False
+06692:         self._expiry_changed = False
+06693:         self._expiry_timer = eTimer()
+06694:         connect_timer(self._expiry_timer, self._pollExpiryJob)
+06695:         self._health_job = None
+06696:         self._health_live = {}
+06697:         self._health_stop = False
+06698:         self._health_changed = False
+06699:         self._health_timer = eTimer()
+06700:         connect_timer(self._health_timer, self._pollHealthJob)
+06701:         try:
+06702:             self.onClose.append(self._stopExpiryJob)
+06703:             self.onClose.append(self._stopHealthJob)
+06704:             self["list"].onSelectionChanged.append(self._updateStatusSlots)
+06705:         except Exception:
+06706:             pass
+06707:         self.refreshList()
+06708:         self._startHealthJob()
+06709:         self._startExpiryJob()
+06710: 
+06711:     def requestExit(self):
+06712:         self.session.openWithCallback(self._exitConfirmed, EpiExitConfirm)
+06713: 
+06714:     def _exitConfirmed(self, confirmed=False):
+06715:         if confirmed:
+06716:             self.close(None)
+06717: 
+06718:     def refreshList(self):
+06719:         self.data = load_profiles()
+06720:         self.profiles = self.data.get("profiles", [])
+06721:         rows = []
+06722:         active_id = self.data.get("active_id", "")
+06723:         for profile in self.profiles:
+06724:             marker = "[%s] " % tr("active") if profile.get("id") == active_id else ""
+06725:             source = "FTP TXT" if profile.get("managed_text_file") else ("FTP/SFTP" if profile.get("managed_file") else "URL")
+06726:             cached = playlist_total_count(profile.get("id"))
+06727:             online = clean_text(getattr(self, "_health_live", {}).get(profile.get("id", ""), profile.get("online_status", "")))
+06728:             status_text = "Online" if online == "online" else ("Server nicht erreichbar" if online == "offline" else "Prüfe...")
+06729:             rows.append("        %s%s   |   %s   |   %d %s   |   %s   |   %s" % (
+06730:                 marker, profile.get("name", "Playlist"), source, cached, tr("entries"), expiry_summary(profile.get("expiry", "")), status_text
+06731:             ))
+06732:         if not rows:
+06733:             rows = ["%s - GRÜN / GREEN" % tr("no_playlist")]
+06734:         self["list"].setList(rows)
+06735:         self["info"].setText("Schnellimport: %s   |   M3U-Dateien: %s" % (PLAYLIST_TEXT_FILE, FTP_PLAYLIST_DIR))
+06736:         self._updateStatusSlots()
+06737: 
+06738:     def _visibleProfileStart(self):
+06739:         try:
+06740:             selected = int(self["list"].getSelectedIndex())
+06741:         except Exception:
+06742:             selected = 0
+06743:         total = len(self.profiles)
+06744:         if total <= 8:
+06745:             return 0
+06746:         return max(0, min(selected - 7 if selected >= 8 else 0, total - 8))
+06747: 
+06748:     def _updateStatusSlots(self):
+06749:         start = self._visibleProfileStart()
+06750:         for slot, name in enumerate(self._status_slots):
+06751:             widget = self[name]
+06752:             index = start + slot
+06753:             if index >= len(self.profiles):
+06754:                 try:
+06755:                     widget.hide()
+06756:                 except Exception:
+
+===== lines 6942-7086 =====
+06942:         else:
+06943:             self._expiry_job = None
+06944: 
+06945:     def _stopExpiryJob(self):
+06946:         self._expiry_stop = True
+06947:         try:
+06948:             self._expiry_timer.stop()
+06949:         except Exception:
+06950:             pass
+06951: 
+06952:     def selectedProfile(self):
+06953:         if not self.profiles:
+06954:             return None
+06955:         index = self["list"].getSelectedIndex()
+06956:         return self.profiles[index] if 0 <= index < len(self.profiles) else None
+06957: 
+06958:     def openSelected(self):
+06959:         profile = self.selectedProfile()
+06960:         if not profile:
+06961:             self.addProfile()
+06962:             return
+06963:         set_active_profile(profile["id"])
+06964:         self.close(profile["id"])
+06965: 
+06966:     def addProfile(self):
+06967:         self.session.openWithCallback(self.addNameEntered, VirtualKeyBoard, title="Name der Playlist", text="Playlist")
+06968: 
+06969:     def addNameEntered(self, name):
+06970:         name = clean_text(name)
+06971:         if not name:
+06972:             return
+06973:         self._new_name = name
+06974:         self.session.openWithCallback(self.addUrlEntered, VirtualKeyBoard, title="M3U-URL", text="")
+06975: 
+06976:     def addUrlEntered(self, url):
+06977:         if url is None:
+06978:             return
+06979:         profile = default_profile(self._new_name, clean_text(url))
+06980:         data = load_profiles()
+06981:         data["profiles"].append(profile)
+06982:         data["active_id"] = profile["id"]
+06983:         save_profiles(data)
+06984:         self.refreshList()
+06985: 
+06986:     def editSelected(self):
+06987:         profile = self.selectedProfile()
+06988:         if not profile:
+06989:             return
+06990:         if profile.get("managed_text_file"):
+06991:             self.session.open(
+06992:                 MessageBox,
+06993:                 "Diese Playlist wird über playlists.txt verwaltet.\n\nBitte per FTP/SFTP bearbeiten:\n%s\n\nFormat: M3U-PLUS-URL # Playlistname" % PLAYLIST_TEXT_FILE,
+06994:                 MessageBox.TYPE_INFO,
+06995:                 timeout=8
+06996:             )
+06997:             return
+06998:         self._edit_profile = dict(profile)
+06999:         self.session.openWithCallback(self.editNameEntered, VirtualKeyBoard, title="Playlist-Name ändern", text=profile.get("name", ""))
+07000: 
+07001:     def editNameEntered(self, name):
+07002:         name = clean_text(name)
+07003:         if not name:
+07004:             return
+07005:         self._edit_profile["name"] = name
+07006:         if self._edit_profile.get("managed_file"):
+07007:             update_profile(self._edit_profile)
+07008:             self.refreshList()
+07009:         else:
+07010:             self.session.openWithCallback(self.editUrlEntered, VirtualKeyBoard, title="M3U-URL ändern", text=self._edit_profile.get("m3u_url", ""))
+07011: 
+07012:     def editUrlEntered(self, url):
+07013:         if url is None:
+07014:             return
+07015:         self._edit_profile["m3u_url"] = clean_text(url)
+07016:         self._edit_profile["expiry"] = ""
+07017:         self._edit_profile["expiry_checked_at"] = 0
+07018:         self._edit_profile["online_status"] = ""
+07019:         self._edit_profile["online_checked_at"] = 0
+07020:         self._edit_profile["online_error"] = ""
+07021:         self._edit_profile["source_mode"] = "m3u"
+07022:         try:
+07023:             meta = xtream_meta_path(self._edit_profile.get("id", ""))
+07024:             if os.path.exists(meta):
+07025:                 os.remove(meta)
+07026:         except Exception:
+07027:             pass
+07028:         update_profile(self._edit_profile)
+07029:         self.refreshList()
+07030: 
+07031:     def deleteSelected(self):
+07032:         profile = self.selectedProfile()
+07033:         if not profile:
+07034:             return
+07035:         self._delete_profile = profile
+07036:         if profile.get("managed_text_file"):
+07037:             note = "\nHinweis: Solange die Zeile in playlists.txt steht, wird die Playlist beim nächsten Start automatisch wieder eingelesen."
+07038:         elif profile.get("managed_file"):
+07039:             note = "\nDie hochgeladene M3U-Datei bleibt im FTP/SFTP-Ordner erhalten."
+07040:         else:
+07041:             note = ""
+07042:         self.session.openWithCallback(self.deleteConfirmed, MessageBox,
+07043:                                       "Playlist '%s' wirklich aus Epi MediaHub entfernen?%s" % (profile.get("name", "Playlist"), note),
+07044:                                       MessageBox.TYPE_YESNO)
+07045: 
+07046:     def deleteConfirmed(self, confirmed):
+07047:         if not confirmed:
+07048:             return
+07049:         profile = self._delete_profile
+07050:         data = load_profiles()
+07051:         data["profiles"] = [p for p in data.get("profiles", []) if p.get("id") != profile.get("id")]
+07052:         if data.get("active_id") == profile.get("id"):
+07053:             data["active_id"] = data["profiles"][0].get("id") if data["profiles"] else ""
+07054:         save_profiles(data)
+07055:         for path in (
+07056:             playlist_path(profile["id"]),
+07057:             playlist_index_path(profile["id"]),
+07058:             playlist_db_path(profile["id"]),
+07059:             favorites_path(profile["id"]),
+07060:             resume_path(profile["id"]),
+07061:             recent_path(profile["id"]),
+07062:             epg_xml_path(profile["id"]),
+07063:             epg_cache_path(profile["id"]),
+07064:             epg_quick_cache_path(profile["id"]),
+07065:             xtream_meta_path(profile["id"])
+07066:         ):
+07067:             try:
+07068:                 if os.path.exists(path):
+07069:                     os.remove(path)
+07070:             except Exception:
+07071:                 pass
+07072:         self.refreshList()
+07073: 
+07074:     def openHelp(self):
+07075:         self.session.open(EpiHelpScreen)
+07076: 
+07077:     def scanFiles(self):
+07078:         added, updated = scan_local_playlists()
+07079:         self.refreshList()
+07080:         self.session.open(MessageBox, "Playlist-Quellen neu eingelesen.\nNeu: %d   Aktualisiert/entfernt: %d\n\n%s" % (added, updated, PLAYLIST_TEXT_FILE), MessageBox.TYPE_INFO, timeout=6)
+07081: 
+07082: 
+07083: 
+07084: MEDIATHEK_API_URL = "https://mediathekviewweb.de/api/query"
+07085: 
+07086: 
+
+===== lines 7368-7444 =====
+07368:             if i<len(self.items): _set_pix(self["provider_icon%d"%i],self.items[i].get("icon",""))
+07369:             else:
+07370:                 try:self["provider_icon%d"%i].hide()
+07371:                 except Exception:pass
+07372:         try:self["list"].onSelectionChanged.append(self.updateInfo)
+07373:         except Exception:pass
+07374:         self.updateInfo()
+07375:     def selected(self):
+07376:         try:i=int(self["list"].getSelectedIndex())
+07377:         except Exception:i=0
+07378:         return self.items[i] if 0<=i<len(self.items) else None
+07379:     def updateInfo(self):
+07380:         x=self.selected()
+07381:         if not x:return
+07382:         _set_pix(self["hero_icon"],x.get("icon","")); self["provider_title"].setText(x["label"]); self["provider_meta"].setText(x.get("availability","")); self["provider_info"].setText(x.get("info",""))
+07383:     def keyUp(self):
+07384:         try:self["list"].up()
+07385:         except Exception:pass
+07386:         self.updateInfo()
+07387:     def keyDown(self):
+07388:         try:self["list"].down()
+07389:         except Exception:pass
+07390:         self.updateInfo()
+07391:     def _pin_done(self,pin,item):
+07392:         if pin is None:return
+07393:         if hashlib.sha256(clean_text(pin).encode("utf-8")).hexdigest()!=FAMILY_PIN_HASH:
+07394:             self.session.open(MessageBox,"PIN ist falsch.",MessageBox.TYPE_ERROR,timeout=3);return
+07395:         self._open_item(item)
+07396:     def openSelected(self):
+07397:         x=self.selected()
+07398:         if not x:return
+07399:         if x.get("kind")=="rai":
+07400:             try:self.session.openWithCallback(lambda pin:self._pin_done(pin,x),EpiPinScreen,title="Family · Rai International")
+07401:             except Exception as e:self.session.open(MessageBox,str(e),MessageBox.TYPE_ERROR,timeout=6)
+07402:             return
+07403:         self._open_item(x)
+07404:     def _open_item(self,x):
+07405:         kind=x.get("kind")
+07406:         if kind=="dir": self.session.open(EpiMediathekDirectory,x.get("target",""),x.get("label","")); return
+07407:         if kind in ("mvw","rai"): self.session.open(EpiMediathekList,x.get("channel",""),x.get("label",""),"",kind); return
+07408:         if kind=="trt":
+07409:             try:
+07410:                 url=_page_hls(x.get("page",""))
+07411:                 if not url: raise Exception("TRT liefert auf dieser Seite aktuell keinen direkt nutzbaren HLS-Stream aus.")
+07412:                 ref=eServiceReference(4097,0,url); ref.setName(x.get("label","TRT")); self.session.open(MoviePlayer,ref) if MoviePlayer is not None else self.session.nav.playService(ref)
+07413:             except Exception as e:self.session.open(MessageBox,"TRT-Stream nicht verfügbar:\n%s"%str(e),MessageBox.TYPE_INFO,timeout=8)
+07414:             return
+07415:         self.session.open(MessageBox,"%s\n\n%s\n\n%s"%(x.get("label","Mediathek"),x.get("availability",""),x.get("info","")),MessageBox.TYPE_INFO,timeout=10)
+07416: 
+07417: class EpiMediathekList(Screen):
+07418:     skin=MEDIATHEK_LIST_SKIN
+07419: 
+07420:     def __init__(self,session,channel="",label="",term="",source_kind="mvw"):
+07421:         Screen.__init__(self,session)
+07422:         self.channel=clean_text(channel)
+07423:         self.channel_label=clean_text(label) or "Mediathek"
+07424:         self.term=clean_text(term)
+07425:         self.source_kind=source_kind
+07426:         self.results=[]
+07427:         self._closing=False
+07428:         self._load_timer=eTimer()
+07429:         self._poster_timer=eTimer()
+07430:         connect_timer(self._load_timer,self._loadNow)
+07431:         connect_timer(self._poster_timer,self._loadPosterNow)
+07432: 
+07433:         self["logo"]=Pixmap()
+07434:         self["title"]=Label(self.channel_label)
+07435:         self["subtitle"]=Label("")
+07436:         self["list"]=MenuList([])
+07437:         self["poster"]=Pixmap()
+07438:         self["preview_title"]=Label("")
+07439:         self["preview_meta"]=Label("")
+07440:         self["preview_overview"]=Label("")
+07441:         self["poster_hint"]=Label("")
+07442:         self["info"]=Label("")
+07443:         self["red"]=Label("ROT  Zurück")
+07444:         self["green"]=Label("GRÜN  Abspielen")
+
+===== lines 7612-7681 =====
+07612:         except Exception:pass
+07613: 
+07614:     def _showPoster(self,path):
+07615:         if self._closing or not path:return
+07616:         try:
+07617:             instance=self["poster"].instance
+07618:             if instance is not None:
+07619:                 instance.setPixmapFromFile(path)
+07620:                 self["poster"].show()
+07621:                 self["poster_hint"].setText("")
+07622:         except Exception:pass
+07623: 
+07624:     def _move(self,method):
+07625:         if self._closing:return
+07626:         try:getattr(self["list"],method)()
+07627:         except Exception:pass
+07628:         self._selectionChanged()
+07629: 
+07630:     def keyUp(self):self._move("up")
+07631:     def keyDown(self):self._move("down")
+07632:     def pageUp(self):self._move("pageUp")
+07633:     def pageDown(self):self._move("pageDown")
+07634: 
+07635:     def openSearch(self):
+07636:         if self._closing:return
+07637:         try:self.session.openWithCallback(self.searchEntered,VirtualKeyBoard,title="Mediathek durchsuchen",text=self.term)
+07638:         except Exception as error:
+07639:             try:self.session.open(MessageBox,str(error),MessageBox.TYPE_ERROR,timeout=6)
+07640:             except Exception:pass
+07641: 
+07642:     def searchEntered(self,value=None):
+07643:         if self._closing:return
+07644:         value=clean_text(value or "")
+07645:         if value!=self.term:
+07646:             self.term=value
+07647:             self.reload()
+07648: 
+07649:     def playSelected(self):
+07650:         if self._closing:return
+07651:         entry=self.selectedEntry()
+07652:         url=clean_text(entry.get("url","")) if entry else ""
+07653:         if not url:return
+07654:         try:
+07655:             ref=eServiceReference(4097,0,url)
+07656:             ref.setName(entry.get("title","Mediathek"))
+07657:             if EpiMoviePlayer is not None:
+07658:                 self.session.open(EpiMoviePlayer,ref,["deu","ger","ita","tur","eng"],"",url,0,entry,[],-1)
+07659:             elif MoviePlayer is not None:
+07660:                 self.session.open(MoviePlayer,ref)
+07661:             else:
+07662:                 self.session.nav.playService(ref)
+07663:         except Exception as error:
+07664:             try:self.session.open(MessageBox,"Wiedergabe fehlgeschlagen:\n%s"%str(error),MessageBox.TYPE_ERROR,timeout=7)
+07665:             except Exception:pass
+07666: 
+07667: 
+07668: class EpiMediaHubHome(Screen):
+07669:     skin = HOME_SKIN
+07670: 
+07671:     def __init__(self, session, profile_id):
+07672:         Screen.__init__(self, session)
+07673:         self.profile_id = profile_id
+07674:         self.tiles = [tr("live"), tr("movies"), tr("series"), mediathek_label(), tr("switch_playlist"), tr("settings")]
+07675:         self.currentIndex = 0
+07676:         self["logo"] = Pixmap()
+07677:         self["subtitle"] = Label("")
+07678:         self["hint"] = Label(tr("home_hint"))
+07679:         for index in range(len(self.tiles)):
+07680:             self["tile%d" % index] = Label("")
+07681:             self["mark%d" % index] = Label("")
+
+===== lines 7760-7829 =====
+07760:     def _stopHomeClock(self):
+07761:         try:
+07762:             self._clock_timer.stop()
+07763:         except Exception:
+07764:             pass
+07765: 
+07766:     def _updateHomeClock(self):
+07767:         try:
+07768:             self["clock"].setText(time.strftime("%H:%M"))
+07769:         except Exception:
+07770:             pass
+07771:         try:
+07772:             # Update shortly after the next minute starts.
+07773:             sec = int(time.localtime().tm_sec)
+07774:             delay = max(1000, (61 - sec) * 1000)
+07775:             self._clock_timer.start(delay, True)
+07776:         except TypeError:
+07777:             try:
+07778:                 self._clock_timer.start(30000)
+07779:             except Exception:
+07780:                 pass
+07781:         except Exception:
+07782:             pass
+07783: 
+07784:     def requestExit(self):
+07785:         self.session.openWithCallback(self._exitConfirmed, EpiExitConfirm)
+07786: 
+07787:     def _exitConfirmed(self, confirmed=False):
+07788:         if confirmed:
+07789:             self.close()
+07790: 
+07791:     def openHelp(self):
+07792:         self.session.open(EpiHelpScreen)
+07793: 
+07794:     def refresh(self):
+07795:         profile = get_profile(self.profile_id)
+07796:         if profile is None:
+07797:             data = load_profiles()
+07798:             profiles = data.get("profiles", [])
+07799:             if profiles:
+07800:                 self.profile_id = profiles[0].get("id")
+07801:                 set_active_profile(self.profile_id)
+07802:                 profile = profiles[0]
+07803: 
+07804:         self.tiles = [tr("live"), tr("movies"), tr("series"), mediathek_label(), tr("switch_playlist"), tr("settings")]
+07805:         self["hint"].setText(tr("home_hint"))
+07806:         self["subtitle"].setText(
+07807:             "%s: %s" % (tr("playlist"), profile.get("name", "Playlist") if profile else tr("no_playlist"))
+07808:         )
+07809:         self.updateUI()
+07810:         self.updateStatus()
+07811:         self._paintWeather()
+07812: 
+07813:         if self.profile_id and playlist_index_needs_rebuild(self.profile_id):
+07814:             self._startIndexRebuild()
+07815: 
+07816:     def _startIndexRebuild(self):
+07817:         if self._index_job is not None and self._index_job.is_alive():
+07818:             return
+07819:         profile_id = self.profile_id
+07820:         self._index_result = None
+07821:         self["hint"].setText("%s …" % tr("playlist"))
+07822:         self._index_job = threading.Thread(target=self._indexWorker, args=(profile_id,))
+07823:         self._index_job.daemon = True
+07824:         self._index_job.start()
+07825:         try:
+07826:             self._index_timer.start(300, True)
+07827:         except TypeError:
+07828:             self._index_timer.start(300)
+07829: 
+
+===== lines 8064-8149 =====
+08064:             if version_tuple(remote) > version_tuple(PLUGIN_VERSION):
+08065:                 self._auto_update_result = (True, manifest, "")
+08066:             else:
+08067:                 self._auto_update_result = (False, None, "")
+08068:         except Exception as error:
+08069:             # Background checks stay silent on network/manifest errors.
+08070:             self._auto_update_result = (False, None, str(error))
+08071: 
+08072:     def _pollAutoUpdate(self):
+08073:         if self._auto_update_job is not None and self._auto_update_job.is_alive():
+08074:             try:
+08075:                 self._auto_update_timer.start(500, True)
+08076:             except TypeError:
+08077:                 self._auto_update_timer.start(500)
+08078:             return
+08079: 
+08080:         result = self._auto_update_result
+08081:         self._auto_update_job = None
+08082:         self._auto_update_result = None
+08083:         if not result or not result[0]:
+08084:             return
+08085: 
+08086:         manifest = result[1]
+08087:         remote = clean_text(manifest.get("version", ""))
+08088:         self._pending_auto_update_manifest = manifest
+08089:         self.session.openWithCallback(
+08090:             self._autoUpdateConfirmed,
+08091:             MessageBox,
+08092:             "Epi MediaHub v%s ist verfügbar.\nJetzt installieren?" % remote,
+08093:             MessageBox.TYPE_YESNO
+08094:         )
+08095: 
+08096:     def _autoUpdateConfirmed(self, confirmed):
+08097:         if not confirmed:
+08098:             return
+08099:         manifest = getattr(self, "_pending_auto_update_manifest", None)
+08100:         if not manifest:
+08101:             return
+08102:         try:
+08103:             download_and_install_update(manifest)
+08104:             if TryQuitMainloop is not None:
+08105:                 self.session.openWithCallback(
+08106:                     self._restartAfterAutoUpdate,
+08107:                     MessageBox,
+08108:                     "Update wurde installiert.\nEnigma2 jetzt neu starten?",
+08109:                     MessageBox.TYPE_YESNO
+08110:                 )
+08111:             else:
+08112:                 self.session.open(
+08113:                     MessageBox,
+08114:                     "Update installiert. Bitte die Enigma2-GUI neu starten.",
+08115:                     MessageBox.TYPE_INFO,
+08116:                     timeout=6
+08117:                 )
+08118:         except Exception as error:
+08119:             self.session.open(
+08120:                 MessageBox,
+08121:                 "Update konnte nicht installiert werden:\n%s" % str(error),
+08122:                 MessageBox.TYPE_ERROR,
+08123:                 timeout=8
+08124:             )
+08125: 
+08126:     def _restartAfterAutoUpdate(self, confirmed):
+08127:         if confirmed and TryQuitMainloop is not None:
+08128:             self.session.open(TryQuitMainloop, 3)
+08129: 
+08130:     def updateUI(self):
+08131:         for index, name in enumerate(self.tiles):
+08132:             widget = self["tile%d" % index]
+08133:             marker = self["mark%d" % index]
+08134:             widget.setText(name)
+08135:             try:
+08136:                 if index == self.currentIndex:
+08137:                     marker.show()
+08138:                 else:
+08139:                     marker.hide()
+08140:             except Exception:
+08141:                 pass
+08142:             if parseColor is not None:
+08143:                 try:
+08144:                     # Do not set a semi-transparent widget background here. On
+08145:                     # OpenATV that can expose the OpenATV desktop artwork. The
+08146:                     # glass surface is a plugin-owned PNG overlay underneath.
+08147:                     if widget.instance is not None:
+08148:                         widget.instance.setForegroundColor(parseColor("#FFFFFF" if index == self.currentIndex else "#E8EEF6"))
+08149:                     if marker.instance is not None:
+
+===== lines 8184-8287 =====
+08184:         if self.currentIndex >= 2:
+08185:             self.currentIndex -= 2
+08186:             self.updateUI()
+08187: 
+08188:     def keyDown(self):
+08189:         if self.currentIndex <= 3:
+08190:             self.currentIndex += 2
+08191:             self.updateUI()
+08192: 
+08193:     def keyOK(self):
+08194:         if self.currentIndex == 0:
+08195:             self.openType("live")
+08196:         elif self.currentIndex == 1:
+08197:             self.openType("movies")
+08198:         elif self.currentIndex == 2:
+08199:             self.openType("series")
+08200:         elif self.currentIndex == 3:
+08201:             try:
+08202:                 self.session.open(EpiMediathekHome)
+08203:             except Exception as error:
+08204:                 try:
+08205:                     self.session.open(MessageBox, "Mediathek konnte nicht geöffnet werden:\n%s" % str(error), MessageBox.TYPE_ERROR, timeout=8)
+08206:                 except Exception:
+08207:                     pass
+08208:         elif self.currentIndex == 4:
+08209:             self.session.openWithCallback(self.playlistSelected, EpiProfileSelect)
+08210:         elif self.currentIndex == 5:
+08211:             self.session.open(EpiSettings, self.profile_id)
+08212: 
+08213:     def playlistSelected(self, profile_id=None):
+08214:         if profile_id:
+08215:             self.profile_id = profile_id
+08216:             set_active_profile(profile_id)
+08217:             self.refresh()
+08218:             self._maybeStartAutoEpg()
+08219: 
+08220:     def openType(self, kind):
+08221:         if db_source_mode(self.profile_id) == "xtream":
+08222:             if not playlist_categories(self.profile_id, kind):
+08223:                 self.session.open(MessageBox, tr("no_categories_kind", kind=type_label(kind)), MessageBox.TYPE_INFO, timeout=4)
+08224:                 return
+08225:             self.session.open(EpiCategoryScreen, self.profile_id, kind)
+08226:             return
+08227: 
+08228:         if playlist_total_count(self.profile_id) <= 0:
+08229:             if self._index_job is not None and self._index_job.is_alive():
+08230:                 self.session.open(MessageBox, "Die Playlist wird gerade im Hintergrund vorbereitet.\nBitte einen Moment warten.", MessageBox.TYPE_INFO, timeout=5)
+08231:             else:
+08232:                 self.session.open(MessageBox, "Für diese Playlist wurden noch keine Daten geladen.\nÖffne Einstellungen und wähle GRÜN = Playlist laden.", MessageBox.TYPE_INFO, timeout=6)
+08233:             return
+08234:         if playlist_counts(self.profile_id).get(kind, 0) <= 0:
+08235:             self.session.open(MessageBox, tr("no_kind_entries", kind=type_label(kind)), MessageBox.TYPE_INFO, timeout=5)
+08236:             return
+08237:         self.session.open(EpiCategoryScreen, self.profile_id, kind)
+08238: 
+08239:     def globalSearch(self):
+08240:         if db_source_mode(self.profile_id) != "xtream" and playlist_total_count(self.profile_id) <= 0:
+08241:             self.session.open(MessageBox, "Noch keine Playlist geladen.", MessageBox.TYPE_INFO, timeout=4)
+08242:             return
+08243:         self.session.openWithCallback(
+08244:             self.globalSearchEntered,
+08245:             VirtualKeyBoard,
+08246:             title="%s / %s - %s" % (tr("movies"), tr("series"), tr("search")),
+08247:             text=""
+08248:         )
+08249: 
+08250:     def globalSearchEntered(self, query):
+08251:         if not query:
+08252:             return
+08253:         profile = get_profile(self.profile_id) or {}
+08254:         if db_source_mode(self.profile_id) == "xtream":
+08255:             try:
+08256:                 xtream_load_kind(self.profile_id, "movies")
+08257:                 xtream_load_kind(self.profile_id, "series")
+08258:             except Exception as error:
+08259:                 self.session.open(MessageBox, tr("search_index_error", error=str(error)), MessageBox.TYPE_ERROR, timeout=6)
+08260:                 return
+08261:         allowed = {
+08262:             "movies": set(allowed_category_names(profile, "movies", include_locked=False)),
+08263:             "series": set(allowed_category_names(profile, "series", include_locked=False)),
+08264:         }
+08265:         results = []
+08266:         for entry in playlist_entries(self.profile_id, query=query):
+08267:             kind = entry.get("type")
+08268:             if kind not in ("movies", "series"):
+08269:                 continue
+08270:             group = clean_text(entry.get("group")) or "Ohne Kategorie"
+08271:             if group in allowed.get(kind, set()):
+08272:                 results.append(entry)
+08273: 
+08274:         self.session.open(
+08275:             EpiContentScreen,
+08276:             self.profile_id,
+08277:             tr("search_results", query=query),
+08278:             results,
+08279:             "mixed",
+08280:             allowed
+08281:         )
+08282: 
+08283: 
+08284: class EpiCategoryScreen(Screen):
+08285:     skin = CATEGORY_SKIN
+08286: 
+08287:     def __init__(self, session, profile_id, kind):
+
+===== lines 8638-8836 =====
+08638:         allowed_for_all = [
+08639:             name for name, _count in records if name not in locked
+08640:         ]
+08641:         known_counts = [self.category_counts.get(name, -1) for name in allowed_for_all]
+08642:         all_known = all(value >= 0 for value in known_counts)
+08643:         all_count = sum(value for value in known_counts if value >= 0)
+08644: 
+08645:         # All three media category screens reserve room for the detached icon strip.
+08646:         indent = "             " if self.kind in ("live", "movies", "series") else ""
+08647:         rows = []
+08648:         if self.kind in ("live", "movies", "series"):
+08649:             recent_count = len(visible_recent_entries(self.profile_id, self.kind, self.profile, 40))
+08650:             rows.append("%s%s   (%d)" % (indent, tr("recent").upper(), recent_count))
+08651:         rows.append("%s%s   (%s)" % (indent, tr("all"), str(all_count) if all_known else "…"))
+08652:         for name, count in records:
+08653:             marker = " [PIN]" if name in locked else ""
+08654:             count_text = str(count) if count >= 0 else "…"
+08655:             rows.append("%s%s%s   (%s)" % (indent, name, marker, count_text))
+08656:         self["list"].setList(rows)
+08657:         self._scheduleCategoryPiconRefresh(60)
+08658:         self["info"].setText(tr("category_info", count=len(records)))
+08659: 
+08660:     def manageCategories(self):
+08661:         settings = load_global_settings()
+08662:         if settings.get("parental_enabled", False) and clean_text(settings.get("parental_pin_hash", "")):
+08663:             self.session.openWithCallback(
+08664:                 self._managePinEntered,
+08665:                 EpiPinScreen,
+08666:                 "Kategorien verwalten - Kindersicherungs-PIN"
+08667:             )
+08668:             return
+08669:         self._openCategoryManager()
+08670: 
+08671:     def _managePinEntered(self, pin):
+08672:         if pin is None:
+08673:             return
+08674:         if not pin_matches(pin):
+08675:             self.session.open(MessageBox, "PIN ist falsch.", MessageBox.TYPE_ERROR, timeout=3)
+08676:             return
+08677:         self._openCategoryManager()
+08678: 
+08679:     def _openCategoryManager(self):
+08680:         self.session.openWithCallback(
+08681:             lambda *args: self.refreshRows(),
+08682:             EpiCategoryManager,
+08683:             self.profile_id,
+08684:             self.kind
+08685:         )
+08686: 
+08687:     def _openItems(self, title, items, search_allowed):
+08688:         if not items:
+08689:             self.session.open(MessageBox, tr("no_entries"), MessageBox.TYPE_INFO, timeout=3)
+08690:             return
+08691:         self.session.open(
+08692:             EpiContentScreen,
+08693:             self.profile_id,
+08694:             title,
+08695:             items,
+08696:             self.kind,
+08697:             search_allowed
+08698:         )
+08699: 
+08700:     def openCategory(self):
+08701:         index = self["list"].getSelectedIndex()
+08702:         if index < 0 or index >= len(self.category_names):
+08703:             return
+08704: 
+08705:         name = self.category_names[index]
+08706:         self.profile = get_profile(self.profile_id) or self.profile
+08707:         unlocked_allowed = allowed_category_names(self.profile, self.kind, include_locked=False)
+08708: 
+08709:         if name == "__recent__" and self.kind in ("live", "movies", "series"):
+08710:             items = visible_recent_entries(self.profile_id, self.kind, self.profile, 40)
+08711:             if not items:
+08712:                 self.session.open(MessageBox, tr("no_recent"), MessageBox.TYPE_INFO, timeout=3)
+08713:                 return
+08714:             self._openItems(tr("recent"), items, unlocked_allowed)
+08715:             return
+08716: 
+08717:         if name == "__all__":
+08718:             if db_source_mode(self.profile_id) == "xtream" and not load_xtream_meta(self.profile_id).get("full_loaded", {}).get(self.kind, False):
+08719:                 self._startXtreamLoad("all", allowed=unlocked_allowed)
+08720:                 return
+08721:             items = playlist_entries(
+08722:                 self.profile_id,
+08723:                 kind=self.kind,
+08724:                 allowed_groups=unlocked_allowed
+08725:             )
+08726:             self._openItems("%s %s" % (tr("all"), type_label(self.kind)), items, unlocked_allowed)
+08727:             return
+08728: 
+08729:         locked = effective_locked_category_set(self.profile, self.kind)
+08730:         if name in locked:
+08731:             self._pending_locked_category = name
+08732:             self.session.openWithCallback(
+08733:                 self._lockedPinEntered,
+08734:                 EpiPinScreen,
+08735:                 "Kindersicherung - PIN für %s" % name
+08736:             )
+08737:             return
+08738: 
+08739:         if db_source_mode(self.profile_id) == "xtream" and not xtream_category_loaded(self.profile_id, self.kind, name):
+08740:             self._startXtreamLoad("category", name=name, allowed=unlocked_allowed)
+08741:             return
+08742:         items = playlist_entries(self.profile_id, kind=self.kind, group=name)
+08743:         self._openItems(name, items, unlocked_allowed)
+08744: 
+08745:     def _lockedPinEntered(self, pin):
+08746:         name = self._pending_locked_category
+08747:         self._pending_locked_category = None
+08748:         if not name:
+08749:             return
+08750:         if not pin or not pin_matches(pin):
+08751:             if pin is not None:
+08752:                 self.session.open(MessageBox, "PIN ist falsch.", MessageBox.TYPE_ERROR, timeout=3)
+08753:             return
+08754: 
+08755:         self.profile = get_profile(self.profile_id) or self.profile
+08756:         allowed = allowed_category_names(self.profile, self.kind, include_locked=False)
+08757:         if name not in allowed:
+08758:             allowed.append(name)
+08759:         if db_source_mode(self.profile_id) == "xtream" and not xtream_category_loaded(self.profile_id, self.kind, name):
+08760:             self._startXtreamLoad("category", name=name, allowed=allowed)
+08761:             return
+08762:         items = playlist_entries(self.profile_id, kind=self.kind, group=name)
+08763:         self._openItems(name, items, allowed)
+08764: 
+08765:     def openFavorites(self):
+08766:         self.profile = get_profile(self.profile_id) or self.profile
+08767:         allowed = set(allowed_category_names(self.profile, self.kind, include_locked=False))
+08768:         favorites = []
+08769:         for entry in favorite_entries(self.profile_id):
+08770:             if entry.get("type") != self.kind:
+08771:                 continue
+08772:             group = clean_text(entry.get("group")) or "Ohne Kategorie"
+08773:             if group in allowed:
+08774:                 favorites.append(entry)
+08775: 
+08776:         if not favorites:
+08777:             self.session.open(
+08778:                 MessageBox,
+08779:                 tr("no_favorites", kind=type_label(self.kind)),
+08780:                 MessageBox.TYPE_INFO,
+08781:                 timeout=4
+08782:             )
+08783:             return
+08784: 
+08785:         self._openItems(
+08786:             tr("favorites_kind", kind=type_label(self.kind)),
+08787:             favorites,
+08788:             list(allowed)
+08789:         )
+08790: 
+08791:     def search(self):
+08792:         self.session.openWithCallback(
+08793:             self.searchEntered,
+08794:             VirtualKeyBoard,
+08795:             title="%s - %s" % (type_label(self.kind), tr("search_area")),
+08796:             text=""
+08797:         )
+08798: 
+08799:     def searchEntered(self, query):
+08800:         if not query:
+08801:             return
+08802:         self.profile = get_profile(self.profile_id) or self.profile
+08803:         allowed = allowed_category_names(self.profile, self.kind, include_locked=False)
+08804:         if db_source_mode(self.profile_id) == "xtream" and not load_xtream_meta(self.profile_id).get("full_loaded", {}).get(self.kind, False):
+08805:             self._startXtreamLoad("search", allowed=allowed, query=query)
+08806:             return
+08807:         results = playlist_entries(
+08808:             self.profile_id,
+08809:             kind=self.kind,
+08810:             query=query,
+08811:             allowed_groups=allowed
+08812:         )
+08813:         self._openItems(
+08814:             tr("search_results", query=query),
+08815:             results,
+08816:             allowed
+08817:         )
+08818: 
+08819:     def toggleSort(self):
+08820:         self.sort_mode = (self.sort_mode + 1) % 3
+08821:         if self.sort_mode == 0:
+08822:             self["blue"].setText("BLAU  A-Z")
+08823:         elif self.sort_mode == 1:
+08824:             self["blue"].setText("BLAU  Z-A")
+08825:         else:
+08826:             self["blue"].setText("BLAU  Original")
+08827:         self.refreshRows()
+08828: 
+08829: 
+08830: class EpiCategoryManager(Screen):
+08831:     skin = CATEGORY_MANAGER_SKIN
+08832: 
+08833:     def __init__(self, session, profile_id, kind):
+08834:         Screen.__init__(self, session)
+08835:         self.profile_id = profile_id
+08836:         self.kind = kind
+
+===== lines 9394-9463 =====
+09394:                 self._media_preview_timer.start(220, True)
+09395:             except TypeError:
+09396:                 self._media_preview_timer.start(220)
+09397:             return
+09398:         result = self._media_preview_result
+09399:         self._media_preview_job = None
+09400:         self._media_preview_result = None
+09401:         if result and result[0] == self._media_preview_token:
+09402:             self._applyMediaPreview(result[2], loading=False)
+09403:             if result[3]:
+09404:                 self._showPreviewPoster(result[3])
+09405:         # Selection may have changed while the provider request was running.
+09406:         try:
+09407:             index = self["list"].getSelectedIndex()
+09408:             current_token = "%d|%s" % (index, clean_text(self.visible_items[index].get("url", ""))) if 0 <= index < len(self.visible_items) else ""
+09409:         except Exception:
+09410:             current_token = ""
+09411:         if current_token and current_token != self._media_preview_token:
+09412:             self._scheduleMediaPreview(100)
+09413: 
+09414:     def currentEntry(self):
+09415:         index = self["list"].getSelectedIndex()
+09416:         return self.visible_items[index] if 0 <= index < len(self.visible_items) else None
+09417: 
+09418:     def search(self):
+09419:         self.session.openWithCallback(
+09420:             self.searchEntered,
+09421:             VirtualKeyBoard,
+09422:             title=tr("search_area"),
+09423:             text=""
+09424:         )
+09425: 
+09426:     def searchEntered(self, query):
+09427:         if not query:
+09428:             return
+09429: 
+09430:         if self.kind == "mixed":
+09431:             allowed_map = self.search_allowed_groups if isinstance(self.search_allowed_groups, dict) else {}
+09432:             results = []
+09433:             for entry in playlist_entries(self.profile_id, query=query):
+09434:                 kind = entry.get("type")
+09435:                 if kind not in ("movies", "series"):
+09436:                     continue
+09437:                 group = clean_text(entry.get("group")) or "Ohne Kategorie"
+09438:                 if group in set(allowed_map.get(kind, [])):
+09439:                     results.append(entry)
+09440:         else:
+09441:             allowed = self.search_allowed_groups
+09442:             results = playlist_entries(
+09443:                 self.profile_id,
+09444:                 kind=self.kind,
+09445:                 query=query,
+09446:                 allowed_groups=allowed
+09447:             )
+09448: 
+09449:         self.visible_items = results
+09450:         self.original_items = list(results)
+09451:         self.sort_mode = 0
+09452:         self["blue"].setText("BLAU  A-Z")
+09453:         self["title"].setText(tr("search_results", query=query))
+09454:         self.refreshRows()
+09455: 
+09456:     def sortItems(self):
+09457:         self.sort_mode = (self.sort_mode + 1) % 3
+09458:         if self.sort_mode == 0:
+09459:             self.visible_items = list(self.original_items)
+09460:             self["blue"].setText("BLAU  A-Z")
+09461:         elif self.sort_mode == 1:
+09462:             self.visible_items = sorted(
+09463:                 self.original_items,
+
+===== lines 9511-9600 =====
+09511:         kind = entry.get("type")
+09512:         if kind == "series" and clean_text(entry.get("url", "")).startswith("xtream-series://"):
+09513:             try:
+09514:                 seasons = xtream_series_seasons(self.profile_id, entry)
+09515:                 if not seasons:
+09516:                     self.session.open(MessageBox, tr("series_empty"), MessageBox.TYPE_INFO, timeout=4)
+09517:                     return
+09518:                 series_title = entry.get("title", "Serie")
+09519:                 # One-season series go straight to the episode list. With two
+09520:                 # or more seasons the user first gets a clean season selector.
+09521:                 if len(seasons) == 1:
+09522:                     group = seasons[0]
+09523:                     title = "%s - %s" % (series_title, clean_text(group.get("label", "Staffel")))
+09524:                     self.session.open(EpiContentScreen, self.profile_id, title, group.get("episodes", []), "series", [series_title])
+09525:                 else:
+09526:                     self.session.open(EpiSeasonScreen, self.profile_id, series_title, seasons)
+09527:             except Exception as error:
+09528:                 self.session.open(MessageBox, tr("series_load_error", error=str(error)), MessageBox.TYPE_ERROR, timeout=6)
+09529:             return
+09530:         settings = load_global_settings()
+09531:         if kind in ("movies", "series") and settings.get("resume_enabled", True):
+09532:             position = get_resume_position(self.profile_id, entry.get("url"))
+09533:             if position >= 30 * 90000:
+09534:                 self._resume_entry = entry
+09535:                 minutes = int(position / 90000 / 60)
+09536:                 self.session.openWithCallback(
+09537:                     self.resumeChoice,
+09538:                     MessageBox,
+09539:                     tr("continue_question", minutes=minutes),
+09540:                     MessageBox.TYPE_YESNO
+09541:                 )
+09542:                 return
+09543:         self.startPlayback(entry, 0)
+09544: 
+09545:     def resumeChoice(self, confirmed):
+09546:         entry = getattr(self, "_resume_entry", None)
+09547:         if not entry:
+09548:             return
+09549:         position = get_resume_position(self.profile_id, entry.get("url")) if confirmed else 0
+09550:         self.startPlayback(entry, position)
+09551: 
+09552:     def startPlayback(self, entry, resume_position):
+09553:         try:
+09554:             if entry.get("type") == "live":
+09555:                 current_index = self["list"].getSelectedIndex()
+09556:                 self.session.openWithCallback(
+09557:                     self.livePlayerClosed,
+09558:                     EpiLivePlayer,
+09559:                     self.profile_id,
+09560:                     self.visible_items,
+09561:                     current_index
+09562:                 )
+09563:                 return
+09564: 
+09565:             save_recent_entry(self.profile_id, entry)
+09566:             ref = eServiceReference(4097, 0, entry.get("url"))
+09567:             ref.setName(entry.get("title", "Epi MediaHub"))
+09568:             profile = get_profile(self.profile_id) or {}
+09569:             preferences = profile.get("preferred_audio", ["deu", "ita", "tur", "eng"])
+09570:             if EpiMoviePlayer is not None:
+09571:                 episode_queue = []
+09572:                 episode_index = -1
+09573:                 if entry.get("type") == "series" and entry.get("is_episode"):
+09574:                     current_url = clean_text(entry.get("url", ""))
+09575:                     current_series_id = clean_text(entry.get("series_id", ""))
+09576:                     current_season = entry.get("season")
+09577: 
+09578:                     # First use the already loaded season list. Filter strictly
+09579:                     # so a "Recently watched" screen can never jump into another
+09580:                     # series just because it contains multiple episode entries.
+09581:                     for item in self.original_items:
+09582:                         if not isinstance(item, dict) or item.get("type") != "series" or not item.get("is_episode"):
+09583:                             continue
+09584:                         if not clean_text(item.get("url", "")):
+09585:                             continue
+09586:                         item_series_id = clean_text(item.get("series_id", ""))
+09587:                         if current_series_id and item_series_id and item_series_id != current_series_id:
+09588:                             continue
+09589:                         if current_season is not None and item.get("season") is not None and item.get("season") != current_season:
+09590:                             continue
+09591:                         episode_queue.append(dict(item))
+09592: 
+09593:                     # Screens such as "Recently watched" may only have the one
+09594:                     # current episode. Rebuild its season from the provider so
+09595:                     # LEFT/RIGHT still knows the neighbouring episodes.
+09596:                     if len(episode_queue) <= 1 and current_series_id:
+09597:                         try:
+09598:                             parent = {
+09599:                                 "url": "xtream-series://%s" % current_series_id,
+09600:                                 "title": entry.get("series_title") or entry.get("group") or "Serie",
+
+===== lines 9602-9671 =====
+09602:                                 "type": "series",
+09603:                             }
+09604:                             seasons = xtream_series_seasons(self.profile_id, parent)
+09605:                             rebuilt = []
+09606:                             for group in seasons:
+09607:                                 group_season = group.get("season")
+09608:                                 if current_season is not None and group_season != current_season:
+09609:                                     continue
+09610:                                 rebuilt.extend([dict(item) for item in group.get("episodes", []) if isinstance(item, dict) and clean_text(item.get("url", ""))])
+09611:                             if rebuilt:
+09612:                                 episode_queue = rebuilt
+09613:                         except Exception:
+09614:                             pass
+09615: 
+09616:                     # Keep provider episode order stable even after entering from
+09617:                     # a sorted/search/recent view.
+09618:                     episode_queue.sort(key=lambda item: (
+09619:                         item.get("episode") is None,
+09620:                         item.get("episode") if item.get("episode") is not None else 999999,
+09621:                         item.get("_provider_order", 999999)
+09622:                     ))
+09623:                     for idx, item in enumerate(episode_queue):
+09624:                         if clean_text(item.get("url", "")) == current_url:
+09625:                             episode_index = idx
+09626:                             break
+09627:                 self.session.openWithCallback(
+09628:                     self.vodPlayerClosed,
+09629:                     EpiMoviePlayer,
+09630:                     ref,
+09631:                     preferences,
+09632:                     self.profile_id,
+09633:                     entry.get("url", ""),
+09634:                     resume_position,
+09635:                     entry,
+09636:                     episode_queue,
+09637:                     episode_index
+09638:                 )
+09639:             else:
+09640:                 self.session.nav.playService(ref)
+09641:         except Exception as error:
+09642:             self.session.open(
+09643:                 MessageBox,
+09644:                 tr("playback_failed", error=str(error)),
+09645:                 MessageBox.TYPE_ERROR,
+09646:                 timeout=6
+09647:             )
+09648: 
+09649:     def vodPlayerClosed(self, *args):
+09650:         # If playback was launched from "Recently watched", reload that view so
+09651:         # the episode shown there immediately reflects the latest auto-advanced
+09652:         # or completed episode.
+09653:         if self._is_recent_view and self.kind in ("movies", "series"):
+09654:             try:
+09655:                 profile = get_profile(self.profile_id) or {}
+09656:                 self.visible_items = visible_recent_entries(self.profile_id, self.kind, profile, 40)
+09657:                 self.original_items = list(self.visible_items)
+09658:             except Exception:
+09659:                 pass
+09660:         self.refreshRows()
+09661: 
+09662:     def livePlayerClosed(self, current_url=""):
+09663:         if not current_url:
+09664:             return
+09665:         for index, item in enumerate(self.visible_items):
+09666:             if item.get("url", "") == current_url:
+09667:                 try:
+09668:                     self["list"].moveToIndex(index)
+09669:                 except Exception:
+09670:                     pass
+09671:                 break
+
+===== lines 10005-10270 =====
+10005:             ("autoupdate", "%s: %s" % (tr("auto_updates"), tr("on") if self.settings.get("auto_update_check", True) else tr("off"))),
+10006:             ("autostart", "%s: %s" % (tr("autostart"), tr("yes") if self.settings.get("autostart_app", False) else tr("no"))),
+10007:             ("help", tr("playlist_help")),
+10008:             ("updatecheck", tr("check_updates", version=PLUGIN_VERSION)),
+10009:         ]
+10010:         self["list"].setList([row[1] for row in self.rows])
+10011:         self["info"].setText(tr("settings_change"))
+10012: 
+10013:     def selectedKey(self):
+10014:         index = self["list"].getSelectedIndex()
+10015:         return self.rows[index][0] if 0 <= index < len(self.rows) else ""
+10016: 
+10017:     def editSelected(self):
+10018:         key = self.selectedKey()
+10019: 
+10020:         if key == "applanguage":
+10021:             current = clean_text(self.settings.get("app_language", "system")) or "system"
+10022:             choices = [
+10023:                 (("[%s] " % tr("active") if current == "system" else "") + tr("system"), "system"),
+10024:                 (("[%s] " % tr("active") if current == "de" else "") + "Deutsch", "de"),
+10025:                 (("[%s] " % tr("active") if current == "en" else "") + "English", "en"),
+10026:                 (("[%s] " % tr("active") if current == "tr" else "") + "Türkçe", "tr"),
+10027:                 (("[%s] " % tr("active") if current == "it" else "") + "Italiano", "it"),
+10028:                 (("[%s] " % tr("active") if current == "es" else "") + "Español", "es"),
+10029:             ]
+10030:             self.session.openWithCallback(self.appLanguageChosen, ChoiceBox, title=tr("app_language"), list=choices)
+10031:         elif key == "skin":
+10032:             current = clean_text(self.settings.get("skin_theme", "default")) or "default"
+10033:             current_group = clean_text(theme_meta(current).get("group", "standard"))
+10034:             choices = []
+10035:             for group in THEME_CATALOG.get("groups", []):
+10036:                 gid = clean_text(group.get("id", ""))
+10037:                 label = clean_text(group.get("label", gid))
+10038:                 if not gid:
+10039:                     continue
+10040:                 if gid == current_group:
+10041:                     label = "[AKTIV] " + label
+10042:                 choices.append((label, gid))
+10043:             self.session.openWithCallback(self.skinCategoryChosen, ChoiceBox, title=tr("skin_category"), list=choices)
+10044:         elif key == "accesscode":
+10045:             self.session.openWithCallback(
+10046:                 self._familyPinEntered,
+10047:                 EpiPinScreen,
+10048:                 tr("pin_default")
+10049:             )
+10050:         elif key == "sourcemode":
+10051:             error = clean_text(self.profile.get("fast_api_error", ""))
+10052:             if db_source_mode(self.profile_id) == "xtream":
+10053:                 self.session.open(MessageBox, "FAST API ist aktiv.", MessageBox.TYPE_INFO, timeout=5)
+10054:             else:
+10055:                 text = "Die Playlist läuft im M3U-Fallback.\n\nOK/JA = FAST API jetzt erneut automatisch erkennen."
+10056:                 if error:
+10057:                     text += "\n\nLetzter FAST-API-Fehler:\n%s" % error
+10058:                 self.session.openWithCallback(self._retryFastApiConfirmed, MessageBox, text, MessageBox.TYPE_YESNO)
+10059:         elif key == "name":
+10060:             self.session.openWithCallback(
+10061:                 self.nameEntered,
+10062:                 VirtualKeyBoard,
+10063:                 title="Playlist-Name",
+10064:                 text=self.profile.get("name", "")
+10065:             )
+10066:         elif key == "url":
+10067:             self.session.openWithCallback(
+10068:                 self.urlEntered,
+10069:                 VirtualKeyBoard,
+10070:                 title="M3U-URL (leer lassen bei FTP-Datei)",
+10071:                 text=self.profile.get("m3u_url", "")
+10072:             )
+10073:         elif key == "epg":
+10074:             self.session.openWithCallback(
+10075:                 self.epgEntered,
+10076:                 VirtualKeyBoard,
+10077:                 title="EPG/XMLTV-URL (leer = automatisch)",
+10078:                 text=self.profile.get("epg_url", "")
+10079:             )
+10080:         elif key == "audio":
+10081:             current = self.profile.get("preferred_audio", ["deu", "ita", "tur", "eng"])
+10082:             choices = [
+10083:                 (("[AKTIV] " if value == current else "") + label, value)
+10084:                 for label, value in self.AUDIO_CHOICES
+10085:             ]
+10086:             self.session.openWithCallback(
+10087:                 self.audioChosen,
+10088:                 ChoiceBox,
+10089:                 title=tr("audio_language"),
+10090:                 list=choices
+10091:             )
+10092:         elif key == "tmdb":
+10093:             self.session.openWithCallback(
+10094:                 self.tmdbEntered,
+10095:                 VirtualKeyBoard,
+10096:                 title="TMDb API-Key / Read Access Token",
+10097:                 text=self.settings.get("tmdb_api_key", "")
+10098:             )
+10099:         elif key == "language":
+10100:             current = self.settings.get("metadata_language", "de-DE")
+10101:             choices = [
+10102:                 (("[AKTIV] " if value == current else "") + label, value)
+10103:                 for label, value in self.LANGUAGE_CHOICES
+10104:             ]
+10105:             self.session.openWithCallback(
+10106:                 self.languageChosen,
+10107:                 ChoiceBox,
+10108:                 title=tr("metadata_language"),
+10109:                 list=choices
+10110:             )
+10111:         elif key == "actorimages":
+10112:             self.settings["actor_category_images"] = not self.settings.get("actor_category_images", True)
+10113:             save_global_settings(self.settings)
+10114:             self.refresh()
+10115:         elif key == "resume":
+10116:             self.settings["resume_enabled"] = not self.settings.get("resume_enabled", True)
+10117:             save_global_settings(self.settings)
+10118:             self.refresh()
+10119:         elif key == "weather":
+10120:             self.settings["weather_enabled"] = not self.settings.get("weather_enabled", True)
+10121:             save_global_settings(self.settings)
+10122:             self.refresh()
+10123:         elif key == "weatherlocation":
+10124:             self.session.openWithCallback(
+10125:                 self.weatherLocationEntered,
+10126:                 VirtualKeyBoard,
+10127:                 title="Wetter-Standort oder 5-stellige PLZ (leer = automatisch)",
+10128:                 text=self.settings.get("weather_location", "")
+10129:             )
+10130:         elif key == "parental":
+10131:             if self.settings.get("parental_enabled", False):
+10132:                 self._pin_action = "disable"
+10133:                 self.session.openWithCallback(
+10134:                     self._currentPinEntered,
+10135:                     EpiPinScreen,
+10136:                     "Kindersicherung deaktivieren - PIN"
+10137:                 )
+10138:             else:
+10139:                 self._pin_action = "enable"
+10140:                 self._startNewPin()
+10141:         elif key == "adultauto":
+10142:             if self.settings.get("parental_enabled", False):
+10143:                 self._pin_action = "adultauto"
+10144:                 self.session.openWithCallback(
+10145:                     self._currentPinEntered,
+10146:                     EpiPinScreen,
+10147:                     "18+ Automatik ändern - PIN"
+10148:                 )
+10149:             else:
+10150:                 self.settings["parental_auto_adult"] = not self.settings.get("parental_auto_adult", True)
+10151:                 save_global_settings(self.settings)
+10152:                 self.refresh()
+10153:         elif key == "pin":
+10154:             if self.settings.get("parental_enabled", False) and clean_text(self.settings.get("parental_pin_hash", "")):
+10155:                 self._pin_action = "change_pin_auth"
+10156:                 self.session.openWithCallback(
+10157:                     self._currentPinEntered,
+10158:                     EpiPinScreen,
+10159:                     "Aktuelle Kindersicherungs-PIN"
+10160:                 )
+10161:             else:
+10162:                 self._pin_action = "change_pin"
+10163:                 self._startNewPin()
+10164:         elif key == "cache":
+10165:             self.session.openWithCallback(
+10166:                 self.clearCacheConfirmed,
+10167:                 MessageBox,
+10168:                 "TMDb-Metadaten-Cache löschen?",
+10169:                 MessageBox.TYPE_YESNO
+10170:             )
+10171:         elif key == "updateurl":
+10172:             self.session.openWithCallback(
+10173:                 self.updateUrlEntered,
+10174:                 VirtualKeyBoard,
+10175:                 title="HTTPS-URL zum Epi MediaHub update.json",
+10176:                 text=self.settings.get("update_manifest_url", "")
+10177:             )
+10178:         elif key == "autoupdate":
+10179:             self.settings["auto_update_check"] = not self.settings.get("auto_update_check", True)
+10180:             save_global_settings(self.settings)
+10181:             self.refresh()
+10182:         elif key == "autostart":
+10183:             self.settings["autostart_app"] = not self.settings.get("autostart_app", False)
+10184:             save_global_settings(self.settings)
+10185:             self.refresh()
+10186:             state = "aktiviert" if self.settings.get("autostart_app", False) else "deaktiviert"
+10187:             self.session.open(
+10188:                 MessageBox,
+10189:                 "Automatischer Start wurde %s.\nDie Änderung gilt ab dem nächsten Receiver-/Enigma2-Start." % state,
+10190:                 MessageBox.TYPE_INFO,
+10191:                 timeout=5
+10192:             )
+10193:         elif key == "help":
+10194:             self.openHelp()
+10195:         elif key == "updatecheck":
+10196:             self.checkForUpdate()
+10197: 
+10198:     def _familyPinEntered(self, pin):
+10199:         if pin is None:
+10200:             return
+10201:         digest = hashlib.sha256(clean_text(pin).encode("utf-8")).hexdigest()
+10202:         if digest != FAMILY_PIN_HASH:
+10203:             self.session.open(MessageBox, "PIN ist falsch.", MessageBox.TYPE_ERROR, timeout=2)
+10204:             return
+10205:         self.settings = load_global_settings()
+10206:         self.settings["family_skins_unlocked"] = True
+10207:         save_global_settings(self.settings)
+10208:         self.refresh()
+10209:         self.session.open(MessageBox, "Freigeschaltet.", MessageBox.TYPE_INFO, timeout=2)
+10210: 
+10211:     def openHelp(self):
+10212:         self.session.open(EpiHelpScreen)
+10213: 
+10214:     def _startNewPin(self):
+10215:         self._pending_new_pin = ""
+10216:         self.session.openWithCallback(
+10217:             self._newPinFirst,
+10218:             EpiPinScreen,
+10219:             "Neue vierstellige Kindersicherungs-PIN"
+10220:         )
+10221: 
+10222:     def _newPinFirst(self, pin):
+10223:         if pin is None:
+10224:             return
+10225:         self._pending_new_pin = pin
+10226:         self.session.openWithCallback(
+10227:             self._newPinConfirm,
+10228:             EpiPinScreen,
+10229:             "Neue PIN wiederholen"
+10230:         )
+10231: 
+10232:     def _newPinConfirm(self, pin):
+10233:         if pin is None:
+10234:             return
+10235:         if pin != self._pending_new_pin:
+10236:             self._pending_new_pin = ""
+10237:             self.session.open(
+10238:                 MessageBox,
+10239:                 "Die PINs stimmen nicht überein.",
+10240:                 MessageBox.TYPE_ERROR,
+10241:                 timeout=4
+10242:             )
+10243:             return
+10244: 
+10245:         self.settings = load_global_settings()
+10246:         self.settings["parental_pin_hash"] = pin_hash(pin)
+10247:         if self._pin_action == "enable":
+10248:             self.settings["parental_enabled"] = True
+10249:         save_global_settings(self.settings)
+10250:         self._pending_new_pin = ""
+10251:         self._pin_action = ""
+10252:         self.refresh()
+10253:         self.session.open(
+10254:             MessageBox,
+10255:             "Kindersicherungs-PIN gespeichert.",
+10256:             MessageBox.TYPE_INFO,
+10257:             timeout=3
+10258:         )
+10259: 
+10260:     def _currentPinEntered(self, pin):
+10261:         action = self._pin_action
+10262:         if pin is None:
+10263:             self._pin_action = ""
+10264:             return
+10265:         if not pin_matches(pin):
+10266:             self._pin_action = ""
+10267:             self.session.open(MessageBox, "PIN ist falsch.", MessageBox.TYPE_ERROR, timeout=3)
+10268:             return
+10269: 
+10270:         self.settings = load_global_settings()
+
+===== lines 10342-10503 =====
+10342:                     os.remove(ACTOR_CACHE_FILE)
+10343:             except Exception:
+10344:                 pass
+10345:         self.refresh()
+10346:         if new_value and new_value != old_value:
+10347:             self.session.open(
+10348:                 MessageBox,
+10349:                 "TMDb wurde gespeichert. Schauspielerbilder werden beim Öffnen der Film-/Serien-Kategorien automatisch geladen.",
+10350:                 MessageBox.TYPE_INFO,
+10351:                 timeout=5
+10352:             )
+10353: 
+10354:     def skinCategoryChosen(self, selection):
+10355:         if not selection:
+10356:             return
+10357:         group_id = selection[1]
+10358:         group_data = None
+10359:         for group in THEME_CATALOG.get("groups", []):
+10360:             if clean_text(group.get("id", "")) == group_id:
+10361:                 group_data = group
+10362:                 break
+10363:         if not group_data:
+10364:             return
+10365:         current = clean_text(self.settings.get("skin_theme", "default")) or "default"
+10366:         choices = []
+10367:         family_unlocked = bool(self.settings.get("family_skins_unlocked", False))
+10368:         for theme_id in group_data.get("themes", []):
+10369:             if theme_id not in THEME_CATALOG.get("themes", {}):
+10370:                 continue
+10371:             meta = theme_meta(theme_id)
+10372:             if meta.get("family", False) and not family_unlocked:
+10373:                 continue
+10374:             label = theme_display_name(theme_id)
+10375:             if theme_id == current:
+10376:                 label = "[AKTIV] " + label
+10377:             choices.append((label, theme_id))
+10378:         if choices:
+10379:             self.session.openWithCallback(self.skinChosen, ChoiceBox, title=tr("skin_select"), list=choices)
+10380: 
+10381:     def skinChosen(self, selection):
+10382:         if not selection:
+10383:             return
+10384:         theme_id = clean_text(selection[1])
+10385:         if theme_id not in THEME_CATALOG.get("themes", {}):
+10386:             return
+10387:         self.settings["skin_theme"] = theme_id
+10388:         save_global_settings(self.settings)
+10389:         prepare_active_theme(theme_id)
+10390:         self.refresh()
+10391:         try:
+10392:             if self["themePreview"].instance is not None and os.path.isfile(ACTIVE_THEME_MARK):
+10393:                 self["themePreview"].instance.setPixmapFromFile(ACTIVE_THEME_MARK)
+10394:         except Exception:
+10395:             pass
+10396:         self.session.open(MessageBox, tr("skin_saved"), MessageBox.TYPE_INFO, timeout=7)
+10397: 
+10398:     def appLanguageChosen(self, selection):
+10399:         if not selection:
+10400:             return
+10401:         self.settings["app_language"] = selection[1]
+10402:         save_global_settings(self.settings)
+10403:         self.refresh()
+10404: 
+10405:     def languageChosen(self, selection):
+10406:         if not selection:
+10407:             return
+10408:         self.settings["metadata_language"] = selection[1]
+10409:         save_global_settings(self.settings)
+10410:         self.refresh()
+10411: 
+10412:     def weatherLocationEntered(self, value):
+10413:         if value is None:
+10414:             return
+10415:         self.settings["weather_location"] = clean_text(value)
+10416:         save_global_settings(self.settings)
+10417:         # Force the next home-screen visit to refresh this location.
+10418:         try:
+10419:             if os.path.exists(WEATHER_CACHE_FILE):
+10420:                 os.remove(WEATHER_CACHE_FILE)
+10421:         except Exception:
+10422:             pass
+10423:         self.refresh()
+10424: 
+10425:     def updateUrlEntered(self, value):
+10426:         if value is None:
+10427:             return
+10428:         self.settings["update_manifest_url"] = clean_text(value)
+10429:         save_global_settings(self.settings)
+10430:         self.refresh()
+10431: 
+10432:     def checkForUpdate(self):
+10433:         url = clean_text(self.settings.get("update_manifest_url", ""))
+10434:         if not url:
+10435:             self.session.open(MessageBox, "Noch keine Update-Quelle eingerichtet.\nDafür brauchen wir später eine HTTPS-Adresse mit update.json.", MessageBox.TYPE_INFO, timeout=6)
+10436:             return
+10437:         try:
+10438:             manifest = fetch_update_manifest(url)
+10439:             remote = clean_text(manifest.get("version", ""))
+10440:             if not remote:
+10441:                 raise Exception("Versionsnummer fehlt im Manifest.")
+10442:             if version_tuple(remote) <= version_tuple(PLUGIN_VERSION):
+10443:                 self.session.open(MessageBox, "Epi MediaHub ist aktuell (v%s)." % PLUGIN_VERSION, MessageBox.TYPE_INFO, timeout=4)
+10444:                 return
+10445:             self._pending_update_manifest = manifest
+10446:             self.session.openWithCallback(self._updateConfirmed, MessageBox, "Epi MediaHub v%s ist verfügbar.\nJetzt herunterladen und installieren?" % remote, MessageBox.TYPE_YESNO)
+10447:         except Exception as error:
+10448:             self.session.open(MessageBox, "Update-Prüfung fehlgeschlagen:\n%s" % str(error), MessageBox.TYPE_ERROR, timeout=7)
+10449: 
+10450:     def _updateConfirmed(self, confirmed):
+10451:         if not confirmed:
+10452:             return
+10453:         manifest = getattr(self, "_pending_update_manifest", None)
+10454:         if not manifest:
+10455:             return
+10456:         try:
+10457:             download_and_install_update(manifest)
+10458:             if TryQuitMainloop is not None:
+10459:                 self.session.openWithCallback(self._restartAfterUpdate, MessageBox, "Update wurde installiert.\nEnigma2 jetzt neu starten?", MessageBox.TYPE_YESNO)
+10460:             else:
+10461:                 self.session.open(MessageBox, "Update installiert. Bitte die Enigma2-GUI neu starten.", MessageBox.TYPE_INFO, timeout=6)
+10462:         except Exception as error:
+10463:             self.session.open(MessageBox, "Update konnte nicht installiert werden:\n%s" % str(error), MessageBox.TYPE_ERROR, timeout=8)
+10464: 
+10465:     def _restartAfterUpdate(self, confirmed):
+10466:         if confirmed and TryQuitMainloop is not None:
+10467:             self.session.open(TryQuitMainloop, 3)
+10468: 
+10469:     def clearCacheConfirmed(self, confirmed):
+10470:         if not confirmed:
+10471:             return
+10472:         try:
+10473:             if os.path.exists(METADATA_CACHE_FILE):
+10474:                 os.remove(METADATA_CACHE_FILE)
+10475:             if os.path.exists(ACTOR_CACHE_FILE):
+10476:                 os.remove(ACTOR_CACHE_FILE)
+10477:             if os.path.isdir(ACTOR_CACHE_DIR):
+10478:                 for filename in os.listdir(ACTOR_CACHE_DIR):
+10479:                     path = os.path.join(ACTOR_CACHE_DIR, filename)
+10480:                     if os.path.isfile(path):
+10481:                         try:
+10482:                             os.remove(path)
+10483:                         except Exception:
+10484:                             pass
+10485:         except Exception:
+10486:             pass
+10487:         self.session.open(MessageBox, "Metadaten- und Schauspieler-Cache gelöscht.", MessageBox.TYPE_INFO, timeout=3)
+10488: 
+10489:     def loadPlaylist(self):
+10490:         if self._playlist_job is not None and self._playlist_job.is_alive():
+10491:             self.session.open(MessageBox, "Die Playlist wird bereits geladen.", MessageBox.TYPE_INFO, timeout=3)
+10492:             return
+10493: 
+10494:         profile = dict(self.profile)
+10495:         self._playlist_result = None
+10496:         self["green"].setText("GRÜN  Lädt ...")
+10497:         self["info"].setText(
+10498:             "Playlist wird im Hintergrund geladen und schnell indiziert. Die Box bleibt bedienbar ..."
+10499:         )
+10500:         self._playlist_job = threading.Thread(target=self._playlistWorker, args=(profile,))
+10501:         self._playlist_job.daemon = True
+10502:         self._playlist_job.start()
+10503:         try:
+
+===== lines 10568-10650 =====
+10568:             self.refresh()
+10569:             self.session.open(
+10570:                 MessageBox,
+10571:                 "EPG aktualisiert: %d Sendungen im Cache" % count,
+10572:                 MessageBox.TYPE_INFO,
+10573:                 timeout=6
+10574:             )
+10575:         except Exception as error:
+10576:             self.session.open(
+10577:                 MessageBox,
+10578:                 "EPG konnte nicht geladen werden:\n%s" % str(error),
+10579:                 MessageBox.TYPE_ERROR,
+10580:                 timeout=8
+10581:             )
+10582: 
+10583: 
+10584: def route_after_splash(session):
+10585:     scan_local_playlists()
+10586:     data = load_profiles()
+10587:     profiles = data.get("profiles", [])
+10588:     if len(profiles) == 1:
+10589:         profile_id = profiles[0].get("id")
+10590:         set_active_profile(profile_id)
+10591:         session.open(EpiMediaHubHome, profile_id)
+10592:     elif len(profiles) > 1:
+10593:         session.openWithCallback(lambda profile_id=None: open_home_after_selection(session, profile_id), EpiProfileSelect)
+10594:     else:
+10595:         session.openWithCallback(lambda profile_id=None: open_home_after_selection(session, profile_id), EpiProfileSelect)
+10596: 
+10597: 
+10598: def open_home_after_selection(session, profile_id):
+10599:     if profile_id:
+10600:         set_active_profile(profile_id)
+10601:         session.open(EpiMediaHubHome, profile_id)
+10602: 
+10603: 
+10604: def main(session, **kwargs):
+10605:     ensure_data_dir()
+10606:     session.openWithCallback(lambda *args: route_after_splash(session), EpiSplash)
+10607: 
+10608: 
+10609: # Keep timers/session alive globally for boot and standby-wakeup launches.
+10610: # Opening a full-screen plugin directly inside WHERE_SESSIONSTART or while
+10611: # Enigma2 is still closing its Standby screen can be too early on some images,
+10612: # so both paths use a short delayed launch.
+10613: _BOOT_AUTOSTART_TIMER = None
+10614: _BOOT_AUTOSTART_SESSION = None
+10615: _STANDBY_WAKE_TIMER = None
+10616: _STANDBY_SESSION = None
+10617: _STANDBY_HOOK_INSTALLED = False
+10618: 
+10619: 
+10620: def _epimedia_dialog_active(session):
+10621:     try:
+10622:         dialog = getattr(session, "current_dialog", None)
+10623:         if dialog is None:
+10624:             return False
+10625:         cls = dialog.__class__
+10626:         module = clean_text(getattr(cls, "__module__", ""))
+10627:         name = clean_text(getattr(cls, "__name__", ""))
+10628:         return module == __name__ and name.startswith("Epi")
+10629:     except Exception:
+10630:         return False
+10631: 
+10632: 
+10633: def _run_boot_autostart():
+10634:     global _BOOT_AUTOSTART_TIMER, _BOOT_AUTOSTART_SESSION
+10635:     session = _BOOT_AUTOSTART_SESSION
+10636:     try:
+10637:         if _BOOT_AUTOSTART_TIMER is not None:
+10638:             _BOOT_AUTOSTART_TIMER.stop()
+10639:     except Exception:
+10640:         pass
+10641:     _BOOT_AUTOSTART_TIMER = None
+10642:     _BOOT_AUTOSTART_SESSION = None
+10643:     if session is None:
+10644:         return
+10645:     try:
+10646:         if load_global_settings().get("autostart_app", False) and not _epimedia_dialog_active(session):
+10647:             main(session)
+10648:     except Exception:
+10649:         pass
+10650: 
+
