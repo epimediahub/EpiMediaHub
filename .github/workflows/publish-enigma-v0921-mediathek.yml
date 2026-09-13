@@ -24,3 +24,5 @@ jobs:
       - name: Build and publish v0.9.21 Mediathek
         shell: bash
         run: bash build_tools/build_v0921_mediathek.sh
+      - name: Confirm release intent
+        run: echo 'Publishing updater-visible v0.9.21'
