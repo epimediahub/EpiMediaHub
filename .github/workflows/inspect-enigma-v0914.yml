@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect live player and category refresh paths
+      - name: Inspect category open and playback callbacks
         shell: bash
         run: |
           set -euo pipefail
@@ -28,17 +28,8 @@ jobs:
           from pathlib import Path
           p=Path('/tmp/inspect0914/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py')
           lines=p.read_text(encoding='utf-8').splitlines()
-          starts=[]
-          for needle in ('class EpiLivePlayer','def save_recent_entry','class EpiCategoryScreen','class EpiContentScreen'):
-              for i,line in enumerate(lines):
-                  if needle in line:
-                      starts.append((needle,i))
-                      break
-          for needle,i in starts:
-              before=45 if 'save_recent' in needle else 15
-              after={'class EpiLivePlayer':260,'def save_recent_entry':100,'class EpiCategoryScreen':360,'class EpiContentScreen':260}.get(needle,120)
-              a=max(0,i-before); b=min(len(lines),i+after)
-              print(f'===== {needle} LINES {a+1}-{b} =====')
-              for j in range(a,b):
+          for a,b in ((7790,7985),(8370,8680)):
+              print(f'===== LINES {a+1}-{b} =====')
+              for j in range(a,min(b,len(lines))):
                   print(f'{j+1:05d}: {lines[j]}')
           PY
