@@ -1,0 +1,52 @@
+name: Inspect Enigma v0.9.19 persistence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-enigma-v0919-persistence.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Inspect package persistence behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/inspect0919
+          mkdir -p /tmp/inspect0919/{ar,data,control} inspection
+          cd /tmp/inspect0919/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.19.ipk"
+          tar -xzf data.tar.gz -C ../data
+          tar -xzf control.tar.gz -C ../control
+          {
+            echo '=== CONTROL FILES ==='
+            find ../control -maxdepth 2 -type f -printf '%P\n' | sort
+            echo
+            for f in ../control/*; do
+              [ -f "$f" ] || continue
+              echo "=== CONTROL: $(basename "$f") ==="
+              cat "$f"
+              echo
+            done
+            echo '=== DATA PATHS UNDER /etc ==='
+            find ../data/etc -maxdepth 6 -printf '%p\n' 2>/dev/null | sed 's#^../data##' | sort || true
+            echo
+            echo '=== ALL PACKAGE PATHS MATCHING playlist/epimedia ==='
+            find ../data -printf '%p\n' | sed 's#^../data##' | grep -Ei 'playlist|epimedia' | sort || true
+          } > "$GITHUB_WORKSPACE/inspection/v0919-persistence.txt"
+      - name: Publish inspection
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add inspection/v0919-persistence.txt
+          git commit -m 'Inspect v0.9.19 persistence behavior'
+          git push
