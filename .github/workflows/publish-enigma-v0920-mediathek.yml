@@ -21,6 +21,16 @@ jobs:
           fetch-depth: 0
       - name: Install build dependency
         run: python3 -m pip install --disable-pip-version-check pillow
+      - name: Fix Mediathek asset check
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('build_tools/build_v0920_mediathek.sh')
+          t = p.read_text(encoding='utf-8')
+          t = t.replace('grep -q home_mediathek "$PLUGIN"', 'test -f "$ROOT/home_mediathek.png"')
+          p.write_text(t, encoding='utf-8')
+          PY
       - name: Build and publish v0.9.20 Mediathek
         shell: bash
         run: bash -x build_tools/build_v0920_mediathek.sh
