@@ -1,4 +1,4 @@
-name: Build Enigma v0.9.16 Test
+name: Publish Enigma v0.9.16
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build v0.9.16 test package from v0.9.15
+      - name: Build official v0.9.16 from v0.9.15
         shell: bash
         run: |
           set -euo pipefail
@@ -65,7 +65,7 @@ jobs:
           p.write_text(t,encoding='utf-8')
           PY
           sed -i 's/^Version:.*/Version: 0.9.16/' /tmp/epimedia0916/control/control
-          sed -i 's/^Description:.*/Description: Epi MediaHub - v0.9.16 premium UI test build/' /tmp/epimedia0916/control/control
+          sed -i 's/^Description:.*/Description: Epi MediaHub - v0.9.16 premium UI/' /tmp/epimedia0916/control/control
           python3 -m py_compile "$PLUGIN"
           grep -q 'PLUGIN_VERSION = "0.9.16"' "$PLUGIN"
           grep -q '_premium_tile_branding = True' "$PLUGIN"
@@ -74,16 +74,29 @@ jobs:
           cd /tmp/epimedia0916/pkg
           ar r "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.16.ipk" debian-binary control.tar.gz data.tar.gz
           cd "$GITHUB_WORKSPACE"
-          sha256sum EpiMediaHub_v0.9.16.ipk > EpiMediaHub_v0.9.16.ipk.sha256
+          SHA=$(sha256sum EpiMediaHub_v0.9.16.ipk | awk '{print $1}')
+          export IPK_SHA256="$SHA"
+          echo "$SHA  EpiMediaHub_v0.9.16.ipk" > EpiMediaHub_v0.9.16.ipk.sha256
+          python3 - <<'PY'
+          import json, os
+          with open('update.json','r',encoding='utf-8') as f:
+              d=json.load(f)
+          d['version']='0.9.16'
+          d['url']='https://raw.githubusercontent.com/epimediahub/EpiMediaHub/main/EpiMediaHub_v0.9.16.ipk'
+          d['sha256']=os.environ['IPK_SHA256']
+          with open('update.json','w',encoding='utf-8') as f:
+              json.dump(d,f,indent=2); f.write('\n')
+          PY
           ar t EpiMediaHub_v0.9.16.ipk
-          cat EpiMediaHub_v0.9.16.ipk.sha256
+          sha256sum -c EpiMediaHub_v0.9.16.ipk.sha256
 
-      - name: Publish test IPK
+      - name: Publish single official IPK
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add EpiMediaHub_v0.9.16.ipk EpiMediaHub_v0.9.16.ipk.sha256
-          git commit -m 'Publish EpiMediaHub v0.9.16 test build'
+          rm -f EpiMediaHub_v0.9.15.ipk EpiMediaHub_v0.9.15.ipk.sha256
+          git add -A EpiMediaHub_v0.9.15.ipk EpiMediaHub_v0.9.15.ipk.sha256 EpiMediaHub_v0.9.16.ipk EpiMediaHub_v0.9.16.ipk.sha256 update.json
+          git commit -m 'Publish EpiMediaHub v0.9.16 as official Enigma build'
           git push
