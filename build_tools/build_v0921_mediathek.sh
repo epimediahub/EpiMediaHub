@@ -20,6 +20,12 @@ if needle not in src:
 src = src.replace(needle, replacement, 1)
 # Make the source-version validation match the new release.
 src = src.replace("if 'PLUGIN_VERSION = \\\"0.9.20\\\"' not in t:", "if 'PLUGIN_VERSION = \\\"0.9.21\\\"' not in t:")
+# Keep only one official Enigma package after a successful publish.
+anchor = "git config user.name 'github-actions[bot]'"
+cleanup = "rm -f EpiMediaHub_v0.9.20.ipk EpiMediaHub_v0.9.20.ipk.sha256\nrm -f .github/workflows/publish-enigma-v0920-mediathek.yml\n" + anchor
+if anchor not in src:
+    raise SystemExit('publish anchor missing')
+src = src.replace(anchor, cleanup, 1)
 Path('/tmp/build_v0921_mediathek_inner.sh').write_text(src, encoding='utf-8')
 PY
 bash -x "$TMP_SCRIPT"
