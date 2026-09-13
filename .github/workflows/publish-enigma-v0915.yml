@@ -1,0 +1,275 @@
+name: Publish Enigma v0.9.15
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-enigma-v0915.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build v0.9.15 from v0.9.14
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/epimedia0915
+          mkdir -p /tmp/epimedia0915/{ar,data,control,pkg}
+          cd /tmp/epimedia0915/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.14.ipk"
+          tar -xzf data.tar.gz -C ../data
+          tar -xzf control.tar.gz -C ../control
+          cp debian-binary ../pkg/debian-binary
+
+          PLUGIN="/tmp/epimedia0915/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py"
+          export PLUGIN
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ['PLUGIN'])
+          text = path.read_text(encoding='utf-8')
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit('%s: expected 1 match, got %d' % (label, count))
+              text = text.replace(old, new, 1)
+
+          replace_once('PLUGIN_VERSION = "0.9.14"', 'PLUGIN_VERSION = "0.9.15"', 'version')
+
+          replace_once(
+              '    "0.9.14": {',
+              '''    "0.9.15": {
+                  "de": ["Schnelles Scrollen durch Kategorien optimiert: Kategorie-Icons werden verzögert und nur bei Bedarf neu gezeichnet, damit OpenATV flüssig bleibt.", "LIVE-TV hat jetzt die Kategorie Zuletzt angesehen; erfolgreich gestartete Sender werden automatisch gespeichert, auch beim Zappen."],
+                  "en": ["Optimized fast category scrolling: category icons are deferred and only redrawn when needed to keep OpenATV responsive.", "Live TV now has a Recently watched category; successfully tuned channels are stored automatically, including while zapping."],
+                  "tr": ["Hızlı kategori kaydırma optimize edildi; OpenATV akıcı kalması için kategori simgeleri gecikmeli ve yalnızca gerektiğinde yenilenir.", "Canlı TV artık Son izlenenler kategorisine sahip; başarılı açılan kanallar kanal değiştirirken de otomatik kaydedilir."],
+                  "it": ["Ottimizzato lo scorrimento rapido delle categorie: le icone vengono aggiornate con ritardo e solo quando serve per mantenere OpenATV fluido.", "La TV Live ora ha la categoria Visti di recente; i canali avviati correttamente vengono salvati anche durante lo zapping."],
+                  "es": ["Optimizado el desplazamiento rápido por categorías: los iconos se actualizan con retardo y solo cuando es necesario para mantener OpenATV fluido.", "Live TV ahora incluye Vistos recientemente; los canales sintonizados correctamente se guardan también al hacer zapping."]
+              },
+              "0.9.14": {''',
+              'release notes'
+          )
+
+          replace_once(
+              '    if entry.get("type") not in ("movies", "series") or not clean_text(entry.get("url", "")):',
+              '    if entry.get("type") not in ("live", "movies", "series") or not clean_text(entry.get("url", "")):',
+              'recent accepts live'
+          )
+
+          replace_once(
+              '        self._ignore_failure_until = 0.0\n        self._service_event_tracker = None',
+              '        self._ignore_failure_until = 0.0\n        self._recent_live_url = ""\n        self._service_event_tracker = None',
+              'live recent state'
+          )
+
+          replace_once(
+              '''    def _liveReady(self):
+                  self._stream_started = True
+                  try:
+                      self._stream_watchdog.stop()
+                  except Exception:
+                      pass
+          ''',
+              '''    def _liveReady(self):
+                  self._stream_started = True
+                  try:
+                      self._stream_watchdog.stop()
+                  except Exception:
+                      pass
+                  # Only successful tunes enter LIVE history. This keeps broken/offline
+                  # services out of "Zuletzt angesehen" and also records zapping.
+                  try:
+                      entry = self.entries[self.index] if self.entries else None
+                      url = clean_text((entry or {}).get("url", ""))
+                      if entry and url and url != self._recent_live_url:
+                          save_recent_entry(self.profile_id, entry)
+                          self._recent_live_url = url
+                  except Exception:
+                      pass
+          ''',
+              'save successful live tune'
+          )
+
+          replace_once(
+              '''        self._actor_timer = eTimer()
+                  connect_timer(self._actor_timer, self._pollActorCategoryImages)
+          
+                  self["logo"] = Pixmap()
+          ''',
+              '''        self._actor_timer = eTimer()
+                  connect_timer(self._actor_timer, self._pollActorCategoryImages)
+                  # Do not decode/reload up to ten category images for every key-repeat
+                  # event. A short one-shot debounce lets native MenuList scrolling stay
+                  # responsive even on slower OpenATV receivers.
+                  self._category_icon_timer = eTimer()
+                  connect_timer(self._category_icon_timer, self._deferredCategoryPiconRefresh)
+                  self._category_icon_slot_paths = {}
+                  try:
+                      self._category_actor_images_enabled = bool(load_global_settings().get("actor_category_images", True))
+                  except Exception:
+                      self._category_actor_images_enabled = True
+          
+                  self["logo"] = Pixmap()
+          ''',
+              'category debounce init'
+          )
+
+          replace_once(
+              '''    def _configureCategoryIcons(self):
+                  self._updateCategoryPiconStrip()
+          
+              def _categorySelectionChanged(self):
+                  self._updateCategoryPiconStrip()
+          ''',
+              '''    def _configureCategoryIcons(self):
+                  self._updateCategoryPiconStrip()
+          
+              def _scheduleCategoryPiconRefresh(self, delay=160):
+                  try:
+                      self._category_icon_timer.stop()
+                  except Exception:
+                      pass
+                  try:
+                      self._category_icon_timer.start(int(delay), True)
+                  except TypeError:
+                      self._category_icon_timer.start(int(delay))
+                  except Exception:
+                      pass
+          
+              def _deferredCategoryPiconRefresh(self):
+                  self._updateCategoryPiconStrip()
+          
+              def _categorySelectionChanged(self):
+                  self._scheduleCategoryPiconRefresh(160)
+          ''',
+              'category selection debounce'
+          )
+
+          replace_once(
+              '        if load_global_settings().get("actor_category_images", True):\n            resolved, actor_path = actor_category_cache_record(category_name)',
+              '        if getattr(self, "_category_actor_images_enabled", True):\n            resolved, actor_path = actor_category_cache_record(category_name)',
+              'avoid settings read per category icon'
+          )
+
+          replace_once(
+              '''        # Repaint visible icons after cached images arrived.
+                  self._updateCategoryPiconStrip()
+          ''',
+              '''        # Repaint after cached images arrived, but never compete with
+                  # an active remote-control scroll burst.
+                  self._scheduleCategoryPiconRefresh(80)
+          ''',
+              'actor repaint debounce'
+          )
+
+          replace_once(
+              '''                if path and os.path.isfile(path) and widget.instance is not None:
+                              widget.instance.setPixmapFromFile(path)
+                              widget.show()
+                          else:
+                              widget.hide()
+          ''',
+              '''                if path and os.path.isfile(path) and widget.instance is not None:
+                              # setPixmapFromFile can be surprisingly expensive on small
+                              # receivers. Reuse the pixmap already present in this slot.
+                              if self._category_icon_slot_paths.get(name, "") != path:
+                                  widget.instance.setPixmapFromFile(path)
+                                  self._category_icon_slot_paths[name] = path
+                              widget.show()
+                          else:
+                              self._category_icon_slot_paths[name] = ""
+                              widget.hide()
+          ''',
+              'avoid redundant category pixmap decode'
+          )
+
+          replace_once(
+              '        if self.kind in ("movies", "series"):\n            pseudo = ["__recent__", "__all__"]',
+              '        if self.kind in ("live", "movies", "series"):\n            pseudo = ["__recent__", "__all__"]',
+              'live recent pseudo category'
+          )
+
+          replace_once(
+              '        if self.kind in ("movies", "series"):\n            recent_count = len(visible_recent_entries(self.profile_id, self.kind, self.profile, 40))',
+              '        if self.kind in ("live", "movies", "series"):\n            recent_count = len(visible_recent_entries(self.profile_id, self.kind, self.profile, 40))',
+              'live recent count'
+          )
+
+          replace_once(
+              '        self["list"].setList(rows)\n        self._updateCategoryPiconStrip()\n        self["info"].setText(tr("category_info", count=len(records)))',
+              '        self["list"].setList(rows)\n        self._scheduleCategoryPiconRefresh(60)\n        self["info"].setText(tr("category_info", count=len(records)))',
+              'defer refreshRows icons'
+          )
+
+          replace_once(
+              '        if name == "__recent__" and self.kind in ("movies", "series"):',
+              '        if name == "__recent__" and self.kind in ("live", "movies", "series"):',
+              'open live recent'
+          )
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          sed -i 's/^Version:.*/Version: 0.9.15/' /tmp/epimedia0915/control/control
+          sed -i 's/^Description:.*/Description: Epi MediaHub - v0.9.15 smooth categories and LIVE recent channels/' /tmp/epimedia0915/control/control
+
+          python3 -m py_compile "$PLUGIN"
+          grep -q 'PLUGIN_VERSION = "0.9.15"' "$PLUGIN"
+          grep -q 'def _scheduleCategoryPiconRefresh' "$PLUGIN"
+          grep -q 'self._recent_live_url' "$PLUGIN"
+          grep -q 'entry.get("type") not in ("live", "movies", "series")' "$PLUGIN"
+          grep -q 'self.kind in ("live", "movies", "series")' "$PLUGIN"
+
+          tar --owner=0 --group=0 -czf /tmp/epimedia0915/pkg/control.tar.gz -C /tmp/epimedia0915/control .
+          tar --owner=0 --group=0 -czf /tmp/epimedia0915/pkg/data.tar.gz -C /tmp/epimedia0915/data .
+          cd /tmp/epimedia0915/pkg
+          ar r "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.15.ipk" debian-binary control.tar.gz data.tar.gz
+
+          cd "$GITHUB_WORKSPACE"
+          SHA=$(sha256sum EpiMediaHub_v0.9.15.ipk | awk '{print $1}')
+          export IPK_SHA256="$SHA"
+          echo "IPK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "$SHA  EpiMediaHub_v0.9.15.ipk" > EpiMediaHub_v0.9.15.ipk.sha256
+
+          python3 - <<'PY'
+          import json, os
+          path = 'update.json'
+          with open(path, 'r', encoding='utf-8') as f:
+              data = json.load(f)
+          data['version'] = '0.9.15'
+          data['url'] = 'https://raw.githubusercontent.com/epimediahub/EpiMediaHub/main/EpiMediaHub_v0.9.15.ipk'
+          data['sha256'] = os.environ['IPK_SHA256']
+          with open(path, 'w', encoding='utf-8') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+          PY
+
+          ar t EpiMediaHub_v0.9.15.ipk
+          cat EpiMediaHub_v0.9.15.ipk.sha256
+          cat update.json
+
+      - name: Publish IPK and updater manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add EpiMediaHub_v0.9.15.ipk EpiMediaHub_v0.9.15.ipk.sha256 update.json
+          if git diff --cached --quiet; then
+            echo 'Nothing to publish.'
+            exit 0
+          fi
+          git commit -m 'Publish EpiMediaHub v0.9.15'
+          git push
