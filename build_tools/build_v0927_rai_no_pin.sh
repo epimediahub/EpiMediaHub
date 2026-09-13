@@ -2,6 +2,11 @@
 set -euo pipefail
 W="${GITHUB_WORKSPACE:-$(pwd)}"
 B="$W/EpiMediaHub_v0.9.25.ipk"
+# v0.9.26 may already have removed the current v0.9.25 package from main.
+# Recreate the known-good v0.9.25 package from the commit that published it.
+if [ ! -f "$B" ]; then
+  git show a6211ff:EpiMediaHub_v0.9.25.ipk > "$B"
+fi
 T=/tmp/epimedia0927
 P="$T/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py"
 rm -rf "$T"; mkdir -p "$T/ar" "$T/data" "$T/control" "$T/pkg"
@@ -46,6 +51,7 @@ sed -i 's/^Version:.*/Version: 0.9.27/' "$T/control/control"
 sed -i 's/^Description:.*/Description: Epi MediaHub - v0.9.27 Rai direct access, Family features retained/' "$T/control/control"
 python3 -m py_compile "$P"
 grep -q 'PLUGIN_VERSION = "0.9.27"' "$P"
+# These four checks prove the non-Rai Family/parental features were preserved.
 grep -q 'FAMILY_PIN_HASH' "$P"
 grep -q 'family_skins_unlocked' "$P"
 grep -q '_familyPinEntered' "$P"
