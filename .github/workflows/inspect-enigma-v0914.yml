@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect category open and playback callbacks
+      - name: Inspect live playback callback details
         shell: bash
         run: |
           set -euo pipefail
@@ -28,8 +28,7 @@ jobs:
           from pathlib import Path
           p=Path('/tmp/inspect0914/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py')
           lines=p.read_text(encoding='utf-8').splitlines()
-          for a,b in ((7790,7985),(8370,8680)):
-              print(f'===== LINES {a+1}-{b} =====')
+          for a,b in ((8670,8770),):
               for j in range(a,min(b,len(lines))):
                   print(f'{j+1:05d}: {lines[j]}')
           PY
