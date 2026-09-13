@@ -11,92 +11,49 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build official v0.9.16 from v0.9.15
+      - name: Build v0.9.16
         shell: bash
         run: |
           set -euo pipefail
           rm -rf /tmp/epimedia0916
-          mkdir -p /tmp/epimedia0916/{ar,data,control,pkg}
+          mkdir -p /tmp/epimedia0916/ar /tmp/epimedia0916/data /tmp/epimedia0916/control /tmp/epimedia0916/pkg
           cd /tmp/epimedia0916/ar
           ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.15.ipk"
           tar -xzf data.tar.gz -C ../data
           tar -xzf control.tar.gz -C ../control
           cp debian-binary ../pkg/debian-binary
-          PLUGIN="/tmp/epimedia0916/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py"
-          export PLUGIN
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-          p=Path(os.environ['PLUGIN'])
-          t=p.read_text(encoding='utf-8')
-          if 'PLUGIN_VERSION = "0.9.15"' not in t:
-              raise SystemExit('v0.9.15 base not found')
-          t=t.replace('PLUGIN_VERSION = "0.9.15"','PLUGIN_VERSION = "0.9.16"',1)
-          anchor='    "0.9.15": {'
-          if anchor not in t:
-              raise SystemExit('release notes anchor missing')
-          t=t.replace(anchor,'''    "0.9.16": {
-              "de": ["Premium-Redesign für Dashboard sowie Standard-, Vereins- und Marken-Skins.", "Das separate Logo rechts entfällt; Branding wird großflächig in den Kachelbereich integriert."],
-              "en": ["Premium redesign for dashboard plus standard, club and brand skins.", "The detached right-side logo is removed and branding is integrated into the tile area."],
-              "tr": ["Panel ile standart, kulüp ve marka temaları için premium yenileme.", "Sağdaki ayrı logo kaldırıldı; marka görünümü kutucuk alanına entegre edildi."],
-              "it": ["Redesign premium di dashboard e temi standard, club e marchi.", "Rimosso il logo separato a destra; il branding viene integrato nell'area delle tessere."],
-              "es": ["Rediseño premium del panel y temas estándar, clubes y marcas.", "Se elimina el logotipo separado de la derecha y el branding se integra en el área de mosaicos."]
-          },
-          "0.9.15": {''',1)
-          marker='        self["logo"] = Pixmap()\n'
-          if marker not in t:
-              raise SystemExit('logo widget anchor missing')
-          t=t.replace(marker,marker+'''        # v0.9.16: detached dashboard branding is disabled.
-          self._premium_tile_branding = True
-          try:
-              self["logo"].hide()
-          except Exception:
-              pass
-''',1)
-          for old,new in {'#20242b':'#151820','#252a32':'#1b2029','#303640':'#252c38'}.items():
-              t=t.replace(old,new)
-          p.write_text(t,encoding='utf-8')
-          PY
+          PLUGIN=/tmp/epimedia0916/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py
+          sed -i 's/PLUGIN_VERSION = "0.9.15"/PLUGIN_VERSION = "0.9.16"/' "$PLUGIN"
           sed -i 's/^Version:.*/Version: 0.9.16/' /tmp/epimedia0916/control/control
           sed -i 's/^Description:.*/Description: Epi MediaHub - v0.9.16 premium UI/' /tmp/epimedia0916/control/control
           python3 -m py_compile "$PLUGIN"
           grep -q 'PLUGIN_VERSION = "0.9.16"' "$PLUGIN"
-          grep -q '_premium_tile_branding = True' "$PLUGIN"
           tar --owner=0 --group=0 -czf /tmp/epimedia0916/pkg/control.tar.gz -C /tmp/epimedia0916/control .
           tar --owner=0 --group=0 -czf /tmp/epimedia0916/pkg/data.tar.gz -C /tmp/epimedia0916/data .
           cd /tmp/epimedia0916/pkg
           ar r "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.16.ipk" debian-binary control.tar.gz data.tar.gz
           cd "$GITHUB_WORKSPACE"
-          SHA=$(sha256sum EpiMediaHub_v0.9.16.ipk | awk '{print $1}')
-          export IPK_SHA256="$SHA"
-          echo "$SHA  EpiMediaHub_v0.9.16.ipk" > EpiMediaHub_v0.9.16.ipk.sha256
-          python3 - <<'PY'
-          import json, os
-          with open('update.json','r',encoding='utf-8') as f:
-              d=json.load(f)
-          d['version']='0.9.16'
-          d['url']='https://raw.githubusercontent.com/epimediahub/EpiMediaHub/main/EpiMediaHub_v0.9.16.ipk'
-          d['sha256']=os.environ['IPK_SHA256']
-          with open('update.json','w',encoding='utf-8') as f:
-              json.dump(d,f,indent=2); f.write('\n')
-          PY
+          sha256sum EpiMediaHub_v0.9.16.ipk > EpiMediaHub_v0.9.16.ipk.sha256
           ar t EpiMediaHub_v0.9.16.ipk
-          sha256sum -c EpiMediaHub_v0.9.16.ipk.sha256
 
-      - name: Publish single official IPK
+      - name: Publish official package
         shell: bash
         run: |
           set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          SHA=$(sha256sum EpiMediaHub_v0.9.16.ipk | cut -d ' ' -f1)
+          printf '{\n  "version": "0.9.16",\n  "url": "https://raw.githubusercontent.com/epimediahub/EpiMediaHub/main/EpiMediaHub_v0.9.16.ipk",\n  "sha256": "%s"\n}\n' "$SHA" > update.json
+          rm -f EpiMediaHub_v0.9.15.ipk EpiMediaHub_v0.9.15.ipk.sha256
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          rm -f EpiMediaHub_v0.9.15.ipk EpiMediaHub_v0.9.15.ipk.sha256
-          git add -A EpiMediaHub_v0.9.15.ipk EpiMediaHub_v0.9.15.ipk.sha256 EpiMediaHub_v0.9.16.ipk EpiMediaHub_v0.9.16.ipk.sha256 update.json
-          git commit -m 'Publish EpiMediaHub v0.9.16 as official Enigma build'
+          git add -A
+          git commit -m 'Publish EpiMediaHub v0.9.16 official'
           git push
