@@ -1,0 +1,82 @@
+name: Publish Enigma v0.9.11
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-enigma-v0911.yml'
+      - 'tools/plugin_099_to_0911.patch.gz.b64'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build v0.9.11 from v0.9.9
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/epimedia0911
+          mkdir -p /tmp/epimedia0911/{ar,data,control,pkg}
+          cd /tmp/epimedia0911/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.9.ipk"
+          tar -xzf data.tar.gz -C ../data
+          tar -xzf control.tar.gz -C ../control
+          cp debian-binary ../pkg/debian-binary
+
+          base64 -d "$GITHUB_WORKSPACE/tools/plugin_099_to_0911.patch.gz.b64" | gzip -dc > /tmp/epimedia0911/plugin.patch
+          PLUGIN="/tmp/epimedia0911/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py"
+          patch "$PLUGIN" < /tmp/epimedia0911/plugin.patch
+
+          sed -i 's/^Version:.*/Version: 0.9.11/' /tmp/epimedia0911/control/control
+          sed -i 's/^Description:.*/Description: Epi MediaHub - v0.9.11 OpenATV image compatibility/' /tmp/epimedia0911/control/control
+
+          python3 -m py_compile "$PLUGIN"
+          tar --owner=0 --group=0 -czf /tmp/epimedia0911/pkg/control.tar.gz -C /tmp/epimedia0911/control .
+          tar --owner=0 --group=0 -czf /tmp/epimedia0911/pkg/data.tar.gz -C /tmp/epimedia0911/data .
+          cd /tmp/epimedia0911/pkg
+          ar r "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.11.ipk" debian-binary control.tar.gz data.tar.gz
+
+          cd "$GITHUB_WORKSPACE"
+          SHA=$(sha256sum EpiMediaHub_v0.9.11.ipk | awk '{print $1}')
+          echo "IPK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "$SHA  EpiMediaHub_v0.9.11.ipk" > EpiMediaHub_v0.9.11.ipk.sha256
+
+          python3 - <<'PY'
+          import json, os
+          path = 'update.json'
+          with open(path, 'r', encoding='utf-8') as f:
+              data = json.load(f)
+          data['version'] = '0.9.11'
+          data['url'] = 'https://raw.githubusercontent.com/epimediahub/EpiMediaHub/main/EpiMediaHub_v0.9.11.ipk'
+          data['sha256'] = os.environ['IPK_SHA256']
+          with open(path, 'w', encoding='utf-8') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+          PY
+
+          ar t EpiMediaHub_v0.9.11.ipk
+          cat EpiMediaHub_v0.9.11.ipk.sha256
+          cat update.json
+
+      - name: Publish IPK and updater manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add EpiMediaHub_v0.9.11.ipk EpiMediaHub_v0.9.11.ipk.sha256 update.json
+          if git diff --cached --quiet; then
+            echo 'Nothing to publish.'
+            exit 0
+          fi
+          git commit -m 'Publish EpiMediaHub v0.9.11'
+          git push
