@@ -1,0 +1,94 @@
+name: Publish Enigma v0.9.14
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-enigma-v0914.yml'
+      - 'tools/patch_v0914.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build v0.9.14 from v0.9.13
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/epimedia0914
+          mkdir -p /tmp/epimedia0914/{ar,data,control,pkg}
+          cd /tmp/epimedia0914/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.13.ipk"
+          tar -xzf data.tar.gz -C ../data
+          tar -xzf control.tar.gz -C ../control
+          cp debian-binary ../pkg/debian-binary
+
+          ROOT="/tmp/epimedia0914/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub"
+          PLUGIN="$ROOT/plugin.py"
+          python3 "$GITHUB_WORKSPACE/tools/patch_v0914.py" "$PLUGIN"
+
+          # 28x28 high-contrast traffic-light dots for TV readability.
+          echo 'iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAYAAAByDd+UAAAArUlEQVR42u3WMQ6AIAwAQNoPOfgeR17l6HscfBEukhDT0gJVDJEZeymtFOdGX1CyOYQQyCAAYAZyCBtQwKEEm/aF3HfMmxoFDcZBOZhDQZGZT+C1FUUtdgXzEpieBlV/bD3GUhSlDyxQEeRqpqmh+j+MqVtkRzVRbCB8+2r7wYHA2EX3i9iyQ79zpBZZcjGQm2MtaG5iYG5i16DF46kFrR7AXZ4YXR5RTzwTx18nfFhh1LKCefcAAAAASUVORK5CYII=' | base64 -d > "$ROOT/playlist_status_online.png"
+          echo 'iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAYAAAByDd+UAAAArklEQVR42u3WwQ2AIAwAQNoZnMivczCVc/h1InfAjyTEtLRAFUPkjb2UVopzoy8o2RxCCGQQADADOYQNKOBQgh3zQu6b9k2NggbjoBzMoaDIzCfw2oqiFruCeQlMT4OqP7YeYymK0gcWqAhyNdPUUP0fxtQtsqOaKDYQvn21/eBAYOyi+0Vs2aHfOVKLLLkYyM2xFjQ3MTA3sWvQ4vHUglYP4C5PjC6PqCeeieOvE3K6YVTqTIxyAAAAAElFTkSuQmCC' | base64 -d > "$ROOT/playlist_status_offline.png"
+
+          sed -i 's/^Version:.*/Version: 0.9.14/' /tmp/epimedia0914/control/control
+          sed -i 's/^Description:.*/Description: Epi MediaHub - v0.9.14 fast playlist status indicators/' /tmp/epimedia0914/control/control
+
+          python3 -m py_compile "$PLUGIN"
+          grep -q 'PLUGIN_VERSION = "0.9.14"' "$PLUGIN"
+          grep -q 'socket.create_connection' "$PLUGIN"
+          grep -q 'as_completed' "$PLUGIN"
+          grep -q 'size(28, 28)' "$PLUGIN"
+          test -s "$ROOT/playlist_status_online.png"
+          test -s "$ROOT/playlist_status_offline.png"
+
+          tar --owner=0 --group=0 -czf /tmp/epimedia0914/pkg/control.tar.gz -C /tmp/epimedia0914/control .
+          tar --owner=0 --group=0 -czf /tmp/epimedia0914/pkg/data.tar.gz -C /tmp/epimedia0914/data .
+          cd /tmp/epimedia0914/pkg
+          ar r "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.14.ipk" debian-binary control.tar.gz data.tar.gz
+
+          cd "$GITHUB_WORKSPACE"
+          SHA=$(sha256sum EpiMediaHub_v0.9.14.ipk | awk '{print $1}')
+          export IPK_SHA256="$SHA"
+          echo "IPK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "$SHA  EpiMediaHub_v0.9.14.ipk" > EpiMediaHub_v0.9.14.ipk.sha256
+
+          python3 - <<'PY'
+          import json, os
+          path = 'update.json'
+          with open(path, 'r', encoding='utf-8') as f:
+              data = json.load(f)
+          data['version'] = '0.9.14'
+          data['url'] = 'https://raw.githubusercontent.com/epimediahub/EpiMediaHub/main/EpiMediaHub_v0.9.14.ipk'
+          data['sha256'] = os.environ['IPK_SHA256']
+          with open(path, 'w', encoding='utf-8') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+          PY
+
+          ar t EpiMediaHub_v0.9.14.ipk
+          cat EpiMediaHub_v0.9.14.ipk.sha256
+          cat update.json
+
+      - name: Publish IPK and updater manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add EpiMediaHub_v0.9.14.ipk EpiMediaHub_v0.9.14.ipk.sha256 update.json
+          if git diff --cached --quiet; then
+            echo 'Nothing to publish.'
+            exit 0
+          fi
+          git commit -m 'Publish EpiMediaHub v0.9.14'
+          git push
