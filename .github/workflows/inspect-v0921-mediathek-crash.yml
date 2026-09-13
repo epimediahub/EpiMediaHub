@@ -1,0 +1,55 @@
+name: Inspect v0.9.21 Mediathek crash
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v0921-mediathek-crash.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract current source and relevant hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/inspect0921
+          mkdir -p /tmp/inspect0921/ar /tmp/inspect0921/data inspection
+          cd /tmp/inspect0921/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.21.ipk"
+          tar -xzf data.tar.gz -C ../data
+          ROOT=/tmp/inspect0921/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub
+          cp "$ROOT/plugin.py" "$GITHUB_WORKSPACE/inspection/plugin_v0921.py"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/inspect0921/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py')
+          lines=p.read_text(encoding='utf-8').splitlines()
+          keys=(
+            'def label_widget', 'def list_widget', 'class EpiMediathekHome',
+            'class EpiMediathekList', 'MEDIATHEK_HOME_SKIN', 'MEDIATHEK_LIST_SKIN',
+            'def _mediathek_query', 'def keyOK', 'HOME_ICONS'
+          )
+          out=[]; seen=[]
+          for i,line in enumerate(lines,1):
+              if any(k in line for k in keys):
+                  a=max(1,i-25); b=min(len(lines),i+120)
+                  if any(a>=x and b<=y for x,y in seen):
+                      continue
+                  seen.append((a,b)); out.append('\n===== lines %d-%d =====\n' % (a,b))
+                  for n in range(a,b+1): out.append('%05d: %s\n' % (n,lines[n-1]))
+          Path('/home/runner/work/EpiMediaHub/EpiMediaHub/inspection/v0921-mediathek-crash.txt').write_text(''.join(out),encoding='utf-8')
+          PY
+      - name: Publish inspection
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add inspection/plugin_v0921.py inspection/v0921-mediathek-crash.txt
+          git commit -m 'Inspect v0.9.21 Mediathek crash hooks'
+          git push
