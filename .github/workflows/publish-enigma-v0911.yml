@@ -47,6 +47,7 @@ jobs:
 
           cd "$GITHUB_WORKSPACE"
           SHA=$(sha256sum EpiMediaHub_v0.9.11.ipk | awk '{print $1}')
+          export IPK_SHA256="$SHA"
           echo "IPK_SHA256=$SHA" >> "$GITHUB_ENV"
           echo "$SHA  EpiMediaHub_v0.9.11.ipk" > EpiMediaHub_v0.9.11.ipk.sha256
 
