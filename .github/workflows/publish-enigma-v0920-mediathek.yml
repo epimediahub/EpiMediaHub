@@ -23,4 +23,4 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check pillow
       - name: Build and publish v0.9.20 Mediathek
         shell: bash
-        run: bash build_tools/build_v0920_mediathek.sh
+        run: bash -x build_tools/build_v0920_mediathek.sh
