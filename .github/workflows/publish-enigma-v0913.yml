@@ -1,0 +1,93 @@
+name: Publish Enigma v0.9.13
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-enigma-v0913.yml'
+      - 'tools/plugin_0912_to_0913.patch.gz.b64'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build v0.9.13 from v0.9.12
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/epimedia0913
+          mkdir -p /tmp/epimedia0913/{ar,data,control,pkg}
+          cd /tmp/epimedia0913/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.12.ipk"
+          tar -xzf data.tar.gz -C ../data
+          tar -xzf control.tar.gz -C ../control
+          cp debian-binary ../pkg/debian-binary
+
+          base64 -d "$GITHUB_WORKSPACE/tools/plugin_0912_to_0913.patch.gz.b64" | gzip -dc > /tmp/epimedia0913/plugin.patch
+          PLUGIN="/tmp/epimedia0913/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py"
+          patch "$PLUGIN" < /tmp/epimedia0913/plugin.patch
+
+          ROOT="/tmp/epimedia0913/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub"
+          echo 'iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAYAAABWzo5XAAAB8klEQVR4nK2UMU8bQRCF35s728hCgGQk7NDEMi35DaElIjSQ3vaVbvJL0lCecR9oCAot+Q2hxXIagpGwBAghbN/tS7NOLgYRifCklU67876d2b1ZYEqSKCmcns+sh5I4Pc+pIJKU/54H8AFA3i+PAHwmeT0d+xdIkpF0kgxAazC8bu73v71JkAIAQgTYKr/9XirMtwHsTGJJut+gCV0SHVw7/vm13u5+wY+7c8nvSQKvixU2a+8RvXrXMVhz4iEp+noJoOCc2/l4utPodA/TcqFkectlkhZGboz+cODqtY3g00pr18xaAIYAZAACn17UvjhqdE4PXbW4bCEDpnJMlfrhGDJgtbhsndND1744agCIvDcwkomkhcHwJoq7B648s2hjN/5zitnLADB2Y5ZnFi3uHrjB8CaStEAyMR+zvd8/Xu3dnjNvoR6DZGF5C9W7Ped+/3gVwDYATED5BOmDf+Nf8p58FvTfmoBGIYKnKnpU3jPKgva2ymsn1dmKRi7hUzUSwMglrM5WtFVeOwGwBwAmKSR5VSrMxVFt0/r3ly5nuYfN5CE5y6l/f+mi2qaVCnMxyStJoQFIfVvEzaX13frKhvXuzlyiVAFNAQM/TIlS9e7OXH1lw5pL67sAYu9NX65FJmm/SNNmYM9+Rh7ouQ/bL8XbRSOMqfd9AAAAAElFTkSuQmCC' | base64 -d > "$ROOT/playlist_status_online.png"
+          echo 'iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAYAAABWzo5XAAAB50lEQVR4nK2Uz25SQRTGv2/+QFJDQBawUXgB6yu4Nk3YFYLUGmmXfQPjyvgGXVKMUTTQHUnj2lewvgDYRWGBEGITuHfmuODeBugfk9ovmWQy53y/mTOZM8CaRIQiYtbXl+JGRLi+zrUkkpRongZQBpCIwnMAHZKT9dwVkIgokl5EFICDcDTam3a/PWUYLuLGIFV6/sNks0cADuNckv4SFNNFhPD+6M/n9uvhp6+Y988EkMs9E4VHzL2s4sFO5QOU2os9JIVRvQSQhPeHv9+8qw++tJ3J5xStXb2fIEA4GPr8i4p++P5tE0odAJgBEAVAR8fbv2h16oNW29tiQVFrwrmVQa1piwU1aLX9RatTB7AfeXVcWsaNxt9/VV49CScTRa0BEVwrEuIcTDrtH7c//tTZzDOSYxWFt6fdk81Zr09aKzdCFruC1sqs1+e0e7IJYBsAYlACYXjlbfxTC09iGfTfikFzGHNLPTdo4Zkvg45Tpa3TZLEgEgQEb6mShAQBk8WCpEpbpwCOAUCJiCE51tlMI7dbVeH50MNauRZGAtZKeD70ud2q0tlMg+RYRIwC4KK2aGzUys18raKCXt+LcwKtV4Y4J0Gv7/O1itqolZsAGpHX3V+LxKe+l6Zdgt35G7miu35sfwFSvTjYV5kKcQAAAABJRU5ErkJggg==' | base64 -d > "$ROOT/playlist_status_offline.png"
+
+          sed -i 's/^Version:.*/Version: 0.9.13/' /tmp/epimedia0913/control/control
+          sed -i 's/^Description:.*/Description: Epi MediaHub - v0.9.13 playlist online status/' /tmp/epimedia0913/control/control
+
+          python3 -m py_compile "$PLUGIN"
+          grep -q 'PLUGIN_VERSION = "0.9.13"' "$PLUGIN"
+          grep -q 'def probe_playlist_online' "$PLUGIN"
+          grep -q 'Server nicht erreichbar' "$PLUGIN"
+          test -s "$ROOT/playlist_status_online.png"
+          test -s "$ROOT/playlist_status_offline.png"
+
+          tar --owner=0 --group=0 -czf /tmp/epimedia0913/pkg/control.tar.gz -C /tmp/epimedia0913/control .
+          tar --owner=0 --group=0 -czf /tmp/epimedia0913/pkg/data.tar.gz -C /tmp/epimedia0913/data .
+          cd /tmp/epimedia0913/pkg
+          ar r "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.13.ipk" debian-binary control.tar.gz data.tar.gz
+
+          cd "$GITHUB_WORKSPACE"
+          SHA=$(sha256sum EpiMediaHub_v0.9.13.ipk | awk '{print $1}')
+          export IPK_SHA256="$SHA"
+          echo "IPK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "$SHA  EpiMediaHub_v0.9.13.ipk" > EpiMediaHub_v0.9.13.ipk.sha256
+
+          python3 - <<'PY'
+          import json, os
+          path = 'update.json'
+          with open(path, 'r', encoding='utf-8') as f:
+              data = json.load(f)
+          data['version'] = '0.9.13'
+          data['url'] = 'https://raw.githubusercontent.com/epimediahub/EpiMediaHub/main/EpiMediaHub_v0.9.13.ipk'
+          data['sha256'] = os.environ['IPK_SHA256']
+          with open(path, 'w', encoding='utf-8') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+          PY
+
+          ar t EpiMediaHub_v0.9.13.ipk
+          cat EpiMediaHub_v0.9.13.ipk.sha256
+          cat update.json
+
+      - name: Publish IPK and updater manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add EpiMediaHub_v0.9.13.ipk EpiMediaHub_v0.9.13.ipk.sha256 update.json
+          if git diff --cached --quiet; then
+            echo 'Nothing to publish.'
+            exit 0
+          fi
+          git commit -m 'Publish EpiMediaHub v0.9.13'
+          git push
