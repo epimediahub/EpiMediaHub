@@ -1,0 +1,23 @@
+name: Publish Enigma v0.9.29 Mediathek Exit
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'build_tools/build_v0929_mediathek_exit.sh'
+      - '.github/workflows/publish-enigma-v0929-mediathek-exit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build and publish v0.9.29
+        run: bash build_tools/build_v0929_mediathek_exit.sh
