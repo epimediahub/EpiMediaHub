@@ -24,25 +24,12 @@ jobs:
           cd /tmp/inspect0913/ar
           ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.13.ipk"
           tar -xzf data.tar.gz -C ../data
-          PLUGIN="/tmp/inspect0913/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py"
           python3 - <<'PY'
           from pathlib import Path
           p=Path('/tmp/inspect0913/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py')
           lines=p.read_text(encoding='utf-8').splitlines()
-          needles=('probe_playlist_online','PlaylistChooser','playlist_status_online','Server nicht erreichbar','Online','Prüfe')
-          hits=[]
-          for i,line in enumerate(lines):
-              if any(n in line for n in needles):
-                  hits.append(i)
-          ranges=[]
-          for i in hits:
-              a=max(0,i-45); b=min(len(lines),i+90)
-              if ranges and a <= ranges[-1][1]+5:
-                  ranges[-1]=(ranges[-1][0],max(ranges[-1][1],b))
-              else:
-                  ranges.append((a,b))
-          for a,b in ranges:
+          for a,b in ((6400,6505),(6505,6640)):
               print(f'===== LINES {a+1}-{b} =====')
-              for j in range(a,b):
+              for j in range(a,min(b,len(lines))):
                   print(f'{j+1:05d}: {lines[j]}')
           PY
