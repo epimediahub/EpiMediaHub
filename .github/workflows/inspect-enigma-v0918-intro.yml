@@ -1,0 +1,64 @@
+name: Inspect Enigma v0.9.18 intro
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-enigma-v0918-intro.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Extract intro and banner implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/inspect0918
+          mkdir -p /tmp/inspect0918/ar /tmp/inspect0918/data inspection
+          cd /tmp/inspect0918/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.18.ipk"
+          tar -xzf data.tar.gz -C ../data
+          ROOT=/tmp/inspect0918/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub
+          PLUGIN="$ROOT/plugin.py"
+          cp "$PLUGIN" "$GITHUB_WORKSPACE/inspection/plugin_v0918.py"
+          find "$ROOT" -type f | sed "s#^$ROOT/##" | sort > "$GITHUB_WORKSPACE/inspection/v0918-tree.txt"
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          root=Path('/tmp/inspect0918/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub')
+          p=root/'plugin.py'
+          lines=p.read_text(encoding='utf-8').splitlines()
+          keys=('intro','splash','startup','sound','audio','wav','mp3','melody','music','LIVE_PLAYER_SKIN','EpiLivePlayer')
+          out=[]
+          seen=set()
+          for i,line in enumerate(lines,1):
+              if any(k.lower() in line.lower() for k in keys):
+                  a=max(1,i-12); b=min(len(lines),i+24)
+                  key=(a,b)
+                  if key in seen: continue
+                  seen.add(key)
+                  out.append('\n===== lines %d-%d =====\n' % (a,b))
+                  for n in range(a,b+1): out.append('%05d: %s\n' % (n,lines[n-1]))
+          Path('/home/runner/work/EpiMediaHub/EpiMediaHub/inspection/v0918-intro-banner-snippets.txt').write_text(''.join(out),encoding='utf-8')
+          assets=[]
+          for f in root.rglob('*'):
+              if f.is_file() and f.suffix.lower() in ('.wav','.mp3','.ogg','.m4a','.aac','.png','.jpg','.jpeg','.webp','.gif'):
+                  assets.append('%s\t%d\n' % (f.relative_to(root),f.stat().st_size))
+          Path('/home/runner/work/EpiMediaHub/EpiMediaHub/inspection/v0918-media-assets.txt').write_text(''.join(sorted(assets)),encoding='utf-8')
+          PY
+      - name: Publish inspection
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add inspection/plugin_v0918.py inspection/v0918-tree.txt inspection/v0918-intro-banner-snippets.txt inspection/v0918-media-assets.txt
+          git commit -m 'Inspect v0.9.18 intro and banner source'
+          git push
