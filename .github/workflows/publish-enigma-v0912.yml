@@ -1,0 +1,133 @@
+name: Publish Enigma v0.9.12
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-enigma-v0912.yml'
+      - 'tools/plugin_0911_to_0912.patch.gz.b64'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install image tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-pil
+
+      - name: Build v0.9.12 from v0.9.11
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/epimedia0912
+          mkdir -p /tmp/epimedia0912/{ar,data,control,pkg}
+          cd /tmp/epimedia0912/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.11.ipk"
+          tar -xzf data.tar.gz -C ../data
+          tar -xzf control.tar.gz -C ../control
+          cp debian-binary ../pkg/debian-binary
+
+          base64 -d "$GITHUB_WORKSPACE/tools/plugin_0911_to_0912.patch.gz.b64" | gzip -dc > /tmp/epimedia0912/plugin.patch
+          PLUGIN="/tmp/epimedia0912/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py"
+          patch "$PLUGIN" < /tmp/epimedia0912/plugin.patch
+
+          THEMES="/tmp/epimedia0912/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/themes"
+          python3 - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+
+          root = Path('/tmp/epimedia0912/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/themes')
+          src = root / 'marks'
+          dst = root / 'center_marks'
+          dst.mkdir(exist_ok=True)
+
+          # Normal themes: trim the existing transparent watermark and center it
+          # on a square canvas so it can be shown once, larger, in the Home UI.
+          for p in src.glob('*.png'):
+              im = Image.open(p).convert('RGBA')
+              bbox = im.getbbox()
+              if not bbox:
+                  continue
+              crop = im.crop(bbox)
+              crop.thumbnail((190, 190), Image.Resampling.LANCZOS)
+              canvas = Image.new('RGBA', (230, 230), (0, 0, 0, 0))
+              canvas.alpha_composite(crop, ((230 - crop.width) // 2, (230 - crop.height) // 2))
+              canvas.save(dst / p.name, optimize=True)
+
+          # Family themes already contain the authentic high-resolution logo card.
+          # Reuse that area for a much cleaner centered Home badge.
+          for bg in (root / 'family').glob('family_*.png'):
+              im = Image.open(bg).convert('RGBA')
+              crop = im.crop((835, 145, 1155, 515))
+              crop.thumbnail((214, 214), Image.Resampling.LANCZOS)
+              canvas = Image.new('RGBA', (230, 230), (0, 0, 0, 0))
+              canvas.alpha_composite(crop, ((230 - crop.width) // 2, (230 - crop.height) // 2))
+              canvas.save(dst / (bg.stem + '.png'), optimize=True)
+
+          count = len(list(dst.glob('*.png')))
+          if count < 100:
+              raise SystemExit('Too few centered skin marks generated: %d' % count)
+          print('Generated centered skin marks:', count)
+          PY
+
+          sed -i 's/^Version:.*/Version: 0.9.12/' /tmp/epimedia0912/control/control
+          sed -i 's/^Description:.*/Description: Epi MediaHub - v0.9.12 centered skins and multi-playlist expiry/' /tmp/epimedia0912/control/control
+
+          python3 -m py_compile "$PLUGIN"
+          grep -q 'PLUGIN_VERSION = "0.9.12"' "$PLUGIN"
+          grep -q 'def _startExpiryJob' "$PLUGIN"
+          grep -q 'theme_center_mark_pixmap' "$PLUGIN"
+
+          tar --owner=0 --group=0 -czf /tmp/epimedia0912/pkg/control.tar.gz -C /tmp/epimedia0912/control .
+          tar --owner=0 --group=0 -czf /tmp/epimedia0912/pkg/data.tar.gz -C /tmp/epimedia0912/data .
+          cd /tmp/epimedia0912/pkg
+          ar r "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.12.ipk" debian-binary control.tar.gz data.tar.gz
+
+          cd "$GITHUB_WORKSPACE"
+          SHA=$(sha256sum EpiMediaHub_v0.9.12.ipk | awk '{print $1}')
+          export IPK_SHA256="$SHA"
+          echo "IPK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "$SHA  EpiMediaHub_v0.9.12.ipk" > EpiMediaHub_v0.9.12.ipk.sha256
+
+          python3 - <<'PY'
+          import json, os
+          path = 'update.json'
+          with open(path, 'r', encoding='utf-8') as f:
+              data = json.load(f)
+          data['version'] = '0.9.12'
+          data['url'] = 'https://raw.githubusercontent.com/epimediahub/EpiMediaHub/main/EpiMediaHub_v0.9.12.ipk'
+          data['sha256'] = os.environ['IPK_SHA256']
+          with open(path, 'w', encoding='utf-8') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+          PY
+
+          ar t EpiMediaHub_v0.9.12.ipk
+          cat EpiMediaHub_v0.9.12.ipk.sha256
+          cat update.json
+
+      - name: Publish IPK and updater manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add EpiMediaHub_v0.9.12.ipk EpiMediaHub_v0.9.12.ipk.sha256 update.json
+          if git diff --cached --quiet; then
+            echo 'Nothing to publish.'
+            exit 0
+          fi
+          git commit -m 'Publish EpiMediaHub v0.9.12'
+          git push
