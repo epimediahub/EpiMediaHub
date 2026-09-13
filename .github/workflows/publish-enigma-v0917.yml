@@ -14,85 +14,12 @@ jobs:
   build-and-publish:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     steps:
-      - name: Checkout
+      - name: Checkout full history
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Prepare v0.9.16 base
+      - name: Build and publish slim v0.9.17
         shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf /tmp/epimedia0917
-          mkdir -p /tmp/epimedia0917/{ar,data,control,pkg}
-          cd /tmp/epimedia0917/ar
-          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.16.ipk"
-          tar -xzf data.tar.gz -C ../data
-          tar -xzf control.tar.gz -C ../control
-          cp debian-binary ../pkg/debian-binary
-
-      - name: Generate all premium skin assets
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m pip install --quiet pillow
-          export EPI_PLUGIN_ROOT=/tmp/epimedia0917/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub
-          python3 build_tools/v0917_assets.py
-
-      - name: Apply v0.9.17 UI and exit behavior
-        shell: bash
-        run: |
-          set -euo pipefail
-          export EPI_PLUGIN_FILE=/tmp/epimedia0917/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py
-          python3 build_tools/v0917_patch.py
-          sed -i 's/^Version:.*/Version: 0.9.17/' /tmp/epimedia0917/control/control
-          sed -i 's/^Description:.*/Description: Epi MediaHub - v0.9.17 premium continuous skins, themed zap banner and exit confirmation/' /tmp/epimedia0917/control/control
-          python3 -m py_compile "$EPI_PLUGIN_FILE"
-          grep -q 'PLUGIN_VERSION = "0.9.17"' "$EPI_PLUGIN_FILE"
-          grep -q 'class EpiExitConfirm' "$EPI_PLUGIN_FILE"
-          grep -q 'ACTIVE_THEME_HOME_MOTIF' "$EPI_PLUGIN_FILE"
-          grep -q 'ACTIVE_THEME_BANNER' "$EPI_PLUGIN_FILE"
-          grep -q 'ACTIVE_THEME_DIALOG' "$EPI_PLUGIN_FILE"
-          grep -q 'theme_home_motif_pixmap' "$EPI_PLUGIN_FILE"
-          test "$(grep -c '"cancel": self.requestExit' "$EPI_PLUGIN_FILE")" -ge 2
-
-      - name: Package and verify v0.9.17
-        shell: bash
-        run: |
-          set -euo pipefail
-          tar --owner=0 --group=0 -czf /tmp/epimedia0917/pkg/control.tar.gz -C /tmp/epimedia0917/control .
-          tar --owner=0 --group=0 -czf /tmp/epimedia0917/pkg/data.tar.gz -C /tmp/epimedia0917/data .
-          cd /tmp/epimedia0917/pkg
-          ar r "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.17.ipk" debian-binary control.tar.gz data.tar.gz
-          cd "$GITHUB_WORKSPACE"
-          SHA=$(sha256sum EpiMediaHub_v0.9.17.ipk | awk '{print $1}')
-          export IPK_SHA256="$SHA"
-          echo "$SHA  EpiMediaHub_v0.9.17.ipk" > EpiMediaHub_v0.9.17.ipk.sha256
-          python3 - <<'PY'
-          import json, os
-          with open('update.json', 'r', encoding='utf-8') as f:
-              data = json.load(f)
-          data['version'] = '0.9.17'
-          data['url'] = 'https://raw.githubusercontent.com/epimediahub/EpiMediaHub/main/EpiMediaHub_v0.9.17.ipk'
-          data['sha256'] = os.environ['IPK_SHA256']
-          with open('update.json', 'w', encoding='utf-8') as f:
-              json.dump(data, f, indent=2)
-              f.write('\n')
-          PY
-          ar t EpiMediaHub_v0.9.17.ipk
-          sha256sum -c EpiMediaHub_v0.9.17.ipk.sha256
-          cat update.json
-
-      - name: Publish v0.9.17 as current official Enigma package
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          rm -f EpiMediaHub_v0.9.16.ipk EpiMediaHub_v0.9.16.ipk.sha256
-          rm -f .github/workflows/build-enigma-v0916-test.yml
-          rm -f .github/workflows/inspect-enigma-v0916.yml
-          rm -rf inspection
-          git add -A
-          git commit -m 'Publish EpiMediaHub v0.9.17 premium skin overhaul'
-          git push
+        run: bash build_tools/build_v0917_slim.sh
