@@ -31,6 +31,7 @@ jobs:
           cp "$ROOT/plugin.py" "$GITHUB_WORKSPACE/inspection/plugin_v0916.py"
           find "$ROOT" -maxdepth 4 -type f | sed "s#^$ROOT/##" | sort > "$GITHUB_WORKSPACE/inspection/v0916-tree.txt"
           find "$ROOT" -type f -name '*.png' | sed "s#^$ROOT/##" | sort > "$GITHUB_WORKSPACE/inspection/v0916-pngs.txt"
+          grep -nE '^(class |    def )|MessageBox|ActionMap|self\["logo"\]|theme|skin|zap|banner|infobar|InfoBar|channel|cancel|close\(' "$ROOT/plugin.py" > "$GITHUB_WORKSPACE/inspection/v0916-symbols.txt" || true
 
       - name: Publish inspection files
         shell: bash
@@ -38,6 +39,7 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add inspection/plugin_v0916.py inspection/v0916-tree.txt inspection/v0916-pngs.txt
-          git commit -m 'Inspect v0.9.16 plugin source'
+          git add inspection/plugin_v0916.py inspection/v0916-tree.txt inspection/v0916-pngs.txt inspection/v0916-symbols.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Inspect v0.9.16 UI symbols'
           git push
