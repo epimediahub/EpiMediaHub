@@ -1,0 +1,51 @@
+name: Inspect v0.9.22 family PIN
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v0922-family-pin.yml'
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect family PIN hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/inspect0922
+          mkdir -p /tmp/inspect0922/ar /tmp/inspect0922/data inspection
+          cd /tmp/inspect0922/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.22.ipk"
+          tar -xzf data.tar.gz -C ../data
+          P=/tmp/inspect0922/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py
+          python3 - "$P" "$GITHUB_WORKSPACE/inspection/v0922-family-pin.txt" <<'PY'
+          import sys
+          from pathlib import Path
+          p=Path(sys.argv[1]); out=Path(sys.argv[2])
+          lines=p.read_text(encoding='utf-8').splitlines()
+          keys=('FAMILY_PIN_HASH','class EpiPinScreen','EpiPinScreen','family_unlocked','family','skin_family')
+          hits=[]
+          for i,line in enumerate(lines):
+              if any(k.lower() in line.lower() for k in keys):
+                  a=max(0,i-45); b=min(len(lines),i+90)
+                  if hits and a <= hits[-1][1]:
+                      hits[-1]=(hits[-1][0],max(hits[-1][1],b))
+                  else:
+                      hits.append((a,b))
+          buf=[]
+          for a,b in hits:
+              buf.append('\n===== lines %d-%d =====\n' % (a+1,b))
+              for n in range(a,b): buf.append('%05d: %s\n' % (n+1,lines[n]))
+          out.write_text(''.join(buf),encoding='utf-8')
+          PY
+      - name: Publish inspection
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add inspection/v0922-family-pin.txt
+          git commit -m 'Inspect v0.9.22 family PIN hooks'
+          git push
