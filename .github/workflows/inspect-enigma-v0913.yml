@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect playlist chooser/status code
+      - name: Inspect PROFILE_SKIN
         shell: bash
         run: |
           set -euo pipefail
@@ -28,8 +28,11 @@ jobs:
           from pathlib import Path
           p=Path('/tmp/inspect0913/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py')
           lines=p.read_text(encoding='utf-8').splitlines()
-          for a,b in ((6400,6505),(6505,6640)):
-              print(f'===== LINES {a+1}-{b} =====')
-              for j in range(a,min(b,len(lines))):
-                  print(f'{j+1:05d}: {lines[j]}')
+          for i,line in enumerate(lines):
+              if line.startswith('PROFILE_SKIN'):
+                  a=max(0,i-10); b=min(len(lines),i+100)
+                  print(f'===== LINES {a+1}-{b} =====')
+                  for j in range(a,b):
+                      print(f'{j+1:05d}: {lines[j]}')
+                  break
           PY
