@@ -1,0 +1,2960 @@
+
+===== lines 104-249 =====
+00104: try:
+00105:     import Screens.Standby as Standby
+00106:     from Screens.Standby import TryQuitMainloop
+00107: except Exception:
+00108:     Standby = None
+00109:     TryQuitMainloop = None
+00110: 
+00111: try:
+00112:     from Components.config import config
+00113: except Exception:
+00114:     config = None
+00115: 
+00116: try:
+00117:     from urllib.request import urlopen, Request
+00118:     from urllib.parse import urlparse, parse_qs, urlencode, quote, unquote
+00119: except ImportError:
+00120:     from urllib2 import urlopen, Request
+00121:     from urlparse import urlparse, parse_qs
+00122:     from urllib import urlencode, quote, unquote
+00123: 
+00124: 
+00125: PLUGIN_VERSION = "0.9.21"
+00126: PLUGIN_DIR = os.path.dirname(os.path.realpath(__file__))
+00127: SPLASH_LOGO = os.path.join(PLUGIN_DIR, "splash.png")
+00128: HEADER_LOGO = os.path.join(PLUGIN_DIR, "header.png")
+00129: HOME_ICONS = [os.path.join(PLUGIN_DIR, "home_%s.png" % name) for name in ("live", "movies", "series", "mediathek", "playlist", "settings")]
+00130: HOME_GLASS_OVERLAY = os.path.join(PLUGIN_DIR, "home_glass_overlay.png")
+00131: SETTINGS_GLASS_OVERLAY = os.path.join(PLUGIN_DIR, "settings_glass_overlay.png")
+00132: BROWSER_GLASS_OVERLAY = os.path.join(PLUGIN_DIR, "browser_glass_overlay.png")
+00133: INTRO_FRAMES = [os.path.join(PLUGIN_DIR, "intro_%02d.png" % index) for index in range(10)]
+00134: INTRO_SOUND = os.path.join(PLUGIN_DIR, "intro_sound.wav")
+00135: WEATHER_ICONS = {name: os.path.join(PLUGIN_DIR, "weather_%s.png" % name) for name in ("sun", "cloud", "rain", "snow", "storm", "fog")}
+00136: CATEGORY_SERVICE_ICONS = {
+00137:     "netflix": os.path.join(PLUGIN_DIR, "category_netflix.png"),
+00138:     "prime": os.path.join(PLUGIN_DIR, "category_prime.png"),
+00139:     "disney": os.path.join(PLUGIN_DIR, "category_disney.png"),
+00140:     "sky": os.path.join(PLUGIN_DIR, "category_sky.png"),
+00141:     "max": os.path.join(PLUGIN_DIR, "category_max.png"),
+00142:     "paramount": os.path.join(PLUGIN_DIR, "category_paramount.png"),
+00143:     "apple": os.path.join(PLUGIN_DIR, "category_apple.png"),
+00144:     "dazn": os.path.join(PLUGIN_DIR, "category_dazn.png"),
+00145: }
+00146: 
+00147: DATA_DIR = "/etc/enigma2/epimediahub"
+00148: FTP_PLAYLIST_DIR = "/etc/enigma2/EpiMediaHub/playlists"
+00149: PLAYLIST_TEXT_FILE = "/etc/enigma2/EpiMediaHub/playlists.txt"
+00150: PROFILES_FILE = os.path.join(DATA_DIR, "profiles.json")
+00151: GLOBAL_SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
+00152: METADATA_CACHE_FILE = os.path.join(DATA_DIR, "metadata_cache.json")
+00153: POSTER_CACHE_DIR = os.path.join(DATA_DIR, "posters")
+00154: IMAGE_DEBUG_FILE = os.path.join(DATA_DIR, "image_debug.log")
+00155: PICON_CACHE_DIR = os.path.join(DATA_DIR, "picons")
+00156: ACTOR_CACHE_DIR = os.path.join(DATA_DIR, "actor_categories")
+00157: ACTOR_CACHE_FILE = os.path.join(DATA_DIR, "actor_category_cache.json")
+00158: SAGA_CACHE_DIR = os.path.join(DATA_DIR, "saga_categories")
+00159: SAGA_CACHE_FILE = os.path.join(DATA_DIR, "saga_category_cache.json")
+00160: WEATHER_CACHE_FILE = os.path.join(DATA_DIR, "weather_cache.json")
+00161: LEGACY_CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+00162: LEGACY_PLAYLIST_FILE = os.path.join(DATA_DIR, "playlist.m3u")
+00163: LEGACY_FAVORITES_FILE = os.path.join(DATA_DIR, "favorites.json")
+00164: LEGACY_SSH_URL_FILE = os.path.join(DATA_DIR, "playlist_url.txt")
+00165: 
+00166: # -------------------- Themes / skins (v0.9.9) --------------------
+00167: # Theme artwork ships with the plugin. The currently selected background is
+00168: # copied to one stable /tmp path so every screen can reference the same pixmap.
+00169: # Changing a theme therefore does not require rebuilding all Enigma2 skin XML.
+00170: THEME_DIR = os.path.join(PLUGIN_DIR, "themes")
+00171: THEME_CATALOG_FILE = os.path.join(THEME_DIR, "catalog.json")
+00172: ACTIVE_THEME_BACKGROUND = "/tmp/epimediahub_active_theme.png"
+00173: ACTIVE_THEME_MARK = "/tmp/epimediahub_active_theme_mark.png"
+00174: ACTIVE_THEME_CENTER_MARK = "/tmp/epimediahub_active_theme_center_mark.png"
+00175: ACTIVE_THEME_HOME_MOTIF = "/tmp/epimediahub_active_home_motif.png"
+00176: ACTIVE_THEME_BANNER_MARK = "/tmp/epimediahub_active_banner_mark.png"
+00177: PLAYLIST_STATUS_ONLINE = os.path.join(PLUGIN_DIR, "playlist_status_online.png")
+00178: PLAYLIST_STATUS_OFFLINE = os.path.join(PLUGIN_DIR, "playlist_status_offline.png")
+00179: 
+00180: # Hidden Family Skin access. Only the SHA-256 digest is shipped; the code itself
+00181: # is never written to settings.json. Unlock state is persisted locally.
+00182: FAMILY_PIN_HASH = "ed946f65d2c785d90e827c5ffd879ce3b49c68d4c88013074176a7e73bc58bcf"
+00183: 
+00184: 
+00185: 
+00186: def _load_theme_catalog_early():
+00187:     try:
+00188:         with open(THEME_CATALOG_FILE, "r") as handle:
+00189:             value = json.load(handle)
+00190:         if isinstance(value, dict) and isinstance(value.get("themes"), dict):
+00191:             return value
+00192:     except Exception:
+00193:         pass
+00194:     return {
+00195:         "groups": [{"id": "standard", "label": "Epi MediaHub", "themes": ["default"]}],
+00196:         "themes": {"default": {"label": "Epi Dark", "group": "standard", "accent": "#1E88D8", "background": "default.png"}},
+00197:     }
+00198: 
+00199: 
+00200: THEME_CATALOG = _load_theme_catalog_early()
+00201: 
+00202: 
+00203: def _theme_id_from_settings_early():
+00204:     try:
+00205:         with open(GLOBAL_SETTINGS_FILE, "r") as handle:
+00206:             settings = json.load(handle)
+00207:         value = str(settings.get("skin_theme", "default")).strip()
+00208:     except Exception:
+00209:         value = "default"
+00210:     if value not in THEME_CATALOG.get("themes", {}):
+00211:         value = "default"
+00212:     return value
+00213: 
+00214: 
+00215: def theme_meta(theme_id=None):
+00216:     theme_id = theme_id or _theme_id_from_settings_early()
+00217:     themes = THEME_CATALOG.get("themes", {})
+00218:     return themes.get(theme_id) or themes.get("default", {})
+00219: 
+00220: 
+00221: def theme_display_name(theme_id=None):
+00222:     return str(theme_meta(theme_id).get("label", "Epi Dark"))
+00223: 
+00224: 
+00225: def theme_accent(theme_id=None):
+00226:     value = str(theme_meta(theme_id).get("accent", "#1E88D8"))
+00227:     return value if value.startswith("#") else "#1E88D8"
+00228: 
+00229: 
+00230: def theme_focus_background(theme_id=None):
+00231:     # Enigma2 uses #AARRGGBB with 00 = opaque and FF = fully transparent.
+00232:     # Keep focus neutral/dark so even white or yellow themes never turn the
+00233:     # whole selected tile into a bright block. The theme colour is carried by
+00234:     # the slim focus bar instead.
+00235:     return "#80101620"
+00236: 
+00237: 
+00238: def theme_focus_foreground(theme_id=None):
+00239:     return "#FFFFFF"
+00240: 
+00241: 
+00242: def prepare_active_theme(theme_id=None):
+00243:     theme_id = theme_id or _theme_id_from_settings_early()
+00244:     if theme_id not in THEME_CATALOG.get("themes", {}):
+00245:         theme_id = "default"
+00246:     meta = theme_meta(theme_id)
+00247:     source = os.path.join(THEME_DIR, str(meta.get("background", "default.png")))
+00248:     mark_source = os.path.join(THEME_DIR, "marks", "%s.png" % theme_id)
+00249:     center_mark_source = os.path.join(THEME_DIR, "center_marks", "%s.png" % theme_id)
+
+===== lines 298-443 =====
+00298: def pos(x, y):
+00299:     return "%d,%d" % (sx(x), sy(y))
+00300: 
+00301: 
+00302: def size(w, h):
+00303:     return "%d,%d" % (sx(w), sy(h))
+00304: 
+00305: 
+00306: def font(n):
+00307:     return "Regular;%d" % sf(n)
+00308: 
+00309: 
+00310: def build_fullscreen_skin(name, widgets):
+00311:     theme_layer = '<ePixmap position="0,0" size="%d,%d" pixmap="%s" alphatest="off" scale="1" zPosition="-10" />' % (GUI_W, GUI_H, ACTIVE_THEME_BACKGROUND)
+00312:     return '<screen name="%s" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="#070A10">%s%s</screen>' % (
+00313:         name, GUI_W, GUI_H, theme_layer, widgets
+00314:     )
+00315: 
+00316: 
+00317: def logo_widget(name="logo", x=42, y=18, w=390, h=130):
+00318:     return '<widget name="%s" position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" />' % (
+00319:         name, pos(x, y), size(w, h), HEADER_LOGO
+00320:     )
+00321: 
+00322: 
+00323: def label_widget(name, x, y, w, h, f=22, align="left", valign="center", bg=None, fg="#F4F7FB"):
+00324:     attrs = [
+00325:         'name="%s"' % name,
+00326:         'position="%s"' % pos(x, y),
+00327:         'size="%s"' % size(w, h),
+00328:         'font="%s"' % font(f),
+00329:         'halign="%s"' % align,
+00330:         'valign="%s"' % valign,
+00331:         'foregroundColor="%s"' % fg,
+00332:     ]
+00333:     if bg:
+00334:         attrs.append('backgroundColor="%s"' % bg)
+00335:         attrs.append('transparent="0"')
+00336:     else:
+00337:         attrs.append('transparent="1"')
+00338:     return '<widget %s />' % " ".join(attrs)
+00339: 
+00340: 
+00341: def home_tile_widget(name, x, y, w=550, h=95, f=29):
+00342:     # v0.9.7: tile glass is baked into HOME_GLASS_OVERLAY. Keeping the Label
+00343:     # itself fully transparent is important on OpenATV: semi-transparent ARGB
+00344:     # widget backgrounds can otherwise reveal the receiver skin/desktop rather
+00345:     # than the EpiMediaHub ePixmap directly below it.
+00346:     return '<widget name="%s" position="%s" size="%s" font="%s" halign="center" valign="center" foregroundColor="#F8FAFC" transparent="1" shadowColor="#000000" shadowOffset="2,2" zPosition="1" />' % (
+00347:         name, pos(x, y), size(w, h), font(f)
+00348:     )
+00349: 
+00350: 
+00351: def overlay_pixmap(path, z=-5):
+00352:     return '<ePixmap position="0,0" size="%d,%d" pixmap="%s" alphatest="blend" scale="1" zPosition="%d" />' % (GUI_W, GUI_H, path, z)
+00353: 
+00354: 
+00355: def theme_mark_pixmap(x, y, w=150, h=76, z=2):
+00356:     return '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="%d" />' % (
+00357:         pos(x, y), size(w, h), ACTIVE_THEME_MARK, z
+00358:     )
+00359: 
+00360: 
+00361: def theme_center_mark_pixmap(x, y, w=230, h=230, z=0):
+00362:     return '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="%d" />' % (
+00363:         pos(x, y), size(w, h), ACTIVE_THEME_CENTER_MARK, z
+00364:     )
+00365: 
+00366: 
+00367: def theme_home_motif_pixmap(z=0):
+00368:     return '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="%d" />' % (pos(55, 210), size(1170, 325), ACTIVE_THEME_HOME_MOTIF, z)
+00369: 
+00370: 
+00371: def list_widget(name, x, y, w, h, f=24, item_h=44):
+00372:     # v0.9.7: the glass panel is an EpiMediaHub-owned PNG directly above the
+00373:     # active theme background. The MenuList itself is transparent so Enigma2
+00374:     # never composites a semi-transparent widget against the receiver/OpenATV
+00375:     # desktop. This removes the last OpenATV bleed-through from categories,
+00376:     # channel lists, VOD/series lists and search results.
+00377:     return '<widget name="%s" position="%s" size="%s" font="%s" itemHeight="%d" scrollbarMode="showOnDemand" foregroundColor="#F4F7FB" backgroundColor="#00101418" transparent="1" selectionColor="#FFFFFF" selectionBackgroundColor="#00232D39" />' % (
+00378:         name, pos(x, y), size(w, h), font(f), sy(item_h)
+00379:     )
+00380: 
+00381: 
+00382: def color_button(name, text_x, bg):
+00383:     return label_widget(name, text_x, 662, 275, 38, 18, "center", "center", bg, "#FFFFFF")
+00384: 
+00385: 
+00386: HOME_SKIN = build_fullscreen_skin(
+00387:     "EpiMediaHubHome",
+00388:     overlay_pixmap(HOME_GLASS_OVERLAY) +
+00389:     logo_widget() +
+00390:     label_widget("subtitle", 470, 35, 750, 45, 23, "right") +
+00391:     label_widget("hint", 470, 83, 750, 28, 16, "right", fg="#9EADBF") +
+00392:     # Clock + weather form one centered information block on the home screen.
+00393:     # The clock is deliberately large and uses the receiver's local system time.
+00394:     label_widget("clock", 455, 105, 430, 38, 30, "center", fg="#F4F7FB") +
+00395:     '<widget name="weather_icon" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(395, 142), size(58, 58)) +
+00396:     label_widget("weather", 465, 140, 420, 36, 24, "center", fg="#E7F2FC") +
+00397:     label_widget("weather_detail", 465, 174, 420, 25, 17, "center", fg="#9ED4F2") +
+00398:     home_tile_widget("tile0", 55, 210, 550, 95, 29) +
+00399:     home_tile_widget("tile1", 675, 210, 550, 95, 29) +
+00400:     home_tile_widget("tile2", 55, 325, 550, 95, 29) +
+00401:     home_tile_widget("tile3", 675, 325, 550, 95, 29) +
+00402:     home_tile_widget("tile4", 55, 440, 550, 95, 27) +
+00403:     home_tile_widget("tile5", 675, 440, 550, 95, 27) +
+00404:     # v0.9.17: one compact large motif is clipped across all six tile windows.
+00405:     theme_home_motif_pixmap(0) +
+00406:     # Thin accent bars provide a clear focus cue while the tile itself remains translucent.
+00407:     label_widget("mark0", 55, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00408:     label_widget("mark1", 675, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00409:     label_widget("mark2", 55, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00410:     label_widget("mark3", 675, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00411:     label_widget("mark4", 55, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00412:     label_widget("mark5", 675, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00413:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 222), size(70, 70), HOME_ICONS[0]) +
+00414:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 222), size(70, 70), HOME_ICONS[1]) +
+00415:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 337), size(70, 70), HOME_ICONS[2]) +
+00416:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 337), size(70, 70), HOME_ICONS[3]) +
+00417:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 452), size(70, 70), HOME_ICONS[4]) +
+00418:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 452), size(70, 70), HOME_ICONS[5]) +
+00419:     label_widget("status", 55, 565, 1170, 42, 18, "center", "center") +
+00420:     label_widget("version", 1030, 620, 195, 28, 15, "right", fg="#708093")
+00421: )
+00422: 
+00423: PROFILE_SKIN = build_fullscreen_skin(
+00424:     "EpiProfileSelect",
+00425:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00426:     logo_widget(w=345, h=115) +
+00427:     label_widget("title", 430, 35, 795, 48, 31, "right") +
+00428:     label_widget("subtitle", 430, 86, 795, 30, 18, "right", fg="#9EADBF") +
+00429:     list_widget("list", 70, 155, 1140, 390, 25, 48) +
+00430:     "".join('<widget name="profile_status%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="4" />' %
+00431:             (i, pos(80, 164 + (i * 48)), size(28, 28)) for i in range(8)) +
+00432:     label_widget("info", 70, 560, 1140, 38, 17, "center", fg="#9EADBF") +
+00433:     color_button("red", 55, "#8D2830") +
+00434:     color_button("green", 350, "#267A42") +
+00435:     color_button("yellow", 645, "#8A7624") +
+00436:     color_button("blue", 940, "#245B8F")
+00437: )
+00438: 
+00439: HELP_SKIN = build_fullscreen_skin(
+00440:     "EpiHelpScreen",
+00441:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00442:     logo_widget(w=300, h=100) +
+00443:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+
+===== lines 346-491 =====
+00346:     return '<widget name="%s" position="%s" size="%s" font="%s" halign="center" valign="center" foregroundColor="#F8FAFC" transparent="1" shadowColor="#000000" shadowOffset="2,2" zPosition="1" />' % (
+00347:         name, pos(x, y), size(w, h), font(f)
+00348:     )
+00349: 
+00350: 
+00351: def overlay_pixmap(path, z=-5):
+00352:     return '<ePixmap position="0,0" size="%d,%d" pixmap="%s" alphatest="blend" scale="1" zPosition="%d" />' % (GUI_W, GUI_H, path, z)
+00353: 
+00354: 
+00355: def theme_mark_pixmap(x, y, w=150, h=76, z=2):
+00356:     return '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="%d" />' % (
+00357:         pos(x, y), size(w, h), ACTIVE_THEME_MARK, z
+00358:     )
+00359: 
+00360: 
+00361: def theme_center_mark_pixmap(x, y, w=230, h=230, z=0):
+00362:     return '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="%d" />' % (
+00363:         pos(x, y), size(w, h), ACTIVE_THEME_CENTER_MARK, z
+00364:     )
+00365: 
+00366: 
+00367: def theme_home_motif_pixmap(z=0):
+00368:     return '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="%d" />' % (pos(55, 210), size(1170, 325), ACTIVE_THEME_HOME_MOTIF, z)
+00369: 
+00370: 
+00371: def list_widget(name, x, y, w, h, f=24, item_h=44):
+00372:     # v0.9.7: the glass panel is an EpiMediaHub-owned PNG directly above the
+00373:     # active theme background. The MenuList itself is transparent so Enigma2
+00374:     # never composites a semi-transparent widget against the receiver/OpenATV
+00375:     # desktop. This removes the last OpenATV bleed-through from categories,
+00376:     # channel lists, VOD/series lists and search results.
+00377:     return '<widget name="%s" position="%s" size="%s" font="%s" itemHeight="%d" scrollbarMode="showOnDemand" foregroundColor="#F4F7FB" backgroundColor="#00101418" transparent="1" selectionColor="#FFFFFF" selectionBackgroundColor="#00232D39" />' % (
+00378:         name, pos(x, y), size(w, h), font(f), sy(item_h)
+00379:     )
+00380: 
+00381: 
+00382: def color_button(name, text_x, bg):
+00383:     return label_widget(name, text_x, 662, 275, 38, 18, "center", "center", bg, "#FFFFFF")
+00384: 
+00385: 
+00386: HOME_SKIN = build_fullscreen_skin(
+00387:     "EpiMediaHubHome",
+00388:     overlay_pixmap(HOME_GLASS_OVERLAY) +
+00389:     logo_widget() +
+00390:     label_widget("subtitle", 470, 35, 750, 45, 23, "right") +
+00391:     label_widget("hint", 470, 83, 750, 28, 16, "right", fg="#9EADBF") +
+00392:     # Clock + weather form one centered information block on the home screen.
+00393:     # The clock is deliberately large and uses the receiver's local system time.
+00394:     label_widget("clock", 455, 105, 430, 38, 30, "center", fg="#F4F7FB") +
+00395:     '<widget name="weather_icon" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(395, 142), size(58, 58)) +
+00396:     label_widget("weather", 465, 140, 420, 36, 24, "center", fg="#E7F2FC") +
+00397:     label_widget("weather_detail", 465, 174, 420, 25, 17, "center", fg="#9ED4F2") +
+00398:     home_tile_widget("tile0", 55, 210, 550, 95, 29) +
+00399:     home_tile_widget("tile1", 675, 210, 550, 95, 29) +
+00400:     home_tile_widget("tile2", 55, 325, 550, 95, 29) +
+00401:     home_tile_widget("tile3", 675, 325, 550, 95, 29) +
+00402:     home_tile_widget("tile4", 55, 440, 550, 95, 27) +
+00403:     home_tile_widget("tile5", 675, 440, 550, 95, 27) +
+00404:     # v0.9.17: one compact large motif is clipped across all six tile windows.
+00405:     theme_home_motif_pixmap(0) +
+00406:     # Thin accent bars provide a clear focus cue while the tile itself remains translucent.
+00407:     label_widget("mark0", 55, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00408:     label_widget("mark1", 675, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00409:     label_widget("mark2", 55, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00410:     label_widget("mark3", 675, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00411:     label_widget("mark4", 55, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00412:     label_widget("mark5", 675, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00413:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 222), size(70, 70), HOME_ICONS[0]) +
+00414:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 222), size(70, 70), HOME_ICONS[1]) +
+00415:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 337), size(70, 70), HOME_ICONS[2]) +
+00416:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 337), size(70, 70), HOME_ICONS[3]) +
+00417:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 452), size(70, 70), HOME_ICONS[4]) +
+00418:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 452), size(70, 70), HOME_ICONS[5]) +
+00419:     label_widget("status", 55, 565, 1170, 42, 18, "center", "center") +
+00420:     label_widget("version", 1030, 620, 195, 28, 15, "right", fg="#708093")
+00421: )
+00422: 
+00423: PROFILE_SKIN = build_fullscreen_skin(
+00424:     "EpiProfileSelect",
+00425:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00426:     logo_widget(w=345, h=115) +
+00427:     label_widget("title", 430, 35, 795, 48, 31, "right") +
+00428:     label_widget("subtitle", 430, 86, 795, 30, 18, "right", fg="#9EADBF") +
+00429:     list_widget("list", 70, 155, 1140, 390, 25, 48) +
+00430:     "".join('<widget name="profile_status%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="4" />' %
+00431:             (i, pos(80, 164 + (i * 48)), size(28, 28)) for i in range(8)) +
+00432:     label_widget("info", 70, 560, 1140, 38, 17, "center", fg="#9EADBF") +
+00433:     color_button("red", 55, "#8D2830") +
+00434:     color_button("green", 350, "#267A42") +
+00435:     color_button("yellow", 645, "#8A7624") +
+00436:     color_button("blue", 940, "#245B8F")
+00437: )
+00438: 
+00439: HELP_SKIN = build_fullscreen_skin(
+00440:     "EpiHelpScreen",
+00441:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00442:     logo_widget(w=300, h=100) +
+00443:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00444:     label_widget("subtitle", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00445:     list_widget("list", 55, 135, 390, 455, 20, 48) +
+00446:     label_widget("detail", 475, 135, 750, 455, 19, "left", "top", "#0D121B", "#E7EEF7") +
+00447:     label_widget("info", 55, 600, 1170, 35, 16, "center", fg="#9EADBF") +
+00448:     color_button("red", 55, "#8D2830") +
+00449:     color_button("green", 350, "#267A42") +
+00450:     color_button("yellow", 645, "#8A7624") +
+00451:     color_button("blue", 940, "#245B8F")
+00452: )
+00453: 
+00454: CATEGORY_SKIN = build_fullscreen_skin(
+00455:     "EpiCategoryScreen",
+00456:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00457:     logo_widget(w=300, h=100) +
+00458:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00459:     label_widget("info", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00460:     list_widget("list", 70, 135, 1140, 460, 24, 44) +
+00461:     # Category icons stay separate from MenuList so they never interfere with
+00462:     # navigation. Live uses representative Picons; movies/series use a small
+00463:     # service badge when the category name identifies a platform.
+00464:     ''.join('<widget name="category_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00465:             (i, pos(76, 140 + (i * 44)), size(62, 34)) for i in range(10)) +
+00466:     color_button("red", 55, "#8D2830") +
+00467:     color_button("green", 350, "#267A42") +
+00468:     color_button("yellow", 645, "#8A7624") +
+00469:     color_button("blue", 940, "#245B8F")
+00470: )
+00471: 
+00472: CONTENT_SKIN = build_fullscreen_skin(
+00473:     "EpiContentScreen",
+00474:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00475:     logo_widget(w=300, h=100) +
+00476:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00477:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00478:     list_widget("list", 70, 135, 1140, 460, 21, 42) +
+00479:     # Live-TV deliberately uses the normal Enigma2 string MenuList again.
+00480:     # Picons are separate transparent Pixmap widgets, so they cannot interfere
+00481:     # with list focus or remote-control navigation.
+00482:     ''.join('<widget name="live_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00483:             (i, pos(76, 139 + (i * 42)), size(62, 34)) for i in range(10)) +
+00484:     # VOD/series preview: larger poster and substantially more readable text.
+00485:     # The list itself is resized at runtime only for movies/series; live keeps
+00486:     # the complete width for Picon + Now/Next EPG rows.
+00487:     label_widget("preview_panel", 620, 135, 590, 460, 1, "left", "top", None, "#0D121B") +
+00488:     '<widget name="preview_poster" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(642, 155), size(235, 340)) +
+00489:     label_widget("preview_title", 900, 150, 290, 82, 25, "left", "top") +
+00490:     label_widget("preview_meta", 900, 238, 290, 125, 17, "left", "top", fg="#AFC0D4") +
+00491:     label_widget("preview_overview", 900, 370, 290, 205, 18, "left", "top", fg="#DCE7F3") +
+
+===== lines 388-533 =====
+00388:     overlay_pixmap(HOME_GLASS_OVERLAY) +
+00389:     logo_widget() +
+00390:     label_widget("subtitle", 470, 35, 750, 45, 23, "right") +
+00391:     label_widget("hint", 470, 83, 750, 28, 16, "right", fg="#9EADBF") +
+00392:     # Clock + weather form one centered information block on the home screen.
+00393:     # The clock is deliberately large and uses the receiver's local system time.
+00394:     label_widget("clock", 455, 105, 430, 38, 30, "center", fg="#F4F7FB") +
+00395:     '<widget name="weather_icon" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(395, 142), size(58, 58)) +
+00396:     label_widget("weather", 465, 140, 420, 36, 24, "center", fg="#E7F2FC") +
+00397:     label_widget("weather_detail", 465, 174, 420, 25, 17, "center", fg="#9ED4F2") +
+00398:     home_tile_widget("tile0", 55, 210, 550, 95, 29) +
+00399:     home_tile_widget("tile1", 675, 210, 550, 95, 29) +
+00400:     home_tile_widget("tile2", 55, 325, 550, 95, 29) +
+00401:     home_tile_widget("tile3", 675, 325, 550, 95, 29) +
+00402:     home_tile_widget("tile4", 55, 440, 550, 95, 27) +
+00403:     home_tile_widget("tile5", 675, 440, 550, 95, 27) +
+00404:     # v0.9.17: one compact large motif is clipped across all six tile windows.
+00405:     theme_home_motif_pixmap(0) +
+00406:     # Thin accent bars provide a clear focus cue while the tile itself remains translucent.
+00407:     label_widget("mark0", 55, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00408:     label_widget("mark1", 675, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00409:     label_widget("mark2", 55, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00410:     label_widget("mark3", 675, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00411:     label_widget("mark4", 55, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00412:     label_widget("mark5", 675, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00413:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 222), size(70, 70), HOME_ICONS[0]) +
+00414:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 222), size(70, 70), HOME_ICONS[1]) +
+00415:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 337), size(70, 70), HOME_ICONS[2]) +
+00416:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 337), size(70, 70), HOME_ICONS[3]) +
+00417:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 452), size(70, 70), HOME_ICONS[4]) +
+00418:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 452), size(70, 70), HOME_ICONS[5]) +
+00419:     label_widget("status", 55, 565, 1170, 42, 18, "center", "center") +
+00420:     label_widget("version", 1030, 620, 195, 28, 15, "right", fg="#708093")
+00421: )
+00422: 
+00423: PROFILE_SKIN = build_fullscreen_skin(
+00424:     "EpiProfileSelect",
+00425:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00426:     logo_widget(w=345, h=115) +
+00427:     label_widget("title", 430, 35, 795, 48, 31, "right") +
+00428:     label_widget("subtitle", 430, 86, 795, 30, 18, "right", fg="#9EADBF") +
+00429:     list_widget("list", 70, 155, 1140, 390, 25, 48) +
+00430:     "".join('<widget name="profile_status%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="4" />' %
+00431:             (i, pos(80, 164 + (i * 48)), size(28, 28)) for i in range(8)) +
+00432:     label_widget("info", 70, 560, 1140, 38, 17, "center", fg="#9EADBF") +
+00433:     color_button("red", 55, "#8D2830") +
+00434:     color_button("green", 350, "#267A42") +
+00435:     color_button("yellow", 645, "#8A7624") +
+00436:     color_button("blue", 940, "#245B8F")
+00437: )
+00438: 
+00439: HELP_SKIN = build_fullscreen_skin(
+00440:     "EpiHelpScreen",
+00441:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00442:     logo_widget(w=300, h=100) +
+00443:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00444:     label_widget("subtitle", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00445:     list_widget("list", 55, 135, 390, 455, 20, 48) +
+00446:     label_widget("detail", 475, 135, 750, 455, 19, "left", "top", "#0D121B", "#E7EEF7") +
+00447:     label_widget("info", 55, 600, 1170, 35, 16, "center", fg="#9EADBF") +
+00448:     color_button("red", 55, "#8D2830") +
+00449:     color_button("green", 350, "#267A42") +
+00450:     color_button("yellow", 645, "#8A7624") +
+00451:     color_button("blue", 940, "#245B8F")
+00452: )
+00453: 
+00454: CATEGORY_SKIN = build_fullscreen_skin(
+00455:     "EpiCategoryScreen",
+00456:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00457:     logo_widget(w=300, h=100) +
+00458:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00459:     label_widget("info", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00460:     list_widget("list", 70, 135, 1140, 460, 24, 44) +
+00461:     # Category icons stay separate from MenuList so they never interfere with
+00462:     # navigation. Live uses representative Picons; movies/series use a small
+00463:     # service badge when the category name identifies a platform.
+00464:     ''.join('<widget name="category_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00465:             (i, pos(76, 140 + (i * 44)), size(62, 34)) for i in range(10)) +
+00466:     color_button("red", 55, "#8D2830") +
+00467:     color_button("green", 350, "#267A42") +
+00468:     color_button("yellow", 645, "#8A7624") +
+00469:     color_button("blue", 940, "#245B8F")
+00470: )
+00471: 
+00472: CONTENT_SKIN = build_fullscreen_skin(
+00473:     "EpiContentScreen",
+00474:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00475:     logo_widget(w=300, h=100) +
+00476:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00477:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00478:     list_widget("list", 70, 135, 1140, 460, 21, 42) +
+00479:     # Live-TV deliberately uses the normal Enigma2 string MenuList again.
+00480:     # Picons are separate transparent Pixmap widgets, so they cannot interfere
+00481:     # with list focus or remote-control navigation.
+00482:     ''.join('<widget name="live_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00483:             (i, pos(76, 139 + (i * 42)), size(62, 34)) for i in range(10)) +
+00484:     # VOD/series preview: larger poster and substantially more readable text.
+00485:     # The list itself is resized at runtime only for movies/series; live keeps
+00486:     # the complete width for Picon + Now/Next EPG rows.
+00487:     label_widget("preview_panel", 620, 135, 590, 460, 1, "left", "top", None, "#0D121B") +
+00488:     '<widget name="preview_poster" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(642, 155), size(235, 340)) +
+00489:     label_widget("preview_title", 900, 150, 290, 82, 25, "left", "top") +
+00490:     label_widget("preview_meta", 900, 238, 290, 125, 17, "left", "top", fg="#AFC0D4") +
+00491:     label_widget("preview_overview", 900, 370, 290, 205, 18, "left", "top", fg="#DCE7F3") +
+00492:     color_button("red", 55, "#8D2830") +
+00493:     color_button("green", 350, "#267A42") +
+00494:     color_button("yellow", 645, "#8A7624") +
+00495:     color_button("blue", 940, "#245B8F")
+00496: )
+00497: 
+00498: SEASON_SKIN = build_fullscreen_skin(
+00499:     "EpiSeasonScreen",
+00500:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00501:     logo_widget(w=300, h=100) +
+00502:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00503:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00504:     list_widget("list", 70, 135, 1140, 460, 24, 48) +
+00505:     color_button("red", 55, "#8D2830") +
+00506:     color_button("green", 350, "#267A42") +
+00507:     color_button("yellow", 645, "#8A7624") +
+00508:     color_button("blue", 940, "#245B8F")
+00509: )
+00510: 
+00511: SETTINGS_SKIN = build_fullscreen_skin(
+00512:     "EpiSettings",
+00513:     overlay_pixmap(SETTINGS_GLASS_OVERLAY) +
+00514:     logo_widget(w=320, h=108) +
+00515:     label_widget("title", 390, 32, 835, 45, 30, "right") +
+00516:     label_widget("subtitle", 390, 80, 835, 30, 17, "right", fg="#9EADBF") +
+00517:     # Active-theme strip: same translucent language as the home tiles.
+00518:     label_widget("themePanel", 70, 120, 1140, 58, 18, "left", "center") +
+00519:     label_widget("themeAccent", 70, 120, 8, 58, 12, "center", "center", "#FF000000") +
+00520:     label_widget("themeName", 100, 120, 790, 58, 20, "left", "center", None, "#F8FAFC") +
+00521:     '<widget name="themePreview" position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="3" />' % (pos(1010, 109), size(170, 76), ACTIVE_THEME_MARK) +
+00522:     # Settings list is intentionally more transparent so the selected skin
+00523:     # remains visible here too.
+00524:     '<widget name="list" position="%s" size="%s" font="%s" itemHeight="%d" scrollbarMode="showOnDemand" foregroundColor="#F4F7FB" backgroundColor="#00101418" transparent="1" selectionColor="#FFFFFF" selectionBackgroundColor="#00313B48" zPosition="1" />' % (pos(70, 192), size(1140, 392), font(21), sy(46)) +
+00525:     label_widget("info", 70, 595, 1140, 35, 16, "center", fg="#B4C7D9") +
+00526:     color_button("red", 55, "#8D2830") +
+00527:     color_button("green", 350, "#267A42") +
+00528:     color_button("yellow", 645, "#8A7624") +
+00529:     color_button("blue", 940, "#245B8F")
+00530: )
+00531: 
+00532: DETAIL_SKIN = build_fullscreen_skin(
+00533:     "EpiDetailScreen",
+
+===== lines 389-534 =====
+00389:     logo_widget() +
+00390:     label_widget("subtitle", 470, 35, 750, 45, 23, "right") +
+00391:     label_widget("hint", 470, 83, 750, 28, 16, "right", fg="#9EADBF") +
+00392:     # Clock + weather form one centered information block on the home screen.
+00393:     # The clock is deliberately large and uses the receiver's local system time.
+00394:     label_widget("clock", 455, 105, 430, 38, 30, "center", fg="#F4F7FB") +
+00395:     '<widget name="weather_icon" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(395, 142), size(58, 58)) +
+00396:     label_widget("weather", 465, 140, 420, 36, 24, "center", fg="#E7F2FC") +
+00397:     label_widget("weather_detail", 465, 174, 420, 25, 17, "center", fg="#9ED4F2") +
+00398:     home_tile_widget("tile0", 55, 210, 550, 95, 29) +
+00399:     home_tile_widget("tile1", 675, 210, 550, 95, 29) +
+00400:     home_tile_widget("tile2", 55, 325, 550, 95, 29) +
+00401:     home_tile_widget("tile3", 675, 325, 550, 95, 29) +
+00402:     home_tile_widget("tile4", 55, 440, 550, 95, 27) +
+00403:     home_tile_widget("tile5", 675, 440, 550, 95, 27) +
+00404:     # v0.9.17: one compact large motif is clipped across all six tile windows.
+00405:     theme_home_motif_pixmap(0) +
+00406:     # Thin accent bars provide a clear focus cue while the tile itself remains translucent.
+00407:     label_widget("mark0", 55, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00408:     label_widget("mark1", 675, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00409:     label_widget("mark2", 55, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00410:     label_widget("mark3", 675, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00411:     label_widget("mark4", 55, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00412:     label_widget("mark5", 675, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00413:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 222), size(70, 70), HOME_ICONS[0]) +
+00414:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 222), size(70, 70), HOME_ICONS[1]) +
+00415:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 337), size(70, 70), HOME_ICONS[2]) +
+00416:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 337), size(70, 70), HOME_ICONS[3]) +
+00417:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 452), size(70, 70), HOME_ICONS[4]) +
+00418:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 452), size(70, 70), HOME_ICONS[5]) +
+00419:     label_widget("status", 55, 565, 1170, 42, 18, "center", "center") +
+00420:     label_widget("version", 1030, 620, 195, 28, 15, "right", fg="#708093")
+00421: )
+00422: 
+00423: PROFILE_SKIN = build_fullscreen_skin(
+00424:     "EpiProfileSelect",
+00425:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00426:     logo_widget(w=345, h=115) +
+00427:     label_widget("title", 430, 35, 795, 48, 31, "right") +
+00428:     label_widget("subtitle", 430, 86, 795, 30, 18, "right", fg="#9EADBF") +
+00429:     list_widget("list", 70, 155, 1140, 390, 25, 48) +
+00430:     "".join('<widget name="profile_status%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="4" />' %
+00431:             (i, pos(80, 164 + (i * 48)), size(28, 28)) for i in range(8)) +
+00432:     label_widget("info", 70, 560, 1140, 38, 17, "center", fg="#9EADBF") +
+00433:     color_button("red", 55, "#8D2830") +
+00434:     color_button("green", 350, "#267A42") +
+00435:     color_button("yellow", 645, "#8A7624") +
+00436:     color_button("blue", 940, "#245B8F")
+00437: )
+00438: 
+00439: HELP_SKIN = build_fullscreen_skin(
+00440:     "EpiHelpScreen",
+00441:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00442:     logo_widget(w=300, h=100) +
+00443:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00444:     label_widget("subtitle", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00445:     list_widget("list", 55, 135, 390, 455, 20, 48) +
+00446:     label_widget("detail", 475, 135, 750, 455, 19, "left", "top", "#0D121B", "#E7EEF7") +
+00447:     label_widget("info", 55, 600, 1170, 35, 16, "center", fg="#9EADBF") +
+00448:     color_button("red", 55, "#8D2830") +
+00449:     color_button("green", 350, "#267A42") +
+00450:     color_button("yellow", 645, "#8A7624") +
+00451:     color_button("blue", 940, "#245B8F")
+00452: )
+00453: 
+00454: CATEGORY_SKIN = build_fullscreen_skin(
+00455:     "EpiCategoryScreen",
+00456:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00457:     logo_widget(w=300, h=100) +
+00458:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00459:     label_widget("info", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00460:     list_widget("list", 70, 135, 1140, 460, 24, 44) +
+00461:     # Category icons stay separate from MenuList so they never interfere with
+00462:     # navigation. Live uses representative Picons; movies/series use a small
+00463:     # service badge when the category name identifies a platform.
+00464:     ''.join('<widget name="category_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00465:             (i, pos(76, 140 + (i * 44)), size(62, 34)) for i in range(10)) +
+00466:     color_button("red", 55, "#8D2830") +
+00467:     color_button("green", 350, "#267A42") +
+00468:     color_button("yellow", 645, "#8A7624") +
+00469:     color_button("blue", 940, "#245B8F")
+00470: )
+00471: 
+00472: CONTENT_SKIN = build_fullscreen_skin(
+00473:     "EpiContentScreen",
+00474:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00475:     logo_widget(w=300, h=100) +
+00476:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00477:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00478:     list_widget("list", 70, 135, 1140, 460, 21, 42) +
+00479:     # Live-TV deliberately uses the normal Enigma2 string MenuList again.
+00480:     # Picons are separate transparent Pixmap widgets, so they cannot interfere
+00481:     # with list focus or remote-control navigation.
+00482:     ''.join('<widget name="live_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00483:             (i, pos(76, 139 + (i * 42)), size(62, 34)) for i in range(10)) +
+00484:     # VOD/series preview: larger poster and substantially more readable text.
+00485:     # The list itself is resized at runtime only for movies/series; live keeps
+00486:     # the complete width for Picon + Now/Next EPG rows.
+00487:     label_widget("preview_panel", 620, 135, 590, 460, 1, "left", "top", None, "#0D121B") +
+00488:     '<widget name="preview_poster" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(642, 155), size(235, 340)) +
+00489:     label_widget("preview_title", 900, 150, 290, 82, 25, "left", "top") +
+00490:     label_widget("preview_meta", 900, 238, 290, 125, 17, "left", "top", fg="#AFC0D4") +
+00491:     label_widget("preview_overview", 900, 370, 290, 205, 18, "left", "top", fg="#DCE7F3") +
+00492:     color_button("red", 55, "#8D2830") +
+00493:     color_button("green", 350, "#267A42") +
+00494:     color_button("yellow", 645, "#8A7624") +
+00495:     color_button("blue", 940, "#245B8F")
+00496: )
+00497: 
+00498: SEASON_SKIN = build_fullscreen_skin(
+00499:     "EpiSeasonScreen",
+00500:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00501:     logo_widget(w=300, h=100) +
+00502:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00503:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00504:     list_widget("list", 70, 135, 1140, 460, 24, 48) +
+00505:     color_button("red", 55, "#8D2830") +
+00506:     color_button("green", 350, "#267A42") +
+00507:     color_button("yellow", 645, "#8A7624") +
+00508:     color_button("blue", 940, "#245B8F")
+00509: )
+00510: 
+00511: SETTINGS_SKIN = build_fullscreen_skin(
+00512:     "EpiSettings",
+00513:     overlay_pixmap(SETTINGS_GLASS_OVERLAY) +
+00514:     logo_widget(w=320, h=108) +
+00515:     label_widget("title", 390, 32, 835, 45, 30, "right") +
+00516:     label_widget("subtitle", 390, 80, 835, 30, 17, "right", fg="#9EADBF") +
+00517:     # Active-theme strip: same translucent language as the home tiles.
+00518:     label_widget("themePanel", 70, 120, 1140, 58, 18, "left", "center") +
+00519:     label_widget("themeAccent", 70, 120, 8, 58, 12, "center", "center", "#FF000000") +
+00520:     label_widget("themeName", 100, 120, 790, 58, 20, "left", "center", None, "#F8FAFC") +
+00521:     '<widget name="themePreview" position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="3" />' % (pos(1010, 109), size(170, 76), ACTIVE_THEME_MARK) +
+00522:     # Settings list is intentionally more transparent so the selected skin
+00523:     # remains visible here too.
+00524:     '<widget name="list" position="%s" size="%s" font="%s" itemHeight="%d" scrollbarMode="showOnDemand" foregroundColor="#F4F7FB" backgroundColor="#00101418" transparent="1" selectionColor="#FFFFFF" selectionBackgroundColor="#00313B48" zPosition="1" />' % (pos(70, 192), size(1140, 392), font(21), sy(46)) +
+00525:     label_widget("info", 70, 595, 1140, 35, 16, "center", fg="#B4C7D9") +
+00526:     color_button("red", 55, "#8D2830") +
+00527:     color_button("green", 350, "#267A42") +
+00528:     color_button("yellow", 645, "#8A7624") +
+00529:     color_button("blue", 940, "#245B8F")
+00530: )
+00531: 
+00532: DETAIL_SKIN = build_fullscreen_skin(
+00533:     "EpiDetailScreen",
+00534:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+
+===== lines 390-535 =====
+00390:     label_widget("subtitle", 470, 35, 750, 45, 23, "right") +
+00391:     label_widget("hint", 470, 83, 750, 28, 16, "right", fg="#9EADBF") +
+00392:     # Clock + weather form one centered information block on the home screen.
+00393:     # The clock is deliberately large and uses the receiver's local system time.
+00394:     label_widget("clock", 455, 105, 430, 38, 30, "center", fg="#F4F7FB") +
+00395:     '<widget name="weather_icon" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(395, 142), size(58, 58)) +
+00396:     label_widget("weather", 465, 140, 420, 36, 24, "center", fg="#E7F2FC") +
+00397:     label_widget("weather_detail", 465, 174, 420, 25, 17, "center", fg="#9ED4F2") +
+00398:     home_tile_widget("tile0", 55, 210, 550, 95, 29) +
+00399:     home_tile_widget("tile1", 675, 210, 550, 95, 29) +
+00400:     home_tile_widget("tile2", 55, 325, 550, 95, 29) +
+00401:     home_tile_widget("tile3", 675, 325, 550, 95, 29) +
+00402:     home_tile_widget("tile4", 55, 440, 550, 95, 27) +
+00403:     home_tile_widget("tile5", 675, 440, 550, 95, 27) +
+00404:     # v0.9.17: one compact large motif is clipped across all six tile windows.
+00405:     theme_home_motif_pixmap(0) +
+00406:     # Thin accent bars provide a clear focus cue while the tile itself remains translucent.
+00407:     label_widget("mark0", 55, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00408:     label_widget("mark1", 675, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00409:     label_widget("mark2", 55, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00410:     label_widget("mark3", 675, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00411:     label_widget("mark4", 55, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00412:     label_widget("mark5", 675, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00413:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 222), size(70, 70), HOME_ICONS[0]) +
+00414:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 222), size(70, 70), HOME_ICONS[1]) +
+00415:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 337), size(70, 70), HOME_ICONS[2]) +
+00416:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 337), size(70, 70), HOME_ICONS[3]) +
+00417:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 452), size(70, 70), HOME_ICONS[4]) +
+00418:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 452), size(70, 70), HOME_ICONS[5]) +
+00419:     label_widget("status", 55, 565, 1170, 42, 18, "center", "center") +
+00420:     label_widget("version", 1030, 620, 195, 28, 15, "right", fg="#708093")
+00421: )
+00422: 
+00423: PROFILE_SKIN = build_fullscreen_skin(
+00424:     "EpiProfileSelect",
+00425:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00426:     logo_widget(w=345, h=115) +
+00427:     label_widget("title", 430, 35, 795, 48, 31, "right") +
+00428:     label_widget("subtitle", 430, 86, 795, 30, 18, "right", fg="#9EADBF") +
+00429:     list_widget("list", 70, 155, 1140, 390, 25, 48) +
+00430:     "".join('<widget name="profile_status%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="4" />' %
+00431:             (i, pos(80, 164 + (i * 48)), size(28, 28)) for i in range(8)) +
+00432:     label_widget("info", 70, 560, 1140, 38, 17, "center", fg="#9EADBF") +
+00433:     color_button("red", 55, "#8D2830") +
+00434:     color_button("green", 350, "#267A42") +
+00435:     color_button("yellow", 645, "#8A7624") +
+00436:     color_button("blue", 940, "#245B8F")
+00437: )
+00438: 
+00439: HELP_SKIN = build_fullscreen_skin(
+00440:     "EpiHelpScreen",
+00441:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00442:     logo_widget(w=300, h=100) +
+00443:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00444:     label_widget("subtitle", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00445:     list_widget("list", 55, 135, 390, 455, 20, 48) +
+00446:     label_widget("detail", 475, 135, 750, 455, 19, "left", "top", "#0D121B", "#E7EEF7") +
+00447:     label_widget("info", 55, 600, 1170, 35, 16, "center", fg="#9EADBF") +
+00448:     color_button("red", 55, "#8D2830") +
+00449:     color_button("green", 350, "#267A42") +
+00450:     color_button("yellow", 645, "#8A7624") +
+00451:     color_button("blue", 940, "#245B8F")
+00452: )
+00453: 
+00454: CATEGORY_SKIN = build_fullscreen_skin(
+00455:     "EpiCategoryScreen",
+00456:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00457:     logo_widget(w=300, h=100) +
+00458:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00459:     label_widget("info", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00460:     list_widget("list", 70, 135, 1140, 460, 24, 44) +
+00461:     # Category icons stay separate from MenuList so they never interfere with
+00462:     # navigation. Live uses representative Picons; movies/series use a small
+00463:     # service badge when the category name identifies a platform.
+00464:     ''.join('<widget name="category_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00465:             (i, pos(76, 140 + (i * 44)), size(62, 34)) for i in range(10)) +
+00466:     color_button("red", 55, "#8D2830") +
+00467:     color_button("green", 350, "#267A42") +
+00468:     color_button("yellow", 645, "#8A7624") +
+00469:     color_button("blue", 940, "#245B8F")
+00470: )
+00471: 
+00472: CONTENT_SKIN = build_fullscreen_skin(
+00473:     "EpiContentScreen",
+00474:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00475:     logo_widget(w=300, h=100) +
+00476:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00477:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00478:     list_widget("list", 70, 135, 1140, 460, 21, 42) +
+00479:     # Live-TV deliberately uses the normal Enigma2 string MenuList again.
+00480:     # Picons are separate transparent Pixmap widgets, so they cannot interfere
+00481:     # with list focus or remote-control navigation.
+00482:     ''.join('<widget name="live_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00483:             (i, pos(76, 139 + (i * 42)), size(62, 34)) for i in range(10)) +
+00484:     # VOD/series preview: larger poster and substantially more readable text.
+00485:     # The list itself is resized at runtime only for movies/series; live keeps
+00486:     # the complete width for Picon + Now/Next EPG rows.
+00487:     label_widget("preview_panel", 620, 135, 590, 460, 1, "left", "top", None, "#0D121B") +
+00488:     '<widget name="preview_poster" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(642, 155), size(235, 340)) +
+00489:     label_widget("preview_title", 900, 150, 290, 82, 25, "left", "top") +
+00490:     label_widget("preview_meta", 900, 238, 290, 125, 17, "left", "top", fg="#AFC0D4") +
+00491:     label_widget("preview_overview", 900, 370, 290, 205, 18, "left", "top", fg="#DCE7F3") +
+00492:     color_button("red", 55, "#8D2830") +
+00493:     color_button("green", 350, "#267A42") +
+00494:     color_button("yellow", 645, "#8A7624") +
+00495:     color_button("blue", 940, "#245B8F")
+00496: )
+00497: 
+00498: SEASON_SKIN = build_fullscreen_skin(
+00499:     "EpiSeasonScreen",
+00500:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00501:     logo_widget(w=300, h=100) +
+00502:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00503:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00504:     list_widget("list", 70, 135, 1140, 460, 24, 48) +
+00505:     color_button("red", 55, "#8D2830") +
+00506:     color_button("green", 350, "#267A42") +
+00507:     color_button("yellow", 645, "#8A7624") +
+00508:     color_button("blue", 940, "#245B8F")
+00509: )
+00510: 
+00511: SETTINGS_SKIN = build_fullscreen_skin(
+00512:     "EpiSettings",
+00513:     overlay_pixmap(SETTINGS_GLASS_OVERLAY) +
+00514:     logo_widget(w=320, h=108) +
+00515:     label_widget("title", 390, 32, 835, 45, 30, "right") +
+00516:     label_widget("subtitle", 390, 80, 835, 30, 17, "right", fg="#9EADBF") +
+00517:     # Active-theme strip: same translucent language as the home tiles.
+00518:     label_widget("themePanel", 70, 120, 1140, 58, 18, "left", "center") +
+00519:     label_widget("themeAccent", 70, 120, 8, 58, 12, "center", "center", "#FF000000") +
+00520:     label_widget("themeName", 100, 120, 790, 58, 20, "left", "center", None, "#F8FAFC") +
+00521:     '<widget name="themePreview" position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="3" />' % (pos(1010, 109), size(170, 76), ACTIVE_THEME_MARK) +
+00522:     # Settings list is intentionally more transparent so the selected skin
+00523:     # remains visible here too.
+00524:     '<widget name="list" position="%s" size="%s" font="%s" itemHeight="%d" scrollbarMode="showOnDemand" foregroundColor="#F4F7FB" backgroundColor="#00101418" transparent="1" selectionColor="#FFFFFF" selectionBackgroundColor="#00313B48" zPosition="1" />' % (pos(70, 192), size(1140, 392), font(21), sy(46)) +
+00525:     label_widget("info", 70, 595, 1140, 35, 16, "center", fg="#B4C7D9") +
+00526:     color_button("red", 55, "#8D2830") +
+00527:     color_button("green", 350, "#267A42") +
+00528:     color_button("yellow", 645, "#8A7624") +
+00529:     color_button("blue", 940, "#245B8F")
+00530: )
+00531: 
+00532: DETAIL_SKIN = build_fullscreen_skin(
+00533:     "EpiDetailScreen",
+00534:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00535:     logo_widget(w=300, h=100) +
+
+===== lines 391-536 =====
+00391:     label_widget("hint", 470, 83, 750, 28, 16, "right", fg="#9EADBF") +
+00392:     # Clock + weather form one centered information block on the home screen.
+00393:     # The clock is deliberately large and uses the receiver's local system time.
+00394:     label_widget("clock", 455, 105, 430, 38, 30, "center", fg="#F4F7FB") +
+00395:     '<widget name="weather_icon" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(395, 142), size(58, 58)) +
+00396:     label_widget("weather", 465, 140, 420, 36, 24, "center", fg="#E7F2FC") +
+00397:     label_widget("weather_detail", 465, 174, 420, 25, 17, "center", fg="#9ED4F2") +
+00398:     home_tile_widget("tile0", 55, 210, 550, 95, 29) +
+00399:     home_tile_widget("tile1", 675, 210, 550, 95, 29) +
+00400:     home_tile_widget("tile2", 55, 325, 550, 95, 29) +
+00401:     home_tile_widget("tile3", 675, 325, 550, 95, 29) +
+00402:     home_tile_widget("tile4", 55, 440, 550, 95, 27) +
+00403:     home_tile_widget("tile5", 675, 440, 550, 95, 27) +
+00404:     # v0.9.17: one compact large motif is clipped across all six tile windows.
+00405:     theme_home_motif_pixmap(0) +
+00406:     # Thin accent bars provide a clear focus cue while the tile itself remains translucent.
+00407:     label_widget("mark0", 55, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00408:     label_widget("mark1", 675, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00409:     label_widget("mark2", 55, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00410:     label_widget("mark3", 675, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00411:     label_widget("mark4", 55, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00412:     label_widget("mark5", 675, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00413:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 222), size(70, 70), HOME_ICONS[0]) +
+00414:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 222), size(70, 70), HOME_ICONS[1]) +
+00415:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 337), size(70, 70), HOME_ICONS[2]) +
+00416:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 337), size(70, 70), HOME_ICONS[3]) +
+00417:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 452), size(70, 70), HOME_ICONS[4]) +
+00418:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 452), size(70, 70), HOME_ICONS[5]) +
+00419:     label_widget("status", 55, 565, 1170, 42, 18, "center", "center") +
+00420:     label_widget("version", 1030, 620, 195, 28, 15, "right", fg="#708093")
+00421: )
+00422: 
+00423: PROFILE_SKIN = build_fullscreen_skin(
+00424:     "EpiProfileSelect",
+00425:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00426:     logo_widget(w=345, h=115) +
+00427:     label_widget("title", 430, 35, 795, 48, 31, "right") +
+00428:     label_widget("subtitle", 430, 86, 795, 30, 18, "right", fg="#9EADBF") +
+00429:     list_widget("list", 70, 155, 1140, 390, 25, 48) +
+00430:     "".join('<widget name="profile_status%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="4" />' %
+00431:             (i, pos(80, 164 + (i * 48)), size(28, 28)) for i in range(8)) +
+00432:     label_widget("info", 70, 560, 1140, 38, 17, "center", fg="#9EADBF") +
+00433:     color_button("red", 55, "#8D2830") +
+00434:     color_button("green", 350, "#267A42") +
+00435:     color_button("yellow", 645, "#8A7624") +
+00436:     color_button("blue", 940, "#245B8F")
+00437: )
+00438: 
+00439: HELP_SKIN = build_fullscreen_skin(
+00440:     "EpiHelpScreen",
+00441:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00442:     logo_widget(w=300, h=100) +
+00443:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00444:     label_widget("subtitle", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00445:     list_widget("list", 55, 135, 390, 455, 20, 48) +
+00446:     label_widget("detail", 475, 135, 750, 455, 19, "left", "top", "#0D121B", "#E7EEF7") +
+00447:     label_widget("info", 55, 600, 1170, 35, 16, "center", fg="#9EADBF") +
+00448:     color_button("red", 55, "#8D2830") +
+00449:     color_button("green", 350, "#267A42") +
+00450:     color_button("yellow", 645, "#8A7624") +
+00451:     color_button("blue", 940, "#245B8F")
+00452: )
+00453: 
+00454: CATEGORY_SKIN = build_fullscreen_skin(
+00455:     "EpiCategoryScreen",
+00456:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00457:     logo_widget(w=300, h=100) +
+00458:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00459:     label_widget("info", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00460:     list_widget("list", 70, 135, 1140, 460, 24, 44) +
+00461:     # Category icons stay separate from MenuList so they never interfere with
+00462:     # navigation. Live uses representative Picons; movies/series use a small
+00463:     # service badge when the category name identifies a platform.
+00464:     ''.join('<widget name="category_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00465:             (i, pos(76, 140 + (i * 44)), size(62, 34)) for i in range(10)) +
+00466:     color_button("red", 55, "#8D2830") +
+00467:     color_button("green", 350, "#267A42") +
+00468:     color_button("yellow", 645, "#8A7624") +
+00469:     color_button("blue", 940, "#245B8F")
+00470: )
+00471: 
+00472: CONTENT_SKIN = build_fullscreen_skin(
+00473:     "EpiContentScreen",
+00474:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00475:     logo_widget(w=300, h=100) +
+00476:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00477:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00478:     list_widget("list", 70, 135, 1140, 460, 21, 42) +
+00479:     # Live-TV deliberately uses the normal Enigma2 string MenuList again.
+00480:     # Picons are separate transparent Pixmap widgets, so they cannot interfere
+00481:     # with list focus or remote-control navigation.
+00482:     ''.join('<widget name="live_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00483:             (i, pos(76, 139 + (i * 42)), size(62, 34)) for i in range(10)) +
+00484:     # VOD/series preview: larger poster and substantially more readable text.
+00485:     # The list itself is resized at runtime only for movies/series; live keeps
+00486:     # the complete width for Picon + Now/Next EPG rows.
+00487:     label_widget("preview_panel", 620, 135, 590, 460, 1, "left", "top", None, "#0D121B") +
+00488:     '<widget name="preview_poster" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(642, 155), size(235, 340)) +
+00489:     label_widget("preview_title", 900, 150, 290, 82, 25, "left", "top") +
+00490:     label_widget("preview_meta", 900, 238, 290, 125, 17, "left", "top", fg="#AFC0D4") +
+00491:     label_widget("preview_overview", 900, 370, 290, 205, 18, "left", "top", fg="#DCE7F3") +
+00492:     color_button("red", 55, "#8D2830") +
+00493:     color_button("green", 350, "#267A42") +
+00494:     color_button("yellow", 645, "#8A7624") +
+00495:     color_button("blue", 940, "#245B8F")
+00496: )
+00497: 
+00498: SEASON_SKIN = build_fullscreen_skin(
+00499:     "EpiSeasonScreen",
+00500:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00501:     logo_widget(w=300, h=100) +
+00502:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00503:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00504:     list_widget("list", 70, 135, 1140, 460, 24, 48) +
+00505:     color_button("red", 55, "#8D2830") +
+00506:     color_button("green", 350, "#267A42") +
+00507:     color_button("yellow", 645, "#8A7624") +
+00508:     color_button("blue", 940, "#245B8F")
+00509: )
+00510: 
+00511: SETTINGS_SKIN = build_fullscreen_skin(
+00512:     "EpiSettings",
+00513:     overlay_pixmap(SETTINGS_GLASS_OVERLAY) +
+00514:     logo_widget(w=320, h=108) +
+00515:     label_widget("title", 390, 32, 835, 45, 30, "right") +
+00516:     label_widget("subtitle", 390, 80, 835, 30, 17, "right", fg="#9EADBF") +
+00517:     # Active-theme strip: same translucent language as the home tiles.
+00518:     label_widget("themePanel", 70, 120, 1140, 58, 18, "left", "center") +
+00519:     label_widget("themeAccent", 70, 120, 8, 58, 12, "center", "center", "#FF000000") +
+00520:     label_widget("themeName", 100, 120, 790, 58, 20, "left", "center", None, "#F8FAFC") +
+00521:     '<widget name="themePreview" position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="3" />' % (pos(1010, 109), size(170, 76), ACTIVE_THEME_MARK) +
+00522:     # Settings list is intentionally more transparent so the selected skin
+00523:     # remains visible here too.
+00524:     '<widget name="list" position="%s" size="%s" font="%s" itemHeight="%d" scrollbarMode="showOnDemand" foregroundColor="#F4F7FB" backgroundColor="#00101418" transparent="1" selectionColor="#FFFFFF" selectionBackgroundColor="#00313B48" zPosition="1" />' % (pos(70, 192), size(1140, 392), font(21), sy(46)) +
+00525:     label_widget("info", 70, 595, 1140, 35, 16, "center", fg="#B4C7D9") +
+00526:     color_button("red", 55, "#8D2830") +
+00527:     color_button("green", 350, "#267A42") +
+00528:     color_button("yellow", 645, "#8A7624") +
+00529:     color_button("blue", 940, "#245B8F")
+00530: )
+00531: 
+00532: DETAIL_SKIN = build_fullscreen_skin(
+00533:     "EpiDetailScreen",
+00534:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00535:     logo_widget(w=300, h=100) +
+00536:     label_widget("title", 380, 30, 845, 45, 29, "right") +
+
+===== lines 392-537 =====
+00392:     # Clock + weather form one centered information block on the home screen.
+00393:     # The clock is deliberately large and uses the receiver's local system time.
+00394:     label_widget("clock", 455, 105, 430, 38, 30, "center", fg="#F4F7FB") +
+00395:     '<widget name="weather_icon" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(395, 142), size(58, 58)) +
+00396:     label_widget("weather", 465, 140, 420, 36, 24, "center", fg="#E7F2FC") +
+00397:     label_widget("weather_detail", 465, 174, 420, 25, 17, "center", fg="#9ED4F2") +
+00398:     home_tile_widget("tile0", 55, 210, 550, 95, 29) +
+00399:     home_tile_widget("tile1", 675, 210, 550, 95, 29) +
+00400:     home_tile_widget("tile2", 55, 325, 550, 95, 29) +
+00401:     home_tile_widget("tile3", 675, 325, 550, 95, 29) +
+00402:     home_tile_widget("tile4", 55, 440, 550, 95, 27) +
+00403:     home_tile_widget("tile5", 675, 440, 550, 95, 27) +
+00404:     # v0.9.17: one compact large motif is clipped across all six tile windows.
+00405:     theme_home_motif_pixmap(0) +
+00406:     # Thin accent bars provide a clear focus cue while the tile itself remains translucent.
+00407:     label_widget("mark0", 55, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00408:     label_widget("mark1", 675, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00409:     label_widget("mark2", 55, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00410:     label_widget("mark3", 675, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00411:     label_widget("mark4", 55, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00412:     label_widget("mark5", 675, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00413:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 222), size(70, 70), HOME_ICONS[0]) +
+00414:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 222), size(70, 70), HOME_ICONS[1]) +
+00415:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 337), size(70, 70), HOME_ICONS[2]) +
+00416:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 337), size(70, 70), HOME_ICONS[3]) +
+00417:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 452), size(70, 70), HOME_ICONS[4]) +
+00418:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 452), size(70, 70), HOME_ICONS[5]) +
+00419:     label_widget("status", 55, 565, 1170, 42, 18, "center", "center") +
+00420:     label_widget("version", 1030, 620, 195, 28, 15, "right", fg="#708093")
+00421: )
+00422: 
+00423: PROFILE_SKIN = build_fullscreen_skin(
+00424:     "EpiProfileSelect",
+00425:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00426:     logo_widget(w=345, h=115) +
+00427:     label_widget("title", 430, 35, 795, 48, 31, "right") +
+00428:     label_widget("subtitle", 430, 86, 795, 30, 18, "right", fg="#9EADBF") +
+00429:     list_widget("list", 70, 155, 1140, 390, 25, 48) +
+00430:     "".join('<widget name="profile_status%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="4" />' %
+00431:             (i, pos(80, 164 + (i * 48)), size(28, 28)) for i in range(8)) +
+00432:     label_widget("info", 70, 560, 1140, 38, 17, "center", fg="#9EADBF") +
+00433:     color_button("red", 55, "#8D2830") +
+00434:     color_button("green", 350, "#267A42") +
+00435:     color_button("yellow", 645, "#8A7624") +
+00436:     color_button("blue", 940, "#245B8F")
+00437: )
+00438: 
+00439: HELP_SKIN = build_fullscreen_skin(
+00440:     "EpiHelpScreen",
+00441:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00442:     logo_widget(w=300, h=100) +
+00443:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00444:     label_widget("subtitle", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00445:     list_widget("list", 55, 135, 390, 455, 20, 48) +
+00446:     label_widget("detail", 475, 135, 750, 455, 19, "left", "top", "#0D121B", "#E7EEF7") +
+00447:     label_widget("info", 55, 600, 1170, 35, 16, "center", fg="#9EADBF") +
+00448:     color_button("red", 55, "#8D2830") +
+00449:     color_button("green", 350, "#267A42") +
+00450:     color_button("yellow", 645, "#8A7624") +
+00451:     color_button("blue", 940, "#245B8F")
+00452: )
+00453: 
+00454: CATEGORY_SKIN = build_fullscreen_skin(
+00455:     "EpiCategoryScreen",
+00456:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00457:     logo_widget(w=300, h=100) +
+00458:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00459:     label_widget("info", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00460:     list_widget("list", 70, 135, 1140, 460, 24, 44) +
+00461:     # Category icons stay separate from MenuList so they never interfere with
+00462:     # navigation. Live uses representative Picons; movies/series use a small
+00463:     # service badge when the category name identifies a platform.
+00464:     ''.join('<widget name="category_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00465:             (i, pos(76, 140 + (i * 44)), size(62, 34)) for i in range(10)) +
+00466:     color_button("red", 55, "#8D2830") +
+00467:     color_button("green", 350, "#267A42") +
+00468:     color_button("yellow", 645, "#8A7624") +
+00469:     color_button("blue", 940, "#245B8F")
+00470: )
+00471: 
+00472: CONTENT_SKIN = build_fullscreen_skin(
+00473:     "EpiContentScreen",
+00474:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00475:     logo_widget(w=300, h=100) +
+00476:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00477:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00478:     list_widget("list", 70, 135, 1140, 460, 21, 42) +
+00479:     # Live-TV deliberately uses the normal Enigma2 string MenuList again.
+00480:     # Picons are separate transparent Pixmap widgets, so they cannot interfere
+00481:     # with list focus or remote-control navigation.
+00482:     ''.join('<widget name="live_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00483:             (i, pos(76, 139 + (i * 42)), size(62, 34)) for i in range(10)) +
+00484:     # VOD/series preview: larger poster and substantially more readable text.
+00485:     # The list itself is resized at runtime only for movies/series; live keeps
+00486:     # the complete width for Picon + Now/Next EPG rows.
+00487:     label_widget("preview_panel", 620, 135, 590, 460, 1, "left", "top", None, "#0D121B") +
+00488:     '<widget name="preview_poster" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(642, 155), size(235, 340)) +
+00489:     label_widget("preview_title", 900, 150, 290, 82, 25, "left", "top") +
+00490:     label_widget("preview_meta", 900, 238, 290, 125, 17, "left", "top", fg="#AFC0D4") +
+00491:     label_widget("preview_overview", 900, 370, 290, 205, 18, "left", "top", fg="#DCE7F3") +
+00492:     color_button("red", 55, "#8D2830") +
+00493:     color_button("green", 350, "#267A42") +
+00494:     color_button("yellow", 645, "#8A7624") +
+00495:     color_button("blue", 940, "#245B8F")
+00496: )
+00497: 
+00498: SEASON_SKIN = build_fullscreen_skin(
+00499:     "EpiSeasonScreen",
+00500:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00501:     logo_widget(w=300, h=100) +
+00502:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00503:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00504:     list_widget("list", 70, 135, 1140, 460, 24, 48) +
+00505:     color_button("red", 55, "#8D2830") +
+00506:     color_button("green", 350, "#267A42") +
+00507:     color_button("yellow", 645, "#8A7624") +
+00508:     color_button("blue", 940, "#245B8F")
+00509: )
+00510: 
+00511: SETTINGS_SKIN = build_fullscreen_skin(
+00512:     "EpiSettings",
+00513:     overlay_pixmap(SETTINGS_GLASS_OVERLAY) +
+00514:     logo_widget(w=320, h=108) +
+00515:     label_widget("title", 390, 32, 835, 45, 30, "right") +
+00516:     label_widget("subtitle", 390, 80, 835, 30, 17, "right", fg="#9EADBF") +
+00517:     # Active-theme strip: same translucent language as the home tiles.
+00518:     label_widget("themePanel", 70, 120, 1140, 58, 18, "left", "center") +
+00519:     label_widget("themeAccent", 70, 120, 8, 58, 12, "center", "center", "#FF000000") +
+00520:     label_widget("themeName", 100, 120, 790, 58, 20, "left", "center", None, "#F8FAFC") +
+00521:     '<widget name="themePreview" position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="3" />' % (pos(1010, 109), size(170, 76), ACTIVE_THEME_MARK) +
+00522:     # Settings list is intentionally more transparent so the selected skin
+00523:     # remains visible here too.
+00524:     '<widget name="list" position="%s" size="%s" font="%s" itemHeight="%d" scrollbarMode="showOnDemand" foregroundColor="#F4F7FB" backgroundColor="#00101418" transparent="1" selectionColor="#FFFFFF" selectionBackgroundColor="#00313B48" zPosition="1" />' % (pos(70, 192), size(1140, 392), font(21), sy(46)) +
+00525:     label_widget("info", 70, 595, 1140, 35, 16, "center", fg="#B4C7D9") +
+00526:     color_button("red", 55, "#8D2830") +
+00527:     color_button("green", 350, "#267A42") +
+00528:     color_button("yellow", 645, "#8A7624") +
+00529:     color_button("blue", 940, "#245B8F")
+00530: )
+00531: 
+00532: DETAIL_SKIN = build_fullscreen_skin(
+00533:     "EpiDetailScreen",
+00534:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00535:     logo_widget(w=300, h=100) +
+00536:     label_widget("title", 380, 30, 845, 45, 29, "right") +
+00537:     '<widget name="poster" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(70, 145), size(290, 420)) +
+
+===== lines 393-538 =====
+00393:     # The clock is deliberately large and uses the receiver's local system time.
+00394:     label_widget("clock", 455, 105, 430, 38, 30, "center", fg="#F4F7FB") +
+00395:     '<widget name="weather_icon" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(395, 142), size(58, 58)) +
+00396:     label_widget("weather", 465, 140, 420, 36, 24, "center", fg="#E7F2FC") +
+00397:     label_widget("weather_detail", 465, 174, 420, 25, 17, "center", fg="#9ED4F2") +
+00398:     home_tile_widget("tile0", 55, 210, 550, 95, 29) +
+00399:     home_tile_widget("tile1", 675, 210, 550, 95, 29) +
+00400:     home_tile_widget("tile2", 55, 325, 550, 95, 29) +
+00401:     home_tile_widget("tile3", 675, 325, 550, 95, 29) +
+00402:     home_tile_widget("tile4", 55, 440, 550, 95, 27) +
+00403:     home_tile_widget("tile5", 675, 440, 550, 95, 27) +
+00404:     # v0.9.17: one compact large motif is clipped across all six tile windows.
+00405:     theme_home_motif_pixmap(0) +
+00406:     # Thin accent bars provide a clear focus cue while the tile itself remains translucent.
+00407:     label_widget("mark0", 55, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00408:     label_widget("mark1", 675, 210, 8, 95, 12, "center", "center", "#FF000000") +
+00409:     label_widget("mark2", 55, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00410:     label_widget("mark3", 675, 325, 8, 95, 12, "center", "center", "#FF000000") +
+00411:     label_widget("mark4", 55, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00412:     label_widget("mark5", 675, 440, 8, 95, 12, "center", "center", "#FF000000") +
+00413:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 222), size(70, 70), HOME_ICONS[0]) +
+00414:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 222), size(70, 70), HOME_ICONS[1]) +
+00415:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 337), size(70, 70), HOME_ICONS[2]) +
+00416:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 337), size(70, 70), HOME_ICONS[3]) +
+00417:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(82, 452), size(70, 70), HOME_ICONS[4]) +
+00418:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(702, 452), size(70, 70), HOME_ICONS[5]) +
+00419:     label_widget("status", 55, 565, 1170, 42, 18, "center", "center") +
+00420:     label_widget("version", 1030, 620, 195, 28, 15, "right", fg="#708093")
+00421: )
+00422: 
+00423: PROFILE_SKIN = build_fullscreen_skin(
+00424:     "EpiProfileSelect",
+00425:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00426:     logo_widget(w=345, h=115) +
+00427:     label_widget("title", 430, 35, 795, 48, 31, "right") +
+00428:     label_widget("subtitle", 430, 86, 795, 30, 18, "right", fg="#9EADBF") +
+00429:     list_widget("list", 70, 155, 1140, 390, 25, 48) +
+00430:     "".join('<widget name="profile_status%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="4" />' %
+00431:             (i, pos(80, 164 + (i * 48)), size(28, 28)) for i in range(8)) +
+00432:     label_widget("info", 70, 560, 1140, 38, 17, "center", fg="#9EADBF") +
+00433:     color_button("red", 55, "#8D2830") +
+00434:     color_button("green", 350, "#267A42") +
+00435:     color_button("yellow", 645, "#8A7624") +
+00436:     color_button("blue", 940, "#245B8F")
+00437: )
+00438: 
+00439: HELP_SKIN = build_fullscreen_skin(
+00440:     "EpiHelpScreen",
+00441:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00442:     logo_widget(w=300, h=100) +
+00443:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00444:     label_widget("subtitle", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00445:     list_widget("list", 55, 135, 390, 455, 20, 48) +
+00446:     label_widget("detail", 475, 135, 750, 455, 19, "left", "top", "#0D121B", "#E7EEF7") +
+00447:     label_widget("info", 55, 600, 1170, 35, 16, "center", fg="#9EADBF") +
+00448:     color_button("red", 55, "#8D2830") +
+00449:     color_button("green", 350, "#267A42") +
+00450:     color_button("yellow", 645, "#8A7624") +
+00451:     color_button("blue", 940, "#245B8F")
+00452: )
+00453: 
+00454: CATEGORY_SKIN = build_fullscreen_skin(
+00455:     "EpiCategoryScreen",
+00456:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00457:     logo_widget(w=300, h=100) +
+00458:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00459:     label_widget("info", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00460:     list_widget("list", 70, 135, 1140, 460, 24, 44) +
+00461:     # Category icons stay separate from MenuList so they never interfere with
+00462:     # navigation. Live uses representative Picons; movies/series use a small
+00463:     # service badge when the category name identifies a platform.
+00464:     ''.join('<widget name="category_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00465:             (i, pos(76, 140 + (i * 44)), size(62, 34)) for i in range(10)) +
+00466:     color_button("red", 55, "#8D2830") +
+00467:     color_button("green", 350, "#267A42") +
+00468:     color_button("yellow", 645, "#8A7624") +
+00469:     color_button("blue", 940, "#245B8F")
+00470: )
+00471: 
+00472: CONTENT_SKIN = build_fullscreen_skin(
+00473:     "EpiContentScreen",
+00474:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00475:     logo_widget(w=300, h=100) +
+00476:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00477:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00478:     list_widget("list", 70, 135, 1140, 460, 21, 42) +
+00479:     # Live-TV deliberately uses the normal Enigma2 string MenuList again.
+00480:     # Picons are separate transparent Pixmap widgets, so they cannot interfere
+00481:     # with list focus or remote-control navigation.
+00482:     ''.join('<widget name="live_picon%d" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' %
+00483:             (i, pos(76, 139 + (i * 42)), size(62, 34)) for i in range(10)) +
+00484:     # VOD/series preview: larger poster and substantially more readable text.
+00485:     # The list itself is resized at runtime only for movies/series; live keeps
+00486:     # the complete width for Picon + Now/Next EPG rows.
+00487:     label_widget("preview_panel", 620, 135, 590, 460, 1, "left", "top", None, "#0D121B") +
+00488:     '<widget name="preview_poster" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(642, 155), size(235, 340)) +
+00489:     label_widget("preview_title", 900, 150, 290, 82, 25, "left", "top") +
+00490:     label_widget("preview_meta", 900, 238, 290, 125, 17, "left", "top", fg="#AFC0D4") +
+00491:     label_widget("preview_overview", 900, 370, 290, 205, 18, "left", "top", fg="#DCE7F3") +
+00492:     color_button("red", 55, "#8D2830") +
+00493:     color_button("green", 350, "#267A42") +
+00494:     color_button("yellow", 645, "#8A7624") +
+00495:     color_button("blue", 940, "#245B8F")
+00496: )
+00497: 
+00498: SEASON_SKIN = build_fullscreen_skin(
+00499:     "EpiSeasonScreen",
+00500:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00501:     logo_widget(w=300, h=100) +
+00502:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00503:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00504:     list_widget("list", 70, 135, 1140, 460, 24, 48) +
+00505:     color_button("red", 55, "#8D2830") +
+00506:     color_button("green", 350, "#267A42") +
+00507:     color_button("yellow", 645, "#8A7624") +
+00508:     color_button("blue", 940, "#245B8F")
+00509: )
+00510: 
+00511: SETTINGS_SKIN = build_fullscreen_skin(
+00512:     "EpiSettings",
+00513:     overlay_pixmap(SETTINGS_GLASS_OVERLAY) +
+00514:     logo_widget(w=320, h=108) +
+00515:     label_widget("title", 390, 32, 835, 45, 30, "right") +
+00516:     label_widget("subtitle", 390, 80, 835, 30, 17, "right", fg="#9EADBF") +
+00517:     # Active-theme strip: same translucent language as the home tiles.
+00518:     label_widget("themePanel", 70, 120, 1140, 58, 18, "left", "center") +
+00519:     label_widget("themeAccent", 70, 120, 8, 58, 12, "center", "center", "#FF000000") +
+00520:     label_widget("themeName", 100, 120, 790, 58, 20, "left", "center", None, "#F8FAFC") +
+00521:     '<widget name="themePreview" position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="3" />' % (pos(1010, 109), size(170, 76), ACTIVE_THEME_MARK) +
+00522:     # Settings list is intentionally more transparent so the selected skin
+00523:     # remains visible here too.
+00524:     '<widget name="list" position="%s" size="%s" font="%s" itemHeight="%d" scrollbarMode="showOnDemand" foregroundColor="#F4F7FB" backgroundColor="#00101418" transparent="1" selectionColor="#FFFFFF" selectionBackgroundColor="#00313B48" zPosition="1" />' % (pos(70, 192), size(1140, 392), font(21), sy(46)) +
+00525:     label_widget("info", 70, 595, 1140, 35, 16, "center", fg="#B4C7D9") +
+00526:     color_button("red", 55, "#8D2830") +
+00527:     color_button("green", 350, "#267A42") +
+00528:     color_button("yellow", 645, "#8A7624") +
+00529:     color_button("blue", 940, "#245B8F")
+00530: )
+00531: 
+00532: DETAIL_SKIN = build_fullscreen_skin(
+00533:     "EpiDetailScreen",
+00534:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00535:     logo_widget(w=300, h=100) +
+00536:     label_widget("title", 380, 30, 845, 45, 29, "right") +
+00537:     '<widget name="poster" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(70, 145), size(290, 420)) +
+00538:     label_widget("rating", 400, 145, 810, 38, 22, "left", fg="#F5D96B") +
+
+===== lines 537-682 =====
+00537:     '<widget name="poster" position="%s" size="%s" alphatest="on" scale="1" />' % (pos(70, 145), size(290, 420)) +
+00538:     label_widget("rating", 400, 145, 810, 38, 22, "left", fg="#F5D96B") +
+00539:     label_widget("meta", 400, 190, 810, 40, 19, "left", fg="#AFC0D4") +
+00540:     label_widget("overview", 400, 245, 810, 320, 20, "left", "top", "#0D121B") +
+00541:     label_widget("source", 70, 590, 1140, 30, 15, "left", fg="#708093") +
+00542:     color_button("red", 55, "#8D2830") +
+00543:     color_button("green", 350, "#267A42") +
+00544:     color_button("yellow", 645, "#8A7624") +
+00545:     color_button("blue", 940, "#245B8F")
+00546: )
+00547: 
+00548: EPG_SKIN = build_fullscreen_skin(
+00549:     "EpiEPGScreen",
+00550:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00551:     logo_widget(w=300, h=100) +
+00552:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00553:     label_widget("now", 70, 135, 1140, 85, 20, "left", "center", "#0D121B") +
+00554:     list_widget("list", 70, 235, 1140, 355, 21, 46) +
+00555:     label_widget("info", 70, 600, 1140, 30, 16, "center", fg="#9EADBF") +
+00556:     color_button("red", 55, "#8D2830") +
+00557:     color_button("green", 350, "#267A42") +
+00558:     color_button("yellow", 645, "#8A7624") +
+00559:     color_button("blue", 940, "#245B8F")
+00560: )
+00561: 
+00562: MEDIATHEK_HOME_SKIN = build_fullscreen_skin(
+00563:     "EpiMediathekHome",
+00564:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00565:     logo_widget(w=300, h=100) +
+00566:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00567:     label_widget("subtitle", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00568:     list_widget("list", 70, 135, 1140, 455, 23, 44) +
+00569:     label_widget("info", 70, 598, 1140, 35, 16, "center", fg="#9EADBF") +
+00570:     color_button("red", 55, "#8D2830") +
+00571:     color_button("green", 350, "#267A42") +
+00572:     color_button("yellow", 645, "#8A7624") +
+00573:     color_button("blue", 940, "#245B8F")
+00574: )
+00575: 
+00576: MEDIATHEK_LIST_SKIN = build_fullscreen_skin(
+00577:     "EpiMediathekList",
+00578:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00579:     logo_widget(w=300, h=100) +
+00580:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00581:     label_widget("subtitle", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00582:     list_widget("list", 55, 128, 1170, 345, 20, 42) +
+00583:     label_widget("detail", 55, 485, 1170, 125, 17, "left", "top", "#0D121B", "#E7EEF7") +
+00584:     label_widget("info", 55, 615, 1170, 28, 15, "center", fg="#9EADBF") +
+00585:     color_button("red", 55, "#8D2830") +
+00586:     color_button("green", 350, "#267A42") +
+00587:     color_button("yellow", 645, "#8A7624") +
+00588:     color_button("blue", 940, "#245B8F")
+00589: )
+00590: 
+00591: SPLASH_SKIN = build_fullscreen_skin(
+00592:     "EpiSplash",
+00593:     '<widget name="intro" position="0,0" size="%d,%d" alphatest="off" scale="1" />' % (GUI_W, GUI_H) +
+00594:     label_widget("version", 0, 646, 1280, 28, 15, "center", fg="#6F8298") +
+00595:     label_widget("skip", 0, 678, 1280, 24, 14, "center", fg="#8296AB")
+00596: )
+00597: 
+00598: 
+00599: # Bottom banner overlay for Live-TV. The screen only occupies the lower area,
+00600: # so the video remains fully visible behind it.
+00601: LIVE_PLAYER_SKIN = '<screen name="EpiLivePlayer" position="0,%d" size="%d,%d" flags="wfNoBorder" backgroundColor="#10151F">' % (sy(500), GUI_W, sy(220)) + (
+00602:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="0" />' % (pos(1010, 20), size(230, 180), ACTIVE_THEME_BANNER_MARK) +
+00603:     label_widget("bannerAccent", 0, 0, 1280, 5, 10, "center", "center", "#FF000000") +
+00604:     '<widget name="picon" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(35, 10), size(92, 48)) +
+00605:     label_widget("channel", 145, 10, 540, 42, 27, "left", "center", None, "#FFFFFF") +
+00606:     '<widget name="weather_icon" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(785, 12), size(36, 36)) +
+00607:     label_widget("weather", 830, 10, 275, 42, 17, "right", "center", None, "#BBD4EA") +
+00608:     label_widget("clock", 1120, 10, 125, 42, 20, "right", "center", None, "#FFFFFF") +
+00609:     label_widget("now", 35, 62, 1210, 42, 21, "left", "center", None, "#F7FAFD") +
+00610:     label_widget("next", 35, 108, 1210, 35, 18, "left", "center", None, "#AFC0D4") +
+00611:     label_widget("help", 35, 162, 1210, 32, 15, "center", "center", None, "#7F93A8")
+00612: ) + '</screen>'
+00613: 
+00614: 
+00615: CATEGORY_MANAGER_SKIN = build_fullscreen_skin(
+00616:     "EpiCategoryManager",
+00617:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00618:     logo_widget(w=300, h=100) +
+00619:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00620:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00621:     list_widget("list", 70, 135, 1140, 460, 21, 44) +
+00622:     color_button("red", 55, "#8D2830") +
+00623:     color_button("green", 350, "#267A42") +
+00624:     color_button("yellow", 645, "#8A7624") +
+00625:     color_button("blue", 940, "#245B8F")
+00626: )
+00627: 
+00628: PIN_SKIN = build_fullscreen_skin(
+00629:     "EpiPinScreen",
+00630:     logo_widget(w=300, h=100) +
+00631:     label_widget("title", 250, 210, 780, 55, 31, "center") +
+00632:     label_widget("pin", 390, 300, 500, 70, 40, "center", "center", "#141B27") +
+00633:     label_widget("info", 250, 400, 780, 40, 17, "center", fg="#9EADBF")
+00634: )
+00635: 
+00636: 
+00637: EXIT_CONFIRM_SKIN = '<screen name="EpiExitConfirm" position="center,center" size="%d,%d" flags="wfNoBorder" backgroundColor="#090E16">' % (sx(760), sy(330)) + (
+00638:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="0" />' % (pos(475, 65), size(230, 200), ACTIVE_THEME_CENTER_MARK) +
+00639:     label_widget("exitAccent", 0, 0, 760, 6, 10, "center", "center", "#FF000000") +
+00640:     label_widget("exitTitle", 50, 34, 660, 48, 30, "center", "center", None, "#FFFFFF") +
+00641:     label_widget("exitQuestion", 60, 100, 640, 62, 22, "center", "center", None, "#E9F0F7") +
+00642:     label_widget("yes", 105, 200, 245, 62, 23, "center", "center", "#18222E", "#FFFFFF") +
+00643:     label_widget("no", 410, 200, 245, 62, 23, "center", "center", "#18222E", "#FFFFFF") +
+00644:     label_widget("exitHint", 70, 282, 620, 28, 15, "center", "center", None, "#8FA3B6")
+00645: ) + '</screen>'
+00646: 
+00647: 
+00648: def ensure_data_dir():
+00649:     for path in (DATA_DIR, FTP_PLAYLIST_DIR, POSTER_CACHE_DIR, PICON_CACHE_DIR, ACTOR_CACHE_DIR, SAGA_CACHE_DIR):
+00650:         try:
+00651:             if not os.path.isdir(path):
+00652:                 os.makedirs(path)
+00653:         except Exception:
+00654:             pass
+00655:     try:
+00656:         os.chmod(DATA_DIR, 0o700)
+00657:     except Exception:
+00658:         pass
+00659: 
+00660:     # XStreamity-style text import: one M3U/M3U-Plus URL per line, followed
+00661:     # optionally by '# Playlistname'.  The file is created once and is never
+00662:     # overwritten, so it can safely be maintained via FTP/SFTP.
+00663:     try:
+00664:         if not os.path.exists(PLAYLIST_TEXT_FILE):
+00665:             with open(PLAYLIST_TEXT_FILE, "w") as handle:
+00666:                 handle.write(
+00667:                     "# Epi MediaHub - einfache Playlist-Verwaltung\n"
+00668:                     "# Eine Playlist pro Zeile: M3U-PLUS-URL # Playlistname\n"
+00669:                     "# Beispiel:\n"
+00670:                     "# http://server:port/get.php?username=USER&password=PASS&type=m3u_plus&output=ts # Wohnzimmer\n"
+00671:                 )
+00672:             try:
+00673:                 os.chmod(PLAYLIST_TEXT_FILE, 0o600)
+00674:             except Exception:
+00675:                 pass
+00676:     except Exception:
+00677:         pass
+00678: 
+00679: 
+00680: def clean_text(value):
+00681:     if value is None:
+00682:         return ""
+
+===== lines 551-696 =====
+00551:     logo_widget(w=300, h=100) +
+00552:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00553:     label_widget("now", 70, 135, 1140, 85, 20, "left", "center", "#0D121B") +
+00554:     list_widget("list", 70, 235, 1140, 355, 21, 46) +
+00555:     label_widget("info", 70, 600, 1140, 30, 16, "center", fg="#9EADBF") +
+00556:     color_button("red", 55, "#8D2830") +
+00557:     color_button("green", 350, "#267A42") +
+00558:     color_button("yellow", 645, "#8A7624") +
+00559:     color_button("blue", 940, "#245B8F")
+00560: )
+00561: 
+00562: MEDIATHEK_HOME_SKIN = build_fullscreen_skin(
+00563:     "EpiMediathekHome",
+00564:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00565:     logo_widget(w=300, h=100) +
+00566:     label_widget("title", 380, 28, 845, 48, 31, "right") +
+00567:     label_widget("subtitle", 380, 78, 845, 30, 18, "right", fg="#9EADBF") +
+00568:     list_widget("list", 70, 135, 1140, 455, 23, 44) +
+00569:     label_widget("info", 70, 598, 1140, 35, 16, "center", fg="#9EADBF") +
+00570:     color_button("red", 55, "#8D2830") +
+00571:     color_button("green", 350, "#267A42") +
+00572:     color_button("yellow", 645, "#8A7624") +
+00573:     color_button("blue", 940, "#245B8F")
+00574: )
+00575: 
+00576: MEDIATHEK_LIST_SKIN = build_fullscreen_skin(
+00577:     "EpiMediathekList",
+00578:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00579:     logo_widget(w=300, h=100) +
+00580:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00581:     label_widget("subtitle", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00582:     list_widget("list", 55, 128, 1170, 345, 20, 42) +
+00583:     label_widget("detail", 55, 485, 1170, 125, 17, "left", "top", "#0D121B", "#E7EEF7") +
+00584:     label_widget("info", 55, 615, 1170, 28, 15, "center", fg="#9EADBF") +
+00585:     color_button("red", 55, "#8D2830") +
+00586:     color_button("green", 350, "#267A42") +
+00587:     color_button("yellow", 645, "#8A7624") +
+00588:     color_button("blue", 940, "#245B8F")
+00589: )
+00590: 
+00591: SPLASH_SKIN = build_fullscreen_skin(
+00592:     "EpiSplash",
+00593:     '<widget name="intro" position="0,0" size="%d,%d" alphatest="off" scale="1" />' % (GUI_W, GUI_H) +
+00594:     label_widget("version", 0, 646, 1280, 28, 15, "center", fg="#6F8298") +
+00595:     label_widget("skip", 0, 678, 1280, 24, 14, "center", fg="#8296AB")
+00596: )
+00597: 
+00598: 
+00599: # Bottom banner overlay for Live-TV. The screen only occupies the lower area,
+00600: # so the video remains fully visible behind it.
+00601: LIVE_PLAYER_SKIN = '<screen name="EpiLivePlayer" position="0,%d" size="%d,%d" flags="wfNoBorder" backgroundColor="#10151F">' % (sy(500), GUI_W, sy(220)) + (
+00602:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="0" />' % (pos(1010, 20), size(230, 180), ACTIVE_THEME_BANNER_MARK) +
+00603:     label_widget("bannerAccent", 0, 0, 1280, 5, 10, "center", "center", "#FF000000") +
+00604:     '<widget name="picon" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(35, 10), size(92, 48)) +
+00605:     label_widget("channel", 145, 10, 540, 42, 27, "left", "center", None, "#FFFFFF") +
+00606:     '<widget name="weather_icon" position="%s" size="%s" alphatest="on" scale="1" zPosition="3" />' % (pos(785, 12), size(36, 36)) +
+00607:     label_widget("weather", 830, 10, 275, 42, 17, "right", "center", None, "#BBD4EA") +
+00608:     label_widget("clock", 1120, 10, 125, 42, 20, "right", "center", None, "#FFFFFF") +
+00609:     label_widget("now", 35, 62, 1210, 42, 21, "left", "center", None, "#F7FAFD") +
+00610:     label_widget("next", 35, 108, 1210, 35, 18, "left", "center", None, "#AFC0D4") +
+00611:     label_widget("help", 35, 162, 1210, 32, 15, "center", "center", None, "#7F93A8")
+00612: ) + '</screen>'
+00613: 
+00614: 
+00615: CATEGORY_MANAGER_SKIN = build_fullscreen_skin(
+00616:     "EpiCategoryManager",
+00617:     overlay_pixmap(BROWSER_GLASS_OVERLAY) +
+00618:     logo_widget(w=300, h=100) +
+00619:     label_widget("title", 380, 28, 845, 48, 29, "right") +
+00620:     label_widget("info", 380, 78, 845, 30, 17, "right", fg="#9EADBF") +
+00621:     list_widget("list", 70, 135, 1140, 460, 21, 44) +
+00622:     color_button("red", 55, "#8D2830") +
+00623:     color_button("green", 350, "#267A42") +
+00624:     color_button("yellow", 645, "#8A7624") +
+00625:     color_button("blue", 940, "#245B8F")
+00626: )
+00627: 
+00628: PIN_SKIN = build_fullscreen_skin(
+00629:     "EpiPinScreen",
+00630:     logo_widget(w=300, h=100) +
+00631:     label_widget("title", 250, 210, 780, 55, 31, "center") +
+00632:     label_widget("pin", 390, 300, 500, 70, 40, "center", "center", "#141B27") +
+00633:     label_widget("info", 250, 400, 780, 40, 17, "center", fg="#9EADBF")
+00634: )
+00635: 
+00636: 
+00637: EXIT_CONFIRM_SKIN = '<screen name="EpiExitConfirm" position="center,center" size="%d,%d" flags="wfNoBorder" backgroundColor="#090E16">' % (sx(760), sy(330)) + (
+00638:     '<ePixmap position="%s" size="%s" pixmap="%s" alphatest="blend" scale="1" zPosition="0" />' % (pos(475, 65), size(230, 200), ACTIVE_THEME_CENTER_MARK) +
+00639:     label_widget("exitAccent", 0, 0, 760, 6, 10, "center", "center", "#FF000000") +
+00640:     label_widget("exitTitle", 50, 34, 660, 48, 30, "center", "center", None, "#FFFFFF") +
+00641:     label_widget("exitQuestion", 60, 100, 640, 62, 22, "center", "center", None, "#E9F0F7") +
+00642:     label_widget("yes", 105, 200, 245, 62, 23, "center", "center", "#18222E", "#FFFFFF") +
+00643:     label_widget("no", 410, 200, 245, 62, 23, "center", "center", "#18222E", "#FFFFFF") +
+00644:     label_widget("exitHint", 70, 282, 620, 28, 15, "center", "center", None, "#8FA3B6")
+00645: ) + '</screen>'
+00646: 
+00647: 
+00648: def ensure_data_dir():
+00649:     for path in (DATA_DIR, FTP_PLAYLIST_DIR, POSTER_CACHE_DIR, PICON_CACHE_DIR, ACTOR_CACHE_DIR, SAGA_CACHE_DIR):
+00650:         try:
+00651:             if not os.path.isdir(path):
+00652:                 os.makedirs(path)
+00653:         except Exception:
+00654:             pass
+00655:     try:
+00656:         os.chmod(DATA_DIR, 0o700)
+00657:     except Exception:
+00658:         pass
+00659: 
+00660:     # XStreamity-style text import: one M3U/M3U-Plus URL per line, followed
+00661:     # optionally by '# Playlistname'.  The file is created once and is never
+00662:     # overwritten, so it can safely be maintained via FTP/SFTP.
+00663:     try:
+00664:         if not os.path.exists(PLAYLIST_TEXT_FILE):
+00665:             with open(PLAYLIST_TEXT_FILE, "w") as handle:
+00666:                 handle.write(
+00667:                     "# Epi MediaHub - einfache Playlist-Verwaltung\n"
+00668:                     "# Eine Playlist pro Zeile: M3U-PLUS-URL # Playlistname\n"
+00669:                     "# Beispiel:\n"
+00670:                     "# http://server:port/get.php?username=USER&password=PASS&type=m3u_plus&output=ts # Wohnzimmer\n"
+00671:                 )
+00672:             try:
+00673:                 os.chmod(PLAYLIST_TEXT_FILE, 0o600)
+00674:             except Exception:
+00675:                 pass
+00676:     except Exception:
+00677:         pass
+00678: 
+00679: 
+00680: def clean_text(value):
+00681:     if value is None:
+00682:         return ""
+00683:     try:
+00684:         return value.strip()
+00685:     except Exception:
+00686:         return str(value).strip()
+00687: 
+00688: def first_text(mapping, *keys):
+00689:     if not isinstance(mapping, dict):
+00690:         return ""
+00691:     for key in keys:
+00692:         value = clean_text(mapping.get(key, ""))
+00693:         if value:
+00694:             return value
+00695:     return ""
+00696: 
+
+===== lines 7132-7277 =====
+07132:             "source": "Fuente: MediathekViewWeb", "no_results": "No se encontraron contenidos reproducibles.",
+07133:             "search_title": "Buscar en la mediateca"
+07134:         }
+07135:     }
+07136:     table = texts.get(lang, texts["de"])
+07137:     return table.get(key, texts["de"].get(key, key))
+07138: 
+07139: 
+07140: def mediathek_label():
+07141:     return mediathek_copy("label")
+07142: 
+07143: 
+07144: def _mediathek_duration(value):
+07145:     try:
+07146:         seconds = max(0, int(value or 0))
+07147:     except Exception:
+07148:         seconds = 0
+07149:     hours = seconds // 3600
+07150:     minutes = (seconds % 3600) // 60
+07151:     secs = seconds % 60
+07152:     if hours:
+07153:         return "%d:%02d:%02d" % (hours, minutes, secs)
+07154:     return "%02d:%02d" % (minutes, secs)
+07155: 
+07156: 
+07157: def _mediathek_query(channel="", term="", offset=0, size=40):
+07158:     queries = []
+07159:     channel = clean_text(channel)
+07160:     term = clean_text(term)
+07161:     if channel:
+07162:         queries.append({"fields": ["channel"], "query": channel})
+07163:     if term:
+07164:         queries.append({"fields": ["title", "topic", "description"], "query": term})
+07165:     body = {
+07166:         "queries": queries,
+07167:         "sortBy": "timestamp",
+07168:         "sortOrder": "desc",
+07169:         "future": False,
+07170:         "offset": int(offset or 0),
+07171:         "size": int(size or 40)
+07172:     }
+07173:     payload = json.dumps(body).encode("utf-8")
+07174:     last_error = None
+07175:     raw = None
+07176:     for content_type in ("application/json", "text/plain"):
+07177:         try:
+07178:             req = Request(MEDIATHEK_API_URL, data=payload)
+07179:             req.add_header("Content-Type", content_type)
+07180:             req.add_header("Accept", "application/json")
+07181:             req.add_header("User-Agent", "EpiMediaHub/%s" % PLUGIN_VERSION)
+07182:             response = urlopen(req, timeout=15)
+07183:             raw = response.read()
+07184:             try:
+07185:                 response.close()
+07186:             except Exception:
+07187:                 pass
+07188:             break
+07189:         except Exception as error:
+07190:             last_error = error
+07191:             raw = None
+07192:     if raw is None:
+07193:         raise Exception(str(last_error or "MediathekViewWeb nicht erreichbar"))
+07194:     if not isinstance(raw, str):
+07195:         try:
+07196:             text = raw.decode("utf-8")
+07197:         except Exception:
+07198:             text = raw.decode("latin-1", "replace")
+07199:     else:
+07200:         text = raw
+07201:     data = json.loads(text)
+07202:     result = data.get("result", {}) if isinstance(data, dict) else {}
+07203:     rows = result.get("results", []) if isinstance(result, dict) else []
+07204:     entries = []
+07205:     for item in rows:
+07206:         if not isinstance(item, dict):
+07207:             continue
+07208:         stream = clean_text(item.get("url_video_hd", "")) or clean_text(item.get("url_video", "")) or clean_text(item.get("url_video_low", ""))
+07209:         if not stream:
+07210:             continue
+07211:         title = clean_text(item.get("title", "")) or clean_text(item.get("topic", "")) or "Mediathek"
+07212:         entry = {
+07213:             "title": title,
+07214:             "topic": clean_text(item.get("topic", "")),
+07215:             "channel": clean_text(item.get("channel", "")),
+07216:             "description": clean_text(item.get("description", "")),
+07217:             "duration": item.get("duration", 0),
+07218:             "timestamp": item.get("timestamp", 0),
+07219:             "url": stream,
+07220:             "url_website": clean_text(item.get("url_website", "")),
+07221:             "type": "movie"
+07222:         }
+07223:         entries.append(entry)
+07224:     return entries
+07225: 
+07226: 
+07227: class EpiMediathekHome(Screen):
+07228:     skin = MEDIATHEK_HOME_SKIN
+07229: 
+07230:     def __init__(self, session):
+07231:         Screen.__init__(self, session)
+07232:         self["logo"] = Pixmap()
+07233:         self["title"] = Label(mediathek_copy("label"))
+07234:         self["subtitle"] = Label(mediathek_copy("subtitle"))
+07235:         self["list"] = MenuList([])
+07236:         self["info"] = Label("OK = öffnen   |   GELB = %s" % mediathek_copy("search_all"))
+07237:         self["red"] = Label(mediathek_copy("back"))
+07238:         self["green"] = Label("GRÜN  Öffnen")
+07239:         self["yellow"] = Label(mediathek_copy("search"))
+07240:         self["blue"] = Label("")
+07241:         self.items = list(MEDIATHEK_CHANNELS) + [("__search__", mediathek_copy("search_all"))]
+07242:         self["list"].setList([label for value, label in self.items])
+07243:         self["actions"] = ActionMap(
+07244:             ["OkCancelActions", "DirectionActions", "ColorActions"],
+07245:             {
+07246:                 "ok": self.openSelected, "cancel": self.close, "red": self.close,
+07247:                 "green": self.openSelected, "yellow": self.openSearch,
+07248:                 "up": self.keyUp, "down": self.keyDown,
+07249:                 "left": self.pageUp, "right": self.pageDown
+07250:             }, -10
+07251:         )
+07252: 
+07253:     def keyUp(self):
+07254:         try: self["list"].up()
+07255:         except Exception: pass
+07256: 
+07257:     def keyDown(self):
+07258:         try: self["list"].down()
+07259:         except Exception: pass
+07260: 
+07261:     def pageUp(self):
+07262:         try: self["list"].pageUp()
+07263:         except Exception: pass
+07264: 
+07265:     def pageDown(self):
+07266:         try: self["list"].pageDown()
+07267:         except Exception: pass
+07268: 
+07269:     def openSelected(self):
+07270:         try:
+07271:             index = int(self["list"].getSelectedIndex())
+07272:         except Exception:
+07273:             index = 0
+07274:         if index < 0 or index >= len(self.items):
+07275:             return
+07276:         value, label = self.items[index]
+07277:         if value == "__search__":
+
+===== lines 7202-7347 =====
+07202:     result = data.get("result", {}) if isinstance(data, dict) else {}
+07203:     rows = result.get("results", []) if isinstance(result, dict) else []
+07204:     entries = []
+07205:     for item in rows:
+07206:         if not isinstance(item, dict):
+07207:             continue
+07208:         stream = clean_text(item.get("url_video_hd", "")) or clean_text(item.get("url_video", "")) or clean_text(item.get("url_video_low", ""))
+07209:         if not stream:
+07210:             continue
+07211:         title = clean_text(item.get("title", "")) or clean_text(item.get("topic", "")) or "Mediathek"
+07212:         entry = {
+07213:             "title": title,
+07214:             "topic": clean_text(item.get("topic", "")),
+07215:             "channel": clean_text(item.get("channel", "")),
+07216:             "description": clean_text(item.get("description", "")),
+07217:             "duration": item.get("duration", 0),
+07218:             "timestamp": item.get("timestamp", 0),
+07219:             "url": stream,
+07220:             "url_website": clean_text(item.get("url_website", "")),
+07221:             "type": "movie"
+07222:         }
+07223:         entries.append(entry)
+07224:     return entries
+07225: 
+07226: 
+07227: class EpiMediathekHome(Screen):
+07228:     skin = MEDIATHEK_HOME_SKIN
+07229: 
+07230:     def __init__(self, session):
+07231:         Screen.__init__(self, session)
+07232:         self["logo"] = Pixmap()
+07233:         self["title"] = Label(mediathek_copy("label"))
+07234:         self["subtitle"] = Label(mediathek_copy("subtitle"))
+07235:         self["list"] = MenuList([])
+07236:         self["info"] = Label("OK = öffnen   |   GELB = %s" % mediathek_copy("search_all"))
+07237:         self["red"] = Label(mediathek_copy("back"))
+07238:         self["green"] = Label("GRÜN  Öffnen")
+07239:         self["yellow"] = Label(mediathek_copy("search"))
+07240:         self["blue"] = Label("")
+07241:         self.items = list(MEDIATHEK_CHANNELS) + [("__search__", mediathek_copy("search_all"))]
+07242:         self["list"].setList([label for value, label in self.items])
+07243:         self["actions"] = ActionMap(
+07244:             ["OkCancelActions", "DirectionActions", "ColorActions"],
+07245:             {
+07246:                 "ok": self.openSelected, "cancel": self.close, "red": self.close,
+07247:                 "green": self.openSelected, "yellow": self.openSearch,
+07248:                 "up": self.keyUp, "down": self.keyDown,
+07249:                 "left": self.pageUp, "right": self.pageDown
+07250:             }, -10
+07251:         )
+07252: 
+07253:     def keyUp(self):
+07254:         try: self["list"].up()
+07255:         except Exception: pass
+07256: 
+07257:     def keyDown(self):
+07258:         try: self["list"].down()
+07259:         except Exception: pass
+07260: 
+07261:     def pageUp(self):
+07262:         try: self["list"].pageUp()
+07263:         except Exception: pass
+07264: 
+07265:     def pageDown(self):
+07266:         try: self["list"].pageDown()
+07267:         except Exception: pass
+07268: 
+07269:     def openSelected(self):
+07270:         try:
+07271:             index = int(self["list"].getSelectedIndex())
+07272:         except Exception:
+07273:             index = 0
+07274:         if index < 0 or index >= len(self.items):
+07275:             return
+07276:         value, label = self.items[index]
+07277:         if value == "__search__":
+07278:             self.openSearch()
+07279:             return
+07280:         self.session.open(EpiMediathekList, value, label, "")
+07281: 
+07282:     def openSearch(self):
+07283:         self.session.openWithCallback(
+07284:             self.searchEntered, VirtualKeyBoard,
+07285:             title=mediathek_copy("search_title"), text=""
+07286:         )
+07287: 
+07288:     def searchEntered(self, value=None):
+07289:         value = clean_text(value or "")
+07290:         if value:
+07291:             self.session.open(EpiMediathekList, "", mediathek_copy("search_all"), value)
+07292: 
+07293: 
+07294: class EpiMediathekList(Screen):
+07295:     skin = MEDIATHEK_LIST_SKIN
+07296: 
+07297:     def __init__(self, session, channel="", label="", term=""):
+07298:         Screen.__init__(self, session)
+07299:         self.channel = clean_text(channel)
+07300:         self.channel_label = clean_text(label) or mediathek_copy("label")
+07301:         self.term = clean_text(term)
+07302:         self.results = []
+07303:         self._load_job = None
+07304:         self._load_result = None
+07305:         self._loaded_once = False
+07306:         self["logo"] = Pixmap()
+07307:         self["title"] = Label(self.channel_label)
+07308:         self["subtitle"] = Label("")
+07309:         self["list"] = MenuList([])
+07310:         self["detail"] = Label("")
+07311:         self["info"] = Label(mediathek_copy("source"))
+07312:         self["red"] = Label(mediathek_copy("back"))
+07313:         self["green"] = Label(mediathek_copy("play"))
+07314:         self["yellow"] = Label(mediathek_copy("search"))
+07315:         self["blue"] = Label(mediathek_copy("reload"))
+07316:         self["actions"] = ActionMap(
+07317:             ["OkCancelActions", "DirectionActions", "ColorActions"],
+07318:             {
+07319:                 "ok": self.playSelected, "cancel": self.close, "red": self.close,
+07320:                 "green": self.playSelected, "yellow": self.openSearch, "blue": self.reload,
+07321:                 "up": self.keyUp, "down": self.keyDown,
+07322:                 "left": self.pageUp, "right": self.pageDown
+07323:             }, -10
+07324:         )
+07325:         self._load_timer = eTimer()
+07326:         connect_timer(self._load_timer, self._pollLoad)
+07327:         self.onShown.append(self._ensureLoaded)
+07328:         try:
+07329:             self["list"].onSelectionChanged.append(self.updateDetail)
+07330:         except Exception:
+07331:             pass
+07332:         try:
+07333:             self.onClose.append(self._stopLoader)
+07334:         except Exception:
+07335:             pass
+07336: 
+07337:     def _stopLoader(self):
+07338:         try: self._load_timer.stop()
+07339:         except Exception: pass
+07340: 
+07341:     def _ensureLoaded(self):
+07342:         if not self._loaded_once:
+07343:             self.reload()
+07344: 
+07345:     def reload(self):
+07346:         if self._load_job is not None and self._load_job.is_alive():
+07347:             return
+
+===== lines 7203-7348 =====
+07203:     rows = result.get("results", []) if isinstance(result, dict) else []
+07204:     entries = []
+07205:     for item in rows:
+07206:         if not isinstance(item, dict):
+07207:             continue
+07208:         stream = clean_text(item.get("url_video_hd", "")) or clean_text(item.get("url_video", "")) or clean_text(item.get("url_video_low", ""))
+07209:         if not stream:
+07210:             continue
+07211:         title = clean_text(item.get("title", "")) or clean_text(item.get("topic", "")) or "Mediathek"
+07212:         entry = {
+07213:             "title": title,
+07214:             "topic": clean_text(item.get("topic", "")),
+07215:             "channel": clean_text(item.get("channel", "")),
+07216:             "description": clean_text(item.get("description", "")),
+07217:             "duration": item.get("duration", 0),
+07218:             "timestamp": item.get("timestamp", 0),
+07219:             "url": stream,
+07220:             "url_website": clean_text(item.get("url_website", "")),
+07221:             "type": "movie"
+07222:         }
+07223:         entries.append(entry)
+07224:     return entries
+07225: 
+07226: 
+07227: class EpiMediathekHome(Screen):
+07228:     skin = MEDIATHEK_HOME_SKIN
+07229: 
+07230:     def __init__(self, session):
+07231:         Screen.__init__(self, session)
+07232:         self["logo"] = Pixmap()
+07233:         self["title"] = Label(mediathek_copy("label"))
+07234:         self["subtitle"] = Label(mediathek_copy("subtitle"))
+07235:         self["list"] = MenuList([])
+07236:         self["info"] = Label("OK = öffnen   |   GELB = %s" % mediathek_copy("search_all"))
+07237:         self["red"] = Label(mediathek_copy("back"))
+07238:         self["green"] = Label("GRÜN  Öffnen")
+07239:         self["yellow"] = Label(mediathek_copy("search"))
+07240:         self["blue"] = Label("")
+07241:         self.items = list(MEDIATHEK_CHANNELS) + [("__search__", mediathek_copy("search_all"))]
+07242:         self["list"].setList([label for value, label in self.items])
+07243:         self["actions"] = ActionMap(
+07244:             ["OkCancelActions", "DirectionActions", "ColorActions"],
+07245:             {
+07246:                 "ok": self.openSelected, "cancel": self.close, "red": self.close,
+07247:                 "green": self.openSelected, "yellow": self.openSearch,
+07248:                 "up": self.keyUp, "down": self.keyDown,
+07249:                 "left": self.pageUp, "right": self.pageDown
+07250:             }, -10
+07251:         )
+07252: 
+07253:     def keyUp(self):
+07254:         try: self["list"].up()
+07255:         except Exception: pass
+07256: 
+07257:     def keyDown(self):
+07258:         try: self["list"].down()
+07259:         except Exception: pass
+07260: 
+07261:     def pageUp(self):
+07262:         try: self["list"].pageUp()
+07263:         except Exception: pass
+07264: 
+07265:     def pageDown(self):
+07266:         try: self["list"].pageDown()
+07267:         except Exception: pass
+07268: 
+07269:     def openSelected(self):
+07270:         try:
+07271:             index = int(self["list"].getSelectedIndex())
+07272:         except Exception:
+07273:             index = 0
+07274:         if index < 0 or index >= len(self.items):
+07275:             return
+07276:         value, label = self.items[index]
+07277:         if value == "__search__":
+07278:             self.openSearch()
+07279:             return
+07280:         self.session.open(EpiMediathekList, value, label, "")
+07281: 
+07282:     def openSearch(self):
+07283:         self.session.openWithCallback(
+07284:             self.searchEntered, VirtualKeyBoard,
+07285:             title=mediathek_copy("search_title"), text=""
+07286:         )
+07287: 
+07288:     def searchEntered(self, value=None):
+07289:         value = clean_text(value or "")
+07290:         if value:
+07291:             self.session.open(EpiMediathekList, "", mediathek_copy("search_all"), value)
+07292: 
+07293: 
+07294: class EpiMediathekList(Screen):
+07295:     skin = MEDIATHEK_LIST_SKIN
+07296: 
+07297:     def __init__(self, session, channel="", label="", term=""):
+07298:         Screen.__init__(self, session)
+07299:         self.channel = clean_text(channel)
+07300:         self.channel_label = clean_text(label) or mediathek_copy("label")
+07301:         self.term = clean_text(term)
+07302:         self.results = []
+07303:         self._load_job = None
+07304:         self._load_result = None
+07305:         self._loaded_once = False
+07306:         self["logo"] = Pixmap()
+07307:         self["title"] = Label(self.channel_label)
+07308:         self["subtitle"] = Label("")
+07309:         self["list"] = MenuList([])
+07310:         self["detail"] = Label("")
+07311:         self["info"] = Label(mediathek_copy("source"))
+07312:         self["red"] = Label(mediathek_copy("back"))
+07313:         self["green"] = Label(mediathek_copy("play"))
+07314:         self["yellow"] = Label(mediathek_copy("search"))
+07315:         self["blue"] = Label(mediathek_copy("reload"))
+07316:         self["actions"] = ActionMap(
+07317:             ["OkCancelActions", "DirectionActions", "ColorActions"],
+07318:             {
+07319:                 "ok": self.playSelected, "cancel": self.close, "red": self.close,
+07320:                 "green": self.playSelected, "yellow": self.openSearch, "blue": self.reload,
+07321:                 "up": self.keyUp, "down": self.keyDown,
+07322:                 "left": self.pageUp, "right": self.pageDown
+07323:             }, -10
+07324:         )
+07325:         self._load_timer = eTimer()
+07326:         connect_timer(self._load_timer, self._pollLoad)
+07327:         self.onShown.append(self._ensureLoaded)
+07328:         try:
+07329:             self["list"].onSelectionChanged.append(self.updateDetail)
+07330:         except Exception:
+07331:             pass
+07332:         try:
+07333:             self.onClose.append(self._stopLoader)
+07334:         except Exception:
+07335:             pass
+07336: 
+07337:     def _stopLoader(self):
+07338:         try: self._load_timer.stop()
+07339:         except Exception: pass
+07340: 
+07341:     def _ensureLoaded(self):
+07342:         if not self._loaded_once:
+07343:             self.reload()
+07344: 
+07345:     def reload(self):
+07346:         if self._load_job is not None and self._load_job.is_alive():
+07347:             return
+07348:         self._loaded_once = True
+
+===== lines 7269-7414 =====
+07269:     def openSelected(self):
+07270:         try:
+07271:             index = int(self["list"].getSelectedIndex())
+07272:         except Exception:
+07273:             index = 0
+07274:         if index < 0 or index >= len(self.items):
+07275:             return
+07276:         value, label = self.items[index]
+07277:         if value == "__search__":
+07278:             self.openSearch()
+07279:             return
+07280:         self.session.open(EpiMediathekList, value, label, "")
+07281: 
+07282:     def openSearch(self):
+07283:         self.session.openWithCallback(
+07284:             self.searchEntered, VirtualKeyBoard,
+07285:             title=mediathek_copy("search_title"), text=""
+07286:         )
+07287: 
+07288:     def searchEntered(self, value=None):
+07289:         value = clean_text(value or "")
+07290:         if value:
+07291:             self.session.open(EpiMediathekList, "", mediathek_copy("search_all"), value)
+07292: 
+07293: 
+07294: class EpiMediathekList(Screen):
+07295:     skin = MEDIATHEK_LIST_SKIN
+07296: 
+07297:     def __init__(self, session, channel="", label="", term=""):
+07298:         Screen.__init__(self, session)
+07299:         self.channel = clean_text(channel)
+07300:         self.channel_label = clean_text(label) or mediathek_copy("label")
+07301:         self.term = clean_text(term)
+07302:         self.results = []
+07303:         self._load_job = None
+07304:         self._load_result = None
+07305:         self._loaded_once = False
+07306:         self["logo"] = Pixmap()
+07307:         self["title"] = Label(self.channel_label)
+07308:         self["subtitle"] = Label("")
+07309:         self["list"] = MenuList([])
+07310:         self["detail"] = Label("")
+07311:         self["info"] = Label(mediathek_copy("source"))
+07312:         self["red"] = Label(mediathek_copy("back"))
+07313:         self["green"] = Label(mediathek_copy("play"))
+07314:         self["yellow"] = Label(mediathek_copy("search"))
+07315:         self["blue"] = Label(mediathek_copy("reload"))
+07316:         self["actions"] = ActionMap(
+07317:             ["OkCancelActions", "DirectionActions", "ColorActions"],
+07318:             {
+07319:                 "ok": self.playSelected, "cancel": self.close, "red": self.close,
+07320:                 "green": self.playSelected, "yellow": self.openSearch, "blue": self.reload,
+07321:                 "up": self.keyUp, "down": self.keyDown,
+07322:                 "left": self.pageUp, "right": self.pageDown
+07323:             }, -10
+07324:         )
+07325:         self._load_timer = eTimer()
+07326:         connect_timer(self._load_timer, self._pollLoad)
+07327:         self.onShown.append(self._ensureLoaded)
+07328:         try:
+07329:             self["list"].onSelectionChanged.append(self.updateDetail)
+07330:         except Exception:
+07331:             pass
+07332:         try:
+07333:             self.onClose.append(self._stopLoader)
+07334:         except Exception:
+07335:             pass
+07336: 
+07337:     def _stopLoader(self):
+07338:         try: self._load_timer.stop()
+07339:         except Exception: pass
+07340: 
+07341:     def _ensureLoaded(self):
+07342:         if not self._loaded_once:
+07343:             self.reload()
+07344: 
+07345:     def reload(self):
+07346:         if self._load_job is not None and self._load_job.is_alive():
+07347:             return
+07348:         self._loaded_once = True
+07349:         self._load_result = None
+07350:         self["list"].setList([mediathek_copy("loading")])
+07351:         self["detail"].setText("")
+07352:         subtitle = mediathek_copy("latest")
+07353:         if self.term:
+07354:             subtitle = "%s: %s" % (mediathek_copy("search_title"), self.term)
+07355:         self["subtitle"].setText(subtitle)
+07356:         self._load_job = threading.Thread(target=self._loadWorker)
+07357:         self._load_job.daemon = True
+07358:         self._load_job.start()
+07359:         try:
+07360:             self._load_timer.start(300, True)
+07361:         except TypeError:
+07362:             self._load_timer.start(300)
+07363: 
+07364:     def _loadWorker(self):
+07365:         try:
+07366:             items = _mediathek_query(self.channel, self.term, 0, 45)
+07367:             self._load_result = (True, items, "")
+07368:         except Exception as error:
+07369:             self._load_result = (False, [], str(error))
+07370: 
+07371:     def _pollLoad(self):
+07372:         if self._load_job is not None and self._load_job.is_alive():
+07373:             try:
+07374:                 self._load_timer.start(300, True)
+07375:             except TypeError:
+07376:                 self._load_timer.start(300)
+07377:             return
+07378:         result = self._load_result
+07379:         self._load_job = None
+07380:         self._load_result = None
+07381:         if not result:
+07382:             return
+07383:         ok, items, error = result
+07384:         if not ok:
+07385:             self.results = []
+07386:             self["list"].setList(["Mediathek konnte nicht geladen werden"])
+07387:             self["detail"].setText(error)
+07388:             return
+07389:         self.results = items
+07390:         if not items:
+07391:             self["list"].setList([mediathek_copy("no_results")])
+07392:             self["detail"].setText("")
+07393:             return
+07394:         rows = []
+07395:         for entry in items:
+07396:             channel = entry.get("channel", "")
+07397:             title = entry.get("title", "")
+07398:             duration = _mediathek_duration(entry.get("duration", 0))
+07399:             rows.append("%s   |   %s   |   %s" % (channel, title, duration))
+07400:         self["list"].setList(rows)
+07401:         self["info"].setText("%d Beiträge   |   %s" % (len(items), mediathek_copy("source")))
+07402:         self.updateDetail()
+07403: 
+07404:     def selectedEntry(self):
+07405:         if not self.results:
+07406:             return None
+07407:         try:
+07408:             index = int(self["list"].getSelectedIndex())
+07409:         except Exception:
+07410:             index = 0
+07411:         if index < 0 or index >= len(self.results):
+07412:             return None
+07413:         return self.results[index]
+07414: 
+
+===== lines 7270-7415 =====
+07270:         try:
+07271:             index = int(self["list"].getSelectedIndex())
+07272:         except Exception:
+07273:             index = 0
+07274:         if index < 0 or index >= len(self.items):
+07275:             return
+07276:         value, label = self.items[index]
+07277:         if value == "__search__":
+07278:             self.openSearch()
+07279:             return
+07280:         self.session.open(EpiMediathekList, value, label, "")
+07281: 
+07282:     def openSearch(self):
+07283:         self.session.openWithCallback(
+07284:             self.searchEntered, VirtualKeyBoard,
+07285:             title=mediathek_copy("search_title"), text=""
+07286:         )
+07287: 
+07288:     def searchEntered(self, value=None):
+07289:         value = clean_text(value or "")
+07290:         if value:
+07291:             self.session.open(EpiMediathekList, "", mediathek_copy("search_all"), value)
+07292: 
+07293: 
+07294: class EpiMediathekList(Screen):
+07295:     skin = MEDIATHEK_LIST_SKIN
+07296: 
+07297:     def __init__(self, session, channel="", label="", term=""):
+07298:         Screen.__init__(self, session)
+07299:         self.channel = clean_text(channel)
+07300:         self.channel_label = clean_text(label) or mediathek_copy("label")
+07301:         self.term = clean_text(term)
+07302:         self.results = []
+07303:         self._load_job = None
+07304:         self._load_result = None
+07305:         self._loaded_once = False
+07306:         self["logo"] = Pixmap()
+07307:         self["title"] = Label(self.channel_label)
+07308:         self["subtitle"] = Label("")
+07309:         self["list"] = MenuList([])
+07310:         self["detail"] = Label("")
+07311:         self["info"] = Label(mediathek_copy("source"))
+07312:         self["red"] = Label(mediathek_copy("back"))
+07313:         self["green"] = Label(mediathek_copy("play"))
+07314:         self["yellow"] = Label(mediathek_copy("search"))
+07315:         self["blue"] = Label(mediathek_copy("reload"))
+07316:         self["actions"] = ActionMap(
+07317:             ["OkCancelActions", "DirectionActions", "ColorActions"],
+07318:             {
+07319:                 "ok": self.playSelected, "cancel": self.close, "red": self.close,
+07320:                 "green": self.playSelected, "yellow": self.openSearch, "blue": self.reload,
+07321:                 "up": self.keyUp, "down": self.keyDown,
+07322:                 "left": self.pageUp, "right": self.pageDown
+07323:             }, -10
+07324:         )
+07325:         self._load_timer = eTimer()
+07326:         connect_timer(self._load_timer, self._pollLoad)
+07327:         self.onShown.append(self._ensureLoaded)
+07328:         try:
+07329:             self["list"].onSelectionChanged.append(self.updateDetail)
+07330:         except Exception:
+07331:             pass
+07332:         try:
+07333:             self.onClose.append(self._stopLoader)
+07334:         except Exception:
+07335:             pass
+07336: 
+07337:     def _stopLoader(self):
+07338:         try: self._load_timer.stop()
+07339:         except Exception: pass
+07340: 
+07341:     def _ensureLoaded(self):
+07342:         if not self._loaded_once:
+07343:             self.reload()
+07344: 
+07345:     def reload(self):
+07346:         if self._load_job is not None and self._load_job.is_alive():
+07347:             return
+07348:         self._loaded_once = True
+07349:         self._load_result = None
+07350:         self["list"].setList([mediathek_copy("loading")])
+07351:         self["detail"].setText("")
+07352:         subtitle = mediathek_copy("latest")
+07353:         if self.term:
+07354:             subtitle = "%s: %s" % (mediathek_copy("search_title"), self.term)
+07355:         self["subtitle"].setText(subtitle)
+07356:         self._load_job = threading.Thread(target=self._loadWorker)
+07357:         self._load_job.daemon = True
+07358:         self._load_job.start()
+07359:         try:
+07360:             self._load_timer.start(300, True)
+07361:         except TypeError:
+07362:             self._load_timer.start(300)
+07363: 
+07364:     def _loadWorker(self):
+07365:         try:
+07366:             items = _mediathek_query(self.channel, self.term, 0, 45)
+07367:             self._load_result = (True, items, "")
+07368:         except Exception as error:
+07369:             self._load_result = (False, [], str(error))
+07370: 
+07371:     def _pollLoad(self):
+07372:         if self._load_job is not None and self._load_job.is_alive():
+07373:             try:
+07374:                 self._load_timer.start(300, True)
+07375:             except TypeError:
+07376:                 self._load_timer.start(300)
+07377:             return
+07378:         result = self._load_result
+07379:         self._load_job = None
+07380:         self._load_result = None
+07381:         if not result:
+07382:             return
+07383:         ok, items, error = result
+07384:         if not ok:
+07385:             self.results = []
+07386:             self["list"].setList(["Mediathek konnte nicht geladen werden"])
+07387:             self["detail"].setText(error)
+07388:             return
+07389:         self.results = items
+07390:         if not items:
+07391:             self["list"].setList([mediathek_copy("no_results")])
+07392:             self["detail"].setText("")
+07393:             return
+07394:         rows = []
+07395:         for entry in items:
+07396:             channel = entry.get("channel", "")
+07397:             title = entry.get("title", "")
+07398:             duration = _mediathek_duration(entry.get("duration", 0))
+07399:             rows.append("%s   |   %s   |   %s" % (channel, title, duration))
+07400:         self["list"].setList(rows)
+07401:         self["info"].setText("%d Beiträge   |   %s" % (len(items), mediathek_copy("source")))
+07402:         self.updateDetail()
+07403: 
+07404:     def selectedEntry(self):
+07405:         if not self.results:
+07406:             return None
+07407:         try:
+07408:             index = int(self["list"].getSelectedIndex())
+07409:         except Exception:
+07410:             index = 0
+07411:         if index < 0 or index >= len(self.results):
+07412:             return None
+07413:         return self.results[index]
+07414: 
+07415:     def updateDetail(self):
+
+===== lines 7983-8128 =====
+07983:                 "%s   |   Live %d   |   Filme %d   |   Serien %d   |   EPG %s   |   Ablauf: %s" % (
+07984:                     prefix, counts["live"], counts["movies"], counts["series"], epg_state, expiry_summary(profile.get("expiry", ""))
+07985:                 )
+07986:             )
+07987: 
+07988:     def keyLeft(self):
+07989:         if self.currentIndex % 2 == 1:
+07990:             self.currentIndex -= 1
+07991:             self.updateUI()
+07992: 
+07993:     def keyRight(self):
+07994:         if self.currentIndex % 2 == 0 and self.currentIndex < len(self.tiles) - 1:
+07995:             self.currentIndex += 1
+07996:             self.updateUI()
+07997: 
+07998:     def keyUp(self):
+07999:         if self.currentIndex >= 2:
+08000:             self.currentIndex -= 2
+08001:             self.updateUI()
+08002: 
+08003:     def keyDown(self):
+08004:         if self.currentIndex <= 3:
+08005:             self.currentIndex += 2
+08006:             self.updateUI()
+08007: 
+08008:     def keyOK(self):
+08009:         if self.currentIndex == 0:
+08010:             self.openType("live")
+08011:         elif self.currentIndex == 1:
+08012:             self.openType("movies")
+08013:         elif self.currentIndex == 2:
+08014:             self.openType("series")
+08015:         elif self.currentIndex == 3:
+08016:             self.session.open(EpiMediathekHome)
+08017:         elif self.currentIndex == 4:
+08018:             self.session.openWithCallback(self.playlistSelected, EpiProfileSelect)
+08019:         elif self.currentIndex == 5:
+08020:             self.session.open(EpiSettings, self.profile_id)
+08021: 
+08022:     def playlistSelected(self, profile_id=None):
+08023:         if profile_id:
+08024:             self.profile_id = profile_id
+08025:             set_active_profile(profile_id)
+08026:             self.refresh()
+08027:             self._maybeStartAutoEpg()
+08028: 
+08029:     def openType(self, kind):
+08030:         if db_source_mode(self.profile_id) == "xtream":
+08031:             if not playlist_categories(self.profile_id, kind):
+08032:                 self.session.open(MessageBox, tr("no_categories_kind", kind=type_label(kind)), MessageBox.TYPE_INFO, timeout=4)
+08033:                 return
+08034:             self.session.open(EpiCategoryScreen, self.profile_id, kind)
+08035:             return
+08036: 
+08037:         if playlist_total_count(self.profile_id) <= 0:
+08038:             if self._index_job is not None and self._index_job.is_alive():
+08039:                 self.session.open(MessageBox, "Die Playlist wird gerade im Hintergrund vorbereitet.\nBitte einen Moment warten.", MessageBox.TYPE_INFO, timeout=5)
+08040:             else:
+08041:                 self.session.open(MessageBox, "Für diese Playlist wurden noch keine Daten geladen.\nÖffne Einstellungen und wähle GRÜN = Playlist laden.", MessageBox.TYPE_INFO, timeout=6)
+08042:             return
+08043:         if playlist_counts(self.profile_id).get(kind, 0) <= 0:
+08044:             self.session.open(MessageBox, tr("no_kind_entries", kind=type_label(kind)), MessageBox.TYPE_INFO, timeout=5)
+08045:             return
+08046:         self.session.open(EpiCategoryScreen, self.profile_id, kind)
+08047: 
+08048:     def globalSearch(self):
+08049:         if db_source_mode(self.profile_id) != "xtream" and playlist_total_count(self.profile_id) <= 0:
+08050:             self.session.open(MessageBox, "Noch keine Playlist geladen.", MessageBox.TYPE_INFO, timeout=4)
+08051:             return
+08052:         self.session.openWithCallback(
+08053:             self.globalSearchEntered,
+08054:             VirtualKeyBoard,
+08055:             title="%s / %s - %s" % (tr("movies"), tr("series"), tr("search")),
+08056:             text=""
+08057:         )
+08058: 
+08059:     def globalSearchEntered(self, query):
+08060:         if not query:
+08061:             return
+08062:         profile = get_profile(self.profile_id) or {}
+08063:         if db_source_mode(self.profile_id) == "xtream":
+08064:             try:
+08065:                 xtream_load_kind(self.profile_id, "movies")
+08066:                 xtream_load_kind(self.profile_id, "series")
+08067:             except Exception as error:
+08068:                 self.session.open(MessageBox, tr("search_index_error", error=str(error)), MessageBox.TYPE_ERROR, timeout=6)
+08069:                 return
+08070:         allowed = {
+08071:             "movies": set(allowed_category_names(profile, "movies", include_locked=False)),
+08072:             "series": set(allowed_category_names(profile, "series", include_locked=False)),
+08073:         }
+08074:         results = []
+08075:         for entry in playlist_entries(self.profile_id, query=query):
+08076:             kind = entry.get("type")
+08077:             if kind not in ("movies", "series"):
+08078:                 continue
+08079:             group = clean_text(entry.get("group")) or "Ohne Kategorie"
+08080:             if group in allowed.get(kind, set()):
+08081:                 results.append(entry)
+08082: 
+08083:         self.session.open(
+08084:             EpiContentScreen,
+08085:             self.profile_id,
+08086:             tr("search_results", query=query),
+08087:             results,
+08088:             "mixed",
+08089:             allowed
+08090:         )
+08091: 
+08092: 
+08093: class EpiCategoryScreen(Screen):
+08094:     skin = CATEGORY_SKIN
+08095: 
+08096:     def __init__(self, session, profile_id, kind):
+08097:         Screen.__init__(self, session)
+08098:         self.profile_id = profile_id
+08099:         self.kind = kind
+08100:         self.profile = get_profile(profile_id) or {}
+08101:         self.original_categories = []
+08102:         self.category_names = []
+08103:         self.category_counts = {}
+08104:         self.sort_mode = 0
+08105:         self._pending_locked_category = None
+08106:         self._load_job = None
+08107:         self._load_result = None
+08108:         self._pending_load = None
+08109:         self._load_timer = eTimer()
+08110:         connect_timer(self._load_timer, self._pollXtreamLoad)
+08111:         # Actor-category thumbnails are resolved lazily and only for visible
+08112:         # rows. Network work never runs in the Enigma2 UI thread.
+08113:         self._actor_job = None
+08114:         self._actor_queue = []
+08115:         self._actor_timer = eTimer()
+08116:         connect_timer(self._actor_timer, self._pollActorCategoryImages)
+08117:         # Do not decode/reload up to ten category images for every key-repeat
+08118:         # event. A short one-shot debounce lets native MenuList scrolling stay
+08119:         # responsive even on slower OpenATV receivers.
+08120:         self._category_icon_timer = eTimer()
+08121:         connect_timer(self._category_icon_timer, self._deferredCategoryPiconRefresh)
+08122:         self._category_icon_slot_paths = {}
+08123:         try:
+08124:             self._category_actor_images_enabled = bool(load_global_settings().get("actor_category_images", True))
+08125:         except Exception:
+08126:             self._category_actor_images_enabled = True
+08127: 
+08128:         self["logo"] = Pixmap()
+
+===== lines 8164-8309 =====
+08164:     def _scheduleCategoryPiconRefresh(self, delay=160):
+08165:         try:
+08166:             self._category_icon_timer.stop()
+08167:         except Exception:
+08168:             pass
+08169:         try:
+08170:             self._category_icon_timer.start(int(delay), True)
+08171:         except TypeError:
+08172:             self._category_icon_timer.start(int(delay))
+08173:         except Exception:
+08174:             pass
+08175: 
+08176:     def _deferredCategoryPiconRefresh(self):
+08177:         self._updateCategoryPiconStrip()
+08178: 
+08179:     def _categorySelectionChanged(self):
+08180:         self._scheduleCategoryPiconRefresh(160)
+08181: 
+08182:     def _categoryIconPath(self, category_name):
+08183:         if self.kind == "live":
+08184:             entry = first_cached_live_entry(self.profile_id, category_name)
+08185:             if entry:
+08186:                 path = picon_local_file(entry)
+08187:                 if path:
+08188:                     return path
+08189:             return HOME_ICONS[0]
+08190: 
+08191:         # VOD/series categories usually have no provider image of their own.
+08192:         # Recognise common platform names and show a compact local badge.
+08193:         # This is deliberately local/offline and does not require a TMDb key.
+08194:         name = clean_text(category_name).lower()
+08195:         if category_name in ("__all__", "__recent__"):
+08196:             return HOME_ICONS[1] if self.kind == "movies" else HOME_ICONS[2]
+08197:         rules = (
+08198:             (("netflix",), "netflix"),
+08199:             (("amazon", "prime video", "primevideo", "prime"), "prime"),
+08200:             (("disney+", "disney plus", "disney"), "disney"),
+08201:             (("paramount+", "paramount plus", "paramount"), "paramount"),
+08202:             (("apple tv+", "apple tv", "appletv"), "apple"),
+08203:             (("hbo max", "hbomax", "max"), "max"),
+08204:             (("sky",), "sky"),
+08205:             (("dazn",), "dazn"),
+08206:         )
+08207:         for aliases, key in rules:
+08208:             if any(alias in name for alias in aliases):
+08209:                 path = CATEGORY_SERVICE_ICONS.get(key, "")
+08210:                 if path and os.path.isfile(path):
+08211:                     return path
+08212: 
+08213:         # Saga / franchise folders have priority over generic VOD icons.
+08214:         # The actual network lookup is queued below; this lookup is cache-only.
+08215:         if _looks_like_saga_category(category_name):
+08216:             resolved, saga_path = saga_category_cache_record(category_name)
+08217:             if resolved and saga_path and os.path.isfile(saga_path):
+08218:                 return saga_path
+08219: 
+08220:         # Actor folders: use a cached TMDb profile photo if already available.
+08221:         # Missing photos are queued by _updateCategoryPiconStrip and loaded in
+08222:         # the background; this function itself never performs network I/O.
+08223:         if getattr(self, "_category_actor_images_enabled", True):
+08224:             resolved, actor_path = actor_category_cache_record(category_name)
+08225:             if resolved and actor_path and os.path.isfile(actor_path):
+08226:                 return actor_path
+08227:         return HOME_ICONS[1] if self.kind == "movies" else HOME_ICONS[2]
+08228: 
+08229:     def _restartActorTimer(self):
+08230:         try:
+08231:             self._actor_timer.start(300, True)
+08232:         except TypeError:
+08233:             self._actor_timer.start(300)
+08234: 
+08235:     def _queueActorCategoryImages(self, names):
+08236:         # Despite the historical method name this queue now handles both actor
+08237:         # portraits and Saga/collection artwork. It remains one small worker so
+08238:         # category scrolling never starts parallel network storms.
+08239:         if self.kind not in ("movies", "series"):
+08240:             return
+08241:         settings = load_global_settings()
+08242:         tmdb_ready = bool(clean_text(settings.get("tmdb_api_key", "")))
+08243:         actors_enabled = bool(settings.get("actor_category_images", True))
+08244:         for category_name in names:
+08245:             is_saga = _looks_like_saga_category(category_name)
+08246:             is_actor = actors_enabled and tmdb_ready and _looks_like_actor_category(category_name)
+08247:             if not is_saga and not is_actor:
+08248:                 continue
+08249:             if is_saga:
+08250:                 resolved, _path = saga_category_cache_record(category_name)
+08251:             else:
+08252:                 resolved, _path = actor_category_cache_record(category_name)
+08253:             if resolved:
+08254:                 continue
+08255:             if category_name not in self._actor_queue:
+08256:                 self._actor_queue.append(category_name)
+08257:         if self._actor_job is None and self._actor_queue:
+08258:             batch = self._actor_queue[:6]
+08259:             del self._actor_queue[:len(batch)]
+08260:             self._actor_job = threading.Thread(target=self._actorCategoryWorker, args=(batch,))
+08261:             self._actor_job.daemon = True
+08262:             self._actor_job.start()
+08263:             self._restartActorTimer()
+08264: 
+08265:     def _actorCategoryWorker(self, names):
+08266:         for category_name in names:
+08267:             try:
+08268:                 if _looks_like_saga_category(category_name):
+08269:                     resolve_saga_category_image(category_name)
+08270:                 else:
+08271:                     resolve_actor_category_image(category_name)
+08272:             except Exception:
+08273:                 pass
+08274: 
+08275:     def _pollActorCategoryImages(self):
+08276:         if self._actor_job is not None and self._actor_job.is_alive():
+08277:             self._restartActorTimer()
+08278:             return
+08279:         self._actor_job = None
+08280:         # Repaint after cached images arrived, but never compete with
+08281:         # an active remote-control scroll burst.
+08282:         self._scheduleCategoryPiconRefresh(80)
+08283:         if self._actor_queue:
+08284:             self._queueActorCategoryImages([])
+08285: 
+08286:     def _updateCategoryPiconStrip(self):
+08287:         icons_enabled = self.kind in ("live", "movies", "series")
+08288:         try:
+08289:             top = self["list"].getTopIndex()
+08290:             if top < 0:
+08291:                 top = 0
+08292:         except Exception:
+08293:             try:
+08294:                 current = self["list"].getSelectedIndex()
+08295:             except Exception:
+08296:                 current = 0
+08297:             top = max(0, current - 4)
+08298:         visible_actor_candidates = []
+08299:         for slot, name in enumerate(getattr(self, "_category_picon_slots", [])):
+08300:             try:
+08301:                 widget = self[name]
+08302:                 idx = top + slot
+08303:                 if not icons_enabled or idx >= len(self.category_names):
+08304:                     widget.hide()
+08305:                     continue
+08306:                 category_name = self.category_names[idx]
+08307:                 path = self._categoryIconPath(category_name)
+08308:                 if path and os.path.isfile(path) and widget.instance is not None:
+08309:                     # setPixmapFromFile can be surprisingly expensive on small
+
+===== lines 8171-8316 =====
+08171:         except TypeError:
+08172:             self._category_icon_timer.start(int(delay))
+08173:         except Exception:
+08174:             pass
+08175: 
+08176:     def _deferredCategoryPiconRefresh(self):
+08177:         self._updateCategoryPiconStrip()
+08178: 
+08179:     def _categorySelectionChanged(self):
+08180:         self._scheduleCategoryPiconRefresh(160)
+08181: 
+08182:     def _categoryIconPath(self, category_name):
+08183:         if self.kind == "live":
+08184:             entry = first_cached_live_entry(self.profile_id, category_name)
+08185:             if entry:
+08186:                 path = picon_local_file(entry)
+08187:                 if path:
+08188:                     return path
+08189:             return HOME_ICONS[0]
+08190: 
+08191:         # VOD/series categories usually have no provider image of their own.
+08192:         # Recognise common platform names and show a compact local badge.
+08193:         # This is deliberately local/offline and does not require a TMDb key.
+08194:         name = clean_text(category_name).lower()
+08195:         if category_name in ("__all__", "__recent__"):
+08196:             return HOME_ICONS[1] if self.kind == "movies" else HOME_ICONS[2]
+08197:         rules = (
+08198:             (("netflix",), "netflix"),
+08199:             (("amazon", "prime video", "primevideo", "prime"), "prime"),
+08200:             (("disney+", "disney plus", "disney"), "disney"),
+08201:             (("paramount+", "paramount plus", "paramount"), "paramount"),
+08202:             (("apple tv+", "apple tv", "appletv"), "apple"),
+08203:             (("hbo max", "hbomax", "max"), "max"),
+08204:             (("sky",), "sky"),
+08205:             (("dazn",), "dazn"),
+08206:         )
+08207:         for aliases, key in rules:
+08208:             if any(alias in name for alias in aliases):
+08209:                 path = CATEGORY_SERVICE_ICONS.get(key, "")
+08210:                 if path and os.path.isfile(path):
+08211:                     return path
+08212: 
+08213:         # Saga / franchise folders have priority over generic VOD icons.
+08214:         # The actual network lookup is queued below; this lookup is cache-only.
+08215:         if _looks_like_saga_category(category_name):
+08216:             resolved, saga_path = saga_category_cache_record(category_name)
+08217:             if resolved and saga_path and os.path.isfile(saga_path):
+08218:                 return saga_path
+08219: 
+08220:         # Actor folders: use a cached TMDb profile photo if already available.
+08221:         # Missing photos are queued by _updateCategoryPiconStrip and loaded in
+08222:         # the background; this function itself never performs network I/O.
+08223:         if getattr(self, "_category_actor_images_enabled", True):
+08224:             resolved, actor_path = actor_category_cache_record(category_name)
+08225:             if resolved and actor_path and os.path.isfile(actor_path):
+08226:                 return actor_path
+08227:         return HOME_ICONS[1] if self.kind == "movies" else HOME_ICONS[2]
+08228: 
+08229:     def _restartActorTimer(self):
+08230:         try:
+08231:             self._actor_timer.start(300, True)
+08232:         except TypeError:
+08233:             self._actor_timer.start(300)
+08234: 
+08235:     def _queueActorCategoryImages(self, names):
+08236:         # Despite the historical method name this queue now handles both actor
+08237:         # portraits and Saga/collection artwork. It remains one small worker so
+08238:         # category scrolling never starts parallel network storms.
+08239:         if self.kind not in ("movies", "series"):
+08240:             return
+08241:         settings = load_global_settings()
+08242:         tmdb_ready = bool(clean_text(settings.get("tmdb_api_key", "")))
+08243:         actors_enabled = bool(settings.get("actor_category_images", True))
+08244:         for category_name in names:
+08245:             is_saga = _looks_like_saga_category(category_name)
+08246:             is_actor = actors_enabled and tmdb_ready and _looks_like_actor_category(category_name)
+08247:             if not is_saga and not is_actor:
+08248:                 continue
+08249:             if is_saga:
+08250:                 resolved, _path = saga_category_cache_record(category_name)
+08251:             else:
+08252:                 resolved, _path = actor_category_cache_record(category_name)
+08253:             if resolved:
+08254:                 continue
+08255:             if category_name not in self._actor_queue:
+08256:                 self._actor_queue.append(category_name)
+08257:         if self._actor_job is None and self._actor_queue:
+08258:             batch = self._actor_queue[:6]
+08259:             del self._actor_queue[:len(batch)]
+08260:             self._actor_job = threading.Thread(target=self._actorCategoryWorker, args=(batch,))
+08261:             self._actor_job.daemon = True
+08262:             self._actor_job.start()
+08263:             self._restartActorTimer()
+08264: 
+08265:     def _actorCategoryWorker(self, names):
+08266:         for category_name in names:
+08267:             try:
+08268:                 if _looks_like_saga_category(category_name):
+08269:                     resolve_saga_category_image(category_name)
+08270:                 else:
+08271:                     resolve_actor_category_image(category_name)
+08272:             except Exception:
+08273:                 pass
+08274: 
+08275:     def _pollActorCategoryImages(self):
+08276:         if self._actor_job is not None and self._actor_job.is_alive():
+08277:             self._restartActorTimer()
+08278:             return
+08279:         self._actor_job = None
+08280:         # Repaint after cached images arrived, but never compete with
+08281:         # an active remote-control scroll burst.
+08282:         self._scheduleCategoryPiconRefresh(80)
+08283:         if self._actor_queue:
+08284:             self._queueActorCategoryImages([])
+08285: 
+08286:     def _updateCategoryPiconStrip(self):
+08287:         icons_enabled = self.kind in ("live", "movies", "series")
+08288:         try:
+08289:             top = self["list"].getTopIndex()
+08290:             if top < 0:
+08291:                 top = 0
+08292:         except Exception:
+08293:             try:
+08294:                 current = self["list"].getSelectedIndex()
+08295:             except Exception:
+08296:                 current = 0
+08297:             top = max(0, current - 4)
+08298:         visible_actor_candidates = []
+08299:         for slot, name in enumerate(getattr(self, "_category_picon_slots", [])):
+08300:             try:
+08301:                 widget = self[name]
+08302:                 idx = top + slot
+08303:                 if not icons_enabled or idx >= len(self.category_names):
+08304:                     widget.hide()
+08305:                     continue
+08306:                 category_name = self.category_names[idx]
+08307:                 path = self._categoryIconPath(category_name)
+08308:                 if path and os.path.isfile(path) and widget.instance is not None:
+08309:                     # setPixmapFromFile can be surprisingly expensive on small
+08310:                     # receivers. Reuse the pixmap already present in this slot.
+08311:                     if self._category_icon_slot_paths.get(name, "") != path:
+08312:                         widget.instance.setPixmapFromFile(path)
+08313:                         self._category_icon_slot_paths[name] = path
+08314:                     widget.show()
+08315:                 else:
+08316:                     self._category_icon_slot_paths[name] = ""
+
+===== lines 8202-8347 =====
+08202:             (("apple tv+", "apple tv", "appletv"), "apple"),
+08203:             (("hbo max", "hbomax", "max"), "max"),
+08204:             (("sky",), "sky"),
+08205:             (("dazn",), "dazn"),
+08206:         )
+08207:         for aliases, key in rules:
+08208:             if any(alias in name for alias in aliases):
+08209:                 path = CATEGORY_SERVICE_ICONS.get(key, "")
+08210:                 if path and os.path.isfile(path):
+08211:                     return path
+08212: 
+08213:         # Saga / franchise folders have priority over generic VOD icons.
+08214:         # The actual network lookup is queued below; this lookup is cache-only.
+08215:         if _looks_like_saga_category(category_name):
+08216:             resolved, saga_path = saga_category_cache_record(category_name)
+08217:             if resolved and saga_path and os.path.isfile(saga_path):
+08218:                 return saga_path
+08219: 
+08220:         # Actor folders: use a cached TMDb profile photo if already available.
+08221:         # Missing photos are queued by _updateCategoryPiconStrip and loaded in
+08222:         # the background; this function itself never performs network I/O.
+08223:         if getattr(self, "_category_actor_images_enabled", True):
+08224:             resolved, actor_path = actor_category_cache_record(category_name)
+08225:             if resolved and actor_path and os.path.isfile(actor_path):
+08226:                 return actor_path
+08227:         return HOME_ICONS[1] if self.kind == "movies" else HOME_ICONS[2]
+08228: 
+08229:     def _restartActorTimer(self):
+08230:         try:
+08231:             self._actor_timer.start(300, True)
+08232:         except TypeError:
+08233:             self._actor_timer.start(300)
+08234: 
+08235:     def _queueActorCategoryImages(self, names):
+08236:         # Despite the historical method name this queue now handles both actor
+08237:         # portraits and Saga/collection artwork. It remains one small worker so
+08238:         # category scrolling never starts parallel network storms.
+08239:         if self.kind not in ("movies", "series"):
+08240:             return
+08241:         settings = load_global_settings()
+08242:         tmdb_ready = bool(clean_text(settings.get("tmdb_api_key", "")))
+08243:         actors_enabled = bool(settings.get("actor_category_images", True))
+08244:         for category_name in names:
+08245:             is_saga = _looks_like_saga_category(category_name)
+08246:             is_actor = actors_enabled and tmdb_ready and _looks_like_actor_category(category_name)
+08247:             if not is_saga and not is_actor:
+08248:                 continue
+08249:             if is_saga:
+08250:                 resolved, _path = saga_category_cache_record(category_name)
+08251:             else:
+08252:                 resolved, _path = actor_category_cache_record(category_name)
+08253:             if resolved:
+08254:                 continue
+08255:             if category_name not in self._actor_queue:
+08256:                 self._actor_queue.append(category_name)
+08257:         if self._actor_job is None and self._actor_queue:
+08258:             batch = self._actor_queue[:6]
+08259:             del self._actor_queue[:len(batch)]
+08260:             self._actor_job = threading.Thread(target=self._actorCategoryWorker, args=(batch,))
+08261:             self._actor_job.daemon = True
+08262:             self._actor_job.start()
+08263:             self._restartActorTimer()
+08264: 
+08265:     def _actorCategoryWorker(self, names):
+08266:         for category_name in names:
+08267:             try:
+08268:                 if _looks_like_saga_category(category_name):
+08269:                     resolve_saga_category_image(category_name)
+08270:                 else:
+08271:                     resolve_actor_category_image(category_name)
+08272:             except Exception:
+08273:                 pass
+08274: 
+08275:     def _pollActorCategoryImages(self):
+08276:         if self._actor_job is not None and self._actor_job.is_alive():
+08277:             self._restartActorTimer()
+08278:             return
+08279:         self._actor_job = None
+08280:         # Repaint after cached images arrived, but never compete with
+08281:         # an active remote-control scroll burst.
+08282:         self._scheduleCategoryPiconRefresh(80)
+08283:         if self._actor_queue:
+08284:             self._queueActorCategoryImages([])
+08285: 
+08286:     def _updateCategoryPiconStrip(self):
+08287:         icons_enabled = self.kind in ("live", "movies", "series")
+08288:         try:
+08289:             top = self["list"].getTopIndex()
+08290:             if top < 0:
+08291:                 top = 0
+08292:         except Exception:
+08293:             try:
+08294:                 current = self["list"].getSelectedIndex()
+08295:             except Exception:
+08296:                 current = 0
+08297:             top = max(0, current - 4)
+08298:         visible_actor_candidates = []
+08299:         for slot, name in enumerate(getattr(self, "_category_picon_slots", [])):
+08300:             try:
+08301:                 widget = self[name]
+08302:                 idx = top + slot
+08303:                 if not icons_enabled or idx >= len(self.category_names):
+08304:                     widget.hide()
+08305:                     continue
+08306:                 category_name = self.category_names[idx]
+08307:                 path = self._categoryIconPath(category_name)
+08308:                 if path and os.path.isfile(path) and widget.instance is not None:
+08309:                     # setPixmapFromFile can be surprisingly expensive on small
+08310:                     # receivers. Reuse the pixmap already present in this slot.
+08311:                     if self._category_icon_slot_paths.get(name, "") != path:
+08312:                         widget.instance.setPixmapFromFile(path)
+08313:                         self._category_icon_slot_paths[name] = path
+08314:                     widget.show()
+08315:                 else:
+08316:                     self._category_icon_slot_paths[name] = ""
+08317:                     widget.hide()
+08318:                 if self.kind in ("movies", "series") and (
+08319:                     _looks_like_saga_category(category_name) or _looks_like_actor_category(category_name)
+08320:                 ):
+08321:                     visible_actor_candidates.append(category_name)
+08322:             except Exception:
+08323:                 pass
+08324:         if visible_actor_candidates:
+08325:             self._queueActorCategoryImages(visible_actor_candidates)
+08326: 
+08327:     def _restartLoadTimer(self):
+08328:         try:
+08329:             self._load_timer.start(250, True)
+08330:         except TypeError:
+08331:             self._load_timer.start(250)
+08332: 
+08333:     def _startXtreamLoad(self, mode, name="", allowed=None, query=""):
+08334:         if self._load_job is not None and self._load_job.is_alive():
+08335:             self["info"].setText(tr("loading_busy"))
+08336:             return
+08337:         self._pending_load = {
+08338:             "mode": mode,
+08339:             "name": name,
+08340:             "allowed": list(allowed or []),
+08341:             "query": query,
+08342:         }
+08343:         self._load_result = None
+08344:         if mode == "category":
+08345:             self["info"].setText(tr("loading_category", name=name))
+08346:         elif mode == "all":
+08347:             self["info"].setText(tr("loading_all", kind=type_label(self.kind)))
