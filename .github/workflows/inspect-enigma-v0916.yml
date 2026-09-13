@@ -30,15 +30,7 @@ jobs:
           ROOT=data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub
           cp "$ROOT/plugin.py" "$GITHUB_WORKSPACE/inspection/plugin_v0916.py"
           find "$ROOT" -maxdepth 4 -type f | sed "s#^$ROOT/##" | sort > "$GITHUB_WORKSPACE/inspection/v0916-tree.txt"
-          python3 - <<'PY'
-          from pathlib import Path
-          root=Path('/tmp/inspect0916/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub')
-          out=Path('/github/workspace/inspection/v0916-pngs.txt')
-          rows=[]
-          for p in sorted(root.rglob('*.png')):
-              rows.append(str(p.relative_to(root)))
-          out.write_text('\n'.join(rows)+'\n', encoding='utf-8')
-          PY
+          find "$ROOT" -type f -name '*.png' | sed "s#^$ROOT/##" | sort > "$GITHUB_WORKSPACE/inspection/v0916-pngs.txt"
 
       - name: Publish inspection files
         shell: bash
