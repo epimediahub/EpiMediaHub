@@ -1,0 +1,51 @@
+name: Inspect Enigma v0.9.16 source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-enigma-v0916.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract plugin source and tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/inspect0916
+          mkdir -p /tmp/inspect0916/data "$GITHUB_WORKSPACE/inspection"
+          cd /tmp/inspect0916
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.16.ipk"
+          tar -xzf data.tar.gz -C data
+          ROOT=data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub
+          cp "$ROOT/plugin.py" "$GITHUB_WORKSPACE/inspection/plugin_v0916.py"
+          find "$ROOT" -maxdepth 4 -type f | sed "s#^$ROOT/##" | sort > "$GITHUB_WORKSPACE/inspection/v0916-tree.txt"
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/tmp/inspect0916/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub')
+          out=Path('/github/workspace/inspection/v0916-pngs.txt')
+          rows=[]
+          for p in sorted(root.rglob('*.png')):
+              rows.append(str(p.relative_to(root)))
+          out.write_text('\n'.join(rows)+'\n', encoding='utf-8')
+          PY
+
+      - name: Publish inspection files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add inspection/plugin_v0916.py inspection/v0916-tree.txt inspection/v0916-pngs.txt
+          git commit -m 'Inspect v0.9.16 plugin source'
+          git push
