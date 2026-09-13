@@ -10,6 +10,8 @@ src = Path('build_tools/build_v0920_mediathek.sh').read_text(encoding='utf-8')
 # Keep the stable package as input, but publish every generated artifact as 0.9.21.
 src = src.replace('v0.9.20', 'v0.9.21')
 src = src.replace('BASE="$WORKSPACE/EpiMediaHub_v0.9.21.ipk"', 'BASE="$WORKSPACE/EpiMediaHub_v0.9.20.ipk"')
+# Fix the asset validation: the filename is generated dynamically in plugin.py.
+src = src.replace('grep -q home_mediathek "$PLUGIN"', 'test -f "$ROOT/home_mediathek.png"')
 # The source plugin itself must identify as 0.9.21.
 needle = "p.write_text(t, encoding='utf-8')"
 replacement = "t = t.replace('PLUGIN_VERSION = \\\"0.9.20\\\"', 'PLUGIN_VERSION = \\\"0.9.21\\\"', 1)\n" + needle
