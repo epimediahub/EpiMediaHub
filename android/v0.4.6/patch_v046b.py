@@ -38,8 +38,9 @@ prefs.write_text(s)
 
 
 # ---------------------------------------------------------------------------
-# ViewModel: remote maintenance uses its own PIN. Once explicitly unlocked,
-# the web admin starts on app launch even when there is no playlist yet.
+# ViewModel: remote maintenance uses its own PIN. Websetup is independent of
+# playlist state: a fresh install with zero playlists opens Websetup directly.
+# Once remote maintenance was unlocked, its web server also auto-starts later.
 # ---------------------------------------------------------------------------
 vm = java / "MainViewModel.kt"
 s = vm.read_text()
@@ -54,30 +55,10 @@ old_init = '''    init {\n        enforceFamilyThemeGate()\n        refreshProfi
 require_once(s, old_init, "ViewModel init")
 s = s.replace(
     old_init,
-    '''    init {\n        enforceFamilyThemeGate()\n        refreshProfiles()\n        // Remote maintenance is independent of playlist state. After the local\n        // one-time PIN unlock it comes back automatically on future app starts,\n        // including a completely fresh installation with zero playlists.\n        if (prefs.remoteMaintenanceUnlocked()) startWebAdmin()\n    }''',
+    '''    init {\n        enforceFamilyThemeGate()\n        refreshProfiles()\n        val noPlaylist = _ui.value.playlists.isEmpty()\n        if (prefs.remoteMaintenanceUnlocked() || noPlaylist) startWebAdmin()\n        // Fernwartung/Websetup must be reachable before any playlist exists.\n        // Therefore a fresh installation starts here instead of trapping the\n        // user inside the playlist form. A direct on-device playlist button is\n        // available on this screen as well.\n        if (noPlaylist) set { it.copy(screen = Screen.WebAdmin) }\n    }''',
     1,
 )
 vm.write_text(s)
-
-
-# ---------------------------------------------------------------------------
-# First-run UX: Websetup / remote maintenance must be reachable before a
-# playlist exists, instead of being hidden behind the normal Settings screen.
-# Insert directly into the AddPlaylist composable rather than depending on a
-# wording string that earlier readability patches may have changed.
-# ---------------------------------------------------------------------------
-screens = java / "ui/Screens.kt"
-s = screens.read_text()
-start = s.find('fun AddPlaylistScreen(')
-end = s.find('\n@Composable\nfun CategoryScreen', start)
-if start < 0 or end < 0:
-    raise SystemExit("AddPlaylistScreen bounds not found")
-close = s.rfind('    }}}', start, end)
-if close < 0:
-    raise SystemExit("AddPlaylistScreen closing anchor not found")
-insert = '''        Spacer(Modifier.height(10.dp))\n        OutlinedButton(\n            onClick={vm.navigate(Screen.WebAdmin)},\n            modifier=Modifier.fillMaxWidth().height(50.dp),\n            shape=MaterialTheme.shapes.medium\n        ){\n            Icon(Icons.Default.VpnKey,null,modifier=Modifier.size(19.dp));Spacer(Modifier.width(8.dp));Text("Websetup & Fernwartung",fontWeight=FontWeight.Bold)\n        }\n        Text("Websetup und Tailscale-Fernwartung funktionieren bereits ohne eingerichtete Playlist.",fontSize=12.sp,color=Color.White.copy(.78f),modifier=Modifier.padding(top=7.dp))\n'''
-s = s[:close] + insert + s[close:]
-screens.write_text(s)
 
 
 # ---------------------------------------------------------------------------
@@ -105,10 +86,14 @@ themes.write_text(s)
 
 
 # ---------------------------------------------------------------------------
-# Remote screen wording: separate remote PIN, no Family-PIN ambiguity.
+# Remote screen wording: separate remote PIN, no Family-PIN ambiguity, and a
+# direct on-device playlist setup button when no playlist exists yet.
 # ---------------------------------------------------------------------------
 remote = java / "ui/V046WebAdmin.kt"
 s = remote.read_text()
+import_anchor = 'import de.epimediahub.app.MainViewModel\n'
+require_once(s, import_anchor, "V046WebAdmin MainViewModel import")
+s = s.replace(import_anchor, import_anchor + 'import de.epimediahub.app.Screen\n', 1)
 replacements = {
     'Freischaltung nur mit der speziellen Family-PIN – danach ausschließlich über Tailscale.': 'Freischaltung nur mit der separaten Fernwartungs-PIN – danach ausschließlich über Tailscale.',
     'Text("Mit Family-PIN freischalten", color = Color.Black, fontWeight = FontWeight.Black)': 'Text("Mit Fernwartungs-PIN freischalten", color = Color.Black, fontWeight = FontWeight.Black)',
@@ -118,6 +103,13 @@ replacements = {
 for old, new in replacements.items():
     require_once(s, old, f"Remote wording {old[:28]}")
     s = s.replace(old, new, 1)
+old_buttons = '''                            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {\n                                TextButton(onClick = { vm.restartWebAdmin() }) { Text("Websetup neu starten") }\n                                TextButton(onClick = { vm.stopWebAdmin() }) { Text("Websetup stoppen") }\n                            }'''
+require_once(s, old_buttons, "Websetup action row")
+s = s.replace(
+    old_buttons,
+    '''                            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {\n                                if (u.playlists.isEmpty()) {\n                                    TextButton(onClick = { vm.navigate(Screen.AddPlaylist) }) { Text("Playlist am Gerät") }\n                                }\n                                TextButton(onClick = { vm.restartWebAdmin() }) { Text("Websetup neu starten") }\n                                TextButton(onClick = { vm.stopWebAdmin() }) { Text("Websetup stoppen") }\n                            }''',
+    1,
+)
 remote.write_text(s)
 
 
@@ -130,4 +122,4 @@ s = s.replace(
 )
 web.write_text(s)
 
-print("Android v0.4.6 separate Family/remote PINs + no-playlist remote access patch applied")
+print("Android v0.4.6 separate Family/remote PINs + zero-playlist Websetup/remote access patch applied")
