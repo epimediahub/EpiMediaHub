@@ -1,0 +1,23 @@
+name: Publish Enigma v0.9.37 Catch-up EPG Grid
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'build_tools/build_v0937_catchup_epg_grid.sh'
+      - '.github/workflows/publish-enigma-v0937-catchup-epg-grid.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build and publish v0.9.37
+        run: bash build_tools/build_v0937_catchup_epg_grid.sh
