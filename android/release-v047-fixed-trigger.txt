@@ -1,0 +1,1 @@
+Trigger signed Android v0.4.7 release with automatic Raspberry-assisted embedded Tailscale enrollment and reconnect.
