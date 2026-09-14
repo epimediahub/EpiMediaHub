@@ -1,0 +1,20 @@
+name: Publish Enigma v0.9.39 Native Stream Audio
+
+on:
+  push:
+    paths:
+      - 'build_tools/build_v0939_native_stream_audio.sh'
+      - '.github/workflows/publish-enigma-v0939-native-stream-audio.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and publish v0.9.39
+        shell: bash
+        run: bash build_tools/build_v0939_native_stream_audio.sh
