@@ -1,7 +1,7 @@
 {
-  "version": "0.3.6",
-  "versionCode": 36,
+  "version": "0.4.0",
+  "versionCode": 40,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "c37cb3698116c874ffdd8510b48c8e16eeab2c71b4e03af21b83dbf9940b85af",
-  "notes": "Premium-Skin-Update: Die Logos der gewählten Designs sind jetzt groß und dezent direkt in die vier Startkacheln eingearbeitet und laufen optisch über die Kacheln weiter. Auch die Standard-Skins erhalten das neue hochwertige Kachel-Design mit verbessertem Fokus, Schatten und Akzent-Rahmen. Der IBO-inspirierte Browser aus v0.3.5 bleibt erhalten. Als Skin-Basis dient der eingefrorene Enigma-Stand 0.9.41."
+  "sha256": "3b6640f788e2d1c093b03a31b5f818191bc48cc132e0ab62af0e61a0844874e2",
+  "notes": "Technischer Paritätsstand zur Enigma-0.9.41-Linie: Mediathek nach Ländern/Anbietern, Voll-EPG, Xtream Catch-up bei freigegebenem Archiv, QR-Websetup mit TV-Ersteinrichtung sowie neues 6-Kachel-Home. Premium-Skins und IBO-Browser aus v0.3.6 bleiben erhalten."
 }
