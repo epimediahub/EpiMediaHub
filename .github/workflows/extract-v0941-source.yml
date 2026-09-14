@@ -1,0 +1,33 @@
+name: Extract v0.9.41 plugin source
+
+on:
+  push:
+    paths:
+      - '.github/workflows/extract-v0941-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract plugin.py from v0.9.41 IPK
+        shell: bash
+        run: |
+          set -euo pipefail
+          T=/tmp/epimedia_extract
+          rm -rf "$T"
+          mkdir -p "$T/ar" "$T/data" debug
+          cd "$T/ar"
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.41.ipk"
+          tar -xzf data.tar.gz -C "$T/data"
+          cp "$T/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py" "$GITHUB_WORKSPACE/debug/plugin_v0941.py"
+          cd "$GITHUB_WORKSPACE"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add debug/plugin_v0941.py
+          git commit -m 'Debug: extract v0.9.41 plugin source'
+          git push
