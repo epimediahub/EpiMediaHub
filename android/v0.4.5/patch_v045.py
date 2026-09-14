@@ -13,7 +13,7 @@ def require_once(text: str, needle: str, label: str):
 
 
 # ---------------------------------------------------------------------------
-# Persist Family PIN only as salted SHA-256 digest.
+# Persist Family PIN only as a salted SHA-256 digest.
 # ---------------------------------------------------------------------------
 prefs = java / "data/PrefsRepository.kt"
 s = prefs.read_text()
@@ -22,7 +22,7 @@ require_once(s, anchor, "Prefs getResume")
 family_methods = r'''    private fun familyPinDigest(pin: String): String {
         val bytes = java.security.MessageDigest.getInstance("SHA-256")
             .digest(("EpiMediaHub-Family-v1|" + pin).toByteArray(Charsets.UTF_8))
-        return bytes.joinToString("") { "%02x".format(it) }
+        return bytes.joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
     fun hasFamilyPin(): Boolean = p.getString("family_pin_hash", "").orEmpty().isNotBlank()
@@ -123,6 +123,11 @@ require_once(s, insert_anchor, "onCleared")
 controls = r'''    fun restartWebAdmin() {
         stopWebAdmin()
         startWebAdmin()
+    }
+
+    fun refreshWebAdminAccess() {
+        val server = webAdmin ?: return
+        set { it.copy(webAdminUrl = server.localAddress, webAdminRemoteUrl = server.remoteAddress) }
     }
 
     fun enableFamilyPin(pin: String): Boolean {
