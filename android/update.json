@@ -1,7 +1,7 @@
 {
-  "version": "0.4.3",
-  "versionCode": 43,
+  "version": "0.4.4",
+  "versionCode": 44,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "e3955fa4e6e21d359fe707082864940d3398a3254093081fe7165ff52264902b",
-  "notes": "Navigation jetzt sichtbar wie gewünscht: Filme/Serien öffnen zuerst Kategorien, danach die Bibliothek und anschließend eine eigene Detailansicht vor Wiedergabe bzw. Staffeln/Episoden. Mediathek ebenfalls mit Detailseite. Skins nutzen zusätzlich Enigma-Home-Motive, Center- und Banner-Marks sowie das 2x3-TV-Raster mit durchgehendem Motiv."
+  "sha256": "a96e80cc22c6c12d697432c8c926026da5e133123e29b96cc80e31433815310c",
+  "notes": "Skin-Wechsel repariert und Skin-Grafiken deutlich sichtbarer. Designs werden über den Enigma-Katalog korrekt aufgelöst und sofort neu geladen. Android-Zurück/Wischgeste folgt jetzt Detail → Liste → Kategorien → Hauptmenü in Live, Filmen und Serien."
 }
