@@ -135,7 +135,7 @@ controls = r'''    fun restartWebAdmin() {
     }
 
     fun enableFamilyPin(pin: String): Boolean {
-        if (!pin.matches(Regex("\d{4,8}"))) return false
+        if (!pin.matches(Regex("""\d{4,8}"""))) return false
         prefs.setFamilyPin(pin)
         set { it.copy(familyProtectionEnabled = true, error = "") }
         return true
@@ -151,7 +151,7 @@ controls = r'''    fun restartWebAdmin() {
     }
 
     fun changeFamilyPin(oldPin: String, newPin: String): Boolean {
-        if (!prefs.verifyFamilyPin(oldPin) || !newPin.matches(Regex("\d{4,8}"))) return false
+        if (!prefs.verifyFamilyPin(oldPin) || !newPin.matches(Regex("""\d{4,8}"""))) return false
         prefs.setFamilyPin(newPin)
         set { it.copy(familyProtectionEnabled = true, error = "") }
         return true
