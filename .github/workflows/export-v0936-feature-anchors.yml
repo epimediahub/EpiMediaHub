@@ -1,0 +1,56 @@
+name: Export v0.9.36 Feature Anchors
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/export-v0936-feature-anchors.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  anchors:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Export relevant source anchors
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('v0936_plugin_source.py')
+          lines=p.read_text(encoding='utf-8').splitlines()
+          needles=[
+            'def xtream_bootstrap', 'def _xtream_fetch', 'def xtream_', 'stream_id', 'tv_archive',
+            'CREATE TABLE', 'def epg_programmes_for_entry', 'def download_epg', 'def now_next_from_items',
+            'class EpiMediaHubBrowser', 'class EpiBrowser', 'class EpiLive', 'LIVE_PLAYER_SKIN',
+            'def playSelected', 'def openEPG', 'EpiEPG', 'epg', 'service_ref', 'eServiceReference(4097'
+          ]
+          hits=[]
+          for i,line in enumerate(lines):
+              low=line.lower()
+              if any(n.lower() in low for n in needles):
+                  hits.append(i)
+          # merge +/- 45-line windows
+          windows=[]
+          for i in hits:
+              a=max(0,i-45); b=min(len(lines),i+46)
+              if windows and a <= windows[-1][1]+5:
+                  windows[-1]=(windows[-1][0],max(windows[-1][1],b))
+              else:
+                  windows.append((a,b))
+          out=[]
+          for a,b in windows:
+              out.append('\n===== LINES %d-%d =====\n' % (a+1,b))
+              for j in range(a,b):
+                  out.append('%05d: %s\n' % (j+1,lines[j]))
+          Path('v0936_feature_anchors.txt').write_text(''.join(out),encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add v0936_feature_anchors.txt
+          git commit -m 'Export v0.9.36 feature anchors'
+          git push
