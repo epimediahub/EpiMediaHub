@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Inspection trigger 2.
 T=/tmp/inspect_android_base
 rm -rf "$T" && mkdir -p "$T"
 cat android/source_parts/source_* > "$T/source.b64"
