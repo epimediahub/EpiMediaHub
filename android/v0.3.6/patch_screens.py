@@ -15,10 +15,7 @@ def replace_between(text, start_marker, end_marker, replacement):
         raise SystemExit(f'markers missing: {start_marker!r} -> {end_marker!r}')
     return text[:start] + replacement + '\n' + text[end:]
 
-# v0.3.5 uses Python raw strings for parts of Screens.kt but escaped a few
-# Kotlin quotes as if those strings were non-raw. The backslashes therefore
-# leak into the generated Kotlin source and break parsing. Repair only the
-# known generated expressions before applying the v0.3.6 home redesign.
+# Repair known syntax defects emitted by the historical v0.3.5 raw-string patch.
 s = s.replace(
     'now?.let{\\"${clock(it.start)}–${clock(it.end)}  ${it.title}\\"}.orEmpty()',
     'now?.let{"${clock(it.start)}–${clock(it.end)}  ${it.title}"}.orEmpty()'
@@ -26,6 +23,10 @@ s = s.replace(
 s = s.replace(
     'kind?.let{sectionTitle(it)+\\" · \\"}',
     'kind?.let{sectionTitle(it)+" · "}'
+)
+s = s.replace(
+    'OutlinedButton(onClick={vm.navigate(Screen.Categories(kind),remember=false),modifier=Modifier.weight(1f)){Text("Kategorien")}',
+    'OutlinedButton(onClick={vm.navigate(Screen.Categories(kind),remember=false)},modifier=Modifier.weight(1f)){Text("Kategorien")}'
 )
 
 home = '''@Composable
@@ -39,8 +40,14 @@ s = s.replace('Android v0.3.5', 'Android v0.3.6')
 s = s.replace('IBO-inspirierter Browser · Kategorien links · Positionsspeicher', 'Premium-Skins · integriertes Logo-Design · IBO-Browser')
 
 # Guard against regressions in the historical patch chain.
-if '\\" · \\"' in s or 'now?.let{\\"' in s:
-    raise SystemExit('v0.3.5 Kotlin quote repair incomplete')
+invalid_fragments = [
+    '\\" · \\"',
+    'now?.let{\\"',
+    'remember=false),modifier=Modifier.weight(1f)'
+]
+for fragment in invalid_fragments:
+    if fragment in s:
+        raise SystemExit(f'v0.3.5 Kotlin repair incomplete: {fragment}')
 
 path.write_text(s)
 print('Screens.kt patched for Android v0.3.6')
