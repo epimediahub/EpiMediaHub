@@ -63,16 +63,20 @@ vm.write_text(s)
 # ---------------------------------------------------------------------------
 # First-run UX: Websetup / remote maintenance must be reachable before a
 # playlist exists, instead of being hidden behind the normal Settings screen.
+# Insert directly into the AddPlaylist composable rather than depending on a
+# wording string that earlier readability patches may have changed.
 # ---------------------------------------------------------------------------
 screens = java / "ui/Screens.kt"
 s = screens.read_text()
-needle = '        Text("Am TV noch bequemer: Einstellungen → PC-Verwaltung."'
-if s.count(needle) != 1:
-    raise SystemExit(f"First-run PC-management hint: expected exactly one anchor, found {s.count(needle)}")
+start = s.find('fun AddPlaylistScreen(')
+end = s.find('\n@Composable\nfun CategoryScreen', start)
+if start < 0 or end < 0:
+    raise SystemExit("AddPlaylistScreen bounds not found")
+close = s.rfind('    }}}', start, end)
+if close < 0:
+    raise SystemExit("AddPlaylistScreen closing anchor not found")
 insert = '''        Spacer(Modifier.height(10.dp))\n        OutlinedButton(\n            onClick={vm.navigate(Screen.WebAdmin)},\n            modifier=Modifier.fillMaxWidth().height(50.dp),\n            shape=MaterialTheme.shapes.medium\n        ){\n            Icon(Icons.Default.VpnKey,null,modifier=Modifier.size(19.dp));Spacer(Modifier.width(8.dp));Text("Websetup & Fernwartung",fontWeight=FontWeight.Bold)\n        }\n        Text("Websetup und Tailscale-Fernwartung funktionieren bereits ohne eingerichtete Playlist.",fontSize=12.sp,color=Color.White.copy(.78f),modifier=Modifier.padding(top=7.dp))\n'''
-pos = s.index(needle)
-line_start = s.rfind('\n', 0, pos) + 1
-s = s[:line_start] + insert + s[line_start:]
+s = s[:close] + insert + s[close:]
 screens.write_text(s)
 
 
