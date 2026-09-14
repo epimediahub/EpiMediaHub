@@ -1,7 +1,7 @@
 {
-  "version": "0.4.5",
-  "versionCode": 45,
+  "version": "0.4.6",
+  "versionCode": 46,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "1b16002b954dfd393e871a6924191bb24117ee5bbc6bb4117959736be71d0d9d",
-  "notes": "QR-Websetup im Querformat repariert: QR-Code, lokale Adresse und PIN sind gleichzeitig sichtbar. Fernwartungsadresse wird bei WireGuard/Tailscale automatisch erkannt und ohne öffentlichen Port angeboten. Family-Skins können optional mit einer 4–8-stelligen Admin-PIN geschützt werden."
+  "sha256": "43d6c1a636aaf275ebeeccd262d153aae7cd4972404fbc088003f824418d1116",
+  "notes": "Family-Skins jetzt wie bei Enigma mit der festen speziellen 4-stelligen Family-PIN geschützt; keine frei wählbare oder abschaltbare Family-PIN mehr. Fernwartung wird separat mit derselben Family-PIN freigeschaltet und danach ausschließlich über Tailscale für den Raspberry-Wartungszugang angeboten. Lokales QR-Websetup bleibt mit temporärer Websetup-PIN verfügbar."
 }
