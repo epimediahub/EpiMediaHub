@@ -19,12 +19,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.epimediahub.app.MainViewModel
 import de.epimediahub.app.R
+import kotlinx.coroutines.delay
 
 @Composable
 fun V045WebAdminScreen(vm: MainViewModel, accent: Color, isTv: Boolean) {
     val u by vm.ui.collectAsState()
     BackHandler { vm.back() }
-    LaunchedEffect(Unit) { if (!u.webAdminRunning) vm.startWebAdmin() }
+    LaunchedEffect(Unit) {
+        if (!u.webAdminRunning) vm.startWebAdmin()
+        while (true) {
+            delay(3000L)
+            vm.refreshWebAdminAccess()
+        }
+    }
 
     Column(Modifier.fillMaxSize()) {
         EpiTopBar("WEBSETUP & FERNWARTUNG", R.drawable.brand_header, { vm.back() }, actions = {
