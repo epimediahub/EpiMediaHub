@@ -1,7 +1,7 @@
 {
-  "version": "0.4.0",
-  "versionCode": 40,
+  "version": "0.4.1",
+  "versionCode": 41,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "3b6640f788e2d1c093b03a31b5f818191bc48cc132e0ab62af0e61a0844874e2",
-  "notes": "Technischer Paritätsstand zur Enigma-0.9.41-Linie: Mediathek nach Ländern/Anbietern, Voll-EPG, Xtream Catch-up bei freigegebenem Archiv, QR-Websetup mit TV-Ersteinrichtung sowie neues 6-Kachel-Home. Premium-Skins und IBO-Browser aus v0.3.6 bleiben erhalten."
+  "sha256": "33ecd99f99318f07dd6ef6584448ca84850873c62222638e8f774ca4fce34163",
+  "notes": "Mobile jetzt fest im Querformat mit 3x2-Hauptmenü ohne Scrollen. Android-TV-Fernbedienung verbessert: D-Pad/Ziffern/Media-/Channel-Tasten für Episodensprung, Seek und Play/Pause. Mediathek, Voll-EPG, Catch-up, QR-Websetup und Premium-Skins bleiben erhalten."
 }
