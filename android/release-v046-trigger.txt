@@ -1,1 +1,1 @@
-Trigger signed Android v0.4.6 release with separate fixed PINs for Family skins and Tailscale remote maintenance. Remote/Websetup must be available before the first playlist is configured, and unlocked remote maintenance must auto-start on later launches.
+Retrigger signed Android v0.4.6 after hardening the first-run no-playlist Websetup/Fernwartung insertion. Separate fixed Family-skin and remote-maintenance PINs remain enabled.
