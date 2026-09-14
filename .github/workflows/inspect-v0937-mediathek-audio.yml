@@ -1,4 +1,4 @@
-name: Inspect v0.9.37 Mediathek Audio
+name: Inspect v0.9.38 Mediathek Audio
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
           rm -rf "$T"
           mkdir -p "$T/ar" "$T/data"
           cd "$T/ar"
-          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.37.ipk"
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.38.ipk"
           tar -xzf data.tar.gz -C "$T/data"
           P="$T/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py"
           python3 - "$P" <<'PY'
@@ -34,6 +34,7 @@ jobs:
               'def _open_mediathek',
               'def openMediathek',
               'def playSelected',
+              'def _play',
               'play_open',
               'EpiMediathekPlayer',
               'eServiceReference(',
@@ -45,8 +46,8 @@ jobs:
           for needle in needles:
               hits=[i for i,l in enumerate(lines) if needle in l]
               print('\n===== %s : %s =====' % (needle,hits[:40]))
-              for i in hits[:20]:
-                  a=max(0,i-30); b=min(len(lines),i+70)
+              for i in hits[:30]:
+                  a=max(0,i-35); b=min(len(lines),i+85)
                   key=(a,b)
                   if key in printed: continue
                   printed.add(key)
