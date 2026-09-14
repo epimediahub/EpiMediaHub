@@ -115,9 +115,9 @@ old = '    init { refreshProfiles() }'
 require_once(s, old, "ViewModel init")
 s = s.replace(old, '''    init {\n        enforceFamilyThemeGate()\n        refreshProfiles()\n    }\n\n    private fun enforceFamilyThemeGate() {\n        val state = _ui.value\n        if (!state.familySkinsUnlocked && state.themeCatalog?.themes?.get(state.themeId)?.family == true) {\n            prefs.themeId = "default"\n            _ui.value = state.copy(themeId = "default")\n        }\n    }''', 1)
 
-old = '''    fun selectTheme(id: String) {\n        prefs.themeId = id\n        set { it.copy(themeId = id) }\n    }'''
+old = '''    fun selectTheme(id: String) {\n        if (_ui.value.themeCatalog?.themes?.containsKey(id) != true) return\n        prefs.themeId = id\n        set { it.copy(themeId = id, error = "") }\n    }'''
 require_once(s, old, "selectTheme")
-s = s.replace(old, '''    fun selectTheme(id: String) {\n        val theme = _ui.value.themeCatalog?.themes?.get(id) ?: return\n        if (theme.family && !prefs.familySkinsUnlocked()) return\n        prefs.themeId = id\n        set { it.copy(themeId = id) }\n    }''', 1)
+s = s.replace(old, '''    fun selectTheme(id: String) {\n        val theme = _ui.value.themeCatalog?.themes?.get(id) ?: return\n        if (theme.family && !prefs.familySkinsUnlocked()) return\n        prefs.themeId = id\n        set { it.copy(themeId = id, error = "") }\n    }''', 1)
 vm.write_text(s)
 
 
