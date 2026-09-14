@@ -1,1 +1,1 @@
-Trigger signed Android v0.4.3 release after category/detail/Enigma UI integration.
+Trigger signed Android v0.4.3 release after category-row integration fix.
