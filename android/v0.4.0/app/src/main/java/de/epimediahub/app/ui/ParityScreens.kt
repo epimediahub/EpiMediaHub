@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.epimediahub.app.*
+import de.epimediahub.app.R
 import de.epimediahub.app.data.EpgParityClient
 import de.epimediahub.app.data.MediathekClient
 import de.epimediahub.app.model.EpgItem
@@ -222,7 +223,7 @@ private fun ParityEpgChannel(
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.Top
                     ) {
-                        Text("${clock(event.start)}–${clock(event.end)}", fontSize = 12.sp, color = Color.White.copy(.56f), modifier = Modifier.width(92.dp))
+                        Text("${parityClock(event.start)}–${parityClock(event.end)}", fontSize = 12.sp, color = Color.White.copy(.56f), modifier = Modifier.width(92.dp))
                         Column(Modifier.weight(1f)) {
                             Text(event.title, fontWeight = if (isLive) FontWeight.Black else FontWeight.SemiBold, maxLines = 2)
                             if (event.description.isNotBlank()) Text(event.description, color = Color.White.copy(.48f), fontSize = 11.sp, maxLines = 2)
