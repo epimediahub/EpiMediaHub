@@ -1,7 +1,7 @@
 {
-  "version": "0.4.4",
-  "versionCode": 44,
+  "version": "0.4.5",
+  "versionCode": 45,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "a96e80cc22c6c12d697432c8c926026da5e133123e29b96cc80e31433815310c",
-  "notes": "Skin-Wechsel repariert und Skin-Grafiken deutlich sichtbarer. Designs werden über den Enigma-Katalog korrekt aufgelöst und sofort neu geladen. Android-Zurück/Wischgeste folgt jetzt Detail → Liste → Kategorien → Hauptmenü in Live, Filmen und Serien."
+  "sha256": "1b16002b954dfd393e871a6924191bb24117ee5bbc6bb4117959736be71d0d9d",
+  "notes": "QR-Websetup im Querformat repariert: QR-Code, lokale Adresse und PIN sind gleichzeitig sichtbar. Fernwartungsadresse wird bei WireGuard/Tailscale automatisch erkannt und ohne öffentlichen Port angeboten. Family-Skins können optional mit einer 4–8-stelligen Admin-PIN geschützt werden."
 }
