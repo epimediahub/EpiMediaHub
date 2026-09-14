@@ -1,7 +1,7 @@
 {
-  "version": "0.4.1",
-  "versionCode": 41,
+  "version": "0.4.2",
+  "versionCode": 42,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "33ecd99f99318f07dd6ef6584448ca84850873c62222638e8f774ca4fce34163",
-  "notes": "Mobile jetzt fest im Querformat mit 3x2-Hauptmenü ohne Scrollen. Android-TV-Fernbedienung verbessert: D-Pad/Ziffern/Media-/Channel-Tasten für Episodensprung, Seek und Play/Pause. Mediathek, Voll-EPG, Catch-up, QR-Websetup und Premium-Skins bleiben erhalten."
+  "sha256": "a7bb0ae31c0d98136e36b29e44069d460a8f761b7314d051f36466ec8a8aa0ca",
+  "notes": "Deutlich bessere Lesbarkeit mit größerer Schrift und höherem Kontrast. Mediathek jetzt mit Sender, Sendungsreihe, Beschreibung, Datum, Laufzeit und echten Vorschaubildern aus der Original-Mediathekseite, sofern verfügbar; sonst hochwertiges Sender-Fallback statt leerer Flächen."
 }
