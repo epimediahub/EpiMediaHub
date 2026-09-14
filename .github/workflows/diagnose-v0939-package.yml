@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect published IPK
+      - name: Inspect published IPK and updater
         shell: bash
         run: |
           set -euxo pipefail
@@ -30,8 +30,9 @@ jobs:
           ls -la
           echo '--- control archive ---'
           tar -tvzf control.tar.gz
-          mkdir control
+          mkdir control data
           tar -xzf control.tar.gz -C control
+          tar -xzf data.tar.gz -C data
           echo '--- control file ---'
           cat control/control
           for s in preinst postinst prerm postrm; do
@@ -43,8 +44,11 @@ jobs:
               sh -n "control/$s"
             fi
           done
-          echo '--- data top entries ---'
-          tar -tvzf data.tar.gz | head -80 || true
+          P=data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py
+          echo '--- updater/opkg references ---'
+          grep -n -C 20 -E 'opkg|Update konnte nicht installiert|installieren \(Code|sha256|UPDATE_' "$P" || true
+          echo '--- updater class/function hints ---'
+          grep -n -C 10 -E 'def .*update|class .*Update|_install|installUpdate|doUpdate|updateAvailable' "$P" || true
           echo '--- package path collision checks ---'
           if tar -tzf data.tar.gz | grep -Eq '^\.?/etc/enigma2/(EpiMediaHub|epimediahub)(/|$)'; then
             echo 'ERROR persistent data path owned by package'; exit 1
