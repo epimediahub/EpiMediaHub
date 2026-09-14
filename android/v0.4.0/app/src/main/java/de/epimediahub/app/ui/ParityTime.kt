@@ -4,4 +4,4 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-internal fun clock(s: Long): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(s * 1000L))
+internal fun parityClock(s: Long): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(s * 1000L))
