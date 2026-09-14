@@ -70,7 +70,7 @@ if 'V036HomeScreen(vm,isTv,accent)' not in s:
 s = s.replace('V036HomeScreen(vm,isTv,accent)', 'V040HomeScreen(vm,isTv,accent)', 1)
 
 old_top = 'EpiTopBar(sectionTitle(kind),R.drawable.brand_header,{vm.back()},actions={Text(cat.name,color=accent,fontWeight=FontWeight.Bold,maxLines=1)})'
-new_top = 'EpiTopBar(sectionTitle(kind),R.drawable.brand_header,{vm.back()},actions={Row(verticalAlignment=Alignment.CenterVertically){if(kind==MediaKind.LIVE)TextButton(onClick={vm.navigate(ParityEpgGrid(cat))}){Text("EPG",color=accent,fontWeight=FontWeight.Black)};Text(cat.name,color=accent,fontWeight=FontWeight.Bold,maxLines=1)}})'
+new_top = 'EpiTopBar(sectionTitle(kind),R.drawable.brand_header,{vm.back()},actions={Row(verticalAlignment=Alignment.CenterVertically){if(kind==MediaKind.LIVE)TextButton(onClick={vm.navigate(de.epimediahub.app.ParityEpgGrid(cat))}){Text("EPG",color=accent,fontWeight=FontWeight.Black)};Text(cat.name,color=accent,fontWeight=FontWeight.Bold,maxLines=1)}})'
 if s.count(old_top) != 1:
     raise SystemExit(f"Items topbar anchor missing: {s.count(old_top)}")
 s = s.replace(old_top, new_top, 1)
