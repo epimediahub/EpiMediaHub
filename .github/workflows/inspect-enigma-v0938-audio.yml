@@ -1,0 +1,54 @@
+name: Inspect Enigma v0.9.38 Audio Paths
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-enigma-v0938-audio.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect shipped v0.9.38 player and audio code
+        shell: bash
+        run: |
+          set -euo pipefail
+          T=/tmp/epimedia0938inspect
+          rm -rf "$T"
+          mkdir -p "$T/ar" "$T/data"
+          cd "$T/ar"
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.38.ipk"
+          tar -xzf data.tar.gz -C "$T/data"
+          P="$T/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py"
+          python3 - "$P" <<'PY'
+          import re, sys
+          from pathlib import Path
+          p=Path(sys.argv[1])
+          t=p.read_text(encoding='utf-8')
+          lines=t.splitlines()
+          print('PLUGIN=',p)
+          print('LINES=',len(lines))
+          print('\n=== AUDIO / NAV OCCURRENCES ===')
+          terms=('playService','stopService','mute','Mute','volume','Volume','audio','Audio','eDVBVolumecontrol','VolumeControl','audioTracks','selectTrack','intro_sound','eServiceReference')
+          for i,line in enumerate(lines,1):
+              if any(term in line for term in terms):
+                  lo=max(1,i-3); hi=min(len(lines),i+5)
+                  print('\n--- lines %d-%d ---' % (lo,hi))
+                  for n in range(lo,hi+1):
+                      print('%05d %s' % (n,lines[n-1]))
+          print('\n=== PLAYER CLASSES / INTRO BLOCKS ===')
+          anchors=('class EpiIntro','class EpiLivePlayer','class EpiMoviePlayer','class EpiMediathekPlayer','def _open_mediathek_stream')
+          for anchor in anchors:
+              hits=[i for i,l in enumerate(lines) if anchor in l]
+              for idx in hits:
+                  print('\n### %s @ %d ###' % (anchor,idx+1))
+                  for n in range(idx,min(len(lines),idx+180)):
+                      if n>idx and lines[n].startswith('class ') and not lines[n].startswith('class '+anchor.split()[-1]):
+                          break
+                      print('%05d %s' % (n+1,lines[n]))
+          PY
