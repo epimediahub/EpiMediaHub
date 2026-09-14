@@ -1,7 +1,7 @@
 {
-  "version": "0.4.2",
-  "versionCode": 42,
+  "version": "0.4.3",
+  "versionCode": 43,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "a7bb0ae31c0d98136e36b29e44069d460a8f761b7314d051f36466ec8a8aa0ca",
-  "notes": "Deutlich bessere Lesbarkeit mit größerer Schrift und höherem Kontrast. Mediathek jetzt mit Sender, Sendungsreihe, Beschreibung, Datum, Laufzeit und echten Vorschaubildern aus der Original-Mediathekseite, sofern verfügbar; sonst hochwertiges Sender-Fallback statt leerer Flächen."
+  "sha256": "e3955fa4e6e21d359fe707082864940d3398a3254093081fe7165ff52264902b",
+  "notes": "Navigation jetzt sichtbar wie gewünscht: Filme/Serien öffnen zuerst Kategorien, danach die Bibliothek und anschließend eine eigene Detailansicht vor Wiedergabe bzw. Staffeln/Episoden. Mediathek ebenfalls mit Detailseite. Skins nutzen zusätzlich Enigma-Home-Motive, Center- und Banner-Marks sowie das 2x3-TV-Raster mit durchgehendem Motiv."
 }
