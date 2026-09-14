@@ -20,4 +20,4 @@ jobs:
         with:
           fetch-depth: 0
       - name: Build and publish v0.9.37
-        run: bash build_tools/build_v0937_catchup_epg_grid.sh
+        run: bash -x build_tools/build_v0937_catchup_epg_grid.sh
