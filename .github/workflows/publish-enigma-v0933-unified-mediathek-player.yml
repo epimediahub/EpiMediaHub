@@ -1,0 +1,23 @@
+name: Publish Enigma v0.9.33 Unified Mediathek Player
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'build_tools/build_v0933_unified_mediathek_player.sh'
+      - '.github/workflows/publish-enigma-v0933-unified-mediathek-player.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build and publish v0.9.33
+        run: bash build_tools/build_v0933_unified_mediathek_player.sh
