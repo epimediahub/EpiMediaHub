@@ -1,0 +1,24 @@
+name: Correct Android v0.4.6 release notes
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android/release-v046-notes-trigger.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  correct-release-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Correct stable Android release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release edit android-latest \
+            --title "EpiMediaHub Android v0.4.6" \
+            --notes "Android v0.4.6 keeps the Enigma-style fixed Family PIN for Family skins, but remote maintenance now has its own separate fixed four-digit maintenance PIN. Remote maintenance is accepted only over Tailscale for the Raspberry/tailnet path; no public router port is opened. On a fresh installation with no playlist, Websetup/Fernwartung is available immediately and opens as the first-run screen. Local QR web setup continues to use its temporary setup PIN."
