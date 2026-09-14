@@ -1,0 +1,55 @@
+name: Inspect v0.9.37 Mediathek Audio
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/inspect-v0937-mediathek-audio.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract Mediathek player source
+        run: |
+          set -e
+          T=/tmp/epiaudio
+          rm -rf "$T"
+          mkdir -p "$T/ar" "$T/data"
+          cd "$T/ar"
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.37.ipk"
+          tar -xzf data.tar.gz -C "$T/data"
+          P="$T/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py"
+          python3 - "$P" <<'PY'
+          import sys
+          from pathlib import Path
+          lines=Path(sys.argv[1]).read_text(encoding='utf-8').splitlines()
+          needles=[
+              'class EpiMediathekPlayer',
+              'def _open_mediathek',
+              'def openMediathek',
+              'def playSelected',
+              'play_open',
+              'EpiMediathekPlayer',
+              'eServiceReference(',
+              'setMute',
+              'volumeMute',
+              'audio',
+          ]
+          printed=set()
+          for needle in needles:
+              hits=[i for i,l in enumerate(lines) if needle in l]
+              print('\n===== %s : %s =====' % (needle,hits[:40]))
+              for i in hits[:20]:
+                  a=max(0,i-30); b=min(len(lines),i+70)
+                  key=(a,b)
+                  if key in printed: continue
+                  printed.add(key)
+                  print('\n--- lines %d-%d ---' % (a+1,b))
+                  for n in range(a,b): print('%05d %s' % (n+1,lines[n]))
+          PY
