@@ -1,0 +1,52 @@
+name: Diagnose Enigma v0.9.39 package
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/diagnose-v0939-package.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect published IPK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          FILE=EpiMediaHub_v0.9.39.ipk
+          sha256sum "$FILE"
+          stat -c '%n %s bytes %a' "$FILE"
+          rm -rf /tmp/diag0939 && mkdir -p /tmp/diag0939
+          cd /tmp/diag0939
+          ar t "$GITHUB_WORKSPACE/$FILE"
+          ar x "$GITHUB_WORKSPACE/$FILE"
+          echo '--- members ---'
+          ls -la
+          echo '--- control archive ---'
+          tar -tvzf control.tar.gz
+          mkdir control
+          tar -xzf control.tar.gz -C control
+          echo '--- control file ---'
+          cat control/control
+          for s in preinst postinst prerm postrm; do
+            if [ -f "control/$s" ]; then
+              echo "--- $s mode/content ---"
+              stat -c '%n mode=%a uid=%u gid=%g' "control/$s"
+              sed -n '1,240p' "control/$s"
+              echo "--- sh -n $s ---"
+              sh -n "control/$s"
+            fi
+          done
+          echo '--- data top entries ---'
+          tar -tvzf data.tar.gz | head -80 || true
+          echo '--- package path collision checks ---'
+          if tar -tzf data.tar.gz | grep -Eq '^\.?/etc/enigma2/(EpiMediaHub|epimediahub)(/|$)'; then
+            echo 'ERROR persistent data path owned by package'; exit 1
+          fi
+          echo 'PACKAGE_DIAG_OK'
