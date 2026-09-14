@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Re-run inspection for Android auto-provisioning parity.
 W="${GITHUB_WORKSPACE:-$(pwd)}"
 B="$W/EpiMediaHub_v0.9.41.ipk"
 T=/tmp/inspect_v0941_tailscale
