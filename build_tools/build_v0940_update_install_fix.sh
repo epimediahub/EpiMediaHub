@@ -79,7 +79,7 @@ replacement='''    # Persistent settings/playlists are not package-owned. Do not
         detail = "\\n".join(lines[-5:]) if lines else "Keine opkg-Ausgabe verfügbar."
         raise Exception("opkg-Fehler %d:\\n%s\\nLog: %s" % (rc, detail, log_path))
     return True'''
-t,n=pattern.subn(replacement,t,count=1)
+t,n=pattern.subn(lambda _match: replacement,t,count=1)
 if n != 1:
     raise SystemExit('Updater backup/install block anchor missing or ambiguous: %d' % n)
 
