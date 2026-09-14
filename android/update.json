@@ -1,7 +1,7 @@
 {
-  "version": "0.3.5",
-  "versionCode": 35,
+  "version": "0.3.6",
+  "versionCode": 36,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "9d7b9904f5984580758d89975e9feed776e9ecea5ace6c70d682f804d07a7f12",
-  "notes": "Reduzierte Startseite mit Live TV, Filme, Serien und Einstellungen. IBO-inspirierter TV-Browser mit Kategorien links und Inhalten rechts. Suche und Favoriten liegen im jeweiligen Bereich. Nach dem Beenden eines Senders kehrt die Liste zum zuletzt abgespielten Sender zurück und fokussiert ihn wieder."
+  "sha256": "c37cb3698116c874ffdd8510b48c8e16eeab2c71b4e03af21b83dbf9940b85af",
+  "notes": "Premium-Skin-Update: Die Logos der gewählten Designs sind jetzt groß und dezent direkt in die vier Startkacheln eingearbeitet und laufen optisch über die Kacheln weiter. Auch die Standard-Skins erhalten das neue hochwertige Kachel-Design mit verbessertem Fokus, Schatten und Akzent-Rahmen. Der IBO-inspirierte Browser aus v0.3.5 bleibt erhalten. Als Skin-Basis dient der eingefrorene Enigma-Stand 0.9.41."
 }
