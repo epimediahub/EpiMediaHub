@@ -90,11 +90,11 @@ web.write_text(s)
 # ---------------------------------------------------------------------------
 vm = java / "MainViewModel.kt"
 s = vm.read_text()
-old = '    val webAdminPin: String = ""\n)'
-require_once(s, old, "UiState webAdminPin")
+old = '    val contentFilterKind: MediaKind? = null\n)'
+require_once(s, old, "UiState contentFilterKind")
 s = s.replace(
     old,
-    '    val webAdminPin: String = "",\n    val webAdminRemoteUrl: String = "",\n    val familyProtectionEnabled: Boolean = false\n)',
+    '    val contentFilterKind: MediaKind? = null,\n    val webAdminRemoteUrl: String = "",\n    val familyProtectionEnabled: Boolean = false\n)',
     1,
 )
 
