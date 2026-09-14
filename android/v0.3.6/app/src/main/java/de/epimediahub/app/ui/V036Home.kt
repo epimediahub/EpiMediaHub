@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -227,7 +228,7 @@ private fun V036HomeTile(
                     Modifier
                         .width(if (focused) 56.dp else 34.dp)
                         .height(3.dp)
-                        .background(accent, RoundedCornerShape(50))
+                        .background(accent, RoundedCornerShape(50.dp))
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
