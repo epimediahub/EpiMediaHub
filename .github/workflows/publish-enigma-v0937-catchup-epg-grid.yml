@@ -20,4 +20,6 @@ jobs:
         with:
           fetch-depth: 0
       - name: Build and publish v0.9.37
-        run: bash -x build_tools/build_v0937_catchup_epg_grid.sh
+        run: |
+          sed -i 's/def _web_setup_qr_png/def _playlist_web_generate_qr/' build_tools/build_v0937_catchup_epg_grid.sh
+          bash build_tools/build_v0937_catchup_epg_grid.sh
