@@ -1,0 +1,48 @@
+name: Inspect Enigma v0.9.34 Playlist Code
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/inspect-v0934-playlist.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Inspect playlist code
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/epiinspect && mkdir -p /tmp/epiinspect/ar /tmp/epiinspect/data
+          cd /tmp/epiinspect/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.34.ipk"
+          tar -xzf data.tar.gz -C ../data
+          P=/tmp/epiinspect/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py
+          echo '=== PLAYLIST MATCHES ==='
+          grep -nEi 'playlist|m3u|xtream|portal|bouquet' "$P" | head -n 500 || true
+          echo '=== CLASS/FUNCTION CONTEXT ==='
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/epiinspect/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py')
+          lines=p.read_text(encoding='utf-8').splitlines()
+          needles=('playlist','m3u','xtream','portal','bouquet')
+          hits=[]
+          for i,line in enumerate(lines):
+              if any(n in line.lower() for n in needles): hits.append(i)
+          ranges=[]
+          for i in hits:
+              a=max(0,i-12); b=min(len(lines),i+22)
+              if ranges and a<=ranges[-1][1]+3: ranges[-1][1]=max(ranges[-1][1],b)
+              else: ranges.append([a,b])
+          for a,b in ranges[:80]:
+              print('\n--- lines %d-%d ---' % (a+1,b))
+              for j in range(a,b): print('%05d %s' % (j+1,lines[j]))
+          PY
