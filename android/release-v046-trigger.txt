@@ -1,1 +1,1 @@
-Retrigger signed Android v0.4.6 after hardening the first-run no-playlist Websetup/Fernwartung insertion. Separate fixed Family-skin and remote-maintenance PINs remain enabled.
+Retrigger signed Android v0.4.6 with zero-playlist Websetup as the first-run screen, separate fixed Family-skin and remote-maintenance PINs, and automatic Websetup start when remote maintenance was already unlocked.
