@@ -630,7 +630,7 @@ grep -q '\[REPLAY\]' "$P"
 # Existing critical fixes/features must survive.
 grep -q 'class EpiMediathekPlayer(MoviePlayer)' "$P"
 grep -q 'class EpiWebPlaylistSetup(Screen)' "$P"
-grep -q 'def _web_setup_qr_png' "$P"
+grep -q 'def _playlist_web_generate_qr' "$P"
 grep -q 'FAMILY_PIN_HASH' "$P"
 grep -q 'family_skins_unlocked' "$P"
 grep -q 'parental_pin_hash' "$P"
