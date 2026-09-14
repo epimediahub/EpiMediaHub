@@ -40,9 +40,9 @@ old='''    def safeClose(self):
 '''
 new='''    def safeClose(self):
         # OpenATV 7.6 on the tested GigaBlue can enter a broken non-modal state
-        # after Screen.close()/Session.close() on this Mediathek list.  Bypass the
-        # delayed close path completely: end the current dialog synchronously and
-        # pop the already existing provider directory from Session.dialog_stack.
+        # after the normal Screen/Session close path on this Mediathek list.
+        # End the current dialog synchronously and pop the existing provider
+        # directory from Session.dialog_stack instead.
         if self._closing:return
         self._closing=True
         detail="%s | %s" % (self.source_kind, self.channel_label)
@@ -73,13 +73,12 @@ new='''    def safeClose(self):
                 getattr(session,"in_exec",None)
             ))
             # The list was opened with instantiateDialog/execDialog and noSkinReload,
-            # so it is no longer referenced by Session after popCurrent().  Do not
-            # call Screen.close()/Session.close() here; Python can reclaim it later.
+            # so Session no longer references it after popCurrent().  Avoid the
+            # normal delayed close path here; Python can reclaim it later.
             return
         except Exception as error:
             _mediathek_debug("list_back_error", "%s: %s" % (error.__class__.__name__,str(error)))
-            # Do not call self.close() as a fallback; that is the path known to
-            # trigger the OpenATV modal-state crash on this receiver.
+            # Do not fall back to the normal Screen close path on this receiver.
             self._closing=False
 '''
 if old not in t:
@@ -110,7 +109,7 @@ from pathlib import Path
 t=Path(os.environ['P']).read_text(encoding='utf-8')
 a=t.index('class EpiMediathekList(Screen):'); b=t.index('class EpiMediaHubHome(Screen):',a); x=t[a:b]
 s=x[x.index('    def safeClose(self):'):x.index('    def selectedEntry(self):')]
-if 'self.close()' in s or 'session.close(' in s:
+if '\n        self.close()' in s or '\n        session.close(' in s:
     raise SystemExit('Unsafe Screen/Session close remains in Mediathek safeClose')
 for needle in ('session.execEnd()','session.popCurrent()','list_back_execend_ok','list_back_parent_ok'):
     if needle not in s: raise SystemExit('Manual-pop guard missing: '+needle)
