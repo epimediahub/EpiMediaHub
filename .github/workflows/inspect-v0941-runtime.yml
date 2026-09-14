@@ -21,11 +21,9 @@ jobs:
           ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.41.ipk"
           mkdir data && tar -xzf data.tar.gz -C data
           P="$T/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py"
-          echo '=== VERSION / STREAM REFS ==='
-          grep -n -C 18 'eServiceReference(1,0,url)\|eServiceReference(1, 0,.*url' "$P" || true
-          echo '=== MEDIATHEK PLAYER ==='
-          grep -n -A 140 -B 20 'class EpiMediathekPlayer' "$P" || true
-          echo '=== SETTINGS / HOME CLASSES ==='
-          grep -n 'class .*Settings\|class EpiMediaHubHome\|Einstellungen\|Settings' "$P" | tail -n 120 || true
-          echo '=== HOME MENU AREA ==='
-          grep -n -A 220 -B 30 'class EpiMediaHubHome' "$P" || true
+          echo '=== SETTINGS CLASS ==='
+          sed -n '11102,11680p' "$P"
+          echo '=== IMPORTS ==='
+          sed -n '1,180p' "$P"
+          echo '=== QR HELPERS ==='
+          grep -n -A 50 -B 20 'qrcode\|QR' "$P" | head -n 280 || true
