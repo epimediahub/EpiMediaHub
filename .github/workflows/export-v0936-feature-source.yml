@@ -1,0 +1,34 @@
+name: Export v0.9.36 Feature Source
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/export-v0936-feature-source.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Export plugin source
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/epi_export
+          mkdir -p /tmp/epi_export/ar /tmp/epi_export/data
+          cd /tmp/epi_export/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.36.ipk"
+          tar -xzf data.tar.gz -C ../data
+          cp ../data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py "$GITHUB_WORKSPACE/v0936_plugin_source.py"
+          cd "$GITHUB_WORKSPACE"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add v0936_plugin_source.py
+          git commit -m 'Export v0.9.36 plugin source for feature work'
+          git push
