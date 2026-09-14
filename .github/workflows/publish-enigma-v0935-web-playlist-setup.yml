@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'build_tools/build_v0935_web_playlist_setup.sh'
+      - 'build_tools/build_v0935_web_playlist_setup_v2.sh'
       - '.github/workflows/publish-enigma-v0935-web-playlist-setup.yml'
   workflow_dispatch:
 
@@ -20,4 +21,4 @@ jobs:
         with:
           fetch-depth: 0
       - name: Build and publish v0.9.35
-        run: bash build_tools/build_v0935_web_playlist_setup.sh
+        run: bash build_tools/build_v0935_web_playlist_setup_v2.sh
