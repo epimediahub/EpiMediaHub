@@ -1,0 +1,20 @@
+[Unit]
+Description=EpiMediaHub Tailscale Provisioner
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/etc/epimediahub-provisioner.env
+ExecStart=/usr/bin/python3 /opt/epimediahub/epimediahub-provisioner.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run
+
+[Install]
+WantedBy=multi-user.target
