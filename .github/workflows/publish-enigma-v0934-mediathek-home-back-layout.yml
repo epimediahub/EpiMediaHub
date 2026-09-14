@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'build_tools/build_v0934_mediathek_home_back_layout.sh'
+      - 'build_tools/build_v0934_mediathek_home_back_layout_v2.sh'
       - '.github/workflows/publish-enigma-v0934-mediathek-home-back-layout.yml'
   workflow_dispatch:
 
@@ -20,4 +20,4 @@ jobs:
         with:
           fetch-depth: 0
       - name: Build and publish v0.9.34
-        run: bash build_tools/build_v0934_mediathek_home_back_layout.sh
+        run: bash build_tools/build_v0934_mediathek_home_back_layout_v2.sh
