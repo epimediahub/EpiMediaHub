@@ -1,1 +1,1 @@
-Trigger signed Android v0.4.6 release with the fixed Enigma Family PIN gate and separately PIN-unlocked Tailscale-only Raspberry remote maintenance.
+Trigger signed Android v0.4.6 release with separate fixed PINs for Family skins and Tailscale remote maintenance. Remote/Websetup must be available before the first playlist is configured, and unlocked remote maintenance must auto-start on later launches.
