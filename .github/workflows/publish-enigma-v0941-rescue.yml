@@ -20,3 +20,5 @@ jobs:
       - name: Build and publish v0.9.41 rescue
         shell: bash
         run: bash build_tools/build_v0941_rescue_0938.sh
+
+# Rescue workflow: intentionally based on the exact v0.9.38 runtime.
