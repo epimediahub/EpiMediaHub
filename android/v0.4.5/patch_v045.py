@@ -57,7 +57,7 @@ new_local = r'''    private fun allIpv4(): List<Pair<NetworkInterface, Inet4Addr
     }.getOrDefault(emptyList())
 
     private fun isVpnInterface(nic: NetworkInterface): Boolean {
-        val name = (nic.name.orEmpty() + " " + nic.displayName.orEmpty()).lowercase()
+        val name = ((nic.name ?: "") + " " + (nic.displayName ?: "")).lowercase()
         return name.contains("tailscale") || name.startsWith("tun") || name.startsWith("wg") ||
             name.contains("wireguard") || name.startsWith("zt") || name.contains("zerotier")
     }
@@ -98,9 +98,13 @@ s = s.replace(
     1,
 )
 
-anchor = '            preferredSubtitleLanguage = prefs.preferredSubtitleLanguage\n'
-require_once(s, anchor, "UiState init subtitle")
-s = s.replace(anchor, anchor.rstrip('\n') + ',\n            familyProtectionEnabled = prefs.hasFamilyPin()\n', 1)
+init_anchor = '''            favorites = prefs.loadFavoriteEntries(),\n            continueWatching = prefs.loadContinue(),\n            preferredAudioLanguage = prefs.preferredAudioLanguage,\n            preferredSubtitleLanguage = prefs.preferredSubtitleLanguage\n'''
+require_once(s, init_anchor, "UiState initial preferences")
+s = s.replace(
+    init_anchor,
+    '''            favorites = prefs.loadFavoriteEntries(),\n            continueWatching = prefs.loadContinue(),\n            preferredAudioLanguage = prefs.preferredAudioLanguage,\n            preferredSubtitleLanguage = prefs.preferredSubtitleLanguage,\n            familyProtectionEnabled = prefs.hasFamilyPin()\n''',
+    1,
+)
 
 old_set = '            set { it.copy(webAdminRunning = true, webAdminUrl = server.address, webAdminPin = pin, error = "") }'
 require_once(s, old_set, "startWebAdmin state")
@@ -131,7 +135,7 @@ controls = r'''    fun restartWebAdmin() {
     }
 
     fun enableFamilyPin(pin: String): Boolean {
-        if (!pin.matches(Regex("\\d{4,8}"))) return false
+        if (!pin.matches(Regex("\d{4,8}"))) return false
         prefs.setFamilyPin(pin)
         set { it.copy(familyProtectionEnabled = true, error = "") }
         return true
@@ -147,7 +151,7 @@ controls = r'''    fun restartWebAdmin() {
     }
 
     fun changeFamilyPin(oldPin: String, newPin: String): Boolean {
-        if (!prefs.verifyFamilyPin(oldPin) || !newPin.matches(Regex("\\d{4,8}"))) return false
+        if (!prefs.verifyFamilyPin(oldPin) || !newPin.matches(Regex("\d{4,8}"))) return false
         prefs.setFamilyPin(newPin)
         set { it.copy(familyProtectionEnabled = true, error = "") }
         return true
