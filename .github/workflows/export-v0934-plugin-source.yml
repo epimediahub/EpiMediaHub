@@ -1,0 +1,34 @@
+name: Export v0.9.34 Plugin Source
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/export-v0934-plugin-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Export plugin source for patch preparation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/episource && mkdir -p /tmp/episource/ar /tmp/episource/data
+          cd /tmp/episource/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.34.ipk"
+          tar -xzf data.tar.gz -C ../data
+          cp ../data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py "$GITHUB_WORKSPACE/v0934_plugin_source.py"
+          cd "$GITHUB_WORKSPACE"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add v0934_plugin_source.py
+          git commit -m 'Export v0.9.34 plugin source for v0.9.35 preparation'
+          git push
