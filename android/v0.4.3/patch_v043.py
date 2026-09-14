@@ -68,32 +68,13 @@ home_anchor = 'V041HomeScreen(vm,isTv,accent)'
 require_once(s, home_anchor, "v0.4.1 home delegate")
 s = s.replace(home_anchor, 'V043HomeScreen(vm,isTv,accent)', 1)
 
-# Replace the category row with the slim-left-accent Enigma visual language.
-cat_start = s.find('@Composable\nprivate fun CategoryListRow')
-cat_end = s.find('@Composable\nfun ItemsScreen', cat_start)
-if cat_start < 0 or cat_end < 0:
-    raise SystemExit("CategoryListRow markers missing")
-category_row = r'''@Composable
-private fun CategoryListRow(title:String,accent:Color,onClick:()->Unit){
-    var focused by remember{mutableStateOf(false)}
-    val shape=RoundedCornerShape(14.dp)
-    Row(
-        Modifier.fillMaxWidth().heightIn(min=64.dp)
-            .onFocusChanged{focused=it.isFocused}.focusable()
-            .background(if(focused)Color(0xEA101620)else Color(0xC90A111A),shape)
-            .border(if(focused)2.dp else 1.dp,if(focused)Color.White.copy(.26f)else Color.White.copy(.10f),shape)
-            .clickable(onClick=onClick),
-        verticalAlignment=Alignment.CenterVertically
-    ){
-        Box(Modifier.fillMaxHeight().width(if(focused)7.dp else 3.dp).background(if(focused)accent else accent.copy(.36f)))
-        Spacer(Modifier.width(16.dp))
-        Text(title,color=Color.White,fontSize=19.sp,fontWeight=FontWeight.Black,modifier=Modifier.weight(1f),maxLines=2)
-        Icon(Icons.Default.ChevronRight,null,tint=if(focused)accent else Color.White.copy(.76f),modifier=Modifier.padding(end=16.dp))
-    }
-}
-
-'''
-s = s[:cat_start] + category_row + s[cat_end:]
+category_call = 'items(u.categories,key={it.id}){c->CategoryListRow(c.name,accent){vm.switchLibraryCategory(kind,c)}}'
+require_once(s, category_call, "category row call")
+s = s.replace(
+    category_call,
+    'items(u.categories,key={it.id}){c->V043CategoryRow(c.name,accent){vm.switchLibraryCategory(kind,c)}}',
+    1,
+)
 
 # Library selections now open a proper detail page instead of immediately playing.
 replacements = {
