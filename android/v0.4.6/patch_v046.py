@@ -147,3 +147,8 @@ s = med.read_text().replace('EpiMediaHub-Android/0.4.5', 'EpiMediaHub-Android/0.
 med.write_text(s)
 
 print("Android v0.4.6 fixed Family PIN + Tailscale-only Raspberry remote gate applied")
+
+# Apply the final v0.4.6 refinement: independent Fernwartungs-PIN and
+# remote/web setup availability before the first playlist exists.
+extra = Path(__file__).with_name("patch_v046b.py")
+exec(compile(extra.read_text(encoding="utf-8"), str(extra), "exec"), {"__name__": "__main__"})
