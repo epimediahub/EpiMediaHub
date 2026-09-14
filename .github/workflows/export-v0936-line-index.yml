@@ -1,0 +1,29 @@
+name: Export v0.9.36 Line Index
+on:
+  push:
+    branches: [ main ]
+    paths: ['.github/workflows/export-v0936-line-index.yml']
+permissions:
+  contents: write
+jobs:
+  index:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          lines=Path('v0936_plugin_source.py').read_text(encoding='utf-8').splitlines()
+          needles=['def _db_connect','def playlist_entries','def build_playlist_db','def epg_programmes_for_entry','def download_epg','class EpiEPGScreen','class EpiContentScreen','class EpiLivePlayer','def playSelected','def openEPG','def selectedEntry','def _xtream_fetch']
+          out=[]
+          for n in needles:
+              matches=[i+1 for i,l in enumerate(lines) if n in l]
+              out.append('%s: %s\n'%(n, ','.join(map(str,matches))))
+          Path('v0936_line_index.txt').write_text(''.join(out),encoding='utf-8')
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add v0936_line_index.txt
+          git commit -m 'Export v0.9.36 line index'
+          git push
