@@ -18,8 +18,8 @@ def replace_once(path: Path, old: str, new: str, label: str):
 models = java / "model/Models.kt"
 replace_once(
     models,
-    '    val epgId: String = ""\n)',
-    '    val epgId: String = "",\n    val tvArchive: Boolean = false,\n    val tvArchiveDurationDays: Int = 0\n)',
+    '    val epgId: String = "",\n    val year: String = "",',
+    '    val epgId: String = "",\n    val tvArchive: Boolean = false,\n    val tvArchiveDurationDays: Int = 0,\n    val year: String = "",',
     "MediaEntry archive fields"
 )
 
@@ -27,8 +27,8 @@ replace_once(
 xtream = java / "data/XtreamClient.kt"
 replace_once(
     xtream,
-    'epgId=o.optString("epg_channel_id")))',
-    'epgId=o.optString("epg_channel_id"),tvArchive=o.optInt("tv_archive",0)==1,tvArchiveDurationDays=o.optInt("tv_archive_duration",0)))',
+    '                                epgId = o.optString("epg_channel_id")\n                            )',
+    '                                epgId = o.optString("epg_channel_id"),\n                                tvArchive = o.optInt("tv_archive", 0) == 1,\n                                tvArchiveDurationDays = o.optInt("tv_archive_duration", 0)\n                            )',
     "Xtream live archive metadata"
 )
 
