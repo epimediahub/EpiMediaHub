@@ -1,0 +1,295 @@
+name: Release signed EpiMediaHub Android v0.4.3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android/release-v043-trigger.txt'
+
+concurrency:
+  group: epimediahub-android-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release-android-v043:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require permanent signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+
+      - name: Reconstruct Gradle project shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* > .ci-android/source.b64
+          base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
+          echo "192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c  .ci-android/source.tar.gz" | sha256sum -c -
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+
+      - name: Pin Android Gradle and Kotlin toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+
+      - name: Install Android v0.4.3 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$PROJECT_ROOT/app/src/main/java"
+          rm -f "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
+          cp -a android/v0.3.0/app/. "$PROJECT_ROOT/app/"
+          cp -a android/v0.3.1/app/. "$PROJECT_ROOT/app/"
+          cp -a android/v0.3.2/app/. "$PROJECT_ROOT/app/"
+          cp -a android/v0.3.3/app/. "$PROJECT_ROOT/app/"
+          cp -a android/v0.3.4/app/. "$PROJECT_ROOT/app/"
+          cp -a android/v0.3.5/app/. "$PROJECT_ROOT/app/"
+          cp -a android/v0.3.6/app/. "$PROJECT_ROOT/app/"
+          cp -a android/v0.4.0/app/. "$PROJECT_ROOT/app/"
+          cp -a android/v0.4.1/app/. "$PROJECT_ROOT/app/"
+          cp -a android/v0.4.2/app/. "$PROJECT_ROOT/app/"
+          cp -a android/v0.4.3/app/. "$PROJECT_ROOT/app/"
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p = Path(os.environ['PROJECT_ROOT']) / 'app/src/main/java/de/epimediahub/app/ui/Screens.kt'
+          s = p.read_text()
+          s = s.replace('onClick={if(kind==MediaKind.SERIES){{vm.navigate(Screen.Episodes(m))}}else{{vm.play(m)}}}', 'onClick={if(kind==MediaKind.SERIES) vm.navigate(Screen.Episodes(m)) else vm.play(m)}')
+          s = s.replace('onClick={if(m.kind==MediaKind.SERIES){{vm.navigate(Screen.Episodes(m))}}else{{vm.play(m)}}}', 'onClick={if(m.kind==MediaKind.SERIES) vm.navigate(Screen.Episodes(m)) else vm.play(m)}')
+          s = s.replace('LinearProgressIndicator({it},Modifier.fillMaxWidth().padding(top=6.dp))', 'LinearProgressIndicator(progress={it},modifier=Modifier.fillMaxWidth().padding(top=6.dp))')
+          p.write_text(s)
+          PY
+
+          python3 android/v0.3.2/patch_screens.py "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+          python3 android/v0.3.3/patch_mainviewmodel.py "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          python3 android/v0.3.3/patch_screens.py "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+          python3 android/v0.3.4/patch_screens.py "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+          python3 android/v0.3.5/patch_mainviewmodel.py "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          python3 android/v0.3.5/patch_screens.py "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+          python3 android/v0.3.6/patch_screens.py "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+          PROJECT_ROOT="$PROJECT_ROOT" python3 android/v0.4.0/patch_v040.py
+          PROJECT_ROOT="$PROJECT_ROOT" python3 android/v0.4.1/patch_v041.py
+          PROJECT_ROOT="$PROJECT_ROOT" python3 android/v0.4.2/fix_v042_source.py
+          PROJECT_ROOT="$PROJECT_ROOT" python3 android/v0.4.2/patch_v042.py
+          PROJECT_ROOT="$PROJECT_ROOT" python3 android/v0.4.3/patch_v043.py
+
+          grep -q 'versionName = "0.4.3"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -q 'versionCode = 43' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -q 'fun V043HomeScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V043Home.kt"
+          grep -q 'data class Details' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -q 'pendingAutoOpenKind = null' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -q 'V043MediaDetailScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -q 'ParityMediathekDetail' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ParityRoutes.kt"
+          grep -q 'vm.navigate(ParityMediathekDetail(media))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
+          grep -q 'homeMotifRes' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/ThemeRepository.kt"
+          grep -q 'SCREEN_ORIENTATION_SENSOR_LANDSCAPE' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainActivity.kt"
+          grep -q 'KEYCODE_NUMPAD_5' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -q 'tvArchiveDurationDays' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/model/Models.kt"
+
+      - name: Import frozen v0.9.41 themes and artwork
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android/ipk
+          cd .ci-android/ipk
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.41.ipk"
+          DATA_TAR=""
+          for candidate in data.tar.gz data.tar.xz data.tar.zst data.tar.bz2 data.tar; do
+            if [ -f "$candidate" ]; then DATA_TAR="$candidate"; break; fi
+          done
+          test -n "$DATA_TAR"
+          case "$DATA_TAR" in
+            *.tar.gz) tar -xzf "$DATA_TAR" ;;
+            *.tar.xz) tar -xJf "$DATA_TAR" ;;
+            *.tar.zst) tar --zstd -xf "$DATA_TAR" ;;
+            *.tar.bz2) tar -xjf "$DATA_TAR" ;;
+            *.tar) tar -xf "$DATA_TAR" ;;
+          esac
+          PLUGIN="$PWD/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub"
+          APP="$GITHUB_WORKSPACE/$PROJECT_ROOT/app/src/main"
+          DRAW="$APP/res/drawable-nodpi"
+          mkdir -p "$DRAW" "$APP/res/raw"
+          test -d "$PLUGIN/themes"
+          test -f "$PLUGIN/themes/catalog.json"
+          for file in "$PLUGIN"/themes/*.png; do cp "$file" "$DRAW/theme_$(basename "$file")"; done
+          for file in "$PLUGIN"/themes/marks/*.png; do cp "$file" "$DRAW/mark_$(basename "$file")"; done
+          if compgen -G "$PLUGIN/themes/home_motifs/*.png" > /dev/null; then
+            for file in "$PLUGIN"/themes/home_motifs/*.png; do cp "$file" "$DRAW/home_motif_$(basename "$file")"; done
+          fi
+          if compgen -G "$PLUGIN/themes/center_marks/*.png" > /dev/null; then
+            for file in "$PLUGIN"/themes/center_marks/*.png; do cp "$file" "$DRAW/center_mark_$(basename "$file")"; done
+          fi
+          if compgen -G "$PLUGIN/themes/banner_marks/*.png" > /dev/null; then
+            for file in "$PLUGIN"/themes/banner_marks/*.png; do cp "$file" "$DRAW/banner_mark_$(basename "$file")"; done
+          fi
+          cp "$PLUGIN/themes/catalog.json" "$APP/res/raw/theme_catalog.json"
+          cp "$PLUGIN/header.png" "$DRAW/brand_header.png"
+          cp "$PLUGIN/header.png" "$DRAW/tv_banner.png"
+          cp "$PLUGIN/plugin.png" "$DRAW/app_icon.png"
+          cp "$PLUGIN/splash.png" "$DRAW/splash.png"
+          cp "$PLUGIN/home_live.png" "$DRAW/icon_live.png"
+          cp "$PLUGIN/home_movies.png" "$DRAW/icon_movies.png"
+          cp "$PLUGIN/home_series.png" "$DRAW/icon_series.png"
+          cp "$PLUGIN/home_search.png" "$DRAW/icon_search.png"
+          cp "$PLUGIN/home_settings.png" "$DRAW/icon_settings.png"
+          cp "$PLUGIN/home_playlist.png" "$DRAW/icon_playlist.png"
+          test "$(find "$DRAW" -maxdepth 1 -type f -name 'theme_*.png' | wc -l)" -ge 50
+          test "$(find "$DRAW" -maxdepth 1 -type f -name 'mark_*.png' | wc -l)" -ge 50
+          test "$(find "$DRAW" -maxdepth 1 -type f -name 'home_motif_*.png' | wc -l)" -ge 1
+
+      - name: Install permanent release signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/epimediahub-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias epimediahub >/dev/null
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_ROOT'])/'app/build.gradle.kts'
+          s=p.read_text()
+          anchor='    buildTypes {\n'
+          signing='''    signingConfigs {\n        create("release") {\n            storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))\n            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")\n            keyAlias = "epimediahub"\n            keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")\n        }\n    }\n\n'''
+          s=s.replace(anchor,signing+anchor,1)
+          s=s.replace('        release {\n            isMinifyEnabled = false','        release {\n            signingConfig = signingConfigs.getByName("release")\n            isMinifyEnabled = false',1)
+          p.write_text(s)
+          PY
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configure Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if [ ! -x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            SDK_ROOT="/usr/local/lib/android/sdk"
+          fi
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build signed release APK
+        shell: bash
+        run: |
+          cd "$PROJECT_ROOT"
+          gradle :app:assembleRelease --stacktrace --no-daemon
+
+      - name: Verify permanent signing certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$PROJECT_ROOT/app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apk-signature.txt
+          CERT="$(grep -i 'certificate SHA-256 digest:' /tmp/apk-signature.txt | head -n1 | awk -F': ' '{print $2}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+
+      - name: Prepare release artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-release.apk" dist/EpiMediaHub-Android.apk
+          cp dist/EpiMediaHub-Android.apk dist/EpiMediaHub_Android_v0.4.3-release.apk
+          sha256sum dist/EpiMediaHub-Android.apk | tee dist/SHA256SUMS.txt
+
+      - name: Upload signed build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-Android-v0.4.3-signed
+          path: |
+            dist/EpiMediaHub_Android_v0.4.3-release.apk
+            dist/SHA256SUMS.txt
+          retention-days: 30
+
+      - name: Publish stable Downloader APK
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="android-latest"
+          ASSET="dist/EpiMediaHub-Android.apk"
+          NOTES="Android v0.4.3 brings the Android navigation and skins closer to Enigma v0.9.41: Home now uses the Enigma 2x3 TV composition with one continuous theme motif, banner/center theme artwork and slim accent focus bars. Movie and series libraries keep the category step visible, then open a dedicated details page before playback or season/episode selection. Mediathek entries also open a full programme detail page before playback. v0.4.2 readability, images and metadata remain intact."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber
+            gh release edit "$TAG" --title "EpiMediaHub Android v0.4.3" --notes "$NOTES"
+          else
+            gh release create "$TAG" "$ASSET" --target "$GITHUB_SHA" --title "EpiMediaHub Android v0.4.3" --notes "$NOTES"
+          fi
+
+      - name: Publish matching update manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHA="$(sha256sum dist/EpiMediaHub-Android.apk | awk '{print $1}')"
+          python3 - "$SHA" <<'PY'
+          import json,sys
+          from pathlib import Path
+          data={
+            "version":"0.4.3",
+            "versionCode":43,
+            "url":"https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
+            "sha256":sys.argv[1],
+            "notes":"Navigation jetzt sichtbar wie gewünscht: Filme/Serien öffnen zuerst Kategorien, danach die Bibliothek und anschließend eine eigene Detailansicht vor Wiedergabe bzw. Staffeln/Episoden. Mediathek ebenfalls mit Detailseite. Skins nutzen zusätzlich Enigma-Home-Motive, Center- und Banner-Marks sowie das 2x3-TV-Raster mit durchgehendem Motiv."
+          }
+          Path('/tmp/update.json').write_text(json.dumps(data,indent=2,ensure_ascii=False)+'\n')
+          PY
+          FILE_SHA="$(gh api "repos/$GITHUB_REPOSITORY/contents/android/update.json?ref=main" --jq .sha)"
+          CONTENT="$(base64 -w0 /tmp/update.json)"
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/android/update.json" -f message="Update Android updater manifest to signed v0.4.3" -f content="$CONTENT" -f sha="$FILE_SHA" -f branch="main" >/dev/null
+
+      - name: Show stable Downloader URL
+        run: echo "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk"
