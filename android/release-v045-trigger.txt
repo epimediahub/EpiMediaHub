@@ -1,1 +1,1 @@
-Trigger signed Android v0.4.5 release with compact QR web setup, VPN remote maintenance and Family skin PIN protection.
+Retrigger signed Android v0.4.5 after fixing the Family PIN initial-state patch anchor.
