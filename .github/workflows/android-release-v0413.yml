@@ -1,26 +1,37 @@
-name: Build EpiMediaHub Android v0.4.13
+name: Release signed EpiMediaHub Android v0.4.13
 
 on:
   workflow_dispatch:
   push:
     branches: [android-v0.4.13-setup-code]
     paths:
-      - 'android/v0.4.13/**'
-      - 'build_tools/install_android_v0413_source.sh'
       - '.github/workflows/android-release-v0413.yml'
 
 concurrency:
-  group: epimediahub-android-v0413
-  cancel-in-progress: true
+  group: epimediahub-android-v0413-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
 
 jobs:
-  build-android-v0413:
+  release-android-v0413:
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       TAILSCALE_ANDROID_SHA: c412dfe3b28ed7c5dd4de233149fa1bd55065dfd
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require permanent signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
       - name: Reconstruct project
         shell: bash
         run: |
@@ -53,6 +64,27 @@ jobs:
         run: bash build_tools/install_android_v0413_source.sh
       - name: Import Enigma v0.9.41 skins
         run: bash build_tools/import_enigma_v0941_android_assets.sh
+      - name: Install permanent release signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/epimediahub-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias epimediahub >/dev/null
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_ROOT'])/'app/build.gradle.kts'
+          s=p.read_text()
+          anchor='    buildTypes {\n'
+          signing='''    signingConfigs {\n        create("release") {\n            storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))\n            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")\n            keyAlias = "epimediahub"\n            keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")\n        }\n    }\n\n'''
+          if anchor not in s: raise SystemExit('buildTypes anchor missing')
+          s=s.replace(anchor, signing+anchor, 1)
+          s=s.replace('        release {\n            isMinifyEnabled = false','        release {\n            signingConfig = signingConfigs.getByName("release")\n            isMinifyEnabled = false',1)
+          p.write_text(s)
+          PY
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -73,19 +105,55 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
-      - name: Compile v0.4.13
+      - name: Build signed v0.4.13
         shell: bash
         run: |
           cd "$PROJECT_ROOT"
-          gradle :app:assembleDebug --stacktrace --no-daemon
-      - name: Stage APK
+          gradle :app:assembleRelease --stacktrace --no-daemon
+      - name: Verify permanent signing certificate
         shell: bash
         run: |
+          set -euo pipefail
+          APK="$PROJECT_ROOT/app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apk-signature.txt
+          CERT="$(grep -i 'certificate SHA-256 digest:' /tmp/apk-signature.txt | head -n1 | awk -F': ' '{print $2}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+      - name: Prepare release files
+        shell: bash
+        run: |
+          set -euo pipefail
           mkdir -p dist
-          cp "$PROJECT_ROOT/app/build/outputs/apk/debug/app-debug.apk" dist/EpiMediaHub-Android-v0.4.13-debug.apk
-          sha256sum dist/EpiMediaHub-Android-v0.4.13-debug.apk > dist/SHA256SUMS.txt
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-release.apk" dist/EpiMediaHub-Android.apk
+          cp dist/EpiMediaHub-Android.apk dist/EpiMediaHub_Android_v0.4.13-release.apk
+          SHA="$(sha256sum dist/EpiMediaHub-Android.apk | awk '{print $1}')"
+          sha256sum dist/EpiMediaHub-Android.apk > dist/SHA256SUMS.txt
+          python3 - "$SHA" <<'PY'
+          import json,sys
+          from pathlib import Path
+          data={"version":"0.4.13","versionCode":53,"url":"https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk","sha256":sys.argv[1],"notes":"Setup-Code-Provisionierung, Geräte-Konfigurationssync und reparierter Android FileProvider für In-App-Updates."}
+          Path('dist/update.json').write_text(json.dumps(data,indent=2,ensure_ascii=False)+'\n')
+          PY
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Android-v0.4.13-validation
-          path: dist/
-          retention-days: 14
+          name: EpiMediaHub-Android-v0.4.13-signed
+          path: |
+            dist/EpiMediaHub_Android_v0.4.13-release.apk
+            dist/SHA256SUMS.txt
+            dist/update.json
+          retention-days: 30
+      - name: Publish stable Downloader APK
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="android-latest"
+          NOTES="Android v0.4.13 test release: setup-code provisioning, device configuration sync foundation and repaired FileProvider installer."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/EpiMediaHub-Android.apk dist/update.json --clobber
+            gh release edit "$TAG" --title "EpiMediaHub Android v0.4.13" --notes "$NOTES"
+          else
+            gh release create "$TAG" dist/EpiMediaHub-Android.apk dist/update.json --target "$GITHUB_SHA" --title "EpiMediaHub Android v0.4.13" --notes "$NOTES"
+          fi
+      - name: Show stable Downloader URL
+        run: echo "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk"
