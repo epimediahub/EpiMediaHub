@@ -20,8 +20,9 @@ TS_OAUTH_CLIENT_SECRET=
 TS_TAILNET=-
 TS_DEVICE_TAG=tag:epimediahub-family
 
-# Raspberry LAN bootstrap endpoint. This is deliberately LAN-only.
-EPI_PROVISION_HOST=192.168.0.207
+# Raspberry LAN bootstrap endpoint. Listen on all Pi interfaces; requests remain
+# restricted to the configured LAN subnet by the provisioner itself.
+EPI_PROVISION_HOST=0.0.0.0
 EPI_PROVISION_PORT=8787
 EPI_PROVISION_LAN=192.168.0.0/24
 
@@ -35,6 +36,13 @@ EOF
   exit 2
 fi
 
+# Migrate installations created before Android v0.4.9. Binding the service to
+# 192.168.0.207 made it disappear as soon as DHCP assigned the Pi another IP.
+if grep -q '^EPI_PROVISION_HOST=192\.168\.0\.207$' /etc/epimediahub-provisioner.env; then
+  sed -i 's/^EPI_PROVISION_HOST=192\.168\.0\.207$/EPI_PROVISION_HOST=0.0.0.0/' /etc/epimediahub-provisioner.env
+  echo "Alte feste Raspberry-IP entfernt: Provisioner lauscht jetzt auf allen LAN-Interfaces."
+fi
+
 set -a
 # shellcheck disable=SC1091
 . /etc/epimediahub-provisioner.env
@@ -46,9 +54,10 @@ fi
 
 systemctl daemon-reload
 systemctl enable --now epimediahub-provisioner.service
+systemctl restart epimediahub-provisioner.service
 sleep 1
 systemctl --no-pager --full status epimediahub-provisioner.service || true
 
 echo
-echo "Provisioner aktiv. Test im Heimnetz:"
-echo "  curl http://${EPI_PROVISION_HOST:-192.168.0.207}:${EPI_PROVISION_PORT:-8787}/health"
+echo "Provisioner aktiv auf Port ${EPI_PROVISION_PORT:-8787}."
+echo "Die Android-App v0.4.9 findet die aktuelle Raspberry-IP automatisch im lokalen /24-Netz."
