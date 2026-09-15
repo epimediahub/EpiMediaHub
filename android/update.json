@@ -1,7 +1,7 @@
 {
-  "version": "0.4.8",
-  "versionCode": 48,
+  "version": "0.4.9",
+  "versionCode": 49,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "0eabc111290e2048edf22b07a41205322289e385fe258feb21fa88a0d242e0f7",
-  "notes": "Fernwartung stabilisiert: NeedsLogin wird sofort erkannt und kann per Fernwartungs-PIN erneuert werden. Raspberry-Erkennung über epimedia.local plus LAN-Fallback; laufende Statusprüfung verhindert veraltete Fernwartungsanzeigen."
+  "sha256": "5941b87c636458db6d17ea3e824c196e7033f6f0c3b4af5d59ce3dd4f385e4ce",
+  "notes": "Raspberry-Fernwartung findet den Provisioner jetzt automatisch im lokalen /24-Netz statt von einer festen .207-IP abzuhängen. Der dauerhafte Fernbedienungs-Hinweis im Player wurde entfernt; die Tastenfunktionen bleiben erhalten."
 }
