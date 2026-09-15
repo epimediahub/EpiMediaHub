@@ -1,7 +1,7 @@
 {
-  "version": "0.4.9",
-  "versionCode": 49,
+  "version": "0.4.10",
+  "versionCode": 50,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "5941b87c636458db6d17ea3e824c196e7033f6f0c3b4af5d59ce3dd4f385e4ce",
-  "notes": "Raspberry-Fernwartung findet den Provisioner jetzt automatisch im lokalen /24-Netz statt von einer festen .207-IP abzuhängen. Der dauerhafte Fernbedienungs-Hinweis im Player wurde entfernt; die Tastenfunktionen bleiben erhalten."
+  "sha256": "2ff4668bf4ef6d2d3e3097df0c6acb46e6970b22c3dab17632cb6a887e2eea6c",
+  "notes": "Fernwartung nutzt jetzt die native Tailscale-Anmeldung mit offiziellem Login-QR. Der Raspberry wird anschließend als Tailscale-Peer per Hostname/MagicDNS erkannt; der alte LAN-Provisioner ist für Android nicht mehr erforderlich."
 }
