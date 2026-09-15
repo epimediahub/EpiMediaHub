@@ -6,6 +6,7 @@ set -euo pipefail
 # bootstrap. All player/UI fixes from v0.4.9 remain intact.
 bash build_tools/install_android_v049_source.sh
 PROJECT_ROOT="$PROJECT_ROOT" python3 android/v0.4.10/patch_v0410.py
+PROJECT_ROOT="$PROJECT_ROOT" python3 android/v0.4.10/patch_v0410b.py
 
 grep -q 'versionName = "0.4.10"' "$PROJECT_ROOT/app/build.gradle.kts"
 grep -q 'versionCode = 50' "$PROJECT_ROOT/app/build.gradle.kts"
