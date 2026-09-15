@@ -1,0 +1,39 @@
+name: Inspect Android v0.4.13 entry points
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [android-v0.4.13-setup-code]
+    paths:
+      - '.github/workflows/inspect-android-v0413-entry.yml'
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct Android source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* > .ci-android/source.b64
+          base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+      - name: Install through v0.4.12
+        shell: bash
+        run: bash build_tools/install_android_v0412_source.sh
+      - name: Print entry-point source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '===== MANIFEST ====='
+          cat "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
+          echo '===== MAINACTIVITY ====='
+          cat "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainActivity.kt"
+          echo '===== APP ====='
+          cat "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          echo '===== VIEWMODEL API ====='
+          grep -n -E 'class MainViewModel|fun |val ui|StateFlow|load|playlist|navigate|Screen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt" | head -n 300 || true
