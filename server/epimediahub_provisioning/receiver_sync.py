@@ -30,6 +30,7 @@ def migrate(con):
         ("last_sync_at", "TEXT"),
         ("last_sync_status", "TEXT"),
         ("last_sync_error", "TEXT"),
+        ("sync_bootstrap_hash", "TEXT"),
     ):
         if name not in device_cols:
             con.execute("ALTER TABLE devices ADD COLUMN %s %s" % (name, ddl))
@@ -61,6 +62,10 @@ def save_customer_config(con, customer_id, config):
         "UPDATE customers SET config_json=?,config_version=? WHERE id=?",
         (json.dumps(config, separators=(",", ":")), new_version, customer_id),
     )
+    con.execute(
+        "UPDATE devices SET last_sync_status='pending',last_sync_error=NULL WHERE customer_id=? AND enabled=1",
+        (customer_id,),
+    )
     return new_version
 
 
@@ -75,6 +80,16 @@ def rollback_customer_config(con, customer_id):
     if not previous:
         return None
     return save_customer_config(con, customer_id, json.loads(previous["config_json"] or "{}"))
+
+
+def create_sync_bootstrap(con, device_row_id):
+    """Create a one-time token that upgrades an existing receiver to normal session-token auth."""
+    token = secrets.token_urlsafe(32)
+    cur = con.execute(
+        "UPDATE devices SET sync_bootstrap_hash=? WHERE id=? AND enabled=1",
+        (_digest(token), device_row_id),
+    )
+    return token if cur.rowcount else None
 
 
 def _bearer():
@@ -92,6 +107,36 @@ def register(app, db):
             "SELECT d.*,c.config_json,c.config_version,c.enabled customer_enabled FROM devices d JOIN customers c ON c.id=d.customer_id WHERE d.session_token_hash=?",
             (_digest(token),),
         ).fetchone()
+
+    @bp.post("/v1/device/bootstrap")
+    def bootstrap_device():
+        body = request.get_json(silent=True) or {}
+        device_id = str(body.get("device_id", "")).strip()
+        bootstrap_token = str(body.get("bootstrap_token", "")).strip()
+        platform = str(body.get("platform", "enigma2")).strip() or "enigma2"
+        if not device_id or not bootstrap_token:
+            return jsonify(error="invalid_request"), 400
+        with db() as con:
+            migrate(con)
+            con.execute("BEGIN IMMEDIATE")
+            row = con.execute(
+                "SELECT d.*,c.config_json,c.config_version,c.enabled customer_enabled FROM devices d JOIN customers c ON c.id=d.customer_id WHERE d.device_id=? AND d.sync_bootstrap_hash=?",
+                (device_id, _digest(bootstrap_token)),
+            ).fetchone()
+            if not row or not row["enabled"] or not row["customer_enabled"]:
+                return jsonify(error="invalid_bootstrap"), 401
+            session_token = secrets.token_urlsafe(48)
+            now = _iso_now()
+            con.execute(
+                "UPDATE devices SET platform=?,session_token_hash=?,sync_bootstrap_hash=NULL,last_seen_at=?,last_sync_status='pending',last_sync_error=NULL WHERE id=?",
+                (platform, _digest(session_token), now, row["id"]),
+            )
+            return jsonify(
+                session_token=session_token,
+                customer_id=row["customer_id"],
+                config_version=int(row["config_version"]),
+                config=json.loads(row["config_json"] or "{}"),
+            )
 
     @bp.get("/v1/device/config")
     def device_config():
