@@ -7,7 +7,7 @@ import qrcode
 from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
 
 BASE_DIR = Path(os.environ.get("EPIMEDIAHUB_DATA_DIR", "/var/lib/epimediahub")); DB_PATH = BASE_DIR / "provisioning.db"
-PUBLIC_BASE_URL = os.environ.get("EPIMEDIAHUB_PUBLIC_URL", "https://setup.example.invalid").rstrip("/")
+PUBLIC_BASE_URL = os.environ.get("EPIMEDIAHUB_PUBLIC_URL", "https://setup.epimediahub.com").rstrip("/")
 ADMIN_TOKEN = os.environ.get("EPIMEDIAHUB_ADMIN_TOKEN", ""); ADMIN_PASSWORD = os.environ.get("EPIMEDIAHUB_ADMIN_PASSWORD", "")
 SECRET_KEY = os.environ.get("EPIMEDIAHUB_SECRET_KEY", secrets.token_hex(32)); CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 app = Flask(__name__); app.secret_key = SECRET_KEY; app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
