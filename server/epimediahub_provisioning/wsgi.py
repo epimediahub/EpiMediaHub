@@ -5,6 +5,7 @@ from datetime import datetime
 from flask import render_template
 
 from app import app, db, digest
+import device_api  # registers authenticated /v1/device/* routes and schema migrations
 
 
 @app.get("/connect/<token>")
