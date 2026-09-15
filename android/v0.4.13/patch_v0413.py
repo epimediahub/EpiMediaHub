@@ -12,6 +12,20 @@ for rel in ["ui/V044Home.kt","ui/Screens.kt","data/MediathekClient.kt"]:
     p=java/rel
     if p.exists(): p.write_text(p.read_text().replace("0.4.12","0.4.13"))
 
+# v0.4.12 already uses FileProvider in UpdateManager, but the reconstructed
+# project did not guarantee a matching provider declaration/path resource.
+# Install both explicitly so ACTION_VIEW can hand the downloaded APK to Android.
+manifest = root / "app/src/main/AndroidManifest.xml"
+ms = manifest.read_text()
+provider = '''        <provider\n            android:name="androidx.core.content.FileProvider"\n            android:authorities="${applicationId}.fileprovider"\n            android:exported="false"\n            android:grantUriPermissions="true">\n            <meta-data\n                android:name="android.support.FILE_PROVIDER_PATHS"\n                android:resource="@xml/epimediahub_file_paths" />\n        </provider>\n'''
+if '${applicationId}.fileprovider' not in ms:
+    if '</application>' not in ms: raise SystemExit('AndroidManifest application anchor missing')
+    ms = ms.replace('</application>', provider + '    </application>', 1)
+manifest.write_text(ms)
+xml_dir = root / "app/src/main/res/xml"
+xml_dir.mkdir(parents=True, exist_ok=True)
+(xml_dir / "epimediahub_file_paths.xml").write_text('''<?xml version="1.0" encoding="utf-8"?>\n<paths xmlns:android="http://schemas.android.com/apk/res/android">\n    <external-files-path name="update_downloads" path="Download/" />\n</paths>\n''')
+
 (java/"data/SetupCodeProvisioning.kt").write_text(r'''package de.epimediahub.app.data
 
 import android.content.Context
@@ -90,4 +104,4 @@ import de.epimediahub.app.data.*
 import kotlinx.coroutines.*
 @Composable fun SetupCodeLogin(provisioningBaseUrl:String,onProvisioned:()->Unit,modifier:Modifier=Modifier){val context=LocalContext.current;val scope=rememberCoroutineScope();var code by remember{mutableStateOf("")};var error by remember{mutableStateOf<String?>(null)};var busy by remember{mutableStateOf(false)};Column(modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(10.dp)){Text("Oder mit Einrichtungscode anmelden",style=MaterialTheme.typography.titleMedium);OutlinedTextField(value=code,onValueChange={code=SetupCodeProvisioning.normalize(it);error=null},label={Text("Einrichtungscode")},placeholder={Text("z. B. EPI7-K4M9-2ABC")},singleLine=true,enabled=!busy,modifier=Modifier.fillMaxWidth());Button(enabled=!busy&&SetupCodeProvisioning.isValid(code),modifier=Modifier.fillMaxWidth(),onClick={busy=true;error=null;scope.launch{val r=withContext(Dispatchers.IO){SetupCodeProvisioning.redeem(context,provisioningBaseUrl,code)};busy=false;when(r){is SetupCodeResult.Success->onProvisioned();is SetupCodeResult.Error->error=r.message}}}){Text(if(busy)"Wird eingerichtet …" else "Mit Einrichtungscode anmelden")};error?.let{Text(it,color=MaterialTheme.colorScheme.error)}}}
 ''')
-print("Android v0.4.13 setup provisioning and device config sync installed")
+print("Android v0.4.13 setup provisioning, device config sync and FileProvider updater fix installed")
