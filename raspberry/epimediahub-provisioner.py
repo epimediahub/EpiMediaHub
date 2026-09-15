@@ -20,7 +20,9 @@ import urllib.request
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-LISTEN_HOST = os.environ.get("EPI_PROVISION_HOST", "192.168.0.207")
+# Listen on every Raspberry interface so DHCP changes do not break bootstrap.
+# Access remains LAN-only because every request is checked against LAN_CIDR.
+LISTEN_HOST = os.environ.get("EPI_PROVISION_HOST", "0.0.0.0")
 LISTEN_PORT = int(os.environ.get("EPI_PROVISION_PORT", "8787"))
 TAILNET = os.environ.get("TS_TAILNET", "-")
 TAG = os.environ.get("TS_DEVICE_TAG", "tag:epimediahub-family")
