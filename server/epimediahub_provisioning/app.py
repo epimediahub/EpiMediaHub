@@ -32,6 +32,9 @@ def require_admin_api():
     if not ADMIN_TOKEN or not secrets.compare_digest(request.headers.get("Authorization",""),f"Bearer {ADMIN_TOKEN}"): abort(401)
 def web_auth():
     if not session.get("admin"): return redirect(url_for("login",next=request.path))
+def customer_config(row):
+    try: return json.loads(row["config_json"] or "{}")
+    except (TypeError, json.JSONDecodeError): return {}
 def claim_activation(row,device_id,platform):
     now=utcnow()
     if row is None or not row["customer_enabled"]: return None,(jsonify(error="invalid_code"),404)
@@ -56,7 +59,10 @@ def dashboard():
     guard=web_auth()
     if guard:return guard
     with db() as con:
-        customers=con.execute("SELECT * FROM customers ORDER BY id DESC").fetchall(); devices=con.execute("SELECT d.*,c.name customer_name FROM devices d JOIN customers c ON c.id=d.customer_id ORDER BY d.id DESC").fetchall()
+        customer_rows=con.execute("SELECT * FROM customers ORDER BY id DESC").fetchall(); devices=con.execute("SELECT d.*,c.name customer_name FROM devices d JOIN customers c ON c.id=d.customer_id ORDER BY d.id DESC").fetchall()
+    customers=[]
+    for c in customer_rows:
+        item=dict(c); item["playlist_url"]=customer_config(c).get("playlist_url",""); customers.append(item)
     return render_template("dashboard.html",customers=customers,devices=devices)
 @app.post("/admin/customers")
 def web_create_customer():
@@ -65,6 +71,18 @@ def web_create_customer():
     name=request.form.get("name","").strip(); playlist=request.form.get("playlist_url","").strip()
     if name:
         with db() as con: con.execute("INSERT INTO customers(name,config_json,created_at) VALUES(?,?,?)",(name,json.dumps({"playlist_url":playlist}),iso(utcnow())))
+    return redirect(url_for("dashboard"))
+@app.post("/admin/customers/<int:customer_id>/update")
+def web_update_customer(customer_id):
+    guard=web_auth()
+    if guard:return guard
+    name=request.form.get("name","").strip(); playlist=request.form.get("playlist_url","").strip()
+    if not name:return redirect(url_for("dashboard"))
+    with db() as con:
+        row=con.execute("SELECT * FROM customers WHERE id=?",(customer_id,)).fetchone()
+        if not row:abort(404)
+        config=customer_config(row); config["playlist_url"]=playlist
+        con.execute("UPDATE customers SET name=?,config_json=? WHERE id=?",(name,json.dumps(config,separators=(",",":")),customer_id))
     return redirect(url_for("dashboard"))
 @app.post("/admin/customers/<int:customer_id>/activation")
 def web_activation(customer_id):
@@ -77,11 +95,31 @@ def web_activation(customer_id):
         con.execute("INSERT INTO activations(customer_id,code_hash,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)",(customer_id,digest(raw),digest(token),iso(expires),iso(utcnow())))
     activation_url=f"{PUBLIC_BASE_URL}/connect/{token}"
     return render_template("activation.html",customer=customer,code=display_code(raw),activation_url=activation_url,expires_at=iso(expires),qr_data=qr_data_uri(activation_url))
+@app.post("/admin/devices/<int:device_id>/assign")
+def web_assign_device(device_id):
+    guard=web_auth()
+    if guard:return guard
+    try: customer_id=int(request.form.get("customer_id",""))
+    except ValueError:return redirect(url_for("dashboard"))
+    with db() as con:
+        if not con.execute("SELECT id FROM customers WHERE id=?",(customer_id,)).fetchone():abort(404)
+        device=con.execute("SELECT * FROM devices WHERE id=?",(device_id,)).fetchone()
+        if not device:abort(404)
+        duplicate=con.execute("SELECT id FROM devices WHERE customer_id=? AND device_id=? AND id<>?",(customer_id,device["device_id"],device_id)).fetchone()
+        if duplicate:abort(409)
+        con.execute("UPDATE devices SET customer_id=? WHERE id=?",(customer_id,device_id))
+    return redirect(url_for("dashboard"))
 @app.post("/admin/devices/<int:device_id>/revoke")
 def web_revoke(device_id):
     guard=web_auth()
     if guard:return guard
     with db() as con:con.execute("UPDATE devices SET enabled=0 WHERE id=?",(device_id,))
+    return redirect(url_for("dashboard"))
+@app.post("/admin/devices/<int:device_id>/enable")
+def web_enable(device_id):
+    guard=web_auth()
+    if guard:return guard
+    with db() as con:con.execute("UPDATE devices SET enabled=1 WHERE id=?",(device_id,))
     return redirect(url_for("dashboard"))
 @app.post("/v1/admin/customers")
 def create_customer():
