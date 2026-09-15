@@ -25,13 +25,15 @@ jobs:
       - name: Install through v0.4.12
         shell: bash
         run: bash build_tools/install_android_v0412_source.sh
-      - name: Print entry-point structure
+      - name: Print entry-point source
         shell: bash
         run: |
           set -euo pipefail
           echo '===== MANIFEST ====='
           cat "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
-          echo '===== KOTLIN FILES ====='
-          find "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app" -maxdepth 2 -type f -name '*.kt' -printf '%P\n' | sort
-          echo '===== MAIN ACTIVITY CANDIDATES ====='
-          grep -R -n -E 'class .*Activity|setContent\{|NavHost|rememberNavController|V044Home|HomeScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app" | head -n 250 || true
+          echo '===== MAINACTIVITY ====='
+          cat "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainActivity.kt"
+          echo '===== APP ====='
+          cat "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          echo '===== VIEWMODEL API ====='
+          grep -n -E 'class MainViewModel|fun |val ui|StateFlow|load|playlist|navigate|Screen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt" | head -n 300 || true
