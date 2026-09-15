@@ -14,7 +14,7 @@
         android:name="com.tailscale.ipn.App"
         android:allowBackup="false"
         android:banner="@drawable/tv_banner"
-        android:icon="@drawable/epimediahub_icon"
+        android:icon="@drawable/app_icon"
         android:label="EpiMediaHub"
         android:theme="@style/Theme.EpiMediaHub"
         android:usesCleartextTraffic="true">
