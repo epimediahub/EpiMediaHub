@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import qrcode
 from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
+from receiver_sync import migrate as migrate_receiver_sync, register as register_receiver_sync, save_customer_config
 
 BASE_DIR = Path(os.environ.get("EPIMEDIAHUB_DATA_DIR", "/var/lib/epimediahub")); DB_PATH = BASE_DIR / "provisioning.db"
 PUBLIC_BASE_URL = os.environ.get("EPIMEDIAHUB_PUBLIC_URL", "https://setup.example.invalid").rstrip("/")
@@ -24,10 +25,12 @@ def qr_data_uri(value):
 def db():
     BASE_DIR.mkdir(parents=True,exist_ok=True); con=sqlite3.connect(DB_PATH); con.row_factory=sqlite3.Row; con.execute("PRAGMA foreign_keys=ON"); return con
 def init_db():
-    with db() as con: con.executescript("""
-    CREATE TABLE IF NOT EXISTS customers(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,config_json TEXT NOT NULL DEFAULT '{}',enabled INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS activations(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,code_hash TEXT NOT NULL UNIQUE,token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,redeemed_at TEXT,device_id TEXT,platform TEXT,created_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS devices(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,device_id TEXT NOT NULL,platform TEXT NOT NULL,session_token_hash TEXT NOT NULL UNIQUE,enabled INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,UNIQUE(customer_id,device_id));""")
+    with db() as con:
+        con.executescript("""
+        CREATE TABLE IF NOT EXISTS customers(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,config_json TEXT NOT NULL DEFAULT '{}',enabled INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS activations(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,code_hash TEXT NOT NULL UNIQUE,token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,redeemed_at TEXT,device_id TEXT,platform TEXT,created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS devices(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,device_id TEXT NOT NULL,platform TEXT NOT NULL,session_token_hash TEXT NOT NULL UNIQUE,enabled INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,UNIQUE(customer_id,device_id));""")
+        migrate_receiver_sync(con)
 def require_admin_api():
     if not ADMIN_TOKEN or not secrets.compare_digest(request.headers.get("Authorization",""),f"Bearer {ADMIN_TOKEN}"): abort(401)
 def web_auth():
@@ -59,7 +62,7 @@ def dashboard():
     guard=web_auth()
     if guard:return guard
     with db() as con:
-        customer_rows=con.execute("SELECT * FROM customers ORDER BY id DESC").fetchall(); devices=con.execute("SELECT d.*,c.name customer_name FROM devices d JOIN customers c ON c.id=d.customer_id ORDER BY d.id DESC").fetchall()
+        customer_rows=con.execute("SELECT * FROM customers ORDER BY id DESC").fetchall(); devices=con.execute("SELECT d.*,c.name customer_name,c.config_version customer_config_version FROM devices d JOIN customers c ON c.id=d.customer_id ORDER BY d.id DESC").fetchall()
     customers=[]
     for c in customer_rows:
         item=dict(c); item["playlist_url"]=customer_config(c).get("playlist_url",""); customers.append(item)
@@ -82,7 +85,9 @@ def web_update_customer(customer_id):
         row=con.execute("SELECT * FROM customers WHERE id=?",(customer_id,)).fetchone()
         if not row:abort(404)
         config=customer_config(row); config["playlist_url"]=playlist
-        con.execute("UPDATE customers SET name=?,config_json=? WHERE id=?",(name,json.dumps(config,separators=(",",":")),customer_id))
+        con.execute("UPDATE customers SET name=? WHERE id=?",(name,customer_id))
+        if json.dumps(config,separators=(",",":")) != json.dumps(customer_config(row),separators=(",",":")):
+            save_customer_config(con,customer_id,config)
     return redirect(url_for("dashboard"))
 @app.post("/admin/customers/<int:customer_id>/activation")
 def web_activation(customer_id):
@@ -107,7 +112,7 @@ def web_assign_device(device_id):
         if not device:abort(404)
         duplicate=con.execute("SELECT id FROM devices WHERE customer_id=? AND device_id=? AND id<>?",(customer_id,device["device_id"],device_id)).fetchone()
         if duplicate:abort(409)
-        con.execute("UPDATE devices SET customer_id=? WHERE id=?",(customer_id,device_id))
+        con.execute("UPDATE devices SET customer_id=?,applied_config_version=0,last_sync_status=NULL,last_sync_error=NULL WHERE id=?",(customer_id,device_id))
     return redirect(url_for("dashboard"))
 @app.post("/admin/devices/<int:device_id>/revoke")
 def web_revoke(device_id):
@@ -138,10 +143,10 @@ def redeem_by(field,value,body):
     device_id=str(body.get("device_id","")).strip();platform=str(body.get("platform","android")).strip() or "android"
     if not device_id:return jsonify(error="invalid_request"),400
     with db() as con:
-        con.execute("BEGIN IMMEDIATE");row=con.execute(f"SELECT a.*,c.config_json,c.enabled customer_enabled FROM activations a JOIN customers c ON c.id=a.customer_id WHERE a.{field}=?",(digest(value),)).fetchone(); claim,error=claim_activation(row,device_id,platform)
+        con.execute("BEGIN IMMEDIATE");row=con.execute(f"SELECT a.*,c.config_json,c.config_version,c.enabled customer_enabled FROM activations a JOIN customers c ON c.id=a.customer_id WHERE a.{field}=?",(digest(value),)).fetchone(); claim,error=claim_activation(row,device_id,platform)
         if error:return error
-        session_token,now=claim;con.execute("UPDATE activations SET redeemed_at=?,device_id=?,platform=? WHERE id=? AND redeemed_at IS NULL",(iso(now),device_id,platform,row["id"]));con.execute("INSERT INTO devices(customer_id,device_id,platform,session_token_hash,created_at) VALUES(?,?,?,?,?) ON CONFLICT(customer_id,device_id) DO UPDATE SET platform=excluded.platform,session_token_hash=excluded.session_token_hash,enabled=1",(row["customer_id"],device_id,platform,digest(session_token),iso(now)));config=json.loads(row["config_json"])
-    return jsonify(session_token=session_token,customer_id=row["customer_id"],config=config)
+        session_token,now=claim;con.execute("UPDATE activations SET redeemed_at=?,device_id=?,platform=? WHERE id=? AND redeemed_at IS NULL",(iso(now),device_id,platform,row["id"]));con.execute("INSERT INTO devices(customer_id,device_id,platform,session_token_hash,created_at,applied_config_version,last_seen_at,last_sync_at,last_sync_status) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(customer_id,device_id) DO UPDATE SET platform=excluded.platform,session_token_hash=excluded.session_token_hash,enabled=1,applied_config_version=excluded.applied_config_version,last_seen_at=excluded.last_seen_at,last_sync_at=excluded.last_sync_at,last_sync_status=excluded.last_sync_status,last_sync_error=NULL",(row["customer_id"],device_id,platform,digest(session_token),iso(now),int(row["config_version"]),iso(now),iso(now),"ok"));config=json.loads(row["config_json"])
+    return jsonify(session_token=session_token,customer_id=row["customer_id"],config_version=int(row["config_version"]),config=config)
 @app.post("/v1/setup/redeem")
 def redeem():
     body=request.get_json(silent=True) or {};code=normalize_code(str(body.get("code","")))
@@ -158,5 +163,7 @@ def revoke_device(device_id):
     with db() as con:cur=con.execute("UPDATE devices SET enabled=0 WHERE id=?",(device_id,))
     if cur.rowcount==0:return jsonify(error="device_not_found"),404
     return jsonify(status="revoked")
+
 init_db()
+register_receiver_sync(app,db)
 if __name__=="__main__":app.run(host="127.0.0.1",port=int(os.environ.get("PORT","8787")))
