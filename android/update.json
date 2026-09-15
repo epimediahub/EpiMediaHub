@@ -1,7 +1,7 @@
 {
-  "version": "0.4.11",
-  "versionCode": 51,
+  "version": "0.4.12",
+  "versionCode": 52,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "56cbb35d539619126e181bb3598a9a3d588417ba9f325552070d22d6b5fa04ed",
-  "notes": "Tailscale-Anmeldung auf TV repariert: Bei PIN_REQUIRED öffnet sich der Fernwartungs-PIN-Dialog automatisch; zusätzlich ist Tailscale anmelden direkt im sichtbaren Statusbereich erreichbar."
+  "sha256": "ca8818f64c82be670f2ec406255d547571bb9b2c69018de0556cd4eedeb8f1d1",
+  "notes": "Updater repariert: drei unabhängige Metadaten-Quellen (Raw-Manifest, GitHub Contents API und android-latest Release API) plus explizite GitHub-Redirect-Behandlung beim APK-Download."
 }
