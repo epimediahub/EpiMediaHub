@@ -1,1 +1,2 @@
 Trigger signed Android v0.4.7 release with automatic Raspberry-assisted embedded Tailscale enrollment and reconnect.
+Packaging fix: compileOnly generated libtailscale AAR in wrapper; package it separately in final APK.
