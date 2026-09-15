@@ -1,7 +1,7 @@
 {
-  "version": "0.4.10",
-  "versionCode": 50,
+  "version": "0.4.11",
+  "versionCode": 51,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "2ff4668bf4ef6d2d3e3097df0c6acb46e6970b22c3dab17632cb6a887e2eea6c",
-  "notes": "Fernwartung nutzt jetzt die native Tailscale-Anmeldung mit offiziellem Login-QR. Der Raspberry wird anschließend als Tailscale-Peer per Hostname/MagicDNS erkannt; der alte LAN-Provisioner ist für Android nicht mehr erforderlich."
+  "sha256": "56cbb35d539619126e181bb3598a9a3d588417ba9f325552070d22d6b5fa04ed",
+  "notes": "Tailscale-Anmeldung auf TV repariert: Bei PIN_REQUIRED öffnet sich der Fernwartungs-PIN-Dialog automatisch; zusätzlich ist Tailscale anmelden direkt im sichtbaren Statusbereich erreichbar."
 }
