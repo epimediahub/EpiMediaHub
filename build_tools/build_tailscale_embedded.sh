@@ -71,7 +71,12 @@ dependencies {
     implementation(libs.zxing.core)
     implementation(libs.vico.compose)
     implementation(libs.vico.composeM3)
-    implementation(files("libs/libtailscale.aar"))
+
+    // libtailscale is a generated local AAR. The wrapper module only needs it
+    // on the compile classpath; the final EpiMediaHub APK packages the same AAR
+    // separately. Using implementation(...) here makes AGP try to nest an AAR
+    // inside another AAR and fails bundleReleaseAar by design.
+    compileOnly(files("libs/libtailscale.aar"))
 }
 EOF
 
