@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import qrcode
 from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
-from receiver_sync import migrate as migrate_receiver_sync, register as register_receiver_sync, save_customer_config
+from receiver_sync import create_sync_bootstrap, migrate as migrate_receiver_sync, register as register_receiver_sync, rollback_customer_config, save_customer_config
 
 BASE_DIR = Path(os.environ.get("EPIMEDIAHUB_DATA_DIR", "/var/lib/epimediahub")); DB_PATH = BASE_DIR / "provisioning.db"
 PUBLIC_BASE_URL = os.environ.get("EPIMEDIAHUB_PUBLIC_URL", "https://setup.example.invalid").rstrip("/")
@@ -89,6 +89,13 @@ def web_update_customer(customer_id):
         if json.dumps(config,separators=(",",":")) != json.dumps(customer_config(row),separators=(",",":")):
             save_customer_config(con,customer_id,config)
     return redirect(url_for("dashboard"))
+@app.post("/admin/customers/<int:customer_id>/rollback")
+def web_rollback_customer(customer_id):
+    guard=web_auth()
+    if guard:return guard
+    with db() as con:
+        if rollback_customer_config(con,customer_id) is None: abort(409)
+    return redirect(url_for("dashboard"))
 @app.post("/admin/customers/<int:customer_id>/activation")
 def web_activation(customer_id):
     guard=web_auth()
@@ -112,8 +119,17 @@ def web_assign_device(device_id):
         if not device:abort(404)
         duplicate=con.execute("SELECT id FROM devices WHERE customer_id=? AND device_id=? AND id<>?",(customer_id,device["device_id"],device_id)).fetchone()
         if duplicate:abort(409)
-        con.execute("UPDATE devices SET customer_id=?,applied_config_version=0,last_sync_status=NULL,last_sync_error=NULL WHERE id=?",(customer_id,device_id))
+        con.execute("UPDATE devices SET customer_id=?,applied_config_version=0,last_sync_status='pending',last_sync_error=NULL WHERE id=?",(customer_id,device_id))
     return redirect(url_for("dashboard"))
+@app.post("/admin/devices/<int:device_id>/sync-bootstrap")
+def web_sync_bootstrap(device_id):
+    guard=web_auth()
+    if guard:return guard
+    with db() as con:
+        token=create_sync_bootstrap(con,device_id)
+        device=con.execute("SELECT d.*,c.name customer_name FROM devices d JOIN customers c ON c.id=d.customer_id WHERE d.id=?",(device_id,)).fetchone()
+    if not token or not device:abort(404)
+    return render_template("sync_bootstrap.html",device=device,bootstrap_token=token,server_url=PUBLIC_BASE_URL)
 @app.post("/admin/devices/<int:device_id>/revoke")
 def web_revoke(device_id):
     guard=web_auth()
