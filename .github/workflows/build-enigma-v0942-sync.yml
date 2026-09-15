@@ -1,0 +1,28 @@
+name: Build EpiMediaHub Enigma v0.9.42 Sync
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [receiver-config-sync]
+    paths:
+      - 'enigma_sync/**'
+      - 'build_tools/patch_v0942_receiver_sync.py'
+      - 'build_tools/build_v0942_receiver_sync.sh'
+      - '.github/workflows/build-enigma-v0942-sync.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build v0.9.42 test package
+        run: bash build_tools/build_v0942_receiver_sync.sh
+      - name: Upload test IPK
+        uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-Enigma-v0.9.42-receiver-sync-test
+          path: EpiMediaHub_v0.9.42.ipk
+          if-no-files-found: error
