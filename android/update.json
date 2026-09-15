@@ -1,7 +1,7 @@
 {
-  "version": "0.4.6",
-  "versionCode": 46,
+  "version": "0.4.7",
+  "versionCode": 47,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "43d6c1a636aaf275ebeeccd262d153aae7cd4972404fbc088003f824418d1116",
-  "notes": "Family-Skins bleiben wie bei Enigma mit der festen speziellen 4-stelligen Family-PIN geschützt. Die Fernwartung besitzt jetzt bewusst eine eigene feste Fernwartungs-PIN und wird danach ausschließlich über Tailscale für den Raspberry-Wartungszugang angeboten. Bei einer frischen Installation ohne Playlist startet Websetup/Fernwartung direkt und bleibt damit bereits vor der ersten Playlist erreichbar. Lokales QR-Websetup nutzt weiterhin seine temporäre Websetup-PIN."
+  "sha256": "fadf521dcfc8edc6767e8e77b75cc0a248a5d743e1c7a45a3cbe6cd34d951ab5",
+  "notes": "Fernwartung richtet Tailscale automatisch über den vertrauenswürdigen Raspberry ein: separate Fernwartungs-PIN, kurzlebiger Einmal-Schlüssel, einmalige Android-VPN-Freigabe und danach automatische Wiederverbindung. OAuth-Zugangsdaten bleiben ausschließlich auf dem Raspberry. Websetup funktioniert weiterhin auch ohne Playlist."
 }
