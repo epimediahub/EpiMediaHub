@@ -1,7 +1,7 @@
 {
-  "version": "0.4.7",
-  "versionCode": 47,
+  "version": "0.4.8",
+  "versionCode": 48,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "fadf521dcfc8edc6767e8e77b75cc0a248a5d743e1c7a45a3cbe6cd34d951ab5",
-  "notes": "Fernwartung richtet Tailscale automatisch über den vertrauenswürdigen Raspberry ein: separate Fernwartungs-PIN, kurzlebiger Einmal-Schlüssel, einmalige Android-VPN-Freigabe und danach automatische Wiederverbindung. OAuth-Zugangsdaten bleiben ausschließlich auf dem Raspberry. Websetup funktioniert weiterhin auch ohne Playlist."
+  "sha256": "0eabc111290e2048edf22b07a41205322289e385fe258feb21fa88a0d242e0f7",
+  "notes": "Fernwartung stabilisiert: NeedsLogin wird sofort erkannt und kann per Fernwartungs-PIN erneuert werden. Raspberry-Erkennung über epimedia.local plus LAN-Fallback; laufende Statusprüfung verhindert veraltete Fernwartungsanzeigen."
 }
