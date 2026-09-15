@@ -1,0 +1,22 @@
+[Unit]
+Description=EpiMediaHub Provisioning Backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=epimediahub
+Group=epimediahub
+WorkingDirectory=/opt/epimediahub/provisioning
+EnvironmentFile=/etc/epimediahub/provisioning.env
+ExecStart=/opt/epimediahub/provisioning/.venv/bin/gunicorn --workers 2 --threads 4 --bind 127.0.0.1:8787 --access-logfile - --error-logfile - app:app
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/epimediahub
+
+[Install]
+WantedBy=multi-user.target
