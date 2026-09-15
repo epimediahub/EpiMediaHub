@@ -1,7 +1,7 @@
 {
-  "version": "0.4.12",
-  "versionCode": 52,
+  "version": "0.5.0",
+  "versionCode": 500,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "ca8818f64c82be670f2ec406255d547571bb9b2c69018de0556cd4eedeb8f1d1",
-  "notes": "Updater repariert: drei unabhängige Metadaten-Quellen (Raw-Manifest, GitHub Contents API und android-latest Release API) plus explizite GitHub-Redirect-Behandlung beim APK-Download."
+  "sha256": "3fcfa3ebc1c5c2441eedd00fe3c1c08cadfa606256a658543e4d92959350b25e",
+  "notes": "Produktions-Provisionierung über https://setup.epimediahub.com, Einrichtungscode/Token, Geräte-Konfigurationssync und sicherer In-App-Updater."
 }
