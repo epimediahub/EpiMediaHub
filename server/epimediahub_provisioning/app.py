@@ -33,8 +33,39 @@ def require_admin_api():
 def web_auth():
     if not session.get("admin"): return redirect(url_for("login",next=request.path))
 def customer_config(row):
-    try: return json.loads(row["config_json"] or "{}")
-    except (TypeError, json.JSONDecodeError): return {}
+    try:
+        value=json.loads(row["config_json"] or "{}")
+        return value if isinstance(value,dict) else {}
+    except (TypeError,json.JSONDecodeError): return {}
+def config_version(config):
+    try:return max(1,int(config.get("_version",1)))
+    except (TypeError,ValueError):return 1
+def public_config(config): return {k:v for k,v in config.items() if not str(k).startswith("_")}
+def form_config(previous=None):
+    previous=dict(previous or {})
+    kind=request.form.get("playlist_type",previous.get("playlist_type","M3U")).strip().upper()
+    if kind not in {"M3U","XTREAM"}:kind="M3U"
+    cfg=dict(previous)
+    cfg["_version"]=config_version(previous)+1 if previous else 1
+    cfg["playlist_type"]=kind
+    cfg["playlist_name"]=request.form.get("playlist_name",previous.get("playlist_name","EpiMediaHub")).strip() or "EpiMediaHub"
+    if kind=="XTREAM":
+        cfg["playlist_url"]=""
+        cfg["xtream_server"]=request.form.get("xtream_server","").strip().rstrip("/")
+        cfg["xtream_username"]=request.form.get("xtream_username","").strip()
+        cfg["xtream_password"]=request.form.get("xtream_password","")
+        cfg["xtream_output"]=request.form.get("xtream_output","ts").strip() or "ts"
+    else:
+        cfg["playlist_url"]=request.form.get("playlist_url","").strip()
+        cfg["xtream_server"]="";cfg["xtream_username"]="";cfg["xtream_password"]="";cfg["xtream_output"]="ts"
+    return cfg
+def device_session_row():
+    auth=request.headers.get("Authorization","")
+    if not auth.startswith("Bearer "):return None
+    token=auth[7:].strip()
+    if not token:return None
+    with db() as con:
+        return con.execute("SELECT d.*,c.config_json,c.enabled customer_enabled FROM devices d JOIN customers c ON c.id=d.customer_id WHERE d.session_token_hash=? AND d.enabled=1 AND c.enabled=1",(digest(token),)).fetchone()
 def claim_activation(row,device_id,platform):
     now=utcnow()
     if row is None or not row["customer_enabled"]: return None,(jsonify(error="invalid_code"),404)
@@ -62,26 +93,37 @@ def dashboard():
         customer_rows=con.execute("SELECT * FROM customers ORDER BY id DESC").fetchall(); devices=con.execute("SELECT d.*,c.name customer_name FROM devices d JOIN customers c ON c.id=d.customer_id ORDER BY d.id DESC").fetchall()
     customers=[]
     for c in customer_rows:
-        item=dict(c); item["playlist_url"]=customer_config(c).get("playlist_url",""); customers.append(item)
+        cfg=customer_config(c); item=dict(c)
+        item.update({
+            "playlist_type":cfg.get("playlist_type","XTREAM" if cfg.get("xtream_server") else "M3U"),
+            "playlist_name":cfg.get("playlist_name",c["name"]),
+            "playlist_url":cfg.get("playlist_url",""),
+            "xtream_server":cfg.get("xtream_server",""),
+            "xtream_username":cfg.get("xtream_username",""),
+            "xtream_password":cfg.get("xtream_password",""),
+            "xtream_output":cfg.get("xtream_output","ts"),
+            "config_version":config_version(cfg),
+        }); customers.append(item)
     return render_template("dashboard.html",customers=customers,devices=devices)
 @app.post("/admin/customers")
 def web_create_customer():
     guard=web_auth()
     if guard:return guard
-    name=request.form.get("name","").strip(); playlist=request.form.get("playlist_url","").strip()
+    name=request.form.get("name","").strip()
     if name:
-        with db() as con: con.execute("INSERT INTO customers(name,config_json,created_at) VALUES(?,?,?)",(name,json.dumps({"playlist_url":playlist}),iso(utcnow())))
+        cfg=form_config()
+        with db() as con: con.execute("INSERT INTO customers(name,config_json,created_at) VALUES(?,?,?)",(name,json.dumps(cfg,separators=(",",":")),iso(utcnow())))
     return redirect(url_for("dashboard"))
 @app.post("/admin/customers/<int:customer_id>/update")
 def web_update_customer(customer_id):
     guard=web_auth()
     if guard:return guard
-    name=request.form.get("name","").strip(); playlist=request.form.get("playlist_url","").strip()
+    name=request.form.get("name","").strip()
     if not name:return redirect(url_for("dashboard"))
     with db() as con:
         row=con.execute("SELECT * FROM customers WHERE id=?",(customer_id,)).fetchone()
         if not row:abort(404)
-        config=customer_config(row); config["playlist_url"]=playlist
+        config=form_config(customer_config(row))
         con.execute("UPDATE customers SET name=?,config_json=? WHERE id=?",(name,json.dumps(config,separators=(",",":")),customer_id))
     return redirect(url_for("dashboard"))
 @app.post("/admin/customers/<int:customer_id>/activation")
@@ -125,6 +167,7 @@ def web_enable(device_id):
 def create_customer():
     require_admin_api();body=request.get_json(silent=True) or {};name=str(body.get("name","")).strip();config=body.get("config",{})
     if not name or not isinstance(config,dict):return jsonify(error="invalid_customer"),400
+    config=dict(config);config["_version"]=config_version(config)
     with db() as con:cid=con.execute("INSERT INTO customers(name,config_json,created_at) VALUES(?,?,?)",(name,json.dumps(config,separators=(",",":")),iso(utcnow()))).lastrowid
     return jsonify(id=cid,name=name),201
 @app.post("/v1/admin/customers/<int:customer_id>/activation")
@@ -140,8 +183,8 @@ def redeem_by(field,value,body):
     with db() as con:
         con.execute("BEGIN IMMEDIATE");row=con.execute(f"SELECT a.*,c.config_json,c.enabled customer_enabled FROM activations a JOIN customers c ON c.id=a.customer_id WHERE a.{field}=?",(digest(value),)).fetchone(); claim,error=claim_activation(row,device_id,platform)
         if error:return error
-        session_token,now=claim;con.execute("UPDATE activations SET redeemed_at=?,device_id=?,platform=? WHERE id=? AND redeemed_at IS NULL",(iso(now),device_id,platform,row["id"]));con.execute("INSERT INTO devices(customer_id,device_id,platform,session_token_hash,created_at) VALUES(?,?,?,?,?) ON CONFLICT(customer_id,device_id) DO UPDATE SET platform=excluded.platform,session_token_hash=excluded.session_token_hash,enabled=1",(row["customer_id"],device_id,platform,digest(session_token),iso(now)));config=json.loads(row["config_json"])
-    return jsonify(session_token=session_token,customer_id=row["customer_id"],config=config)
+        session_token,now=claim;con.execute("UPDATE activations SET redeemed_at=?,device_id=?,platform=? WHERE id=? AND redeemed_at IS NULL",(iso(now),device_id,platform,row["id"]));con.execute("INSERT INTO devices(customer_id,device_id,platform,session_token_hash,created_at) VALUES(?,?,?,?,?) ON CONFLICT(customer_id,device_id) DO UPDATE SET platform=excluded.platform,session_token_hash=excluded.session_token_hash,enabled=1",(row["customer_id"],device_id,platform,digest(session_token),iso(now)));config=customer_config(row);version=config_version(config)
+    return jsonify(session_token=session_token,customer_id=row["customer_id"],config_version=version,config=public_config(config))
 @app.post("/v1/setup/redeem")
 def redeem():
     body=request.get_json(silent=True) or {};code=normalize_code(str(body.get("code","")))
@@ -152,6 +195,20 @@ def redeem_token():
     body=request.get_json(silent=True) or {};token=str(body.get("token","")).strip()
     if not token:return jsonify(error="invalid_request"),400
     return redeem_by("token_hash",token,body)
+@app.get("/v1/device/config")
+def device_config():
+    row=device_session_row()
+    if row is None:return jsonify(error="device_not_authorized"),401
+    cfg=customer_config(row);version=config_version(cfg)
+    try:known=int(request.args.get("version","0"))
+    except ValueError:known=0
+    return jsonify(customer_id=row["customer_id"],config_version=version,changed=known!=version,config=public_config(cfg))
+@app.post("/v1/device/sync-result")
+def device_sync_result():
+    row=device_session_row()
+    if row is None:return jsonify(error="device_not_authorized"),401
+    body=request.get_json(silent=True) or {}
+    return jsonify(status="accepted",config_version=body.get("config_version",0))
 @app.post("/v1/admin/devices/<int:device_id>/revoke")
 def revoke_device(device_id):
     require_admin_api()
