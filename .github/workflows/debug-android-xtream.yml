@@ -26,11 +26,24 @@ jobs:
           PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
           test -n "$PROJECT_ROOT"
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
-      - name: Apply v0.6.4 source patches
-        run: bash build_tools/install_android_v064_source.sh
-      - name: Dump v0.6.4 Xtream markers
+      - name: Apply v0.6.4 source patches and hotfix
+        run: |
+          bash build_tools/install_android_v064_source.sh
+          python3 android/hotfixes/v064_xtream_hotfix1.py
+      - name: Validate hotfix markers
         shell: bash
         run: |
-          grep -n -A110 -B10 'private fun resolveStreamServer' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -n 'direct_source' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -n 'versionName = "0.6.4"' "$PROJECT_ROOT/app/build.gradle.kts"
+          set -euo pipefail
+          X="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          P="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'm3uStreamUrlCache' "$X"
+          grep -Fq 'providerM3uUrl()' "$X"
+          grep -Fq 'exactM3uStreamUrls()' "$X"
+          grep -Fq 'cachedExactM3uUrl(item.id)' "$X"
+          grep -Fq 'rawUser' "$X"
+          grep -Fq 'DefaultHttpDataSource.Factory()' "$P"
+          grep -Fq 'VLC/3.0.21 LibVLC/3.0.21' "$P"
+          grep -Fq 'setAllowCrossProtocolRedirects(true)' "$P"
+          grep -Fq '@OptIn(UnstableApi::class)' "$P"
+          grep -n -A80 -B10 'private fun exactM3uStreamUrls' "$X"
+          grep -n -A20 -B8 'DefaultHttpDataSource.Factory' "$P"
