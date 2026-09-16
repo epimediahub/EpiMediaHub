@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from flask import render_template
 
 from app import app, db, digest
-import device_api  # registers /v1/device/* and migrations
 
 
 @app.get("/connect/<token>")
@@ -34,11 +33,10 @@ def connect_page(token: str):
     if expires <= datetime.now(timezone.utc):
         return render_template("connect.html", state="expired", customer_name=row["customer_name"]), 410
 
-    deep_link = f"epimediahub://connect?token={token}"
     return render_template(
         "connect.html",
         state="ready",
         customer_name=row["customer_name"],
-        deep_link=deep_link,
+        deep_link=f"epimediahub://connect?token={token}",
         expires_at=row["expires_at"],
     )
