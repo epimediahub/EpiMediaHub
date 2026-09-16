@@ -3,6 +3,7 @@ set -euo pipefail
 : "${PROJECT_ROOT:?PROJECT_ROOT is required}"
 
 bash build_tools/install_android_v062_source.sh
+PROJECT_ROOT="$PROJECT_ROOT" python3 android/v0.6.3/pre_v063.py
 PROJECT_ROOT="$PROJECT_ROOT" python3 android/v0.6.3/patch_v063.py
 
 grep -q 'versionName = "0.6.3"' "$PROJECT_ROOT/app/build.gradle.kts"
