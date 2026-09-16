@@ -32,16 +32,18 @@ home.write_text(text.replace("0.6.1", "0.6.2"))
 parser = java / "data/PlaylistParser.kt"
 replace_once(
     parser,
-    r'Regex("/(?i:get|player_api|panel_api|xmltv)\.php$")',
-    r'Regex("/(?i:get|player_api|panel_api|xmltv)\\.php$")',
+    r'Regex("/(?i:get|player_api|panel_api|xmltv)\.php$")'.replace('\\"', '"'),
+    r'Regex("/(?i:get|player_api|panel_api|xmltv)\\.php$")'.replace('\\"', '"'),
     "Xtream endpoint regex escape",
 )
 
 # Guard against reintroducing the broken Kotlin escape in reconstructed source.
 source = parser.read_text()
-if r'Regex("/(?i:get|player_api|panel_api|xmltv)\.php$")' in source:
+broken = r'Regex("/(?i:get|player_api|panel_api|xmltv)\.php$")'.replace('\\"', '"')
+fixed = r'Regex("/(?i:get|player_api|panel_api|xmltv)\\.php$")'.replace('\\"', '"')
+if broken in source:
     raise SystemExit("single-backslash Xtream endpoint regex still present")
-if r'Regex("/(?i:get|player_api|panel_api|xmltv)\\.php$")' not in source:
+if fixed not in source:
     raise SystemExit("corrected Xtream endpoint regex missing")
 
 print("Android v0.6.2 compile-fix patch applied")
