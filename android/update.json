@@ -1,7 +1,7 @@
 {
-  "version": "0.5.1",
-  "versionCode": 501,
+  "version": "0.5.2",
+  "versionCode": 502,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "c851fbaef963f6ac04a351d11b68c33692fd9da30a41210f5a10e7381b642486",
-  "notes": "Fire-TV Dashboard-Verbindung nur auf Wunsch, klare Code-Eingabe mit automatischen Bindestrichen sowie funktionierender M3U/Xtream-Konfigurationssync."
+  "sha256": "70a1877990090bab8cc241edf93a289258e8929c307884e7d787087ec6a01484",
+  "notes": "Fire-TV Navigationsfix: Fernwartungs-PIN und Dashboard-Code komplett per D-Pad, ohne Systemtastatur. Zurück schließt die Dialoge zuverlässig."
 }
