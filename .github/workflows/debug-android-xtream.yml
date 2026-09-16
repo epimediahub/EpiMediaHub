@@ -28,10 +28,12 @@ jobs:
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
       - name: Apply v0.6.3 source patches
         run: bash build_tools/install_android_v063_source.sh
-      - name: Dump Xtream client and parser
+      - name: Dump Xtream client and Live EPG logic
         shell: bash
         run: |
           echo '===== XtreamClient.kt ====='
           cat "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           echo '===== PlaylistParser.kt ====='
           cat "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PlaylistParser.kt"
+          echo '===== MainViewModel Live EPG ====='
+          grep -n -A80 -B20 'private fun loadLiveEpg' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt" || true
