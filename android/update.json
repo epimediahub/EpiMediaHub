@@ -1,7 +1,7 @@
 {
-  "version": "0.5.0",
-  "versionCode": 500,
+  "version": "0.5.1",
+  "versionCode": 501,
   "url": "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk",
-  "sha256": "3fcfa3ebc1c5c2441eedd00fe3c1c08cadfa606256a658543e4d92959350b25e",
-  "notes": "Produktions-Provisionierung über https://setup.epimediahub.com, Einrichtungscode/Token, Geräte-Konfigurationssync und sicherer In-App-Updater."
+  "sha256": "c851fbaef963f6ac04a351d11b68c33692fd9da30a41210f5a10e7381b642486",
+  "notes": "Fire-TV Dashboard-Verbindung nur auf Wunsch, klare Code-Eingabe mit automatischen Bindestrichen sowie funktionierender M3U/Xtream-Konfigurationssync."
 }
