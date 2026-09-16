@@ -1,0 +1,37 @@
+name: Debug reconstructed Android Xtream source
+
+on:
+  push:
+    branches: [android-v0.6.0-cinematic-ui]
+    paths:
+      - '.github/workflows/debug-android-xtream.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  dump-xtream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* > .ci-android/source.b64
+          base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+      - name: Apply v0.6.3 source patches
+        run: bash build_tools/install_android_v063_source.sh
+      - name: Dump Xtream client and parser
+        shell: bash
+        run: |
+          echo '===== XtreamClient.kt ====='
+          cat "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          echo '===== PlaylistParser.kt ====='
+          cat "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PlaylistParser.kt"
