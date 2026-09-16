@@ -4,6 +4,32 @@ set -euo pipefail
 
 bash build_tools/install_android_v062_source.sh
 PROJECT_ROOT="$PROJECT_ROOT" python3 android/v0.6.3/run_v063_core.py
+
+# The reconstructed 0.6.2 PlayerScreen no longer always contains the legacy
+# TV-help overlay. Make that cleanup optional before applying the Live-TV patch.
+python3 - <<'PY'
+from pathlib import Path
+p = Path('android/v0.6.3/patch_v063_player.py')
+s = p.read_text()
+old = '''# Keep the useful remote hint for VOD/episodes only. It must not appear over Live TV.
+replace_once(
+    '        if (isTv && controls) {\\n',
+    '        if (isTv && controls && item.kind != MediaKind.LIVE) {\\n',
+    'TV help overlay Live exclusion',
+)
+'''
+new = '''# Keep the useful remote hint for VOD/episodes only when that legacy overlay exists.
+legacy_tv_help = '        if (isTv && controls) {\\n'
+if legacy_tv_help in s:
+    s = s.replace(legacy_tv_help, '        if (isTv && controls && item.kind != MediaKind.LIVE) {\\n', 1)
+'''
+if old not in s:
+    raise SystemExit('v0.6.3 player compatibility anchor missing')
+s = s.replace(old, new, 1)
+s = s.replace("assert 'if (isTv && controls && item.kind != MediaKind.LIVE)' in final\n", "")
+p.write_text(s)
+PY
+
 PROJECT_ROOT="$PROJECT_ROOT" python3 android/v0.6.3/patch_v063_player.py
 
 grep -q 'versionName = "0.6.3"' "$PROJECT_ROOT/app/build.gradle.kts"
