@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-android-v060:
@@ -157,3 +157,27 @@ jobs:
             dist/EpiMediaHub_Android_v0.6.0-test.apk
             dist/SHA256SUMS.txt
           retention-days: 30
+
+      - name: Publish public GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v0.6.0-test"
+          TITLE="EpiMediaHub Android v0.6.0 Test"
+          NOTES="Öffentliche Testversion mit neuer Filme-/Serien-Oberfläche, Suche, zuletzt gesehen, Trailer-Unterstützung, Live-TV-Senderbannern und deutlich sichtbarer TV-Fokusanimation."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" \
+              dist/EpiMediaHub_Android_v0.6.0-test.apk \
+              dist/SHA256SUMS.txt \
+              --clobber
+          else
+            gh release create "$TAG" \
+              dist/EpiMediaHub_Android_v0.6.0-test.apk \
+              dist/SHA256SUMS.txt \
+              --target "$GITHUB_SHA" \
+              --prerelease \
+              --title "$TITLE" \
+              --notes "$NOTES"
+          fi
