@@ -67,7 +67,7 @@ jobs:
           include(":app")
           EOF
 
-      - name: Install v0.6.4.6 source
+      - name: Install v0.6.4.7 source
         run: bash build_tools/install_android_v064_source.sh
 
       - name: Import existing premium skin assets
@@ -161,30 +161,32 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build signed v0.6.4.6 test APK
+      - name: Build signed v0.6.4.7 test APK
         shell: bash
         run: |
           cd "$PROJECT_ROOT"
           gradle :app:assembleRelease --stacktrace --no-daemon
 
-      - name: Verify v0.6.4.6 fixes and signing certificate
+      - name: Verify v0.6.4.7 fixes and signing certificate
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "0.6.4.6"' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'versionCode = 609' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionName = "0.6.4.7"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 610' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'private fun canonicalMpegTsLiveUrl(streamId: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -Fq 'getQueryParameter("output")' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'if (canonical.isNotBlank()) return listOf(canonical)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -Fq 'providerOutputFormat() !in setOf("mpegts", "mpeg-ts")' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'streamUrl = firstNonBlank(canonicalMpegTsLiveUrl(id)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'entries.filterNot { it.id in alreadyLoaded }.take(4)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'private val xtreamLibraryCache = java.util.concurrent.ConcurrentHashMap<String, List<MediaEntry>>()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'val allowLegacyUnbound = it.playlists.size <= 1' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'private fun xtreamLibrary(profile: PlaylistProfile, kind: MediaKind)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'xtreamLibraryCache.clear()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'contentFilterKind = null' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'all.asSequence().filter { entry -> entry.categoryId == category.id }.take(24).toList()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'state.playlists.firstOrNull { it.id == item.sourceProfileId }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'parseIptvHttpRequest(raw: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'DefaultLoadControl.Builder()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq '.setBufferDurationsMs(750, 3_000, 150, 300)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'if (false && item.kind == MediaKind.LIVE)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'player.clearMediaItems()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'InvalidResponseCodeException' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'EpiMediaHub beenden?' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
           APK="$PROJECT_ROOT/app/build/outputs/apk/release/app-release.apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apk-signature.txt
@@ -200,7 +202,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Android-v0.6.4.6-signed-test
+          name: EpiMediaHub-Android-v0.6.4.7-signed-test
           path: |
             dist/EpiMediaHub_Android_v0.6.4-test.apk
             dist/SHA256SUMS.txt
@@ -213,8 +215,8 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v0.6.4-test"
-          TITLE="EpiMediaHub Android v0.6.4.6 Test"
-          NOTES="Hotfix 0.6.4.6 wurde anhand der echten Provider-M3U angepasst: bei explizitem output=mpegts wird die tatsächlich verwendete endungslose Live-Struktur host:port/USER/PASS/STREAM_ID direkt aus der ursprünglichen Portal-Adresse erzeugt. Dadurch entfällt für Live das Warten auf den vollständigen ~23-MB-M3U-Download und es wird nicht mehr durch acht geratenen URL-Varianten gezappt. Zusätzlich wurden automatische EPG-Anfragen pro Kategorie auf vier sequenzielle Requests reduziert, der 6,5-s-First-Frame-Watchdog deaktiviert, der Live-Puffer verkleinert und die vorherige Player-Verbindung beim Umschalten sofort beendet. Die öffentliche APK-URL bleibt unverändert."
+          TITLE="EpiMediaHub Android v0.6.4.7 Test"
+          NOTES="Hotfix 0.6.4.7 trennt Filme, Serien, Favoriten, Weiterschauen und Verlauf strikt nach Playlist. Beim Playlistwechsel werden VOD-/Serienzustand, Details und alte Katalogzeilen vollständig verworfen und nur Sammlungen der aktiven Quelle wieder eingelesen. Xtream-Filme und -Serien werden pro aktiver Quelle einmal geladen, gecacht und lokal nach Kategorien aufgeteilt statt bis zu zwölf parallele Kategorieabfragen auszulösen. Das reduziert Providerlast und verhindert, dass Inhalte der vorherigen Playlist im neuen Katalog stehen bleiben. Die Live-TV-Fixes aus 0.6.4.6 bleiben unverändert enthalten. Die öffentliche APK-URL bleibt unverändert."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
             gh release upload "$TAG" \
