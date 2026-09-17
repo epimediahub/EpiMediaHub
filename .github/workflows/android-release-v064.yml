@@ -10,6 +10,7 @@ on:
       - 'android/hotfixes/v064_xtream_hotfix*.py'
       - 'build_tools/install_android_v064_source.sh'
       - 'build_tools/install_android_v06413_source.sh'
+      - 'build_tools/install_android_v06414_source.sh'
 
 concurrency:
   group: epimediahub-android-v064-test
@@ -68,8 +69,8 @@ jobs:
           include(":app")
           EOF
 
-      - name: Install v0.6.4.13 source
-        run: bash build_tools/install_android_v06413_source.sh
+      - name: Install v0.6.4.14 source
+        run: bash build_tools/install_android_v06414_source.sh
 
       - name: Import existing premium skin assets
         run: bash build_tools/import_enigma_v0941_android_assets.sh
@@ -157,19 +158,22 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build signed v0.6.4.13 test APK
+      - name: Build signed v0.6.4.14 test APK
         shell: bash
         run: |
           cd "$PROJECT_ROOT"
           gradle :app:assembleRelease --stacktrace --no-daemon
 
-      - name: Verify v0.6.4.13 and signing certificate
+      - name: Verify v0.6.4.14 and signing certificate
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "0.6.4.13"' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'versionCode = 616' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionName = "0.6.4.14"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 617' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'private fun canonicalMpegTsLiveUrl(streamId: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          grep -Fq 'provider get.php M3U may exceed the Android TV heap' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          grep -Fq 'val exactM3u = emptyMap<String, String>()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          ! grep -Fq 'text(providerM3uUrl()).lineSequence()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'favorites = prefs.loadFavoriteEntries(activeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'items(entries, key = { it.resumeKey })' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
           ! grep -Fq 'items(entries.take(24)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
@@ -177,9 +181,9 @@ jobs:
           grep -Fq 'const val PRODUCTION_BASE_URL = "https://setup.epimediahub.com"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
           grep -Fq '/v1/device/config?version=' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
           grep -Fq '/v1/device/sync-result' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
-          grep -Fq 'serverChanged || version != knownVersion || localManagedMissing' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
-          grep -Fq 'PeriodicWorkRequestBuilder<DashboardSyncWorker>(15, TimeUnit.MINUTES)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/DashboardSyncWorker.kt"
-          grep -Fq 'DashboardSyncWorker.schedule(applicationContext)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainActivity.kt"
+          grep -Fq 'SetupCodeProvisioning.sync(applicationContext)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainActivity.kt"
+          grep -Fq 'result is DeviceSyncResult.Success && result.changed' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainActivity.kt"
+          grep -Fq 'recreate()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainActivity.kt"
           APK="$PROJECT_ROOT/app/build/outputs/apk/release/app-release.apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apk-signature.txt
           CERT="$(grep -i 'certificate SHA-256 digest:' /tmp/apk-signature.txt | head -n1 | awk -F': ' '{print $2}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
@@ -194,7 +198,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Android-v0.6.4.13-signed-test
+          name: EpiMediaHub-Android-v0.6.4.14-signed-test
           path: |
             dist/EpiMediaHub_Android_v0.6.4-test.apk
             dist/SHA256SUMS.txt
@@ -207,8 +211,8 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v0.6.4-test"
-          TITLE="EpiMediaHub Android v0.6.4.13 Test"
-          NOTES="Hotfix 0.6.4.13 aktualisiert die Android-Anbindung auf Dashboard 0.7. Dashboard-Konfigurationen werden beim App-Start sofort und danach netzwerkgebunden regelmäßig synchronisiert. M3U- und Xtream-Zuweisungen werden validiert und als verwaltete Playlist aktualisiert, lokale Playlists bleiben erhalten. Fehlgeschlagene Konfigurationen werden nicht als erfolgreich angewendet gemeldet. Enthält weiterhin alle Fixes aus 0.6.4.12."
+          TITLE="EpiMediaHub Android v0.6.4.14 Test"
+          NOTES="Hotfix 0.6.4.14 behebt den auf Android TV sichtbaren Speicherfehler beim Laden sehr großer Xtream-Provider-M3U-Dateien. Die App lädt die bis zu hunderte MB große Fallback-M3U nicht mehr komplett in den Arbeitsspeicher; Filme und Serien werden direkt über die Xtream-API geladen. Zusätzlich wird eine Dashboard-Synchronisierung im Vordergrund sofort in die laufende App übernommen, statt erst nach einem Neustart sichtbar zu werden. Enthält weiterhin alle Fixes aus 0.6.4.13."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
             gh release upload "$TAG" dist/EpiMediaHub_Android_v0.6.4-test.apk dist/SHA256SUMS.txt --clobber
