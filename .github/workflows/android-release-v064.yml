@@ -224,7 +224,22 @@ jobs:
           NOTES="Hotfix 0.6.4.15 passt Android an das Dashboard-0.7-Multi-Playlist-Format an: alle einem Gerät zugewiesenen Playlists werden gespiegelt, entfernte Dashboard-Listen verschwinden wieder, lokale Listen bleiben erhalten. Standard-Xtream-M3U-URLs werden intern als Xtream erkannt, damit keine riesige M3U in den TV-Speicher geladen wird; echte M3U-Dateien werden zeilenweise statt per readText verarbeitet. Filme/Serien zeigen bis zum aufgebauten Katalog einen klaren Ladebildschirm, zusätzliche Xtream-Cover-Felder werden berücksichtigt und fehlerhafte Cover bekommen einen sichtbaren Platzhalter. Tailscale bleibt unverändert, weil der Playlist-Sync direkt über die Dashboard-API läuft."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
-            gh release upload "$TAG" dist/EpiMediaHub_Android_v0.6.4-test.apk dist/SHA256SUMS.txt --clobber
           else
-            gh release create "$TAG" dist/EpiMediaHub_Android_v0.6.4-test.apk dist/SHA256SUMS.txt --title "$TITLE" --notes "$NOTES" --prerelease --target "${GITHUB_SHA}"
+            gh release create "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease --target "${GITHUB_SHA}"
           fi
+
+          upload_asset() {
+            local file="$1"
+            local attempt
+            for attempt in 1 2 3; do
+              if timeout 12m gh release upload "$TAG" "$file" --clobber; then
+                return 0
+              fi
+              echo "Release upload attempt $attempt failed for $file"
+              sleep "$((attempt * 5))"
+            done
+            return 1
+          }
+
+          upload_asset dist/EpiMediaHub_Android_v0.6.4-test.apk
+          upload_asset dist/SHA256SUMS.txt
