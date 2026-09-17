@@ -28,15 +28,15 @@ jobs:
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
       - name: Apply current Android source
         run: bash build_tools/install_android_v064_source.sh
-      - name: Dump playlist switch and VOD/series state logic
+      - name: Dump per-playlist collections persistence
         shell: bash
         run: |
           set -euo pipefail
           VM="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          echo '--- MainViewModel playlist/catalog functions ---'
-          grep -n -A90 -B25 'fun selectPlaylist\|fun loadCategories\|fun loadCatalogRows\|fun loadItems\|fun search\|catalogRows\|contentFilterKind' "$VM" || true
-          echo '--- Xtream VOD/series requests ---'
-          X="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -n -A100 -B25 'fun categories\|fun entries\|get_vod_streams\|get_series\|category_id' "$X" || true
-          echo '--- UI movie/series/catalog usage ---'
-          grep -Rni -A80 -B20 'catalogRows\|contentFilterKind\|MediaKind.MOVIE\|MediaKind.SERIES' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui" || true
+          PREF="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PrefsRepository.kt"
+          echo '--- MainViewModel collection functions ---'
+          grep -n -A90 -B25 'refreshCollections\|toggleFavorite\|isFavorite\|saveProgress\|markWatched\|recentlyWatched\|continueWatching\|selectPlaylist' "$VM" || true
+          echo '--- PrefsRepository collection persistence ---'
+          grep -n -A120 -B30 'loadFavoriteEntries\|saveFavorite\|loadContinue\|saveContinue\|loadRecentlyWatched\|saveRecently\|resume\|favorite\|recent' "$PREF" || true
+          echo '--- MediaEntry source identity ---'
+          grep -Rni -A35 -B10 'data class MediaEntry\|resumeKey\|sourceProfileId' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/model" || true
