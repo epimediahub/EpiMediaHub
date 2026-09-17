@@ -28,19 +28,12 @@ jobs:
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
       - name: Apply current Android source
         run: bash build_tools/install_android_v064_source.sh
-      - name: Dump Live TV navigation and remote-key logic
+      - name: Dump LiveChannelRow and focus helpers
         shell: bash
         run: |
           set -euo pipefail
-          VM="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          PLAYER="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          APP="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
           SCREENS="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
-          echo '--- MainViewModel navigation/play ---'
-          grep -n -A120 -B35 'fun navigate\|fun back()\|fun play(\|fun loadItems\|rememberBrowserPosition\|browserPosition\|browserSelectedId' "$VM" || true
-          echo '--- PlayerScreen key handling ---'
-          grep -n -A180 -B60 'onKeyEvent\|onPreviewKeyEvent\|KeyEvent\|KEYCODE_DPAD_UP\|KEYCODE_DPAD_DOWN\|skipEpisode\|onBack' "$PLAYER" || true
-          echo '--- App player wiring/back handling ---'
-          grep -n -A120 -B40 'PlayerScreen\|Screen.Player\|BackHandler\|vm.back\|onBack' "$APP" || true
-          echo '--- Item list focus/click wiring ---'
-          grep -n -A130 -B50 'ItemsScreen\|rememberBrowserPosition\|browserSelectedId\|onPlay\|onItem' "$SCREENS" || true
+          echo '--- LiveChannelRow ---'
+          grep -n -A100 -B30 'fun LiveChannelRow' "$SCREENS" || true
+          echo '--- imports ---'
+          head -n 80 "$SCREENS"
