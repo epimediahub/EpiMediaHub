@@ -623,6 +623,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -643,8 +644,6 @@ fun V070IntroScreen(accent: Color, onFinished: () -> Unit) {
     val focusRequester = remember { FocusRequester() }
     val scale by animateFloatAsState(if (visible) 1f else .78f, label = "introScale")
     val introAlpha by animateFloatAsState(if (visible) 1f else 0f, label = "introAlpha")
-    val scope = rememberCoroutineScope()
-
     fun finish() {
         if (!finished) { finished = true; onFinished() }
     }
