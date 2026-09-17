@@ -35,6 +35,7 @@ def migrate(con):
     if "config_version" not in customer_cols:
         con.execute("ALTER TABLE customers ADD COLUMN config_version INTEGER NOT NULL DEFAULT 1")
     for name, ddl in (
+        ("config_version", "INTEGER NOT NULL DEFAULT 1"),
         ("last_seen_at", "TEXT"),
         ("applied_config_version", "INTEGER NOT NULL DEFAULT 0"),
         ("last_sync_at", "TEXT"),
@@ -46,6 +47,29 @@ def migrate(con):
             con.execute(f"ALTER TABLE devices ADD COLUMN {name} {ddl}")
     con.execute(
         """
+        CREATE TABLE IF NOT EXISTS device_playlists(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            config_json TEXT NOT NULL DEFAULT '{}',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            legacy_customer_id INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(device_id, legacy_customer_id)
+        )
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS device_playlist_migrations(
+            device_id INTEGER PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+            migrated_at TEXT NOT NULL
+        )
+        """
+    )
+    con.execute(
+        """
         CREATE TABLE IF NOT EXISTS customer_config_history(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
@@ -55,6 +79,121 @@ def migrate(con):
             UNIQUE(customer_id, config_version)
         )
         """
+    )
+    rows = con.execute(
+        """
+        SELECT d.id device_row_id,d.customer_id,c.name,c.config_json
+        FROM devices d JOIN customers c ON c.id=d.customer_id
+        WHERE NOT EXISTS(
+            SELECT 1 FROM device_playlist_migrations m WHERE m.device_id=d.id
+        )
+        """
+    ).fetchall()
+    for row in rows:
+        config = _public_config(row["config_json"])
+        if config.get("_system_role") == "unassigned":
+            con.execute(
+                "INSERT OR IGNORE INTO device_playlist_migrations(device_id,migrated_at) VALUES(?,?)",
+                (row["device_row_id"], _iso_now()),
+            )
+            continue
+        if not (config.get("playlist_url") or config.get("xtream_server")):
+            con.execute(
+                "INSERT OR IGNORE INTO device_playlist_migrations(device_id,migrated_at) VALUES(?,?)",
+                (row["device_row_id"], _iso_now()),
+            )
+            continue
+        now = _iso_now()
+        con.execute(
+            """
+            INSERT OR IGNORE INTO device_playlists(
+                device_id,name,config_json,legacy_customer_id,created_at,updated_at
+            ) VALUES(?,?,?,?,?,?)
+            """,
+            (
+                row["device_row_id"],
+                str(config.get("playlist_name") or row["name"] or "Playlist").strip(),
+                json.dumps(config, separators=(",", ":")),
+                row["customer_id"],
+                now,
+                now,
+            ),
+        )
+        con.execute(
+            "INSERT OR IGNORE INTO device_playlist_migrations(device_id,migrated_at) VALUES(?,?)",
+            (row["device_row_id"], now),
+        )
+
+
+def ensure_device_playlist_from_customer(con, device_row_id: int, customer_id: int):
+    """Seed a newly registered device with the customer's legacy playlist."""
+    if con.execute(
+        "SELECT device_id FROM device_playlist_migrations WHERE device_id=?", (device_row_id,)
+    ).fetchone():
+        return
+    row = con.execute(
+        "SELECT name,config_json FROM customers WHERE id=?", (customer_id,)
+    ).fetchone()
+    if not row:
+        return
+    config = _public_config(row["config_json"])
+    if config.get("_system_role") == "unassigned" or not (
+        config.get("playlist_url") or config.get("xtream_server")
+    ):
+        con.execute(
+            "INSERT OR IGNORE INTO device_playlist_migrations(device_id,migrated_at) VALUES(?,?)",
+            (device_row_id, _iso_now()),
+        )
+        return
+    now = _iso_now()
+    con.execute(
+        """
+        INSERT OR IGNORE INTO device_playlists(
+            device_id,name,config_json,legacy_customer_id,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?)
+        """,
+        (
+            device_row_id,
+            str(config.get("playlist_name") or row["name"] or "Playlist").strip(),
+            json.dumps(config, separators=(",", ":")),
+            customer_id,
+            now,
+            now,
+        ),
+    )
+    con.execute(
+        "INSERT OR IGNORE INTO device_playlist_migrations(device_id,migrated_at) VALUES(?,?)",
+        (device_row_id, now),
+    )
+
+
+def build_device_config(con, device_row_id: int):
+    """Build multi-playlist sync data while keeping old Android builds compatible."""
+    rows = con.execute(
+        "SELECT * FROM device_playlists WHERE device_id=? AND enabled=1 ORDER BY id",
+        (device_row_id,),
+    ).fetchall()
+    playlists = []
+    for row in rows:
+        config = _public_config(row["config_json"])
+        config["id"] = f"managed-dashboard-{row['id']}"
+        config["playlist_name"] = row["name"]
+        playlists.append(config)
+    payload = dict(playlists[0]) if playlists else {}
+    payload["playlists"] = playlists
+    payload["active_playlist_id"] = playlists[0]["id"] if playlists else ""
+    return payload
+
+
+def bump_device_config(con, device_row_id: int):
+    con.execute(
+        """
+        UPDATE devices
+        SET config_version=config_version+1,applied_config_version=0,
+            last_sync_status='pending',last_sync_error=NULL
+        WHERE id=?
+        """,
+        (device_row_id,),
     )
 
 
@@ -125,7 +264,7 @@ def register(app, db):
         if not token:
             return None
         return con.execute(
-            "SELECT d.*,c.config_json,c.config_version,c.enabled customer_enabled FROM devices d JOIN customers c ON c.id=d.customer_id WHERE d.session_token_hash=? LIMIT 1",
+            "SELECT d.*,c.enabled customer_enabled FROM devices d JOIN customers c ON c.id=d.customer_id WHERE d.session_token_hash=? LIMIT 1",
             (_digest(token),),
         ).fetchone()
 
@@ -141,7 +280,7 @@ def register(app, db):
             migrate(con)
             con.execute("BEGIN IMMEDIATE")
             row = con.execute(
-                "SELECT d.*,c.config_json,c.config_version,c.enabled customer_enabled FROM devices d JOIN customers c ON c.id=d.customer_id WHERE d.device_id=? AND d.sync_bootstrap_hash=?",
+                "SELECT d.*,c.enabled customer_enabled FROM devices d JOIN customers c ON c.id=d.customer_id WHERE d.device_id=? AND d.sync_bootstrap_hash=?",
                 (device_id, _digest(bootstrap_token)),
             ).fetchone()
             if not row or not row["enabled"] or not row["customer_enabled"]:
@@ -156,7 +295,7 @@ def register(app, db):
                 session_token=session_token,
                 customer_id=row["customer_id"],
                 config_version=int(row["config_version"] or 1),
-                config=_public_config(row["config_json"]),
+                config=build_device_config(con, int(row["id"])),
             )
 
     @bp.get("/v1/device/config")
@@ -185,7 +324,7 @@ def register(app, db):
                 config_version=current,
                 applied_config_version=int(row["applied_config_version"] or 0),
                 changed=changed,
-                config=_public_config(row["config_json"]),
+                config=build_device_config(con, int(row["id"])),
             )
 
     @bp.post("/v1/device/sync-result")

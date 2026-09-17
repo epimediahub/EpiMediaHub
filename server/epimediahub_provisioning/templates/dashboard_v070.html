@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f4f6fa">
+  <title>EpiMediaHub · Kunden & Geräte</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css', v='0.7.0') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v070.css', v='0.7.0') }}">
+</head>
+<body class="admin-page hierarchy-page">
+<svg class="svg-sprite" aria-hidden="true">
+  <symbol id="i-device" viewBox="0 0 24 24"><path d="M5 3h14v18H5zM9 17h6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM10 9l5 3-5 3z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M18 12a7 7 0 0 0-12-4l-2 4m2 0a7 7 0 0 0 12 4l2-4"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 4H4v16h6M14 8l4 4-4 4m4-4H8"/></symbol>
+</svg>
+
+<header class="hierarchy-topbar">
+  <a class="hierarchy-brand" href="{{ url_for('dashboard') }}"><span>E</span><div><strong>EpiMediaHub</strong><small>CONTROL CENTER · 0.7.0</small></div></a>
+  <form method="post" action="{{ url_for('logout') }}"><button class="button button-ghost" type="submit"><svg><use href="#i-logout"/></svg>Abmelden</button></form>
+</header>
+
+<main class="hierarchy-shell">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}<div class="flash-stack" aria-live="polite">{% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+  {% endwith %}
+
+  <section class="hierarchy-heading">
+    <div><span class="eyebrow">EINFACHE VERWALTUNG</span><h1>Kunden, Geräte & Playlists</h1><p>Alles dort bearbeiten, wo es hingehört: Kunde → Gerät → Playlists.</p></div>
+    <button class="button button-primary" type="button" data-open-dialog="new-customer"><svg><use href="#i-plus"/></svg>Kunde hinzufügen</button>
+  </section>
+
+  <section class="hierarchy-metrics" aria-label="Übersicht">
+    <div><span>Kunden</span><strong>{{ customers|length }}</strong></div>
+    <div><span>Geräte</span><strong>{{ total_devices }}</strong></div>
+    <div><span>Playlists</span><strong>{{ total_playlists }}</strong></div>
+    <div class="{% if pending_devices %}metric-attention{% endif %}"><span>Sync offen</span><strong>{{ pending_devices }}</strong></div>
+  </section>
+
+  <label class="hierarchy-search"><svg><use href="#i-search"/></svg><input id="hierarchySearch" type="search" placeholder="Kunde, Gerät oder Playlist suchen …" autocomplete="off"></label>
+
+  <section id="customerGrid" class="customer-grid">
+    {% for customer in customers %}
+    <article id="customer-{{ customer.id }}" class="customer-card" data-search="{{ customer.name|lower }} {% for device in customer.devices %}{{ device.device_id|lower }} {% for playlist in device.playlists %}{{ playlist.name|lower }} {% endfor %}{% endfor %}">
+      <header class="customer-head">
+        <div class="customer-identity"><span class="customer-avatar">{{ customer.name[:1]|upper }}</span><div><small>KUNDE #{{ customer.id }}</small><h2>{{ customer.name }}</h2><p>{{ customer.devices|length }} Gerät(e) · {{ customer.playlist_count }} Playlist(s)</p></div></div>
+        <div class="customer-actions">
+          <button class="button button-ghost button-small" type="button" data-open-dialog="rename-customer-{{ customer.id }}">Umbenennen</button>
+          <form method="post" action="{{ url_for('web_activation', customer_id=customer.id) }}"><button class="button button-secondary button-small" type="submit"><svg><use href="#i-plus"/></svg>Gerät verbinden</button></form>
+        </div>
+      </header>
+
+      <div class="device-stack">
+        {% for device in customer.devices %}
+        <section id="device-{{ device.id }}" class="device-card">
+          <header class="device-head">
+            <div class="device-title"><span class="device-icon"><svg><use href="#i-device"/></svg></span><div><small>GERÄT</small><h3>{{ device.device_id }}</h3><p>{{ device.platform|capitalize }} · Soll v{{ device.config_version }} / Gerät v{{ device.applied_config_version or 0 }}</p></div></div>
+            <div class="device-actions">
+              {% if device.last_sync_status == 'error' %}<span class="sync-state error">Fehler</span>{% elif device.sync_pending %}<span class="sync-state pending">Ausstehend</span>{% else %}<span class="sync-state ok">Synchron</span>{% endif %}
+              <button class="button button-primary button-small" type="button" data-open-dialog="add-playlist-{{ device.id }}"><svg><use href="#i-plus"/></svg>Playlist</button>
+              <form method="post" action="{{ url_for('v070_sync_device', device_id=device.id) }}"><button class="button button-secondary button-small" type="submit"><svg><use href="#i-sync"/></svg>Synchronisieren</button></form>
+            </div>
+          </header>
+
+          <div class="playlist-stack">
+            {% for playlist in device.playlists %}
+            <div class="playlist-item">
+              <span class="playlist-icon"><svg><use href="#i-play"/></svg></span>
+              <div class="playlist-copy"><strong>{{ playlist.name }}</strong><small>{{ playlist.playlist_type|default('M3U') }} · {{ playlist.source_display or 'Keine Quelle' }}</small></div>
+              <span class="badge badge-success"><i></i>Aktiv</span>
+              <button class="button button-ghost button-small" type="button" data-open-dialog="edit-playlist-{{ playlist.id }}">Bearbeiten</button>
+            </div>
+            {% else %}
+            <div class="playlist-empty"><div><strong>Noch keine Playlist auf diesem Gerät</strong><span>Füge sie direkt hier hinzu. Die Zuordnung zum Gerät geschieht automatisch.</span></div><button class="button button-primary button-small" type="button" data-open-dialog="add-playlist-{{ device.id }}">Playlist hinzufügen</button></div>
+            {% endfor %}
+          </div>
+        </section>
+        {% else %}
+        <div class="customer-empty"><span class="device-icon"><svg><use href="#i-device"/></svg></span><div><strong>Noch kein Gerät</strong><p>Erstelle einen Verbindungscode. Sobald das Gerät verbunden ist, erscheint es direkt hier.</p></div><form method="post" action="{{ url_for('web_activation', customer_id=customer.id) }}"><button class="button button-primary button-small" type="submit">Gerät verbinden</button></form></div>
+        {% endfor %}
+      </div>
+    </article>
+    {% else %}
+    <div class="first-empty"><span class="customer-avatar"><svg><use href="#i-user"/></svg></span><h2>Noch keine Kunden</h2><p>Lege zuerst einen Kunden an. Danach verbindest du dessen Geräte und fügst die Playlists direkt im Gerät hinzu.</p><button class="button button-primary" type="button" data-open-dialog="new-customer">Ersten Kunden anlegen</button></div>
+    {% endfor %}
+  </section>
+
+  <div id="noSearchResults" class="first-empty" hidden><h2>Keine Treffer</h2><p>Ändere den Suchbegriff.</p></div>
+
+  {% if unassigned_devices %}
+  <section class="unassigned-panel">
+    <header><div><span class="eyebrow">NOCH ZUORDNEN</span><h2>Nicht zugewiesene Geräte</h2><p>Diese Geräte bleiben erhalten. Ordne sie jetzt einem Kunden zu.</p></div><span class="count-pill">{{ unassigned_devices|length }}</span></header>
+    {% for device in unassigned_devices %}
+    <div class="unassigned-row"><div><strong>{{ device.device_id }}</strong><small>{{ device.platform|capitalize }} · {{ device.playlists|length }} Playlist(s)</small></div><form method="post" action="{{ url_for('v070_move_device', device_id=device.id) }}"><select name="customer_id" required><option value="">Kunde auswählen …</option>{% for customer in customers %}<option value="{{ customer.id }}">{{ customer.name }}</option>{% endfor %}</select><button class="button button-primary button-small" type="submit">Zuordnen</button></form></div>
+    {% endfor %}
+  </section>
+  {% endif %}
+</main>
+
+<dialog id="new-customer" class="modal compact-modal"><form method="post" action="{{ url_for('v070_create_customer') }}"><div class="modal-head"><div><span class="section-kicker">NEU</span><h2>Kunde hinzufügen</h2></div><button class="modal-close" type="button" data-close-dialog>×</button></div><label><span>Kundenname</span><input name="name" required autofocus placeholder="Max Mustermann"></label><div class="modal-actions"><button class="button button-ghost" type="button" data-close-dialog>Abbrechen</button><button class="button button-primary" type="submit">Kunde anlegen</button></div></form></dialog>
+
+{% for customer in customers %}
+<dialog id="rename-customer-{{ customer.id }}" class="modal compact-modal"><form method="post" action="{{ url_for('v070_rename_customer', customer_id=customer.id) }}"><div class="modal-head"><div><span class="section-kicker">KUNDE</span><h2>Umbenennen</h2></div><button class="modal-close" type="button" data-close-dialog>×</button></div><label><span>Kundenname</span><input name="name" value="{{ customer.name }}" required></label><div class="modal-actions"><button class="button button-ghost" type="button" data-close-dialog>Abbrechen</button><button class="button button-primary" type="submit">Speichern</button></div></form></dialog>
+{% for device in customer.devices %}
+<dialog id="add-playlist-{{ device.id }}" class="modal"><form method="post" action="{{ url_for('v070_add_playlist', device_id=device.id) }}"><div class="modal-head"><div><span class="section-kicker">{{ device.device_id }}</span><h2>Playlist hinzufügen</h2></div><button class="modal-close" type="button" data-close-dialog>×</button></div>{% include 'playlist_form_v070.html' %}<div class="modal-actions"><button class="button button-ghost" type="button" data-close-dialog>Abbrechen</button><button class="button button-primary" type="submit">Hinzufügen & synchronisieren</button></div></form></dialog>
+{% for playlist in device.playlists %}
+<dialog id="edit-playlist-{{ playlist.id }}" class="modal"><form method="post" action="{{ url_for('v070_update_playlist', playlist_id=playlist.id) }}"><div class="modal-head"><div><span class="section-kicker">{{ device.device_id }}</span><h2>{{ playlist.name }}</h2></div><button class="modal-close" type="button" data-close-dialog>×</button></div>{% include 'playlist_form_v070.html' %}<div class="modal-actions"><button class="button button-ghost" type="button" data-close-dialog>Abbrechen</button><button class="button button-primary" type="submit">Speichern & synchronisieren</button></div></form><div class="danger-zone"><div><strong>Playlist vom Gerät entfernen</strong><span>Der Kunde und das Gerät bleiben erhalten.</span></div><form method="post" action="{{ url_for('v070_delete_playlist', playlist_id=playlist.id) }}" onsubmit="return confirm('Playlist wirklich von diesem Gerät entfernen?')"><button class="button button-danger" type="submit">Playlist löschen</button></form></div></dialog>
+{% endfor %}{% endfor %}{% endfor %}
+
+<script>
+(() => {
+  const openDialog = id => document.getElementById(id)?.showModal();
+  document.querySelectorAll('[data-open-dialog]').forEach(button => button.addEventListener('click', () => openDialog(button.dataset.openDialog)));
+  document.querySelectorAll('[data-close-dialog]').forEach(button => button.addEventListener('click', () => button.closest('dialog')?.close()));
+  document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); }));
+  document.querySelectorAll('.playlist-type-select').forEach(select => { const update = () => { const form = select.closest('form'); form.querySelectorAll('.type-fields').forEach(field => field.hidden = !field.classList.contains(`type-${select.value}`)); }; select.addEventListener('change', update); update(); });
+  const search = document.getElementById('hierarchySearch');
+  const cards = [...document.querySelectorAll('.customer-card')];
+  const empty = document.getElementById('noSearchResults');
+  search?.addEventListener('input', () => { const term = search.value.trim().toLowerCase(); let visible = 0; cards.forEach(card => { card.hidden = Boolean(term && !card.dataset.search.includes(term)); if (!card.hidden) visible += 1; }); empty.hidden = visible !== 0; });
+})();
+</script>
+</body>
+</html>

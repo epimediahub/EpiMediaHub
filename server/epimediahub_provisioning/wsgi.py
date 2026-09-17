@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from flask import render_template
 
 from app import app, db, digest
-from dashboard_v061 import install as install_dashboard_v061
+from dashboard_v070 import install as install_dashboard_v070
 
 
 @app.get("/connect/<token>")
@@ -43,4 +43,4 @@ def connect_page(token: str):
     )
 
 
-install_dashboard_v061(app, db)
+install_dashboard_v070(app, db)

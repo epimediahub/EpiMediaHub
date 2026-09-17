@@ -22,6 +22,12 @@ PORT=8787
 
 ## API v1
 
+Version 0.7.0 separates the hierarchy cleanly: customers own devices and every
+device owns any number of playlists. Existing customer-level playlist data is
+copied to the associated devices automatically during the schema migration.
+The device config response contains a `playlists` array and mirrors its first
+entry at the top level for compatibility with older app versions.
+
 ### Create customer
 `POST /v1/admin/customers`
 

@@ -14,7 +14,9 @@ import qrcode
 from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
 
 from receiver_sync import (
+    build_device_config,
     create_sync_bootstrap,
+    ensure_device_playlist_from_customer,
     migrate as migrate_receiver_sync,
     register as register_receiver_sync,
     rollback_customer_config,
@@ -437,7 +439,6 @@ def redeem_by(field, value, body):
             "UPDATE activations SET redeemed_at=?,device_id=?,platform=? WHERE id=? AND redeemed_at IS NULL",
             (iso(now), device_id, platform, row["id"]),
         )
-        version = int(row["config_version"] or 1)
         con.execute(
             """
             INSERT INTO devices(customer_id,device_id,platform,session_token_hash,created_at,applied_config_version,last_seen_at,last_sync_at,last_sync_status)
@@ -446,7 +447,7 @@ def redeem_by(field, value, body):
               platform=excluded.platform,
               session_token_hash=excluded.session_token_hash,
               enabled=1,
-              applied_config_version=excluded.applied_config_version,
+              applied_config_version=0,
               last_seen_at=excluded.last_seen_at,
               last_sync_at=excluded.last_sync_at,
               last_sync_status=excluded.last_sync_status,
@@ -458,13 +459,23 @@ def redeem_by(field, value, body):
                 platform,
                 digest(session_token),
                 iso(now),
-                version,
+                0,
                 iso(now),
                 iso(now),
                 "ok",
             ),
         )
-        config = public_config(customer_config(row))
+        device = con.execute(
+            "SELECT id,config_version FROM devices WHERE customer_id=? AND device_id=?",
+            (row["customer_id"], device_id),
+        ).fetchone()
+        ensure_device_playlist_from_customer(con, int(device["id"]), int(row["customer_id"]))
+        version = int(device["config_version"] or 1)
+        con.execute(
+            "UPDATE devices SET applied_config_version=? WHERE id=?",
+            (version, device["id"]),
+        )
+        config = build_device_config(con, int(device["id"]))
     return jsonify(
         session_token=session_token,
         customer_id=row["customer_id"],
