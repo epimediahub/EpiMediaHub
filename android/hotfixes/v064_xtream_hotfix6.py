@@ -28,13 +28,38 @@ if "0.6.4.5" not in home_text:
 home.write_text(home_text.replace("0.6.4.5", "0.6.4.6", 1))
 
 # ---------------------------------------------------------------------------
-# Xtream fast-zap: once the provider M3U supplied an exact playable URL, use
-# that canonical URL only. Trying seven additional guessed paths after the
-# canonical URL fails adds latency and can trigger provider anti-flood limits.
-# Providers without an exact M3U URL still retain the legacy fallback matrix.
+# Real-provider fast path.
+# The supplied provider M3U (86k+ entries / ~24 MB) proves that Live streams use
+# the bare Xtream path:
+#   http://host:port/USER/PASS/STREAM_ID
+# i.e. no /live prefix and no extension. Movies and series still use the usual
+# /movie and /series paths.
+#
+# Do NOT synchronously download and parse the whole M3U every time the first
+# channel is opened. Use an already cached exact URL when available and keep the
+# background prefetch, but otherwise let streamCandidates() use the provider's
+# proven bare-Live pattern immediately.
 # ---------------------------------------------------------------------------
 xtream = java / "data/XtreamClient.kt"
 s = xtream.read_text()
+old_prepare = '''    fun preparePlaybackItem(item: MediaEntry): MediaEntry {
+        if (item.kind != MediaKind.LIVE && item.kind != MediaKind.MOVIE && item.kind != MediaKind.EPISODE) return item
+        val exact = exactM3uStreamUrls()[item.id].orEmpty().trim()
+        return if (exact.isBlank()) item else item.copy(streamUrl = exact)
+    }
+'''
+new_prepare = '''    fun preparePlaybackItem(item: MediaEntry): MediaEntry {
+        if (item.kind != MediaKind.LIVE && item.kind != MediaKind.MOVIE && item.kind != MediaKind.EPISODE) return item
+        val exact = cachedExactM3uUrl(item.id).trim()
+        if (exact.isNotBlank()) return item.copy(streamUrl = exact)
+        prefetchExactM3uAsync()
+        return item
+    }
+'''
+if old_prepare not in s:
+    raise SystemExit("preparePlaybackItem hotfix6 anchor missing")
+s = s.replace(old_prepare, new_prepare, 1)
+
 old_candidates = '''        val servers = listOf(cachedStreamServer(), p.server.trimEnd('/')).filter { it.isNotBlank() }.distinct()
         val urls = mutableListOf<String>()
         cachedExactM3uUrl(item.id).takeIf { it.isNotBlank() }?.let { urls += it }
@@ -44,6 +69,17 @@ new_candidates = '''        val servers = listOf(cachedStreamServer(), p.server.
         val exactProviderUrl = cachedExactM3uUrl(item.id).trim()
         if (exactProviderUrl.isNotBlank()) return listOf(exactProviderUrl)
         val urls = mutableListOf<String>()
+        if (item.kind == MediaKind.LIVE) {
+            // Real provider M3U: /USER/PASS/STREAM_ID is the canonical Live path.
+            // Put it before API-constructed /live/.../*.ts guesses so zapping does
+            // not burn several failed HTTP requests before reaching the working URL.
+            servers.forEach { server ->
+                if (rawUser.isNotBlank() && rawPass.isNotBlank() && rawId.isNotBlank()) {
+                    urls += "$server/$rawUser/$rawPass/$rawId"
+                }
+                urls += "$server/$user/$pass/$id"
+            }
+        }
         if (item.streamUrl.isNotBlank()) urls += item.streamUrl
 '''
 if old_candidates not in s:
@@ -170,7 +206,10 @@ player.write_text(s)
 checks = [
     (gradle, 'versionName = "0.6.4.6"'),
     (gradle, 'versionCode = 609'),
+    (xtream, 'val exact = cachedExactM3uUrl(item.id).trim()'),
+    (xtream, 'prefetchExactM3uAsync()'),
     (xtream, 'if (exactProviderUrl.isNotBlank()) return listOf(exactProviderUrl)'),
+    (xtream, 'urls += "$server/$rawUser/$rawPass/$rawId"'),
     (vm, 'val initialWindow = entries.filterNot { it.id in alreadyLoaded }.take(8)'),
     (vm, 'initialWindow.chunked(2)'),
     (player, 'DefaultLoadControl.Builder()'),
@@ -182,4 +221,4 @@ for path, marker in checks:
     if marker not in path.read_text():
         raise SystemExit(f"missing hotfix6 marker {marker} in {path}")
 
-print("Android v0.6.4.6 fast-zap + provider anti-flood hotfix applied")
+print("Android v0.6.4.6 real-M3U fast-zap + provider anti-flood hotfix applied")
