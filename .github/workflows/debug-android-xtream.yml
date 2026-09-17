@@ -26,17 +26,17 @@ jobs:
           PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
           test -n "$PROJECT_ROOT"
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
-      - name: Apply current v0.6.4.4 source
+      - name: Apply current Android source
         run: bash build_tools/install_android_v064_source.sh
-      - name: Dump playlist profile and M3U parsing logic
+      - name: Dump playlist switch and VOD/series state logic
         shell: bash
         run: |
           set -euo pipefail
-          echo '--- candidate files ---'
-          find "$PROJECT_ROOT/app/src/main/java" -type f \( -name '*.kt' -o -name '*.java' \) | grep -Ei 'M3u|Playlist|Model|Prefs|Config' || true
-          echo '--- PlaylistProfile / MediaEntry ---'
-          grep -Rni -A80 -B20 'data class PlaylistProfile\|data class MediaEntry' "$PROJECT_ROOT/app/src/main/java" || true
-          echo '--- M3U parser directives ---'
-          grep -Rni -A120 -B25 'EXTINF\|EXTVLCOPT\|EXTHTTP\|http-user-agent\|referrer\|referer' "$PROJECT_ROOT/app/src/main/java" || true
-          echo '--- managed playlist JSON mapping ---'
-          grep -Rni -A120 -B20 'originalUrl\|output =\|PlaylistType.XTREAM\|username =\|password =' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app" || true
+          VM="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          echo '--- MainViewModel playlist/catalog functions ---'
+          grep -n -A90 -B25 'fun selectPlaylist\|fun loadCategories\|fun loadCatalogRows\|fun loadItems\|fun search\|catalogRows\|contentFilterKind' "$VM" || true
+          echo '--- Xtream VOD/series requests ---'
+          X="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          grep -n -A100 -B25 'fun categories\|fun entries\|get_vod_streams\|get_series\|category_id' "$X" || true
+          echo '--- UI movie/series/catalog usage ---'
+          grep -Rni -A80 -B20 'catalogRows\|contentFilterKind\|MediaKind.MOVIE\|MediaKind.SERIES' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui" || true
