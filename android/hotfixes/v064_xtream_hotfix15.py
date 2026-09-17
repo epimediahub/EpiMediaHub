@@ -217,8 +217,16 @@ new_mismatch = '''            val remoteManagedIds = managedIds(config)
 '''
 s = s.replace(old_mismatch, new_mismatch, 1)
 
-# Insert Dashboard 0.7 helpers after isHttpUrl().
+# Insert Dashboard 0.7 helpers after the complete expression-bodied
+# isHttpUrl() implementation. function_span() stops at the closing brace of
+# runCatching { ... }, while the original Kotlin function continues with the
+# chained .getOrDefault(false). Keeping that chain attached is required for a
+# valid Boolean-returning function.
 a, b = function_span(s, "    private fun isHttpUrl(value: String)")
+tail = '.getOrDefault(false)'
+if not s.startswith(tail, b):
+    raise SystemExit("isHttpUrl getOrDefault tail missing")
+b += len(tail)
 helpers = r'''
 
     private data class DerivedXtream(
@@ -513,6 +521,7 @@ checks = [
     (provision, 'MANAGED_PROFILE_PREFIX = "managed-dashboard-"'),
     (provision, 'config.optJSONArray("playlists")'),
     (provision, 'xtreamFromM3u(url)'),
+    (provision, '}.getOrDefault(false)\n\n    private data class DerivedXtream('),
     (hub, 'Filme werden geladen …'),
     (hub, 'onError = { imageFailed = true }'),
     (xtream, 'o.optString("cover_big")'),
