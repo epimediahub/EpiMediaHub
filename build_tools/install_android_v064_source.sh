@@ -10,6 +10,7 @@ python3 android/hotfixes/v064_xtream_hotfix3.py
 python3 android/hotfixes/v064_xtream_hotfix4.py
 python3 android/hotfixes/v064_xtream_hotfix5.py
 python3 android/hotfixes/v064_xtream_hotfix6.py
+python3 android/hotfixes/v064_xtream_hotfix6b.py
 
 grep -Fq 'versionName = "0.6.4.6"' "$PROJECT_ROOT/app/build.gradle.kts"
 grep -Fq 'versionCode = 609' "$PROJECT_ROOT/app/build.gradle.kts"
@@ -34,8 +35,9 @@ grep -Fq 'XtreamClient(profile).preparePlaybackItem(item)' "$PROJECT_ROOT/app/sr
 grep -Fq 'parseIptvHttpRequest(raw: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'httpFactory.setDefaultRequestProperties(requestHeaders)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'player.setMediaItem(MediaItem.fromUri(request.url))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-grep -Fq 'DefaultLoadControl.Builder()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+grep -Fq 'val liveLoadControl = DefaultLoadControl.Builder()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq '.setBufferDurationsMs(750, 3_000, 150, 300)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+grep -Fq 'exoBuilder.setLoadControl(liveLoadControl)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'if (false && item.kind == MediaKind.LIVE)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'player.clearMediaItems()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'InvalidResponseCodeException' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
