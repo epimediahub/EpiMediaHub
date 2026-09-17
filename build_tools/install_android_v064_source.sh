@@ -15,9 +15,10 @@ python3 android/hotfixes/v064_xtream_hotfix7.py
 python3 android/hotfixes/v064_xtream_hotfix8.py
 python3 android/hotfixes/v064_xtream_hotfix9.py
 python3 android/hotfixes/v064_xtream_hotfix10.py
+python3 android/hotfixes/v064_xtream_hotfix11.py
 
-grep -Fq 'versionName = "0.6.4.10"' "$PROJECT_ROOT/app/build.gradle.kts"
-grep -Fq 'versionCode = 613' "$PROJECT_ROOT/app/build.gradle.kts"
+grep -Fq 'versionName = "0.6.4.11"' "$PROJECT_ROOT/app/build.gradle.kts"
+grep -Fq 'versionCode = 614' "$PROJECT_ROOT/app/build.gradle.kts"
 grep -Fq 'streamServerCache' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
 grep -Fq 'server_info' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
 grep -Fq 'direct_source' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
@@ -64,6 +65,13 @@ grep -Fq '// Back navigation is handled by the device/system Back action.' "$PRO
 grep -Fq 'var searchDialog by remember(providerId) { mutableStateOf(false) }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
 grep -Fq 'OutlinedButton(onClick = { searchDialog = true }, modifier = Modifier.weight(1f))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
 grep -Fq 'items(u.categories, key = { "category:${it.id}" })' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
+grep -Fq 'releases/tags/v0.6.4-test' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+grep -Fq 'EpiMediaHub_Android_v0.6.4-test.apk' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+grep -Fq 'private fun isNewer(remote: String, local: String): Boolean' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+grep -Fq 'Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+grep -Fq 'canRequestPackageInstalls()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+grep -Fq 'FileProvider.getUriForFile' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
 grep -Fq 'parseIptvHttpRequest(raw: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'httpFactory.setDefaultRequestProperties(requestHeaders)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'player.setMediaItem(MediaItem.fromUri(request.url))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
@@ -74,4 +82,4 @@ grep -Fq 'if (false && item.kind == MediaKind.LIVE)' "$PROJECT_ROOT/app/src/main
 grep -Fq 'player.clearMediaItems()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'InvalidResponseCodeException' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 
-echo "Android v0.6.4.10 source reconstructed successfully with clean top bars, TV Mediathek search focus and full cinematic category scrolling"
+echo "Android v0.6.4.11 source reconstructed successfully with current-release updater and Fire TV install-source handling"
