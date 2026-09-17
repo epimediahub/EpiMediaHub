@@ -28,28 +28,57 @@ if "0.6.4.5" not in home_text:
 home.write_text(home_text.replace("0.6.4.5", "0.6.4.6", 1))
 
 # ---------------------------------------------------------------------------
-# Real-provider fast path.
-# The supplied provider M3U (86k+ entries / ~24 MB) proves that Live streams use
-# the bare Xtream path:
-#   http://host:port/USER/PASS/STREAM_ID
-# i.e. no /live prefix and no extension. Movies and series still use the usual
-# /movie and /series paths.
-#
-# Do NOT synchronously download and parse the whole M3U every time the first
-# channel is opened. Use an already cached exact URL when available and keep the
-# background prefetch, but otherwise let streamCandidates() use the provider's
-# proven bare-Live pattern immediately.
+# Real-provider Xtream/MPEG-TS handling.
+# The uploaded provider M3U proves this provider emits Live streams as:
+#   http://host[:port]/USER/PASS/STREAM_ID
+# with no /live prefix and no extension, even though get.php uses output=mpegts.
+# Avoid downloading/parsing the full ~23 MB M3U just to derive this URL.
 # ---------------------------------------------------------------------------
 xtream = java / "data/XtreamClient.kt"
 s = xtream.read_text()
+
 old_prepare = '''    fun preparePlaybackItem(item: MediaEntry): MediaEntry {
         if (item.kind != MediaKind.LIVE && item.kind != MediaKind.MOVIE && item.kind != MediaKind.EPISODE) return item
         val exact = exactM3uStreamUrls()[item.id].orEmpty().trim()
         return if (exact.isBlank()) item else item.copy(streamUrl = exact)
     }
 '''
-new_prepare = '''    fun preparePlaybackItem(item: MediaEntry): MediaEntry {
+new_prepare = '''    private fun providerOutputFormat(): String {
+        val originalOutput = runCatching {
+            Uri.parse(p.originalUrl.trim()).getQueryParameter("output").orEmpty()
+        }.getOrDefault("")
+        return firstNonBlank(originalOutput, p.output).trim().trimStart('.').lowercase()
+    }
+
+    private fun originalPortalBase(): String {
+        val fallback = p.server.trimEnd('/')
+        val raw = p.originalUrl.trim()
+        if (!raw.contains("get.php", ignoreCase = true)) return fallback
+        return runCatching {
+            val uri = Uri.parse(raw)
+            val scheme = uri.scheme.orEmpty()
+            val authority = uri.encodedAuthority.orEmpty()
+            if (scheme.isBlank() || authority.isBlank()) return@runCatching fallback
+            val parent = uri.encodedPath.orEmpty().substringBeforeLast('/', "").trimEnd('/')
+            "$scheme://$authority$parent".trimEnd('/')
+        }.getOrDefault(fallback)
+    }
+
+    private fun canonicalMpegTsLiveUrl(streamId: String): String {
+        val format = providerOutputFormat()
+        if (format != "mpegts" && format != "mpeg-ts") return ""
+        val base = originalPortalBase()
+        val id = streamId.trim()
+        if (base.isBlank() || id.isBlank() || p.username.isBlank() || p.password.isBlank()) return ""
+        return "$base/${path(p.username)}/${path(p.password)}/${path(id)}"
+    }
+
+    fun preparePlaybackItem(item: MediaEntry): MediaEntry {
         if (item.kind != MediaKind.LIVE && item.kind != MediaKind.MOVIE && item.kind != MediaKind.EPISODE) return item
+        if (item.kind == MediaKind.LIVE) {
+            val canonical = canonicalMpegTsLiveUrl(item.id)
+            if (canonical.isNotBlank()) return item.copy(streamUrl = canonical)
+        }
         val exact = cachedExactM3uUrl(item.id).trim()
         if (exact.isNotBlank()) return item.copy(streamUrl = exact)
         prefetchExactM3uAsync()
@@ -66,32 +95,43 @@ old_candidates = '''        val servers = listOf(cachedStreamServer(), p.server.
         if (item.streamUrl.isNotBlank()) urls += item.streamUrl
 '''
 new_candidates = '''        val servers = listOf(cachedStreamServer(), p.server.trimEnd('/')).filter { it.isNotBlank() }.distinct()
+        if (item.kind == MediaKind.LIVE) {
+            val canonical = canonicalMpegTsLiveUrl(item.id)
+            if (canonical.isNotBlank()) return listOf(canonical)
+        }
         val exactProviderUrl = cachedExactM3uUrl(item.id).trim()
         if (exactProviderUrl.isNotBlank()) return listOf(exactProviderUrl)
         val urls = mutableListOf<String>()
-        if (item.kind == MediaKind.LIVE) {
-            // Real provider M3U: /USER/PASS/STREAM_ID is the canonical Live path.
-            // Put it before API-constructed /live/.../*.ts guesses so zapping does
-            // not burn several failed HTTP requests before reaching the working URL.
-            servers.forEach { server ->
-                if (rawUser.isNotBlank() && rawPass.isNotBlank() && rawId.isNotBlank()) {
-                    urls += "$server/$rawUser/$rawPass/$rawId"
-                }
-                urls += "$server/$user/$pass/$id"
-            }
-        }
         if (item.streamUrl.isNotBlank()) urls += item.streamUrl
 '''
 if old_candidates not in s:
     raise SystemExit("stream candidate exact-provider anchor missing")
 s = s.replace(old_candidates, new_candidates, 1)
+
+old_prefetch = '''        if (kind == MediaKind.LIVE || kind == MediaKind.MOVIE) prefetchExactM3uAsync()
+        return buildList {
+'''
+new_prefetch = '''        if (kind == MediaKind.MOVIE || (kind == MediaKind.LIVE && providerOutputFormat() !in setOf("mpegts", "mpeg-ts"))) {
+            prefetchExactM3uAsync()
+        }
+        return buildList {
+'''
+if old_prefetch not in s:
+    raise SystemExit("Live/VOD M3U prefetch anchor missing")
+s = s.replace(old_prefetch, new_prefetch, 1)
+
+old_live_url = '''                                streamUrl = firstNonBlank(cachedExactM3uUrl(id), o.optString("direct_source"), "$streamServer/live/${path(p.username)}/${path(p.password)}/${path(id)}.${p.output.trimStart('.')}"),
+'''
+new_live_url = '''                                streamUrl = firstNonBlank(canonicalMpegTsLiveUrl(id), cachedExactM3uUrl(id), o.optString("direct_source"), "$streamServer/live/${path(p.username)}/${path(p.password)}/${path(id)}.${p.output.trimStart('.')}"),
+'''
+if old_live_url not in s:
+    raise SystemExit("Live entry streamUrl anchor missing")
+s = s.replace(old_live_url, new_live_url, 1)
 xtream.write_text(s)
 
 # ---------------------------------------------------------------------------
-# Provider anti-flood: do not clear already loaded EPG on every Live category
-# switch, and preload only a small visible-window batch with low concurrency.
-# The old code fired up to 72 short-EPG requests per category (and potentially
-# twice that through endpoint fallbacks), competing directly with Live startup.
+# Provider anti-flood: retain EPG cache and dramatically reduce category-load
+# short-EPG traffic. The previous 72 requests competed with Live startup.
 # ---------------------------------------------------------------------------
 vm = java / "MainViewModel.kt"
 s = vm.read_text()
@@ -117,15 +157,10 @@ old_epg_loop = '''                        val out = mutableMapOf<String, List<Ep
 '''
 new_epg_loop = '''                        val out = mutableMapOf<String, List<EpgItem>>()
                         val alreadyLoaded = _ui.value.epg.keys
-                        val initialWindow = entries.filterNot { it.id in alreadyLoaded }.take(8)
-                        for (chunk in initialWindow.chunked(2)) {
-                            coroutineScope {
-                                chunk.map { channel ->
-                                    async {
-                                        channel.id to runCatching { client.shortEpg(channel.id) }.getOrDefault(emptyList())
-                                    }
-                                }.awaitAll()
-                            }.forEach { (id, list) -> if (list.isNotEmpty()) out[id] = list }
+                        val initialWindow = entries.filterNot { it.id in alreadyLoaded }.take(4)
+                        for (channel in initialWindow) {
+                            val list = runCatching { client.shortEpg(channel.id) }.getOrDefault(emptyList())
+                            if (list.isNotEmpty()) out[channel.id] = list
                         }
                         out
 '''
@@ -135,12 +170,7 @@ s = s.replace(old_epg_loop, new_epg_loop, 1)
 vm.write_text(s)
 
 # ---------------------------------------------------------------------------
-# Player fast-zap:
-# - use a small Live-oriented buffer so accepted MPEG-TS/HLS streams render fast;
-# - disable the old 6.5 s first-frame watchdog (it was skipping valid slow-start
-#   streams and opening more provider connections);
-# - explicitly stop/clear the player before release so providers with strict
-#   one-connection/session limits see the previous channel close immediately.
+# Player fast-zap: smaller buffer, no first-frame watchdog, immediate teardown.
 # ---------------------------------------------------------------------------
 player = java / "ui/PlayerScreen.kt"
 s = player.read_text()
@@ -155,7 +185,7 @@ old_engine = '''        val exo = ExoPlayer.Builder(context)
             .build()
 '''
 new_engine = '''        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(1_000, 4_000, 200, 400)
+            .setBufferDurationsMs(750, 3_000, 150, 300)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
         val exo = ExoPlayer.Builder(context)
@@ -170,11 +200,7 @@ s = s.replace(old_engine, new_engine, 1)
 old_watchdog_gate = '''            if (item.kind == MediaKind.LIVE) {
                 val attempt = index
 '''
-new_watchdog_gate = '''            // v0.6.4.6: do not abandon an accepted Live stream merely because
-            // its first decoded frame needs a few seconds. HTTP/player errors
-            // still advance immediately, but normal buffering no longer opens
-            // a second competing stream connection.
-            if (false && item.kind == MediaKind.LIVE) {
+new_watchdog_gate = '''            if (false && item.kind == MediaKind.LIVE) {
                 val attempt = index
 '''
 if old_watchdog_gate not in s:
@@ -192,6 +218,7 @@ new_dispose = '''        onDispose {
             cancelWatchdog()
             save()
             player.removeListener(listener)
+            player.playWhenReady = false
             player.stop()
             player.clearMediaItems()
             player.release()
@@ -202,18 +229,16 @@ if old_dispose not in s:
 s = s.replace(old_dispose, new_dispose, 1)
 player.write_text(s)
 
-# Sanity.
 checks = [
     (gradle, 'versionName = "0.6.4.6"'),
     (gradle, 'versionCode = 609'),
-    (xtream, 'val exact = cachedExactM3uUrl(item.id).trim()'),
-    (xtream, 'prefetchExactM3uAsync()'),
-    (xtream, 'if (exactProviderUrl.isNotBlank()) return listOf(exactProviderUrl)'),
-    (xtream, 'urls += "$server/$rawUser/$rawPass/$rawId"'),
-    (vm, 'val initialWindow = entries.filterNot { it.id in alreadyLoaded }.take(8)'),
-    (vm, 'initialWindow.chunked(2)'),
-    (player, 'DefaultLoadControl.Builder()'),
-    (player, '.setBufferDurationsMs(1_000, 4_000, 200, 400)'),
+    (xtream, 'private fun canonicalMpegTsLiveUrl(streamId: String)'),
+    (xtream, 'getQueryParameter("output")'),
+    (xtream, 'if (canonical.isNotBlank()) return listOf(canonical)'),
+    (xtream, 'providerOutputFormat() !in setOf("mpegts", "mpeg-ts")'),
+    (xtream, 'streamUrl = firstNonBlank(canonicalMpegTsLiveUrl(id)'),
+    (vm, 'entries.filterNot { it.id in alreadyLoaded }.take(4)'),
+    (player, '.setBufferDurationsMs(750, 3_000, 150, 300)'),
     (player, 'if (false && item.kind == MediaKind.LIVE)'),
     (player, 'player.clearMediaItems()'),
 ]
@@ -221,4 +246,4 @@ for path, marker in checks:
     if marker not in path.read_text():
         raise SystemExit(f"missing hotfix6 marker {marker} in {path}")
 
-print("Android v0.6.4.6 real-M3U fast-zap + provider anti-flood hotfix applied")
+print("Android v0.6.4.6 real-provider fast-zap hotfix applied")
