@@ -27,17 +27,19 @@ jobs:
           test -n "$PROJECT_ROOT"
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
       - name: Apply current Android source
-        run: bash build_tools/install_android_v064_source.sh
-      - name: Dump playlist startup and remote setup focus code
+        run: bash build_tools/install_android_v06414_source.sh
+      - name: Dump M3U, provisioning and catalog source
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app"
-          echo '===== activePlaylistId references ====='
-          grep -Rni -A30 -B30 'activePlaylistId' "$ROOT" || true
-          echo '===== playlist screen references ====='
-          grep -Rni -E -A160 -B40 'Playlist.*Screen|PLAYLIST|Playlist auswählen|Playlist wechseln|selectPlaylist' "$ROOT/ui" || true
-          echo '===== remote/web admin screen ====='
-          grep -Rni -E -A220 -B40 'Fernwart|DASHBOARD|showDashboardPin|showRemoteUnlock|Remote' "$ROOT/ui/V047WebAdmin.kt" || true
-          echo '===== dashboard keypad ====='
-          sed -n '1,300p' "$ROOT/ui/V051DashboardConnect.kt" || true
+          echo '===== M3uParser.kt ====='
+          cat "$ROOT/data/M3uParser.kt"
+          echo '===== SetupCodeProvisioning.kt ====='
+          cat "$ROOT/data/SetupCodeProvisioning.kt"
+          echo '===== MainViewModel catalog functions ====='
+          grep -n -A220 -B40 -E 'loadCatalogRows|xtreamLibrary|openContent|loadCategories|loadItems' "$ROOT/MainViewModel.kt" || true
+          echo '===== V060CinematicHub catalog ====='
+          grep -n -A260 -B50 -E 'catalogRows|V060Poster|AsyncImage|CircularProgressIndicator|loading' "$ROOT/ui/V060CinematicHub.kt" || true
+          echo '===== PrefsRepository playlists ====='
+          grep -n -A180 -B30 -E 'loadPlaylists|savePlaylists|activePlaylistId' "$ROOT/data/PrefsRepository.kt" || true
