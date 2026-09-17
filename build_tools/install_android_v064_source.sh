@@ -7,14 +7,6 @@ python3 android/v0.6.4/patch_v064.py
 python3 android/hotfixes/v064_xtream_hotfix1.py
 python3 android/hotfixes/v064_xtream_hotfix2.py
 
-# The public asset intentionally stays on the v0.6.4-test URL. Keep the old
-# workflow's literal verification markers as comments while the actual Android
-# package is versionName 0.6.4.2 / versionCode 605.
-cat >> "$PROJECT_ROOT/app/build.gradle.kts" <<'EOF'
-// Legacy v0.6.4 release-workflow marker: versionName = "0.6.4"
-// Legacy v0.6.4 release-workflow marker: versionCode = 604
-EOF
-
 grep -Fq 'versionName = "0.6.4.2"' "$PROJECT_ROOT/app/build.gradle.kts"
 grep -Fq 'versionCode = 605' "$PROJECT_ROOT/app/build.gradle.kts"
 grep -Fq 'streamServerCache' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
