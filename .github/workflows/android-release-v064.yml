@@ -173,13 +173,15 @@ jobs:
           set -euo pipefail
           grep -Fq 'versionName = "0.6.4.6"' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'versionCode = 609' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'val exact = cachedExactM3uUrl(item.id).trim()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -Fq 'urls += "$server/$rawUser/$rawPass/$rawId"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -Fq 'if (exactProviderUrl.isNotBlank()) return listOf(exactProviderUrl)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -Fq 'val initialWindow = entries.filterNot { it.id in alreadyLoaded }.take(8)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'private fun canonicalMpegTsLiveUrl(streamId: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          grep -Fq 'getQueryParameter("output")' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          grep -Fq 'if (canonical.isNotBlank()) return listOf(canonical)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          grep -Fq 'providerOutputFormat() !in setOf("mpegts", "mpeg-ts")' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          grep -Fq 'streamUrl = firstNonBlank(canonicalMpegTsLiveUrl(id)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          grep -Fq 'entries.filterNot { it.id in alreadyLoaded }.take(4)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'parseIptvHttpRequest(raw: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'DefaultLoadControl.Builder()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq '.setBufferDurationsMs(1_000, 4_000, 200, 400)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq '.setBufferDurationsMs(750, 3_000, 150, 300)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'if (false && item.kind == MediaKind.LIVE)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'player.clearMediaItems()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'InvalidResponseCodeException' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
@@ -212,7 +214,7 @@ jobs:
           set -euo pipefail
           TAG="v0.6.4-test"
           TITLE="EpiMediaHub Android v0.6.4.6 Test"
-          NOTES="Hotfix 0.6.4.6 basiert auf der realen Provider-M3U: Live-Streams im Schema host:port/USER/PASS/STREAM_ID werden ohne /live-Präfix und ohne Dateiendung priorisiert. Der erste Sender blockiert nicht mehr auf dem vollständigen ~24-MB-M3U-Download; die M3U wird nur noch im Hintergrund vorgewärmt. Der 6,5-s-First-Frame-Watchdog ist deaktiviert, Live-Puffer wurden für schnelleres Zappen verkleinert, alte Player-Verbindungen werden beim Umschalten sofort geschlossen und automatische EPG-Abfragen pro Kategorie wurden stark reduziert. Die öffentliche APK-URL bleibt unverändert."
+          NOTES="Hotfix 0.6.4.6 wurde anhand der echten Provider-M3U angepasst: bei explizitem output=mpegts wird die tatsächlich verwendete endungslose Live-Struktur host:port/USER/PASS/STREAM_ID direkt aus der ursprünglichen Portal-Adresse erzeugt. Dadurch entfällt für Live das Warten auf den vollständigen ~23-MB-M3U-Download und es wird nicht mehr durch acht geratenen URL-Varianten gezappt. Zusätzlich wurden automatische EPG-Anfragen pro Kategorie auf vier sequenzielle Requests reduziert, der 6,5-s-First-Frame-Watchdog deaktiviert, der Live-Puffer verkleinert und die vorherige Player-Verbindung beim Umschalten sofort beendet. Die öffentliche APK-URL bleibt unverändert."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
             gh release upload "$TAG" \
