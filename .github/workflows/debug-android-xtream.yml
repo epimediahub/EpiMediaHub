@@ -28,12 +28,9 @@ jobs:
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
       - name: Apply current Android source
         run: bash build_tools/install_android_v064_source.sh
-      - name: Dump LiveChannelRow and focus helpers
+      - name: Locate LiveChannelRow implementation
         shell: bash
         run: |
           set -euo pipefail
-          SCREENS="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
-          echo '--- LiveChannelRow ---'
-          grep -n -A100 -B30 'fun LiveChannelRow' "$SCREENS" || true
-          echo '--- imports ---'
-          head -n 80 "$SCREENS"
+          UI="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui"
+          grep -Rni -A100 -B30 'LiveChannelRow' "$UI" || true
