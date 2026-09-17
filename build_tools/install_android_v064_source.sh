@@ -17,9 +17,10 @@ python3 android/hotfixes/v064_xtream_hotfix9.py
 python3 android/hotfixes/v064_xtream_hotfix10.py
 python3 android/hotfixes/v064_xtream_hotfix11.py
 python3 android/hotfixes/v064_xtream_hotfix11b.py
+python3 android/hotfixes/v064_xtream_hotfix12.py
 
-grep -Fq 'versionName = "0.6.4.11"' "$PROJECT_ROOT/app/build.gradle.kts"
-grep -Fq 'versionCode = 614' "$PROJECT_ROOT/app/build.gradle.kts"
+grep -Fq 'versionName = "0.6.4.12"' "$PROJECT_ROOT/app/build.gradle.kts"
+grep -Fq 'versionCode = 615' "$PROJECT_ROOT/app/build.gradle.kts"
 grep -Fq 'streamServerCache' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
 grep -Fq 'server_info' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
 grep -Fq 'direct_source' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
@@ -42,6 +43,9 @@ grep -Fq 'xtreamLibraryCache' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/ap
 grep -Fq 'private fun xtreamLibrary(profile: PlaylistProfile, kind: MediaKind)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
 grep -Fq 'val byCategory = all.groupBy { entry -> entry.categoryId }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
 grep -Fq 'categories.mapNotNull { category ->' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+grep -Fq 'byCategory[category.id].orEmpty()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+! grep -Fq 'all.take(24)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+! grep -Fq 'byCategory[category.id].orEmpty().take(24)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
 grep -Fq 'contentFilterKind = null' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
 grep -Fq 'state.playlists.firstOrNull { it.id == item.sourceProfileId }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
 grep -Fq 'favorites = prefs.loadFavoriteEntries(activeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
@@ -66,6 +70,8 @@ grep -Fq '// Back navigation is handled by the device/system Back action.' "$PRO
 grep -Fq 'var searchDialog by remember(providerId) { mutableStateOf(false) }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
 grep -Fq 'OutlinedButton(onClick = { searchDialog = true }, modifier = Modifier.weight(1f))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
 grep -Fq 'items(u.categories, key = { "category:${it.id}" })' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+grep -Fq 'items(entries, key = { it.resumeKey })' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+! grep -Fq 'items(entries.take(24)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
 grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
 grep -Fq 'releases/tags/v0.6.4-test' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
 grep -Fq 'EpiMediaHub_Android_v0.6.4-test.apk' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
@@ -92,4 +98,4 @@ grep -Fq 'if (false && item.kind == MediaKind.LIVE)' "$PROJECT_ROOT/app/src/main
 grep -Fq 'player.clearMediaItems()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'InvalidResponseCodeException' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 
-echo "Android v0.6.4.11 source reconstructed successfully with updater overhaul plus Pluto TV/Rakuten TV official-app handoff"
+echo "Android v0.6.4.12 source reconstructed successfully with unlimited movie/series horizontal rows"
