@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import os
+import re
 
 root = Path(os.environ.get("PROJECT_ROOT", "."))
 java = root / "app/src/main/java/de/epimediahub/app"
@@ -149,8 +150,9 @@ screens.write_text(s)
 
 
 # ---------------------------------------------------------------------------
-# Player: Fire TV D-pad Up/Down zaps Live channels. Existing channel/page keys
-# follow the same behavior. Left/right remain disabled for Live to avoid seeking.
+# Player: Fire TV D-pad Up/Down zaps Live channels. Left/right remain disabled
+# for Live. Regex is intentional because older Player patches format key cases
+# compactly while newer ones use spaces.
 # ---------------------------------------------------------------------------
 player = java / "ui/PlayerScreen.kt"
 s = player.read_text()
@@ -175,49 +177,27 @@ if leave_anchor not in s:
     raise SystemExit("Player leave() anchor missing")
 s = s.replace(leave_anchor, live_helpers, 1)
 
-old_prev_keys = '''                KeyEvent.KEYCODE_1,
-                KeyEvent.KEYCODE_NUMPAD_1,
-                KeyEvent.KEYCODE_MEDIA_PREVIOUS,
-                KeyEvent.KEYCODE_CHANNEL_DOWN,
-                KeyEvent.KEYCODE_PAGE_DOWN -> previousEpisode()
-'''
-new_prev_keys = '''                KeyEvent.KEYCODE_1,
-                KeyEvent.KEYCODE_NUMPAD_1,
-                KeyEvent.KEYCODE_MEDIA_PREVIOUS,
-                KeyEvent.KEYCODE_CHANNEL_DOWN,
-                KeyEvent.KEYCODE_PAGE_DOWN -> if (item.kind == MediaKind.LIVE) switchLiveBy(-1) else previousEpisode()
-'''
-if old_prev_keys not in s:
-    raise SystemExit("Player previous/channel-down key anchor missing")
-s = s.replace(old_prev_keys, new_prev_keys, 1)
-
-old_next_keys = '''                KeyEvent.KEYCODE_3,
-                KeyEvent.KEYCODE_NUMPAD_3,
-                KeyEvent.KEYCODE_MEDIA_NEXT,
-                KeyEvent.KEYCODE_CHANNEL_UP,
-                KeyEvent.KEYCODE_PAGE_UP -> nextEpisode()
-'''
-new_next_keys = '''                KeyEvent.KEYCODE_3,
-                KeyEvent.KEYCODE_NUMPAD_3,
-                KeyEvent.KEYCODE_MEDIA_NEXT,
-                KeyEvent.KEYCODE_CHANNEL_UP,
-                KeyEvent.KEYCODE_PAGE_UP -> if (item.kind == MediaKind.LIVE) switchLiveBy(1) else nextEpisode()
-'''
-if old_next_keys not in s:
-    raise SystemExit("Player next/channel-up key anchor missing")
-s = s.replace(old_next_keys, new_next_keys, 1)
-
-old_up = '                KeyEvent.KEYCODE_DPAD_UP -> { controls = true; false }\n'
-new_up = '                KeyEvent.KEYCODE_DPAD_UP -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(1) else true}else{controls=true;false}\n'
-if old_up not in s:
+up_pattern = re.compile(r'(?m)^(\s*)KeyEvent\.KEYCODE_DPAD_UP\s*->\s*\{[^\n]*\}\s*$')
+up_match = up_pattern.search(s)
+if not up_match:
     raise SystemExit("Player DPAD_UP anchor missing")
-s = s.replace(old_up, new_up, 1)
+up_indent = up_match.group(1)
+s = up_pattern.sub(
+    up_indent + 'KeyEvent.KEYCODE_DPAD_UP -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(1) else true}else{controls=true;false}',
+    s,
+    count=1,
+)
 
-old_down = '                KeyEvent.KEYCODE_DPAD_DOWN -> { controls = false; false }\n'
-new_down = '                KeyEvent.KEYCODE_DPAD_DOWN -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(-1) else true}else{controls=false;false}\n'
-if old_down not in s:
+down_pattern = re.compile(r'(?m)^(\s*)KeyEvent\.KEYCODE_DPAD_DOWN\s*->\s*\{[^\n]*\}\s*$')
+down_match = down_pattern.search(s)
+if not down_match:
     raise SystemExit("Player DPAD_DOWN anchor missing")
-s = s.replace(old_down, new_down, 1)
+down_indent = down_match.group(1)
+s = down_pattern.sub(
+    down_indent + 'KeyEvent.KEYCODE_DPAD_DOWN -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(-1) else true}else{controls=false;false}',
+    s,
+    count=1,
+)
 player.write_text(s)
 
 
