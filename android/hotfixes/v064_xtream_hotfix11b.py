@@ -262,6 +262,25 @@ s = s.replace(helper_anchor, helper, 1)
 parity.write_text(s)
 
 
+# ---------------------------------------------------------------------------
+# Compatibility with the existing app lifecycle. EpiMediaHubApp disables the
+# periodic updater in one state via cancelScheduled(); keep that API after the
+# updater rewrite in hotfix11.
+# ---------------------------------------------------------------------------
+manager = java / "data/UpdateManager.kt"
+s = manager.read_text()
+if 'fun cancelScheduled(context: Context)' not in s:
+    pending_anchor = '    fun pending(context: Context): AppUpdateInfo? {\n'
+    if pending_anchor not in s:
+        raise SystemExit("UpdateManager pending anchor missing")
+    s = s.replace(
+        pending_anchor,
+        '    fun cancelScheduled(context: Context) {\n        WorkManager.getInstance(context.applicationContext).cancelUniqueWork(WORK_NAME)\n    }\n\n' + pending_anchor,
+        1,
+    )
+manager.write_text(s)
+
+
 checks = [
     (client, 'Country("fast", "Kostenloses Streaming", "Pluto TV · Rakuten TV"'),
     (client, 'externalUrl = "https://pluto.tv/"'),
@@ -273,9 +292,11 @@ checks = [
     (parity, 'private fun openExternalMediathekProvider(context: Context, provider: MediathekClient.Provider)'),
     (parity, 'getLaunchIntentForPackage(packageName)'),
     (parity, 'Text("${external.label} öffnen", fontWeight = FontWeight.Black)'),
+    (manager, 'fun cancelScheduled(context: Context)'),
+    (manager, 'cancelUniqueWork(WORK_NAME)'),
 ]
 for path, marker in checks:
     if marker not in path.read_text():
-        raise SystemExit(f"missing v0.6.4.11 FAST marker {marker} in {path}")
+        raise SystemExit(f"missing v0.6.4.11 marker {marker} in {path}")
 
-print("Android v0.6.4.11 Pluto TV + Rakuten TV FAST directory and official-app handoff applied")
+print("Android v0.6.4.11 Pluto TV + Rakuten TV FAST directory, official-app handoff and updater lifecycle compatibility applied")
