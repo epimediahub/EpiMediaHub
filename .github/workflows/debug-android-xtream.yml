@@ -28,9 +28,16 @@ jobs:
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
       - name: Apply current Android source
         run: bash build_tools/install_android_v064_source.sh
-      - name: Locate LiveChannelRow implementation
+      - name: Dump playlist startup and remote setup focus code
         shell: bash
         run: |
           set -euo pipefail
-          UI="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui"
-          grep -Rni -A100 -B30 'LiveChannelRow' "$UI" || true
+          ROOT="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app"
+          echo '===== activePlaylistId references ====='
+          grep -Rni -A30 -B30 'activePlaylistId' "$ROOT" || true
+          echo '===== playlist screen references ====='
+          grep -Rni -E -A160 -B40 'Playlist.*Screen|PLAYLIST|Playlist auswählen|Playlist wechseln|selectPlaylist' "$ROOT/ui" || true
+          echo '===== remote/web admin screen ====='
+          grep -Rni -E -A220 -B40 'Fernwart|DASHBOARD|showDashboardPin|showRemoteUnlock|Remote' "$ROOT/ui/V047WebAdmin.kt" || true
+          echo '===== dashboard keypad ====='
+          sed -n '1,300p' "$ROOT/ui/V051DashboardConnect.kt" || true
