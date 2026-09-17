@@ -16,6 +16,8 @@ os.environ.setdefault("EPIMEDIAHUB_SECURE_COOKIES", "0")
 import sys
 sys.path.insert(0, str(root))
 
+expected_api_version = os.environ.get("EPIMEDIAHUB_EXPECTED_API_VERSION", "0.6.0")
+
 from wsgi import app
 from app import db
 from receiver_sync import save_customer_config
@@ -31,7 +33,7 @@ assert "/admin/customers/<int:customer_id>/delete" in rules
 client = app.test_client()
 health = client.get("/health")
 assert health.status_code == 200
-assert health.get_json()["api_version"] == "0.5.2"
+assert health.get_json()["api_version"] == expected_api_version
 
 login = client.post("/admin/login", data={"password": "test-admin-password"})
 assert login.status_code == 302
@@ -154,4 +156,4 @@ with db() as con:
     remaining = con.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
 assert remaining == 1, remaining
 
-print("Raspberry v0.5.2 dashboard smoke test OK")
+print(f"Raspberry v{expected_api_version} dashboard smoke test OK")
