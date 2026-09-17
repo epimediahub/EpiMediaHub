@@ -12,9 +12,10 @@ python3 android/hotfixes/v064_xtream_hotfix5.py
 python3 android/hotfixes/v064_xtream_hotfix6.py
 python3 android/hotfixes/v064_xtream_hotfix6b.py
 python3 android/hotfixes/v064_xtream_hotfix7.py
+python3 android/hotfixes/v064_xtream_hotfix8.py
 
-grep -Fq 'versionName = "0.6.4.7"' "$PROJECT_ROOT/app/build.gradle.kts"
-grep -Fq 'versionCode = 610' "$PROJECT_ROOT/app/build.gradle.kts"
+grep -Fq 'versionName = "0.6.4.8"' "$PROJECT_ROOT/app/build.gradle.kts"
+grep -Fq 'versionCode = 611' "$PROJECT_ROOT/app/build.gradle.kts"
 grep -Fq 'streamServerCache' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
 grep -Fq 'server_info' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
 grep -Fq 'direct_source' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
@@ -34,11 +35,19 @@ grep -Fq '#EXTHTTP:' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/Xt
 grep -Fq 'entries.filterNot { it.id in alreadyLoaded }.take(4)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
 grep -Fq 'XtreamClient(profile).preparePlaybackItem(item)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
 grep -Fq 'xtreamLibraryCache' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-grep -Fq 'val allowLegacyUnbound = it.playlists.size <= 1' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
 grep -Fq 'private fun xtreamLibrary(profile: PlaylistProfile, kind: MediaKind)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
 grep -Fq 'all.asSequence().filter { entry -> entry.categoryId == category.id }.take(24).toList()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
 grep -Fq 'contentFilterKind = null' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
 grep -Fq 'state.playlists.firstOrNull { it.id == item.sourceProfileId }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+grep -Fq 'favorites = prefs.loadFavoriteEntries(activeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+grep -Fq 'continueWatching = prefs.loadContinue(activeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+grep -Fq 'recentlyWatched = prefs.loadRecentlyWatched(activeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+grep -Fq 'prefs.clearPlaylistCollections(id)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+grep -Fq 'sourceProfileId.ifBlank { "legacy" }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/model/Models.kt"
+grep -Fq 'collectionKey("favorites_items", profileId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PrefsRepository.kt"
+grep -Fq 'collectionKey("continue", profileId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PrefsRepository.kt"
+grep -Fq 'collectionKey("recently_watched", profileId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PrefsRepository.kt"
+grep -Fq 'fun clearPlaylistCollections(profileId: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PrefsRepository.kt"
 grep -Fq 'parseIptvHttpRequest(raw: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'httpFactory.setDefaultRequestProperties(requestHeaders)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'player.setMediaItem(MediaItem.fromUri(request.url))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
@@ -49,4 +58,4 @@ grep -Fq 'if (false && item.kind == MediaKind.LIVE)' "$PROJECT_ROOT/app/src/main
 grep -Fq 'player.clearMediaItems()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'InvalidResponseCodeException' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 
-echo "Android v0.6.4.7 source reconstructed successfully with playlist-isolated VOD/series catalogs"
+echo "Android v0.6.4.8 source reconstructed successfully with strict per-playlist collections and VOD/series catalogs"
