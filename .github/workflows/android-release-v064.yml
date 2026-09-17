@@ -67,7 +67,7 @@ jobs:
           include(":app")
           EOF
 
-      - name: Install v0.6.4.9 source
+      - name: Install v0.6.4.10 source
         run: bash build_tools/install_android_v064_source.sh
 
       - name: Import existing premium skin assets
@@ -161,18 +161,18 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build signed v0.6.4.9 test APK
+      - name: Build signed v0.6.4.10 test APK
         shell: bash
         run: |
           cd "$PROJECT_ROOT"
           gradle :app:assembleRelease --stacktrace --no-daemon
 
-      - name: Verify v0.6.4.9 fixes and signing certificate
+      - name: Verify v0.6.4.10 fixes and signing certificate
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "0.6.4.9"' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'versionCode = 612' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionName = "0.6.4.10"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 613' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'private fun canonicalMpegTsLiveUrl(streamId: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'if (canonical.isNotBlank()) return listOf(canonical)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'streamUrl = firstNonBlank(canonicalMpegTsLiveUrl(id)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
@@ -182,15 +182,22 @@ jobs:
           grep -Fq 'fun switchLiveChannel(item: MediaEntry, channelList: List<MediaEntry>)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'private var liveZapGeneration = 0L' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'screen = Screen.Player(prepared.copy(sourceProfileId = profile.id), channelList)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'val byCategory = all.groupBy { entry -> entry.categoryId }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'categories.mapNotNull { category ->' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'val rememberedId=vm.browserSelectedId(kind,cat.id)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
           grep -Fq 'Modifier.focusRequester(channelFocusRequester)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
           grep -Fq 'vm.play(m,u.items)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
           grep -Fq 'fun switchLiveBy(direction: Int): Boolean' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'KeyEvent.KEYCODE_DPAD_UP -> if(item.kind==MediaKind.LIVE)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'KeyEvent.KEYCODE_DPAD_DOWN -> if(item.kind==MediaKind.LIVE)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'KeyEvent.KEYCODE_CHANNEL_UP' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'KeyEvent.KEYCODE_CHANNEL_DOWN' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'u.screen !is Screen.Player' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -Fq '// Back navigation is handled by the device/system Back action.' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
+          ! grep -Fq '‹  Zurück' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
+          grep -Fq 'var searchDialog by remember(providerId) { mutableStateOf(false) }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
+          grep -Fq 'OutlinedButton(onClick = { searchDialog = true }, modifier = Modifier.weight(1f))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
+          grep -Fq 'modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
+          grep -Fq 'items(u.categories, key = { "category:${it.id}" })' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          ! grep -Fq 'items(u.categories.take(12)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
           grep -Fq 'parseIptvHttpRequest(raw: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq '.setBufferDurationsMs(750, 3_000, 150, 300)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'player.clearMediaItems()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
@@ -209,7 +216,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Android-v0.6.4.9-signed-test
+          name: EpiMediaHub-Android-v0.6.4.10-signed-test
           path: |
             dist/EpiMediaHub_Android_v0.6.4-test.apk
             dist/SHA256SUMS.txt
@@ -222,8 +229,8 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v0.6.4-test"
-          TITLE="EpiMediaHub Android v0.6.4.9 Test"
-          NOTES="Hotfix 0.6.4.9 verbessert die Live-TV-Navigation auf Fire TV: Zurück aus dem Player führt wieder exakt in die zuvor geöffnete Senderliste und setzt den Fokus auf den aktuell bzw. zuletzt gewählten Sender. Der Player besitzt dafür alleinige Back-Verarbeitung, damit nicht versehentlich zwei Navigationsebenen übersprungen werden. Im Live-Player schalten D-Pad Hoch/Runter sowie Channel/Page Up/Down direkt durch die Sender der aktuellen Kategorie. Diese Kanalwechsel ersetzen den Player-Inhalt ohne neue Back-Stack-Einträge; Zurück bleibt deshalb immer Player → Senderliste. Alle Playlist-Isolations-, VOD-/Serien- und Live-TV-Kompatibilitätsfixes aus 0.6.4.8 bleiben erhalten. Die öffentliche APK-URL bleibt unverändert."
+          TITLE="EpiMediaHub Android v0.6.4.10 Test"
+          NOTES="Hotfix 0.6.4.10 räumt die Navigation und Mediathek auf: Der visuelle Zurück-Button in der oberen Leiste wurde auf TV und Mobile entfernt; die Geräte-/Fernbedienungs-Zurück-Funktion bleibt erhalten. In der TV-Mediathek ist die Suche jetzt ein bewusst auswählbarer Button, sodass beim Öffnen einer ARD/ZDF/etc.-Kategorie nicht mehr automatisch die Bildschirmtastatur erscheint und die Inhalte normal per D-Pad erreichbar bleiben. Die Netflix-artigen Film- und Serienbereiche sind nicht mehr auf 12 Kategoriezeilen begrenzt: alle vom Anbieter gelieferten Kategorien können vertikal durchgescrollt werden; der Katalog wird dafür einmal effizient nach Kategorie gruppiert. Alle Fixes aus 0.6.4.9 bleiben erhalten. Die öffentliche APK-URL bleibt unverändert."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
             gh release upload "$TAG" \
