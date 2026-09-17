@@ -67,7 +67,7 @@ jobs:
           include(":app")
           EOF
 
-      - name: Install v0.6.4.11 source
+      - name: Install v0.6.4.12 source
         run: bash build_tools/install_android_v064_source.sh
 
       - name: Import existing premium skin assets
@@ -161,18 +161,18 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build signed v0.6.4.11 test APK
+      - name: Build signed v0.6.4.12 test APK
         shell: bash
         run: |
           cd "$PROJECT_ROOT"
           gradle :app:assembleRelease --stacktrace --no-daemon
 
-      - name: Verify v0.6.4.11 fixes and signing certificate
+      - name: Verify v0.6.4.12 fixes and signing certificate
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "0.6.4.11"' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'versionCode = 614' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionName = "0.6.4.12"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 615' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'private fun canonicalMpegTsLiveUrl(streamId: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'if (canonical.isNotBlank()) return listOf(canonical)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'streamUrl = firstNonBlank(canonicalMpegTsLiveUrl(id)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
@@ -184,6 +184,9 @@ jobs:
           grep -Fq 'screen = Screen.Player(prepared.copy(sourceProfileId = profile.id), channelList)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'val byCategory = all.groupBy { entry -> entry.categoryId }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'categories.mapNotNull { category ->' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'byCategory[category.id].orEmpty()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          ! grep -Fq 'all.take(24)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          ! grep -Fq 'byCategory[category.id].orEmpty().take(24)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'val rememberedId=vm.browserSelectedId(kind,cat.id)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
           grep -Fq 'Modifier.focusRequester(channelFocusRequester)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
           grep -Fq 'vm.play(m,u.items)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
@@ -198,6 +201,8 @@ jobs:
           grep -Fq 'modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
           grep -Fq 'items(u.categories, key = { "category:${it.id}" })' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
           ! grep -Fq 'items(u.categories.take(12)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          grep -Fq 'items(entries, key = { it.resumeKey })' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          ! grep -Fq 'items(entries.take(24)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
           grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
           grep -Fq 'releases/tags/v0.6.4-test' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
           grep -Fq 'EpiMediaHub_Android_v0.6.4-test.apk' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
@@ -223,7 +228,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Android-v0.6.4.11-signed-test
+          name: EpiMediaHub-Android-v0.6.4.12-signed-test
           path: |
             dist/EpiMediaHub_Android_v0.6.4-test.apk
             dist/SHA256SUMS.txt
@@ -236,8 +241,8 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v0.6.4-test"
-          TITLE="EpiMediaHub Android v0.6.4.11 Test"
-          NOTES="Hotfix 0.6.4.11 überarbeitet den internen Android-/Fire-TV-Updater grundlegend. Der Updater liest jetzt exakt den tatsächlich verwendeten Moving-Release v0.6.4-test und das reale APK-Asset EpiMediaHub_Android_v0.6.4-test.apk, versteht vierteilige Versionsnummern wie 0.6.4.11 und vergleicht sie semantisch. Downloads werden per GitHub-SHA256 geprüft und bereits vollständig verifizierte APKs wiederverwendet. Android 8+/Fire OS erhält die benötigte REQUEST_INSTALL_PACKAGES-Berechtigung; wenn EpiMediaHub noch nicht als Installationsquelle freigegeben ist, öffnet die App gezielt die Systemseite für unbekannte Apps. Nach der Freigabe wird die bereits geladene APK beim nächsten Installieren ohne erneuten Großdownload verwendet. Alle UI-, Mediathek-, Film-/Serien-, Playlist- und Live-TV-Fixes aus 0.6.4.10 bleiben erhalten."
+          TITLE="EpiMediaHub Android v0.6.4.12 Test"
+          NOTES="Hotfix 0.6.4.12 entfernt die verbliebenen 24-Inhalte-Limits in den horizontalen Netflix-artigen Film- und Serienzeilen. Pro Kategorie wird jetzt der vollständige vom aktiven Playlist-Anbieter geladene Katalog an die LazyRow übergeben; LazyRow rendert weiterhin nur die sichtbaren Poster, sodass auch große Kategorien performant durchscrollbar bleiben. Alle Updater-, Mediathek-, Pluto-TV-/Rakuten-TV-, Playlist-, Live-TV- und Navigationsverbesserungen aus 0.6.4.11 bleiben erhalten."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
             gh release upload "$TAG" \
