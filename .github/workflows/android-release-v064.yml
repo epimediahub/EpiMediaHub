@@ -67,7 +67,7 @@ jobs:
           include(":app")
           EOF
 
-      - name: Install v0.6.4.4 source
+      - name: Install v0.6.4.5 source
         run: bash build_tools/install_android_v064_source.sh
 
       - name: Import existing premium skin assets
@@ -161,29 +161,25 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build signed v0.6.4.4 test APK
+      - name: Build signed v0.6.4.5 test APK
         shell: bash
         run: |
           cd "$PROJECT_ROOT"
           gradle :app:assembleRelease --stacktrace --no-daemon
 
-      - name: Verify v0.6.4.4 fixes and signing certificate
+      - name: Verify v0.6.4.5 fixes and signing certificate
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "0.6.4.4"' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'versionCode = 607' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'sourceProfileId' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/model/Models.kt"
-          grep -Fq 'preparePlaybackItem(item: MediaEntry)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -Fq 'exactM3uStreamUrls()[item.id]' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -Fq 'XtreamClient(profile).preparePlaybackItem(item)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'versionName = "0.6.4.5"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 608' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq '#EXTVLCOPT:http-user-agent=' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          grep -Fq '#EXTHTTP:' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          grep -Fq 'parseIptvHttpRequest(raw: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'httpFactory.setDefaultRequestProperties(requestHeaders)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'player.setMediaItem(MediaItem.fromUri(request.url))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'InvalidResponseCodeException' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'httpCode = cause.responseCode' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'Letzter Fehler: $detail' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'onRenderedFirstFrame()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'postDelayed(it, 6500L)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'useController = item.kind != MediaKind.LIVE' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'DefaultHttpDataSource.Factory()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'EpiMediaHub beenden?' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
           APK="$PROJECT_ROOT/app/build/outputs/apk/release/app-release.apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apk-signature.txt
@@ -199,7 +195,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Android-v0.6.4.4-signed-test
+          name: EpiMediaHub-Android-v0.6.4.5-signed-test
           path: |
             dist/EpiMediaHub_Android_v0.6.4-test.apk
             dist/SHA256SUMS.txt
@@ -212,8 +208,8 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v0.6.4-test"
-          TITLE="EpiMediaHub Android v0.6.4.4 Test"
-          NOTES="Hotfix 0.6.4.4: Beim Start eines Xtream-Live-Senders wird die exakte Original-Stream-URL aus der Provider-M3U im Hintergrund aufgelöst, falls der schnelle Prefetch noch nicht fertig war. Die Senderliste bleibt dadurch schnell, während der Player nicht mehr ausschließlich auf konstruierte Fallback-URLs angewiesen ist. Bei HTTP-Ablehnungen zeigt die App jetzt den echten HTTP-Statuscode und die Kandidatennummer an. Die öffentliche APK-URL bleibt unverändert."
+          TITLE="EpiMediaHub Android v0.6.4.5 Test"
+          NOTES="Hotfix 0.6.4.5: IPTV-M3U-Header werden jetzt korrekt ausgewertet. URL-Pipe-Optionen sowie #EXTVLCOPT und #EXTHTTP für User-Agent, Referer und Origin werden vom Stream getrennt und als echte HTTP-Header an Media3/ExoPlayer übergeben. Das behebt Provider, die ohne die von der Playlist vorgegebenen Header Stream-URLs mit HTTP 404 ablehnen. Die öffentliche APK-URL bleibt unverändert."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
             gh release upload "$TAG" \
