@@ -22,6 +22,8 @@ permissions:
 
 jobs:
   build-android-v064:
+    # Superseded by the Android 0.7.0 UI milestone.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
