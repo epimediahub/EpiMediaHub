@@ -16,6 +16,7 @@ python3 android/hotfixes/v064_xtream_hotfix8.py
 python3 android/hotfixes/v064_xtream_hotfix9.py
 python3 android/hotfixes/v064_xtream_hotfix10.py
 python3 android/hotfixes/v064_xtream_hotfix11.py
+python3 android/hotfixes/v064_xtream_hotfix11b.py
 
 grep -Fq 'versionName = "0.6.4.11"' "$PROJECT_ROOT/app/build.gradle.kts"
 grep -Fq 'versionCode = 614' "$PROJECT_ROOT/app/build.gradle.kts"
@@ -72,6 +73,15 @@ grep -Fq 'private fun isNewer(remote: String, local: String): Boolean' "$PROJECT
 grep -Fq 'Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
 grep -Fq 'canRequestPackageInstalls()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
 grep -Fq 'FileProvider.getUriForFile' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+grep -Fq 'Country("fast", "Kostenloses Streaming", "Pluto TV · Rakuten TV"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/MediathekClient.kt"
+grep -Fq 'externalUrl = "https://pluto.tv/"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/MediathekClient.kt"
+grep -Fq 'appPackages = listOf("tv.pluto.android")' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/MediathekClient.kt"
+grep -Fq 'externalUrl = "https://www.rakuten.tv/de"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/MediathekClient.kt"
+grep -Fq 'appPackages = listOf("tv.wuaki.apptv", "tv.wuaki")' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/MediathekClient.kt"
+grep -Fq '<package android:name="tv.pluto.android" />' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
+grep -Fq '<package android:name="tv.wuaki.apptv" />' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
+grep -Fq 'private fun openExternalMediathekProvider(context: Context, provider: MediathekClient.Provider)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
+grep -Fq 'getLaunchIntentForPackage(packageName)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
 grep -Fq 'parseIptvHttpRequest(raw: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'httpFactory.setDefaultRequestProperties(requestHeaders)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'player.setMediaItem(MediaItem.fromUri(request.url))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
@@ -82,4 +92,4 @@ grep -Fq 'if (false && item.kind == MediaKind.LIVE)' "$PROJECT_ROOT/app/src/main
 grep -Fq 'player.clearMediaItems()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'InvalidResponseCodeException' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 
-echo "Android v0.6.4.11 source reconstructed successfully with current-release updater and Fire TV install-source handling"
+echo "Android v0.6.4.11 source reconstructed successfully with updater overhaul plus Pluto TV/Rakuten TV official-app handoff"
