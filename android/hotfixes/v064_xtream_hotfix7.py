@@ -14,9 +14,7 @@ def replace_once(path: Path, old: str, new: str, label: str):
     path.write_text(text.replace(old, new, 1))
 
 
-# ---------------------------------------------------------------------------
 # Visible version.
-# ---------------------------------------------------------------------------
 gradle = root / "app/build.gradle.kts"
 replace_once(gradle, 'versionCode = 609', 'versionCode = 610', 'hotfix7 versionCode')
 replace_once(gradle, 'versionName = "0.6.4.6"', 'versionName = "0.6.4.7"', 'hotfix7 versionName')
@@ -27,14 +25,7 @@ if "0.6.4.6" not in home_text:
     raise SystemExit("visible home version 0.6.4.6 not found")
 home.write_text(home_text.replace("0.6.4.6", "0.6.4.7", 1))
 
-# ---------------------------------------------------------------------------
 # Playlist-isolated VOD/series library.
-# The cinematic hub used persisted recent/continue/favorites globally, so after
-# switching playlists it could still lead with content from the previous source.
-# Also the catalog loaded up to 12 categories concurrently. On panels that reject
-# category-specific API calls, every category could fall back to downloading the
-# complete VOD/series list again. Load one source-scoped library and filter locally.
-# ---------------------------------------------------------------------------
 vm = java / "MainViewModel.kt"
 s = vm.read_text()
 
@@ -49,23 +40,41 @@ if old_cache not in s:
     raise SystemExit("ViewModel library cache anchor missing")
 s = s.replace(old_cache, new_cache, 1)
 
-# Persisted collections must belong to the active source. Legacy entries without a
-# source id are only safe to show when there is a single playlist.
-repls = [
-    ('                favorites = prefs.loadFavoriteEntries(),\n',
-     '                favorites = prefs.loadFavoriteEntries().filter { media -> media.sourceProfileId == it.active?.id || (media.sourceProfileId.isBlank() && it.playlists.size <= 1) },\n',
-     'favorites source filter'),
-    ('                continueWatching = prefs.loadContinue(),\n',
-     '                continueWatching = prefs.loadContinue().filter { entry -> entry.media.sourceProfileId == it.active?.id || (entry.media.sourceProfileId.isBlank() && it.playlists.size <= 1) },\n',
-     'continue source filter'),
-    ('                recentlyWatched = prefs.loadRecentlyWatched(),\n',
-     '                recentlyWatched = prefs.loadRecentlyWatched().filter { media -> media.sourceProfileId == it.active?.id || (media.sourceProfileId.isBlank() && it.playlists.size <= 1) },\n',
-     'recent source filter'),
-]
-for old, new, label in repls:
-    if old not in s:
-        raise SystemExit(f"{label} anchor missing")
-    s = s.replace(old, new, 1)
+old_collections = '''    private fun refreshCollections() {
+        set {
+            it.copy(
+                favorites = prefs.loadFavoriteEntries(),
+                continueWatching = prefs.loadContinue(),
+                recentlyWatched = prefs.loadRecentlyWatched(),
+                preferredAudioLanguage = prefs.preferredAudioLanguage,
+                preferredSubtitleLanguage = prefs.preferredSubtitleLanguage
+            )
+        }
+    }
+'''
+new_collections = '''    private fun refreshCollections() {
+        set {
+            val activeId = it.active?.id.orEmpty()
+            val allowLegacyUnbound = it.playlists.size <= 1
+            it.copy(
+                favorites = prefs.loadFavoriteEntries().filter { media ->
+                    media.sourceProfileId == activeId || (media.sourceProfileId.isBlank() && allowLegacyUnbound)
+                },
+                continueWatching = prefs.loadContinue().filter { entry ->
+                    entry.media.sourceProfileId == activeId || (entry.media.sourceProfileId.isBlank() && allowLegacyUnbound)
+                },
+                recentlyWatched = prefs.loadRecentlyWatched().filter { media ->
+                    media.sourceProfileId == activeId || (media.sourceProfileId.isBlank() && allowLegacyUnbound)
+                },
+                preferredAudioLanguage = prefs.preferredAudioLanguage,
+                preferredSubtitleLanguage = prefs.preferredSubtitleLanguage
+            )
+        }
+    }
+'''
+if old_collections not in s:
+    raise SystemExit("refreshCollections source-isolation anchor missing")
+s = s.replace(old_collections, new_collections, 1)
 
 old_select = '''    fun selectPlaylist(id: String) {
         val p = _ui.value.playlists.firstOrNull { it.id == id } ?: return
@@ -239,18 +248,16 @@ s = s.replace(old_details_publish, new_details_publish, 1)
 
 vm.write_text(s)
 
-# Sanity.
 checks = [
     (gradle, 'versionName = "0.6.4.7"'),
     (gradle, 'versionCode = 610'),
     (vm, 'private val xtreamLibraryCache = java.util.concurrent.ConcurrentHashMap<String, List<MediaEntry>>()'),
+    (vm, 'val allowLegacyUnbound = it.playlists.size <= 1'),
     (vm, 'private fun xtreamLibrary(profile: PlaylistProfile, kind: MediaKind)'),
     (vm, 'xtreamLibraryCache.clear()'),
-    (vm, 'refreshCollections()'),
     (vm, 'contentFilterKind = null'),
     (vm, 'val all = xtreamLibrary(profile, kind)'),
     (vm, 'all.asSequence().filter { entry -> entry.categoryId == category.id }.take(24).toList()'),
-    (vm, 'if (kind == MediaKind.MOVIE || kind == MediaKind.SERIES)'),
     (vm, 'state.playlists.firstOrNull { it.id == item.sourceProfileId }'),
     (vm, 'if (_ui.value.active?.id != profile.id)'),
 ]
