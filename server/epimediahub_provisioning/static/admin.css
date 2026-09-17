@@ -211,6 +211,18 @@ textarea { resize: vertical; min-height: 140px; line-height: 1.5; }
 .modal-close { width: 34px; height: 34px; border: 1px solid #e1e5ec; border-radius: 9px; background: #f8f9fb; color: #7f899b; font-size: 20px; line-height: 1; cursor: pointer; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .span-2 { grid-column: 1/-1; }
+.assignment-picker { min-width: 0; margin: 4px 0 0; padding: 14px; border: 1px solid #dfe3eb; border-radius: 11px; background: #f8f9fc; }
+.assignment-picker legend { padding: 0 6px; color: #48546a; font-size: 11px; font-weight: 800; }
+.assignment-picker > p { margin: 0 0 11px; color: #7d8799; font-size: 10px; line-height: 1.5; }
+.device-choice-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: 210px; overflow: auto; }
+.device-choice { min-width: 0; padding: 10px; display: flex !important; grid-template-columns: none !important; align-items: center; gap: 9px !important; border: 1px solid #e0e4ec; border-radius: 9px; background: #fff; cursor: pointer; }
+.device-choice:hover { border-color: #bfc5ee; background: #fafaff; }
+.device-choice input { width: 16px; height: 16px; flex: 0 0 auto; }
+.device-choice span { min-width: 0; }
+.device-choice strong, .device-choice small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-choice strong { color: #384258; font-size: 10px; }
+.device-choice small { margin-top: 3px; color: #8e98aa; font-size: 9px; }
+.assignment-empty { grid-column: 1/-1; padding: 14px; border-radius: 8px; color: #8490a3; background: #fff; font-size: 10px; text-align: center; }
 .modal-actions { justify-content: flex-end; margin-top: 22px; padding-top: 17px; border-top: 1px solid #eceff3; }
 .modal-copy { margin: -6px 0 14px; color: var(--muted); font-size: 12px; }
 .format-help { margin-top: 12px; padding: 13px; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; border: 1px solid #e5e8ef; border-radius: 11px; background: #f8f9fb; }
@@ -281,6 +293,7 @@ textarea { resize: vertical; min-height: 140px; line-height: 1.5; }
   .search-field { grid-column: 1/-1; }
   .form-grid { grid-template-columns: 1fr; }
   .span-2 { grid-column: auto; }
+  .device-choice-list { grid-template-columns: 1fr; }
   .format-help { grid-template-columns: 1fr; }
   .format-help strong { grid-column: auto; }
   .danger-zone { align-items: flex-start; flex-direction: column; }
