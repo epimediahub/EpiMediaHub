@@ -13,9 +13,10 @@ python3 android/hotfixes/v064_xtream_hotfix6.py
 python3 android/hotfixes/v064_xtream_hotfix6b.py
 python3 android/hotfixes/v064_xtream_hotfix7.py
 python3 android/hotfixes/v064_xtream_hotfix8.py
+python3 android/hotfixes/v064_xtream_hotfix9.py
 
-grep -Fq 'versionName = "0.6.4.8"' "$PROJECT_ROOT/app/build.gradle.kts"
-grep -Fq 'versionCode = 611' "$PROJECT_ROOT/app/build.gradle.kts"
+grep -Fq 'versionName = "0.6.4.9"' "$PROJECT_ROOT/app/build.gradle.kts"
+grep -Fq 'versionCode = 612' "$PROJECT_ROOT/app/build.gradle.kts"
 grep -Fq 'streamServerCache' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
 grep -Fq 'server_info' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
 grep -Fq 'direct_source' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
@@ -48,6 +49,15 @@ grep -Fq 'collectionKey("favorites_items", profileId)' "$PROJECT_ROOT/app/src/ma
 grep -Fq 'collectionKey("continue", profileId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PrefsRepository.kt"
 grep -Fq 'collectionKey("recently_watched", profileId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PrefsRepository.kt"
 grep -Fq 'fun clearPlaylistCollections(profileId: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PrefsRepository.kt"
+grep -Fq 'fun switchLiveChannel(item: MediaEntry, channelList: List<MediaEntry>)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+grep -Fq 'private var liveZapGeneration = 0L' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+grep -Fq 'val rememberedId=vm.browserSelectedId(kind,cat.id)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+grep -Fq 'Modifier.focusRequester(channelFocusRequester)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+grep -Fq 'vm.play(m,u.items)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+grep -Fq 'fun switchLiveBy(direction: Int): Boolean' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+grep -Fq 'KeyEvent.KEYCODE_DPAD_UP -> if(item.kind==MediaKind.LIVE)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+grep -Fq 'KeyEvent.KEYCODE_DPAD_DOWN -> if(item.kind==MediaKind.LIVE)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+grep -Fq 'u.screen !is Screen.Player' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
 grep -Fq 'parseIptvHttpRequest(raw: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'httpFactory.setDefaultRequestProperties(requestHeaders)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'player.setMediaItem(MediaItem.fromUri(request.url))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
@@ -58,4 +68,4 @@ grep -Fq 'if (false && item.kind == MediaKind.LIVE)' "$PROJECT_ROOT/app/src/main
 grep -Fq 'player.clearMediaItems()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'InvalidResponseCodeException' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 
-echo "Android v0.6.4.8 source reconstructed successfully with strict per-playlist collections and VOD/series catalogs"
+echo "Android v0.6.4.9 source reconstructed successfully with Live TV return-focus and Fire TV D-pad channel zapping"
