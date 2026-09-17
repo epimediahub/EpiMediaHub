@@ -26,20 +26,17 @@ jobs:
           PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
           test -n "$PROJECT_ROOT"
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
-      - name: Apply current v0.6.4.2 source
+      - name: Apply current v0.6.4.3 source
         run: bash build_tools/install_android_v064_source.sh
-      - name: Dump live playback and list loading logic
+      - name: Dump play and HTTP error logic
         shell: bash
         run: |
           set -euo pipefail
           X="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           P="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           V="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          echo '--- Xtream entries / M3U loading ---'
-          grep -n -A95 -B15 'fun entries' "$X" || true
-          grep -n -A45 -B10 'private fun exactM3uStreamUrls' "$X" || true
-          echo '--- Player playback URLs / errors / retries ---'
-          grep -n -A220 -B40 'fun PlayerScreen' "$P" || true
-          echo '--- ViewModel playbackUrls ---'
+          grep -n -A90 -B20 'fun play(' "$V" || true
           grep -n -A70 -B15 'fun playbackUrls' "$V" || true
-          grep -n 'playbackUrls\|playbackError\|onPlayerError\|STATE_READY\|STATE_BUFFERING\|setMediaItem\|prepare()' "$P" "$V" || true
+          grep -n -A90 -B20 'fun streamCandidates' "$X" || true
+          grep -n -A55 -B15 'override fun onPlayerError' "$P" || true
+          grep -n 'InvalidResponseCodeException\|BAD_HTTP_STATUS\|onPlayerError\|navigate(Screen.Player' "$P" "$V" || true
