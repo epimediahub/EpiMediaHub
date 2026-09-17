@@ -67,7 +67,7 @@ jobs:
           include(":app")
           EOF
 
-      - name: Install v0.6.4.10 source
+      - name: Install v0.6.4.11 source
         run: bash build_tools/install_android_v064_source.sh
 
       - name: Import existing premium skin assets
@@ -161,18 +161,18 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build signed v0.6.4.10 test APK
+      - name: Build signed v0.6.4.11 test APK
         shell: bash
         run: |
           cd "$PROJECT_ROOT"
           gradle :app:assembleRelease --stacktrace --no-daemon
 
-      - name: Verify v0.6.4.10 fixes and signing certificate
+      - name: Verify v0.6.4.11 fixes and signing certificate
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "0.6.4.10"' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'versionCode = 613' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionName = "0.6.4.11"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 614' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'private fun canonicalMpegTsLiveUrl(streamId: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'if (canonical.isNotBlank()) return listOf(canonical)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'streamUrl = firstNonBlank(canonicalMpegTsLiveUrl(id)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
@@ -198,6 +198,13 @@ jobs:
           grep -Fq 'modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
           grep -Fq 'items(u.categories, key = { "category:${it.id}" })' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
           ! grep -Fq 'items(u.categories.take(12)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
+          grep -Fq 'releases/tags/v0.6.4-test' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+          grep -Fq 'EpiMediaHub_Android_v0.6.4-test.apk' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+          grep -Fq 'private fun isNewer(remote: String, local: String): Boolean' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+          grep -Fq 'Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+          grep -Fq 'canRequestPackageInstalls()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+          grep -Fq 'FileProvider.getUriForFile' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
           grep -Fq 'parseIptvHttpRequest(raw: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq '.setBufferDurationsMs(750, 3_000, 150, 300)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'player.clearMediaItems()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
@@ -216,7 +223,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Android-v0.6.4.10-signed-test
+          name: EpiMediaHub-Android-v0.6.4.11-signed-test
           path: |
             dist/EpiMediaHub_Android_v0.6.4-test.apk
             dist/SHA256SUMS.txt
@@ -229,8 +236,8 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v0.6.4-test"
-          TITLE="EpiMediaHub Android v0.6.4.10 Test"
-          NOTES="Hotfix 0.6.4.10 räumt die Navigation und Mediathek auf: Der visuelle Zurück-Button in der oberen Leiste wurde auf TV und Mobile entfernt; die Geräte-/Fernbedienungs-Zurück-Funktion bleibt erhalten. In der TV-Mediathek ist die Suche jetzt ein bewusst auswählbarer Button, sodass beim Öffnen einer ARD/ZDF/etc.-Kategorie nicht mehr automatisch die Bildschirmtastatur erscheint und die Inhalte normal per D-Pad erreichbar bleiben. Die Netflix-artigen Film- und Serienbereiche sind nicht mehr auf 12 Kategoriezeilen begrenzt: alle vom Anbieter gelieferten Kategorien können vertikal durchgescrollt werden; der Katalog wird dafür einmal effizient nach Kategorie gruppiert. Alle Fixes aus 0.6.4.9 bleiben erhalten. Die öffentliche APK-URL bleibt unverändert."
+          TITLE="EpiMediaHub Android v0.6.4.11 Test"
+          NOTES="Hotfix 0.6.4.11 überarbeitet den internen Android-/Fire-TV-Updater grundlegend. Der Updater liest jetzt exakt den tatsächlich verwendeten Moving-Release v0.6.4-test und das reale APK-Asset EpiMediaHub_Android_v0.6.4-test.apk, versteht vierteilige Versionsnummern wie 0.6.4.11 und vergleicht sie semantisch. Downloads werden per GitHub-SHA256 geprüft und bereits vollständig verifizierte APKs wiederverwendet. Android 8+/Fire OS erhält die benötigte REQUEST_INSTALL_PACKAGES-Berechtigung; wenn EpiMediaHub noch nicht als Installationsquelle freigegeben ist, öffnet die App gezielt die Systemseite für unbekannte Apps. Nach der Freigabe wird die bereits geladene APK beim nächsten Installieren ohne erneuten Großdownload verwendet. Alle UI-, Mediathek-, Film-/Serien-, Playlist- und Live-TV-Fixes aus 0.6.4.10 bleiben erhalten."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
             gh release upload "$TAG" \
