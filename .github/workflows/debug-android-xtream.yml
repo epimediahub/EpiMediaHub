@@ -28,18 +28,12 @@ jobs:
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
       - name: Apply current Android source
         run: bash build_tools/install_android_v06414_source.sh
-      - name: Dump M3U, provisioning and catalog source
+      - name: Dump Xtream poster and model mapping
         shell: bash
         run: |
           set -euo pipefail
           ROOT="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app"
-          echo '===== M3uParser.kt ====='
-          cat "$ROOT/data/M3uParser.kt"
-          echo '===== SetupCodeProvisioning.kt ====='
-          cat "$ROOT/data/SetupCodeProvisioning.kt"
-          echo '===== MainViewModel catalog functions ====='
-          grep -n -A220 -B40 -E 'loadCatalogRows|xtreamLibrary|openContent|loadCategories|loadItems' "$ROOT/MainViewModel.kt" || true
-          echo '===== V060CinematicHub catalog ====='
-          grep -n -A260 -B50 -E 'catalogRows|V060Poster|AsyncImage|CircularProgressIndicator|loading' "$ROOT/ui/V060CinematicHub.kt" || true
-          echo '===== PrefsRepository playlists ====='
-          grep -n -A180 -B30 -E 'loadPlaylists|savePlaylists|activePlaylistId' "$ROOT/data/PrefsRepository.kt" || true
+          echo '===== XtreamClient mappings ====='
+          grep -n -A260 -B50 -E 'fun entries|fun details|stream_icon|cover|movie_image|backdrop|MediaEntry\(' "$ROOT/data/XtreamClient.kt" || true
+          echo '===== MediaEntry model ====='
+          grep -Rni -A80 -B10 'data class MediaEntry' "$ROOT/model" || true
