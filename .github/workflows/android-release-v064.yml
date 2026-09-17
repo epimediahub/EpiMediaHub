@@ -67,7 +67,7 @@ jobs:
           include(":app")
           EOF
 
-      - name: Install v0.6.4.7 source
+      - name: Install v0.6.4.8 source
         run: bash build_tools/install_android_v064_source.sh
 
       - name: Import existing premium skin assets
@@ -161,29 +161,37 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build signed v0.6.4.7 test APK
+      - name: Build signed v0.6.4.8 test APK
         shell: bash
         run: |
           cd "$PROJECT_ROOT"
           gradle :app:assembleRelease --stacktrace --no-daemon
 
-      - name: Verify v0.6.4.7 fixes and signing certificate
+      - name: Verify v0.6.4.8 fixes and signing certificate
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "0.6.4.7"' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'versionCode = 610' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionName = "0.6.4.8"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 611' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'private fun canonicalMpegTsLiveUrl(streamId: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'if (canonical.isNotBlank()) return listOf(canonical)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'streamUrl = firstNonBlank(canonicalMpegTsLiveUrl(id)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'entries.filterNot { it.id in alreadyLoaded }.take(4)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'private val xtreamLibraryCache = java.util.concurrent.ConcurrentHashMap<String, List<MediaEntry>>()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          grep -Fq 'val allowLegacyUnbound = it.playlists.size <= 1' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'private fun xtreamLibrary(profile: PlaylistProfile, kind: MediaKind)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'xtreamLibraryCache.clear()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'contentFilterKind = null' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'all.asSequence().filter { entry -> entry.categoryId == category.id }.take(24).toList()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'state.playlists.firstOrNull { it.id == item.sourceProfileId }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'favorites = prefs.loadFavoriteEntries(activeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'continueWatching = prefs.loadContinue(activeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'recentlyWatched = prefs.loadRecentlyWatched(activeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'prefs.clearPlaylistCollections(id)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
+          grep -Fq 'sourceProfileId.ifBlank { "legacy" }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/model/Models.kt"
+          grep -Fq 'collectionKey("favorites_items", profileId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PrefsRepository.kt"
+          grep -Fq 'collectionKey("continue", profileId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PrefsRepository.kt"
+          grep -Fq 'collectionKey("recently_watched", profileId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PrefsRepository.kt"
+          grep -Fq 'fun clearPlaylistCollections(profileId: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PrefsRepository.kt"
           grep -Fq 'parseIptvHttpRequest(raw: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq '.setBufferDurationsMs(750, 3_000, 150, 300)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'player.clearMediaItems()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
@@ -202,7 +210,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Android-v0.6.4.7-signed-test
+          name: EpiMediaHub-Android-v0.6.4.8-signed-test
           path: |
             dist/EpiMediaHub_Android_v0.6.4-test.apk
             dist/SHA256SUMS.txt
@@ -215,8 +223,8 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v0.6.4-test"
-          TITLE="EpiMediaHub Android v0.6.4.7 Test"
-          NOTES="Hotfix 0.6.4.7 trennt Filme, Serien, Favoriten, Weiterschauen und Verlauf strikt nach Playlist. Beim Playlistwechsel werden VOD-/Serienzustand, Details und alte Katalogzeilen vollständig verworfen und nur Sammlungen der aktiven Quelle wieder eingelesen. Xtream-Filme und -Serien werden pro aktiver Quelle einmal geladen, gecacht und lokal nach Kategorien aufgeteilt statt bis zu zwölf parallele Kategorieabfragen auszulösen. Das reduziert Providerlast und verhindert, dass Inhalte der vorherigen Playlist im neuen Katalog stehen bleiben. Die Live-TV-Fixes aus 0.6.4.6 bleiben unverändert enthalten. Die öffentliche APK-URL bleibt unverändert."
+          TITLE="EpiMediaHub Android v0.6.4.8 Test"
+          NOTES="Hotfix 0.6.4.8 macht die Trennung der Playlists vollständig: Favoriten, Weiterschauen, Zuletzt gesehen und Wiedergabeposition werden mit der Playlist-ID als eigener Namensraum gespeichert. Gleiche Xtream Film- oder Serien-IDs verschiedener Anbieter können dadurch nicht mehr kollidieren. Beim Umschalten werden ausschließlich die Sammlungen der gewählten Playlist geladen. Beim Löschen einer Playlist werden auch deren lokale Sammlungen und Resume-Positionen entfernt. Zusätzlich bleibt der 0.6.4.7-Fix enthalten, der VOD/Serien pro Playlist lädt und lokal nach Kategorien aufteilt. Alle Live-TV-Fixes aus 0.6.4.6 bleiben erhalten. Die öffentliche APK-URL bleibt unverändert."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
             gh release upload "$TAG" \
