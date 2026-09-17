@@ -15,26 +15,16 @@ def replace_once(path: Path, old: str, new: str, label: str):
     path.write_text(text.replace(old, new, 1))
 
 
-# ---------------------------------------------------------------------------
 # Version.
-# ---------------------------------------------------------------------------
 build = root / "app/build.gradle.kts"
 replace_once(build, 'versionCode = 611', 'versionCode = 612', 'hotfix9 versionCode')
 replace_once(build, 'versionName = "0.6.4.8"', 'versionName = "0.6.4.9"', 'hotfix9 versionName')
-
 home = java / "ui/V044Home.kt"
 replace_once(home, "0.6.4.8", "0.6.4.9", "hotfix9 visible version")
 
-
-# ---------------------------------------------------------------------------
-# MainViewModel: switch Live channels in-place. Do NOT call navigate() here,
-# otherwise every D-pad zap would push another Player onto the back stack.
-# Keep the remembered list position/channel updated so Back returns exactly to
-# the currently playing station. A generation token suppresses stale async zaps.
-# ---------------------------------------------------------------------------
+# Live zapping must replace the Player screen in-place rather than adding back-stack entries.
 vm = java / "MainViewModel.kt"
 s = vm.read_text()
-
 old_state = '''    private val browsePositions = mutableMapOf<String, Int>()
     private val browseSelections = mutableMapOf<String, String>()
 '''
@@ -45,7 +35,6 @@ new_state = '''    private val browsePositions = mutableMapOf<String, Int>()
 if old_state not in s:
     raise SystemExit("live zap generation anchor missing")
 s = s.replace(old_state, new_state, 1)
-
 anchor = '''    fun playbackUrls(item: MediaEntry): List<String> {
 '''
 method = '''    fun switchLiveChannel(item: MediaEntry, channelList: List<MediaEntry>) {
@@ -87,23 +76,13 @@ if anchor not in s:
 s = s.replace(anchor, method, 1)
 vm.write_text(s)
 
-
-# ---------------------------------------------------------------------------
-# Items screen: pass the current Live category list into the player and restore
-# actual TV focus (not only scroll position) to the last/current station on Back.
-# ---------------------------------------------------------------------------
+# Sender list: remember and restore the actual focused channel, and carry the category list into Player.
 screens = java / "ui/Screens.kt"
 s = screens.read_text()
-
 import_anchor = 'import androidx.compose.ui.focus.onFocusChanged\n'
 if import_anchor not in s:
     raise SystemExit("Screens focus import anchor missing")
-s = s.replace(
-    import_anchor,
-    'import androidx.compose.ui.focus.FocusRequester\nimport androidx.compose.ui.focus.focusRequester\n' + import_anchor,
-    1,
-)
-
+s = s.replace(import_anchor, 'import androidx.compose.ui.focus.FocusRequester\nimport androidx.compose.ui.focus.focusRequester\n' + import_anchor, 1)
 old_list_state = '''    val initial=remember(kind,cat.id,u.active?.id){vm.browserPosition(kind,cat.id)}
     val listState=rememberLazyListState(initialFirstVisibleItemIndex=initial)
 '''
@@ -125,7 +104,6 @@ new_list_state = '''    val initial=remember(kind,cat.id,u.active?.id){vm.browse
 if old_list_state not in s:
     raise SystemExit("ItemsScreen list-state anchor missing")
 s = s.replace(old_list_state, new_list_state, 1)
-
 old_tv_live = '''                                LiveChannelRow(m,now?.let{"${clock(it.start)}–${clock(it.end)}  ${it.title}"}.orEmpty(),accent,isTv=true){
                                     vm.rememberBrowserPosition(kind,cat.id,index,m.id);vm.play(m)
                                 }
@@ -138,7 +116,6 @@ new_tv_live = '''                                val channelFocusModifier=if(rem
 if old_tv_live not in s:
     raise SystemExit("TV LiveChannelRow anchor missing")
 s = s.replace(old_tv_live, new_tv_live, 1)
-
 old_mobile_live = '''                            LiveChannelRow(m,now?.title.orEmpty(),accent,isTv=false){vm.rememberBrowserPosition(kind,cat.id,index,m.id);vm.play(m)}
 '''
 new_mobile_live = '''                            LiveChannelRow(m,now?.title.orEmpty(),accent,isTv=false){vm.rememberBrowserPosition(kind,cat.id,index,m.id);vm.play(m,u.items)}
@@ -148,15 +125,9 @@ if old_mobile_live not in s:
 s = s.replace(old_mobile_live, new_mobile_live, 1)
 screens.write_text(s)
 
-
-# ---------------------------------------------------------------------------
-# Player: Fire TV D-pad Up/Down zaps Live channels. Left/right remain disabled
-# for Live. Regex is intentional because older Player patches format key cases
-# compactly while newer ones use spaces.
-# ---------------------------------------------------------------------------
+# Fire TV: Up = next channel, Down = previous channel. Key repeats are consumed to avoid provider flooding.
 player = java / "ui/PlayerScreen.kt"
 s = player.read_text()
-
 leave_anchor = '''    fun leave() {
 '''
 live_helpers = '''    fun switchLiveBy(direction: Int): Boolean {
@@ -176,49 +147,28 @@ live_helpers = '''    fun switchLiveBy(direction: Int): Boolean {
 if leave_anchor not in s:
     raise SystemExit("Player leave() anchor missing")
 s = s.replace(leave_anchor, live_helpers, 1)
-
 up_pattern = re.compile(r'(?m)^(\s*)KeyEvent\.KEYCODE_DPAD_UP\s*->\s*\{[^\n]*\}\s*$')
 up_match = up_pattern.search(s)
 if not up_match:
     raise SystemExit("Player DPAD_UP anchor missing")
 up_indent = up_match.group(1)
-s = up_pattern.sub(
-    up_indent + 'KeyEvent.KEYCODE_DPAD_UP -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(1) else true}else{controls=true;false}',
-    s,
-    count=1,
-)
-
+s = up_pattern.sub(up_indent + 'KeyEvent.KEYCODE_DPAD_UP -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(1) else true}else{controls=true;false}', s, count=1)
 down_pattern = re.compile(r'(?m)^(\s*)KeyEvent\.KEYCODE_DPAD_DOWN\s*->\s*\{[^\n]*\}\s*$')
 down_match = down_pattern.search(s)
 if not down_match:
     raise SystemExit("Player DPAD_DOWN anchor missing")
 down_indent = down_match.group(1)
-s = down_pattern.sub(
-    down_indent + 'KeyEvent.KEYCODE_DPAD_DOWN -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(-1) else true}else{controls=false;false}',
-    s,
-    count=1,
-)
+s = down_pattern.sub(down_indent + 'KeyEvent.KEYCODE_DPAD_DOWN -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(-1) else true}else{controls=false;false}', s, count=1)
 player.write_text(s)
 
-
-# ---------------------------------------------------------------------------
-# App-level BackHandler must not compete with the Player's own BackHandler.
-# The Player saves/releases once, pops one back-stack entry, and returns to Items.
-# ---------------------------------------------------------------------------
+# Only PlayerScreen handles Back while a Player is visible. Patch the stable Home clause instead of formatting around it.
 app = java / "EpiMediaHubApp.kt"
 s = app.read_text()
-old_global_back = '''        val hasInternalBackTarget = u.screen != Screen.Home &&
-            !(u.screen == Screen.AddPlaylist && u.playlists.isEmpty())
-'''
-new_global_back = '''        val hasInternalBackTarget = u.screen != Screen.Home &&
-            u.screen !is Screen.Player &&
-            !(u.screen == Screen.AddPlaylist && u.playlists.isEmpty())
-'''
-if old_global_back not in s:
-    raise SystemExit("global BackHandler target anchor missing")
-s = s.replace(old_global_back, new_global_back, 1)
+back_marker = 'u.screen != Screen.Home &&'
+if s.count(back_marker) != 1:
+    raise SystemExit(f"global BackHandler Home marker count was {s.count(back_marker)}")
+s = s.replace(back_marker, back_marker + '\n            u.screen !is Screen.Player &&', 1)
 app.write_text(s)
-
 
 checks = [
     (build, 'versionName = "0.6.4.9"'),
