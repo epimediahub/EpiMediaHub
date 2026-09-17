@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from flask import render_template
 
 from app import app, db, digest
+from dashboard_v052 import install as install_dashboard_v052
 
 
 @app.get("/connect/<token>")
@@ -40,3 +41,6 @@ def connect_page(token: str):
         deep_link=f"epimediahub://connect?token={token}",
         expires_at=row["expires_at"],
     )
+
+
+install_dashboard_v052(app, db)
