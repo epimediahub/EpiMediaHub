@@ -26,16 +26,23 @@ jobs:
           PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
           test -n "$PROJECT_ROOT"
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
-      - name: Apply current v0.6.4 source
-        run: bash build_tools/install_android_v064_source.sh
-      - name: Dump Xtream API call paths
+      - name: Apply current v0.6.4 source and hotfix2
+        run: |
+          bash build_tools/install_android_v064_source.sh
+          python3 android/hotfixes/v064_xtream_hotfix2.py
+      - name: Validate hotfix2
         shell: bash
         run: |
           set -euo pipefail
           X="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -n -A28 -B8 'private fun text' "$X" || true
-          grep -n -A35 -B8 'fun categories' "$X" || true
-          grep -n -A100 -B12 'fun entries' "$X" || true
-          grep -n -A45 -B8 'fun details' "$X" || true
-          grep -n -A75 -B8 'fun episodes' "$X" || true
-          grep -n 'category_id\|get_live_streams\|get_vod_streams\|get_series\|Xtream HTTP' "$X" || true
+          G="$PROJECT_ROOT/app/build.gradle.kts"
+          H="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V044Home.kt"
+          grep -Fq 'versionName = "0.6.4.2"' "$G"
+          grep -Fq 'versionCode = 605' "$G"
+          grep -Fq '0.6.4.2' "$H"
+          grep -Fq 'apiWithEndpoint("panel_api.php"' "$X"
+          grep -Fq 'val all = arrayAction(action)' "$X"
+          grep -Fq 'row.optString("category_id") == requestedCategory' "$X"
+          grep -Fq 'Xtream ${safeRequestName(current)} HTTP $code' "$X"
+          grep -n -A65 -B10 'private fun apiWithEndpoint' "$X"
+          grep -n -A45 -B8 'fun entries' "$X"
