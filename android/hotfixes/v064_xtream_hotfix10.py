@@ -32,8 +32,11 @@ replace_once(home, "0.6.4.9", "0.6.4.10", "hotfix10 visible version")
 # ---------------------------------------------------------------------------
 common = java / "ui/Common.kt"
 s = common.read_text()
-old_back = '''            if (onBack != null) {
-                TextButton(onClick = onBack, shape = RoundedCornerShape(14.dp)) { Text("‹  Zurück", color = Color.White) }
+old_back = '''            if(onBack!=null){
+                TextButton(onClick=onBack,shape=RoundedCornerShape(12.dp),contentPadding=PaddingValues(horizontal=8.dp,vertical=5.dp)){
+                    Text("‹ Zurück",color=Color.White,fontWeight=FontWeight.Bold,fontSize=14.sp)
+                }
+                Spacer(Modifier.width(4.dp))
             }
 '''
 if old_back not in s:
