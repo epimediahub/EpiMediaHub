@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>EpiMediaHub Einrichtung</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body>
+  <main class="login-shell">
+    <section class="login-card">
+      <div class="brand">EpiMediaHub</div>
+      <h1>Gerät einrichten</h1>
+      {% if state == 'ready' %}
+        <p>Die sichere Einrichtung für <strong>{{ customer_name }}</strong> ist bereit.</p>
+        <p>Öffne EpiMediaHub auf diesem Gerät und bestätige die Verbindung.</p>
+        <p><a class="button" href="{{ deep_link }}">In EpiMediaHub öffnen</a></p>
+        <p class="muted">Die Aktivierung ist einmalig und nur bis {{ expires_at }} gültig.</p>
+        <p class="muted">Auf TV/Receiver ohne Link-Öffnung kann alternativ der Einrichtungscode aus der EpiMediaHub-Verwaltung eingegeben werden.</p>
+      {% elif state == 'used' %}
+        <p>Diese Einrichtung wurde bereits verwendet.</p>
+      {% elif state == 'expired' %}
+        <p>Diese Einrichtung ist abgelaufen. Bitte einen neuen Einrichtungscode erzeugen.</p>
+      {% else %}
+        <p>Dieser Einrichtungslink ist ungültig.</p>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

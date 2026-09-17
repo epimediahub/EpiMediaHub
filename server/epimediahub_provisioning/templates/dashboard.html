@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f4f6fa">
+  <title>EpiMediaHub Admin</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css', v='0.6.1-ui1') }}">
+</head>
+<body class="admin-page">
+<svg class="svg-sprite" aria-hidden="true">
+  <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM10 9l5 3-5 3z"/></symbol>
+  <symbol id="i-device" viewBox="0 0 24 24"><path d="M5 3h14v18H5zM9 17h6"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><path d="M15 7a5 5 0 1 0 2 4l4-4-2-2-2 2-2-2-2 2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 15v5h16v-5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 4H4v16h6M14 8l4 4-4 4m4-4H8"/></symbol>
+  <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2-6 4 12 2-6h6"/></symbol>
+</svg>
+
+<div class="admin-shell">
+  <aside class="sidebar" id="adminSidebar">
+    <div class="sidebar-brand">
+      <span class="brandmark">E</span>
+      <div><strong>EpiMediaHub</strong><small>CONTROL CENTER</small></div>
+      <button class="sidebar-close" id="sidebarClose" type="button" aria-label="Menü schließen">×</button>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Administration">
+      <span class="nav-caption">ÜBERSICHT</span>
+      <a href="#overview" class="nav-link active"><svg><use href="#i-grid"/></svg><span>Dashboard</span></a>
+      <span class="nav-caption">VERWALTUNG</span>
+      <a href="#playlists" class="nav-link"><svg><use href="#i-play"/></svg><span>Playlists</span><b>{{ customers|length }}</b></a>
+      <a href="#activations" class="nav-link"><svg><use href="#i-key"/></svg><span>Aktivierungen</span><b>{{ active_activation_codes }}</b></a>
+      <a href="#devices" class="nav-link"><svg><use href="#i-device"/></svg><span>Geräte</span><b>{{ devices|length }}</b></a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="system-card"><span class="status-dot"></span><div><strong>System online</strong><small>API 0.6.1 · Raspberry</small></div></div>
+      <form method="post" action="{{ url_for('logout') }}"><button class="logout-button" type="submit"><svg><use href="#i-logout"/></svg>Abmelden</button></form>
+    </div>
+  </aside>
+  <div class="sidebar-scrim" id="sidebarScrim"></div>
+
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <div class="topbar-title">
+        <button class="menu-button" id="menuButton" type="button" aria-label="Navigation öffnen"><svg><use href="#i-menu"/></svg></button>
+        <div><small>EpiMediaHub</small><strong>Dashboard</strong></div>
+      </div>
+      <div class="topbar-meta"><span class="online-pill"><i></i>Provisioning online</span><div class="admin-avatar">A</div></div>
+    </header>
+
+    <div class="admin-content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}<div class="flash-stack" aria-live="polite">{% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+      {% endwith %}
+
+      <section id="overview" class="page-header">
+        <div><span class="eyebrow">CONTROL CENTER</span><h1>Willkommen zurück.</h1><p>Hier siehst du den Zustand deiner Playlists, Aktivierungen und Kundengeräte.</p></div>
+        <div class="header-actions">
+          <button class="button button-secondary" type="button" data-open-dialog="bulk-add-dialog"><svg><use href="#i-upload"/></svg>Mehrfachimport</button>
+          <button class="button button-primary" type="button" data-open-dialog="add-dialog"><svg><use href="#i-plus"/></svg>Playlist hinzufügen</button>
+        </div>
+      </section>
+
+      <section class="metric-grid" aria-label="Kennzahlen">
+        <article class="metric-card metric-blue"><div class="metric-icon"><svg><use href="#i-play"/></svg></div><div class="metric-copy"><span>Playlists</span><strong>{{ customers|length }}</strong><small>{{ customers|selectattr('enabled')|list|length }} aktiv angelegt</small></div></article>
+        <article class="metric-card metric-green"><div class="metric-icon"><svg><use href="#i-device"/></svg></div><div class="metric-copy"><span>Aktive Geräte</span><strong>{{ active_devices }}</strong><small>von {{ devices|length }} insgesamt</small></div></article>
+        <article class="metric-card metric-violet"><div class="metric-icon"><svg><use href="#i-key"/></svg></div><div class="metric-copy"><span>Offene Codes</span><strong>{{ active_activation_codes }}</strong><small>{{ activations_today }} heute erstellt</small></div></article>
+        <article class="metric-card {% if pending_devices %}metric-orange{% else %}metric-cyan{% endif %}"><div class="metric-icon"><svg><use href="#i-pulse"/></svg></div><div class="metric-copy"><span>Sync offen</span><strong>{{ pending_devices }}</strong><small>{% if pending_devices %}Geräte warten auf Update{% else %}Alle Geräte aktuell{% endif %}</small></div></article>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel chart-panel">
+          <div class="panel-heading compact"><div><span class="section-kicker">LETZTE 7 TAGE</span><h2>Aktivierungen</h2></div><div class="panel-stat"><strong>{{ redeemed_activations }}</strong><span>insgesamt eingelöst</span></div></div>
+          <div class="bar-chart" aria-label="Aktivierungen der letzten sieben Tage">
+            {% for item in activation_chart %}<div class="bar-column" title="{{ item.date }}: {{ item.count }} Aktivierung(en)"><span class="bar-value">{{ item.count }}</span><div class="bar-track"><i style="height:{{ item.height }}%"></i></div><small>{{ item.label }}</small></div>{% endfor %}
+          </div>
+        </article>
+
+        <article class="panel quick-panel">
+          <div class="panel-heading compact"><div><span class="section-kicker">SCHNELLZUGRIFF</span><h2>Direkt erledigen</h2></div></div>
+          <div class="quick-actions">
+            <button type="button" data-open-dialog="add-dialog"><span class="quick-icon blue"><svg><use href="#i-plus"/></svg></span><span><strong>Neue Playlist</strong><small>Einzelnen Kunden anlegen</small></span><b>›</b></button>
+            <button type="button" data-open-dialog="bulk-add-dialog"><span class="quick-icon violet"><svg><use href="#i-upload"/></svg></span><span><strong>Mehrfachimport</strong><small>Mehrere Listen einfügen</small></span><b>›</b></button>
+            <a href="#devices"><span class="quick-icon green"><svg><use href="#i-device"/></svg></span><span><strong>Geräte prüfen</strong><small>Sync und Freigaben verwalten</small></span><b>›</b></a>
+          </div>
+        </article>
+      </section>
+
+      <section id="playlists" class="panel content-panel">
+        <div class="panel-heading">
+          <div><span class="section-kicker">PLAYLISTS</span><h2>Playlist-Verwaltung</h2><p>Alle Kundenlisten kompakt verwalten, durchsuchen und gemeinsam bearbeiten.</p></div>
+          <div class="panel-actions">
+            <button id="bulkDeleteButton" class="button button-danger button-small" type="button" disabled>Ausgewählte löschen</button>
+            <button class="button button-secondary button-small" type="button" data-open-dialog="bulk-add-dialog"><svg><use href="#i-upload"/></svg>Import</button>
+            <button class="button button-primary button-small" type="button" data-open-dialog="add-dialog"><svg><use href="#i-plus"/></svg>Neu</button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <label class="search-field"><span class="sr-only">Suche</span><svg><use href="#i-search"/></svg><input id="playlistSearch" type="search" placeholder="Kunde oder Playlist suchen …" autocomplete="off"></label>
+          <label class="filter-field"><span>Typ</span><select id="typeFilter"><option value="all">Alle Typen</option><option value="M3U">M3U</option><option value="XTREAM">Xtream</option></select></label>
+          <label class="filter-field"><span>Status</span><select id="statusFilter"><option value="all">Alle Status</option><option value="active">Aktiv</option><option value="disabled">Gesperrt</option></select></label>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th class="select-cell"><input id="selectAll" type="checkbox" aria-label="Alle sichtbaren Playlists auswählen"></th><th>Playlist / Kunde</th><th>Typ</th><th>Quelle</th><th>Geräte</th><th>Status</th><th class="actions-cell">Aktionen</th></tr></thead>
+            <tbody id="playlistRows">
+            {% for c in customers %}
+              <tr class="playlist-row" data-search="{{ (c.playlist_name ~ ' ' ~ c.name)|lower }}" data-type="{{ c.playlist_type }}" data-status="{% if c.enabled %}active{% else %}disabled{% endif %}">
+                <td class="select-cell"><input class="row-select" type="checkbox" value="{{ c.id }}" aria-label="{{ c.playlist_name }} auswählen"></td>
+                <td><div class="primary-cell"><span class="table-avatar">{{ c.playlist_name[:1]|upper }}</span><span><strong>{{ c.playlist_name }}</strong><small>{{ c.name }} · #{{ c.id }}</small></span></div></td>
+                <td><span class="badge badge-neutral">{{ c.playlist_type|capitalize }}</span></td>
+                <td><span class="source-text">{{ c.source_display or 'Nicht hinterlegt' }}</span></td>
+                <td><span class="count-pill">{{ c.device_count }}</span></td>
+                <td>{% if c.enabled %}<span class="badge badge-success"><i></i>Aktiv</span>{% else %}<span class="badge badge-muted">Gesperrt</span>{% endif %}</td>
+                <td class="actions-cell"><div class="row-actions"><button class="button button-ghost button-small" type="button" data-open-dialog="edit-{{ c.id }}">Bearbeiten</button><form method="post" action="{{ url_for('web_activation', customer_id=c.id) }}"><button class="button button-secondary button-small" type="submit">Code</button></form></div></td>
+              </tr>
+            {% else %}<tr><td colspan="7"><div class="empty-state"><span class="empty-icon"><svg><use href="#i-play"/></svg></span><strong>Noch keine Playlists</strong><span>Lege die erste Playlist an oder importiere mehrere auf einmal.</span></div></td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div id="noFilterResults" class="empty-state filtered-empty" hidden><strong>Keine Treffer</strong><span>Ändere Suche oder Filter.</span></div>
+      </section>
+
+      <section id="activations" class="panel content-panel">
+        <div class="panel-heading"><div><span class="section-kicker">AKTIVITÄT</span><h2>Letzte Aktivierungen</h2><p>Die zuletzt erstellten und eingelösten Einrichtungscodes.</p></div><div class="panel-stat"><strong>{{ active_activation_codes }}</strong><span>offen</span></div></div>
+        <div class="activity-list">
+          {% for item in recent_activations %}<div class="activity-row"><span class="activity-icon"><svg><use href="#i-key"/></svg></span><div class="activity-copy"><strong>{{ item.customer_name }}</strong><small>{{ item.device_id }} · {{ item.platform|capitalize }}</small></div><time>{{ item.created_display }}</time><span class="badge badge-{{ item.status_class }}">{{ item.status }}</span></div>
+          {% else %}<div class="empty-state"><span class="empty-icon"><svg><use href="#i-key"/></svg></span><strong>Noch keine Aktivierungen</strong><span>Erstelle bei einer Playlist einen Code für das erste Gerät.</span></div>{% endfor %}
+        </div>
+      </section>
+
+      <section id="devices" class="panel content-panel">
+        <div class="panel-heading"><div><span class="section-kicker">GERÄTE</span><h2>Geräte & Receiver</h2><p>Zuweisung, Freigabe und Synchronisierungsstand kompakt verwalten.</p></div></div>
+        <div class="table-wrap">
+          <table class="data-table device-table">
+            <thead><tr><th>Gerät</th><th>Zugewiesene Playlist</th><th>Plattform</th><th>Synchronisierung</th><th>Status</th><th class="actions-cell">Aktionen</th></tr></thead>
+            <tbody>
+            {% for d in devices %}
+              <tr>
+                <td><div class="primary-cell"><span class="table-avatar device"><svg><use href="#i-device"/></svg></span><span><strong>{{ d.device_id }}</strong>{% if d.last_seen_at %}<small>Kontakt {{ d.last_seen_at }}</small>{% endif %}</span></div></td>
+                <td><form class="inline-form" method="post" action="{{ url_for('web_assign_device', device_id=d.id) }}"><select name="customer_id" aria-label="Playlist zuweisen"><option value="{{ unassigned_customer_id }}" {% if d.unassigned %}selected{% endif %}>— Nicht zugewiesen —</option>{% for c in customers %}<option value="{{ c.id }}" {% if c.id == d.customer_id %}selected{% endif %}>{{ c.playlist_name }} · {{ c.name }}</option>{% endfor %}</select><button class="button button-primary button-small" type="submit">Zuweisen</button></form></td>
+                <td><span class="badge badge-neutral">{{ d.platform|capitalize }}</span></td>
+                <td><div class="sync-cell"><span>Soll v{{ d.customer_config_version }} · Gerät v{{ d.applied_config_version or 0 }}</span>{% if d.last_sync_status == 'error' %}<b class="sync-error">Fehler</b>{% elif (d.applied_config_version or 0) < d.customer_config_version %}<b class="sync-pending">Ausstehend</b>{% else %}<b class="sync-ok">Synchron</b>{% endif %}</div>{% if d.last_sync_error %}<small class="sync-error-text">{{ d.last_sync_error }}</small>{% endif %}</td>
+                <td>{% if d.enabled %}<span class="badge badge-success"><i></i>Aktiv</span>{% else %}<span class="badge badge-muted">Gesperrt</span>{% endif %}</td>
+                <td class="actions-cell"><div class="row-actions"><form method="post" action="{{ url_for('web_sync_bootstrap', device_id=d.id) }}"><button class="button button-ghost button-small" type="submit">Auto-Sync</button></form>{% if d.enabled %}<form method="post" action="{{ url_for('web_revoke', device_id=d.id) }}"><button class="button button-danger button-small" type="submit">Sperren</button></form>{% else %}<form method="post" action="{{ url_for('web_enable', device_id=d.id) }}"><button class="button button-primary button-small" type="submit">Freigeben</button></form>{% endif %}</div></td>
+              </tr>
+            {% else %}<tr><td colspan="6"><div class="empty-state"><span class="empty-icon"><svg><use href="#i-device"/></svg></span><strong>Noch keine Geräte</strong><span>Aktivierte Geräte erscheinen automatisch hier.</span></div></td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<dialog id="add-dialog" class="modal">
+  <form method="post" action="{{ url_for('web_create_customer') }}">
+    <div class="modal-head"><div><span class="section-kicker">NEUER EINTRAG</span><h2>Playlist hinzufügen</h2></div><button class="modal-close" type="button" data-close-dialog aria-label="Schließen">×</button></div>
+    <div class="form-grid">
+      <label><span>Kundenname</span><input name="name" placeholder="Max Mustermann" required></label><label><span>Playlist-Name</span><input name="playlist_name" placeholder="Wohnzimmer"></label>
+      <label><span>Typ</span><select name="playlist_type" class="playlist-type-select"><option value="M3U">M3U</option><option value="XTREAM">Xtream</option></select></label><div></div>
+      <label class="span-2 type-fields type-M3U"><span>M3U-Adresse</span><input name="playlist_url" type="url" placeholder="https://…/get.php?…"></label>
+      <label class="span-2 type-fields type-XTREAM" hidden><span>Xtream Server</span><input name="xtream_server" type="url" placeholder="https://server.example"></label>
+      <label class="type-fields type-XTREAM" hidden><span>Benutzername</span><input name="xtream_username" autocomplete="off"></label><label class="type-fields type-XTREAM" hidden><span>Passwort</span><input name="xtream_password" type="password" autocomplete="new-password"></label>
+      <label class="type-fields type-XTREAM" hidden><span>Ausgabe</span><select name="xtream_output"><option value="ts">ts</option><option value="m3u8">m3u8</option></select></label>
+      <fieldset class="assignment-picker span-2">
+        <legend>Auf Geräte übertragen</legend>
+        <p>Wähle direkt aus, welche vorhandenen Geräte diese Playlist erhalten sollen.</p>
+        <div class="device-choice-list">
+          {% for d in devices %}<label class="device-choice"><input type="checkbox" name="device_ids" value="{{ d.id }}"><span><strong>{{ d.device_id }}</strong><small>{{ d.platform|capitalize }} · aktuell: {{ d.customer_name }}</small></span></label>
+          {% else %}<div class="assignment-empty">Noch kein Gerät registriert. Lege die Playlist an und verbinde das Gerät anschließend über „Code“.</div>{% endfor %}
+        </div>
+      </fieldset>
+    </div>
+    <div class="modal-actions"><button class="button button-ghost" type="button" data-close-dialog>Abbrechen</button><button class="button button-primary" type="submit">Hinzufügen</button></div>
+  </form>
+</dialog>
+
+<dialog id="bulk-add-dialog" class="modal modal-wide">
+  <form method="post" action="{{ url_for('web_bulk_create_customers') }}">
+    <div class="modal-head"><div><span class="section-kicker">MEHRFACHIMPORT</span><h2>Mehrere Playlists gleichzeitig</h2></div><button class="modal-close" type="button" data-close-dialog aria-label="Schließen">×</button></div>
+    <p class="modal-copy">Eine Playlist pro Zeile. Duplikate werden automatisch übersprungen.</p>
+    <textarea name="bulk_playlists" rows="11" required placeholder="Kunde Müller | https://server.example/get.php?username=…&amp;password=…&#10;Kunde Meier | Wohnzimmer | https://example.com/list.m3u&#10;Kunde Schulz | XTREAM | https://server.example | benutzer | passwort | ts"></textarea>
+    <div class="format-help"><strong>Unterstützte Formate</strong><code>Kunde | URL</code><code>Kunde | Playlistname | URL</code><code>Kunde | XTREAM | Server | Benutzer | Passwort | ts</code><code>URL</code></div>
+    <div class="modal-actions"><button class="button button-ghost" type="button" data-close-dialog>Abbrechen</button><button class="button button-primary" type="submit">Alle importieren</button></div>
+  </form>
+</dialog>
+
+{% for c in customers %}
+<dialog id="edit-{{ c.id }}" class="modal">
+  <form method="post" action="{{ url_for('web_update_customer', customer_id=c.id) }}">
+    <div class="modal-head"><div><span class="section-kicker">PLAYLIST #{{ c.id }}</span><h2>{{ c.playlist_name }}</h2></div><button class="modal-close" type="button" data-close-dialog aria-label="Schließen">×</button></div>
+    <div class="form-grid">
+      <label><span>Kundenname</span><input name="name" value="{{ c.name }}" required></label><label><span>Playlist-Name</span><input name="playlist_name" value="{{ c.playlist_name }}"></label>
+      <label><span>Typ</span><select name="playlist_type" class="playlist-type-select"><option value="M3U" {% if c.playlist_type == 'M3U' %}selected{% endif %}>M3U</option><option value="XTREAM" {% if c.playlist_type == 'XTREAM' %}selected{% endif %}>Xtream</option></select></label><div></div>
+      <label class="span-2 type-fields type-M3U" {% if c.playlist_type != 'M3U' %}hidden{% endif %}><span>M3U-Adresse</span><input name="playlist_url" type="url" value="{{ c.playlist_url }}"></label>
+      <label class="span-2 type-fields type-XTREAM" {% if c.playlist_type != 'XTREAM' %}hidden{% endif %}><span>Xtream Server</span><input name="xtream_server" type="url" value="{{ c.xtream_server }}"></label>
+      <label class="type-fields type-XTREAM" {% if c.playlist_type != 'XTREAM' %}hidden{% endif %}><span>Benutzername</span><input name="xtream_username" value="{{ c.xtream_username }}" autocomplete="off"></label><label class="type-fields type-XTREAM" {% if c.playlist_type != 'XTREAM' %}hidden{% endif %}><span>Passwort</span><input name="xtream_password" type="password" placeholder="leer = unverändert" autocomplete="new-password"></label>
+      <label class="type-fields type-XTREAM" {% if c.playlist_type != 'XTREAM' %}hidden{% endif %}><span>Ausgabe</span><select name="xtream_output"><option value="ts" {% if c.xtream_output == 'ts' %}selected{% endif %}>ts</option><option value="m3u8" {% if c.xtream_output == 'm3u8' %}selected{% endif %}>m3u8</option></select></label>
+      <fieldset class="assignment-picker span-2">
+        <legend>Gerätezuweisung</legend>
+        <p>Markierte Geräte erhalten diese Playlist. Entfernst du den Haken, bleibt das Gerät bestehen und wird auf „Nicht zugewiesen“ gesetzt.</p>
+        <div class="device-choice-list">
+          {% for d in devices %}<label class="device-choice"><input type="checkbox" name="device_ids" value="{{ d.id }}" {% if d.customer_id == c.id %}checked{% endif %}><span><strong>{{ d.device_id }}</strong><small>{{ d.platform|capitalize }} · aktuell: {{ d.customer_name }}</small></span></label>
+          {% else %}<div class="assignment-empty">Noch kein Gerät registriert.</div>{% endfor %}
+        </div>
+      </fieldset>
+    </div>
+    <div class="modal-actions"><button class="button button-ghost" type="button" data-close-dialog>Abbrechen</button><button class="button button-primary" type="submit">Speichern & synchronisieren</button></div>
+  </form>
+  <div class="danger-zone"><div><strong>Playlist löschen</strong><span>Zugeordnete Geräte bleiben erhalten und werden auf „Nicht zugewiesen“ gesetzt.</span></div><form method="post" action="{{ url_for('web_delete_customer', customer_id=c.id) }}" onsubmit="return confirm('Diesen Playlist-Eintrag wirklich löschen? Die Geräte bleiben erhalten und werden anschließend als nicht zugewiesen angezeigt.')"><input type="hidden" name="confirm_delete" value="1"><button class="button button-danger" type="submit">Löschen</button></form></div>
+  <div class="rollback-zone"><form method="post" action="{{ url_for('web_rollback_customer', customer_id=c.id) }}"><button class="button button-ghost" type="submit">Vorherige Konfiguration wiederherstellen</button></form></div>
+</dialog>
+{% endfor %}
+
+<form id="bulkDeleteForm" method="post" action="{{ url_for('web_bulk_delete_customers') }}" hidden><input type="hidden" name="confirm_delete" value="1"><div id="bulkDeleteIds"></div></form>
+
+<script>
+(() => {
+  const sidebar = document.getElementById('adminSidebar');
+  const closeSidebar = () => document.body.classList.remove('sidebar-open');
+  document.getElementById('menuButton')?.addEventListener('click', () => document.body.classList.add('sidebar-open'));
+  document.getElementById('sidebarClose')?.addEventListener('click', closeSidebar);
+  document.getElementById('sidebarScrim')?.addEventListener('click', closeSidebar);
+  sidebar?.querySelectorAll('a').forEach(link => link.addEventListener('click', closeSidebar));
+
+  const navLinks = [...document.querySelectorAll('.nav-link')];
+  const sections = navLinks.map(link => document.querySelector(link.getAttribute('href'))).filter(Boolean);
+  const updateActiveNav = () => { const y = window.scrollY + 150; let active = sections[0]; sections.forEach(section => { if (section.offsetTop <= y) active = section; }); navLinks.forEach(link => link.classList.toggle('active', link.getAttribute('href') === `#${active?.id}`)); };
+  window.addEventListener('scroll', updateActiveNav, {passive:true});
+
+  const openDialog = id => { const dialog = document.getElementById(id); if (dialog) dialog.showModal(); };
+  document.querySelectorAll('[data-open-dialog]').forEach(button => button.addEventListener('click', () => openDialog(button.dataset.openDialog)));
+  document.querySelectorAll('[data-close-dialog]').forEach(button => button.addEventListener('click', () => button.closest('dialog')?.close()));
+  document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); }));
+
+  document.querySelectorAll('.playlist-type-select').forEach(select => { const syncTypeFields = () => { const form = select.closest('form'); form.querySelectorAll('.type-fields').forEach(field => { field.hidden = !field.classList.contains(`type-${select.value}`); }); }; select.addEventListener('change', syncTypeFields); syncTypeFields(); });
+
+  const search = document.getElementById('playlistSearch');
+  const typeFilter = document.getElementById('typeFilter');
+  const statusFilter = document.getElementById('statusFilter');
+  const rows = [...document.querySelectorAll('.playlist-row')];
+  const noResults = document.getElementById('noFilterResults');
+  const selectAll = document.getElementById('selectAll');
+  const bulkDeleteButton = document.getElementById('bulkDeleteButton');
+  const selectedRows = () => rows.filter(row => !row.hidden && row.querySelector('.row-select')?.checked);
+  const updateSelection = () => { const visible = rows.filter(row => !row.hidden); const selected = selectedRows(); bulkDeleteButton.disabled = selected.length === 0; bulkDeleteButton.textContent = selected.length ? `${selected.length} löschen` : 'Ausgewählte löschen'; selectAll.checked = visible.length > 0 && selected.length === visible.length; selectAll.indeterminate = selected.length > 0 && selected.length < visible.length; };
+  const applyFilters = () => { const term = search.value.trim().toLowerCase(); let visibleCount = 0; rows.forEach(row => { const matchesSearch = !term || row.dataset.search.includes(term); const matchesType = typeFilter.value === 'all' || row.dataset.type === typeFilter.value; const matchesStatus = statusFilter.value === 'all' || row.dataset.status === statusFilter.value; row.hidden = !(matchesSearch && matchesType && matchesStatus); if (!row.hidden) visibleCount += 1; }); noResults.hidden = visibleCount !== 0 || rows.length === 0; updateSelection(); };
+  [search, typeFilter, statusFilter].forEach(control => control?.addEventListener('input', applyFilters));
+  selectAll?.addEventListener('change', () => { rows.filter(row => !row.hidden).forEach(row => { row.querySelector('.row-select').checked = selectAll.checked; }); updateSelection(); });
+  rows.forEach(row => row.querySelector('.row-select')?.addEventListener('change', updateSelection));
+  bulkDeleteButton?.addEventListener('click', () => { const selected = selectedRows(); if (!selected.length) return; if (!confirm(`${selected.length} Playlist(s) wirklich löschen? Die Geräte bleiben erhalten und werden anschließend als nicht zugewiesen angezeigt.`)) return; const target = document.getElementById('bulkDeleteIds'); target.replaceChildren(); selected.forEach(row => { const input = document.createElement('input'); input.type = 'hidden'; input.name = 'customer_ids'; input.value = row.querySelector('.row-select').value; target.appendChild(input); }); document.getElementById('bulkDeleteForm').submit(); });
+  applyFilters(); updateActiveNav();
+})();
+</script>
+</body>
+</html>
