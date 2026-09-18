@@ -349,7 +349,7 @@ require_once(s, player_anchor, 'PlayerScreen composable anchor')
 vlc_fallback = r'''private fun V071UseVlcLiveFallback(item: MediaEntry): Boolean {
     if (item.kind != MediaKind.LIVE) return false
     val label = item.name.trim()
-    return Regex("(?i)(?:\bRAW\b|\bHEVC\b|\bH\.?265\b)\s*$").containsMatchIn(label)
+    return Regex("""(?i)(?:\\bRAW\\b|\\bHEVC\\b|\\bH\\.?265\\b)\\s*$""").containsMatchIn(label)
 }
 
 @Composable
@@ -431,7 +431,7 @@ private fun V071VlcLivePlayer(
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent {
-                if (it.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (it.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
                 when (it.nativeKeyEvent.keyCode) {
                     KeyEvent.KEYCODE_DPAD_UP -> switchLiveBy(-1)
                     KeyEvent.KEYCODE_DPAD_DOWN -> switchLiveBy(1)
