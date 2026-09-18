@@ -185,7 +185,7 @@ jobs:
           grep -Fq 'durationMillis = 145' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
           grep -Fq 'private fun V071UseVlcLiveFallback(item: MediaEntry)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'setEnableDecoderFallback(true)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'org.videolan.android:libvlc-all:3.7.6' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'org.videolan.android:libvlc-all:3.6.5' "$PROJECT_ROOT/app/build.gradle.kts"
           APK="$PROJECT_ROOT/app/build/outputs/apk/release/app-release.apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apk-signature.txt
           CERT="$(grep -i 'certificate SHA-256 digest:' /tmp/apk-signature.txt | head -n1 | awk -F': ' '{print $2}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
