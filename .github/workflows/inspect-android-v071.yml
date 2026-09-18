@@ -1,0 +1,38 @@
+name: Inspect Android v0.7.0 generated source
+
+on:
+  push:
+    branches: [android-v0.7.0-ui]
+    paths:
+      - '.github/workflows/inspect-android-v071.yml'
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* > .ci-android/source.b64
+          base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+      - name: Apply current Android source patches
+        run: bash build_tools/install_android_v070_source.sh
+      - name: Print relevant generated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== BUILD DEPENDENCIES ==='
+          sed -n '/dependencies[[:space:]]*{/,/^}/p' "$PROJECT_ROOT/app/build.gradle.kts"
+          echo '=== PLAYER SIGNATURE / ENGINE ==='
+          grep -n -A90 -B20 'fun PlayerScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt" | head -n 160
+          echo '=== PLAYER RENDERERS/AUDIO ==='
+          grep -n -E 'ExoPlayer.Builder|DefaultRenderersFactory|DefaultTrackSelector|Audio|trackSelection|PlayerView' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt" || true
+          echo '=== CINEMATIC HUB ==='
+          grep -n -A220 'fun V060CinematicHubScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt" | head -n 260
