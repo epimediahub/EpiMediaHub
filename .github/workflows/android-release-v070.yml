@@ -168,7 +168,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "0.7.0"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionName = "0.7.1"' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'versionCode = 701' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'fun V070HomeScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Home.kt"
           grep -Fq 'V070WeatherClient.refresh' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Home.kt"
