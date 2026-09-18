@@ -47,7 +47,7 @@ dep_anchor = '    implementation("androidx.media3:media3-ui:1.4.1")\n'
 require_once(s, dep_anchor, 'Media3 UI dependency')
 s = s.replace(
     dep_anchor,
-    dep_anchor + '    implementation("org.videolan.android:libvlc-all:3.7.6")\n',
+    dep_anchor + '    implementation("org.videolan.android:libvlc-all:3.6.5")\n',
     1,
 )
 build.write_text(s)
@@ -534,7 +534,7 @@ player.write_text(s)
 checks = [
     (build, 'versionName = "0.7.1"'),
     (build, 'versionCode = 701'),
-    (build, 'org.videolan.android:libvlc-all:3.7.6'),
+    (build, 'org.videolan.android:libvlc-all:3.6.5'),
     (hub, 'private fun V071CategoryRail('),
     (hub, 'contentState.animateScrollToItem(categoryStartIndex + index)'),
     (hub, '1.04f else 1f'),
