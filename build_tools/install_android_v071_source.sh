@@ -14,6 +14,6 @@ grep -Fq 'durationMillis = 145' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/
 grep -Fq 'private fun V071UseVlcLiveFallback(item: MediaEntry)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'VLCVideoLayout(context)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
 grep -Fq 'setEnableDecoderFallback(true)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-grep -Fq 'org.videolan.android:libvlc-all:3.7.6' "$PROJECT_ROOT/app/build.gradle.kts"
+grep -Fq 'org.videolan.android:libvlc-all:3.6.5' "$PROJECT_ROOT/app/build.gradle.kts"
 
 echo "Android v0.7.1 source reconstructed successfully"
