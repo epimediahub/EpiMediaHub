@@ -61,5 +61,11 @@ jobs:
           sed -n '1,340p' "$JAVA/ui/BrowserRows.kt" || true
           echo '=== SCREENS LIBRARY ==='
           grep -n -A320 -B30 -E 'fun LibraryScreen|fun Category|MediaKind\.LIVE' "$JAVA/ui/Screens.kt" || true
+          echo '=== MAIN VIEWMODEL FULL LIBRARY LOAD ==='
+          sed -n '80,440p' "$JAVA/MainViewModel.kt" || true
+          echo '=== M3U PARSER ==='
+          sed -n '1,220p' "$JAVA/data/M3uParser.kt" || true
+          echo '=== CINEMATIC HUB ==='
+          sed -n '1,300p' "$JAVA/ui/V060CinematicHub.kt" || true
           echo '=== UPDATE MANAGER ==='
           sed -n '1,360p' "$JAVA/data/UpdateManager.kt" || true
