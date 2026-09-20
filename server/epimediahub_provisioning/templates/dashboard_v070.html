@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#f4f6fa">
   <title>EpiMediaHub · Kunden & Geräte</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css', v='0.7.3') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v070.css', v='0.7.3') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css', v='0.7.4') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v070.css', v='0.7.4') }}">
 </head>
 <body class="admin-page hierarchy-page">
 <svg class="svg-sprite" aria-hidden="true">
@@ -20,7 +20,7 @@
 </svg>
 
 <header class="hierarchy-topbar">
-  <a class="hierarchy-brand" href="{{ url_for('dashboard') }}"><span>E</span><div><strong>EpiMediaHub</strong><small>CONTROL CENTER · 0.7.3</small></div></a>
+  <a class="hierarchy-brand" href="{{ url_for('dashboard') }}"><span>E</span><div><strong>EpiMediaHub</strong><small>CONTROL CENTER · 0.7.4</small></div></a>
   <form method="post" action="{{ url_for('logout') }}"><button class="button button-ghost" type="submit"><svg><use href="#i-logout"/></svg>Abmelden</button></form>
 </header>
 
@@ -58,7 +58,7 @@
 
   <section id="customerGrid" class="customer-grid">
     {% for customer in customers %}
-    <article id="customer-{{ customer.id }}" class="customer-card" data-search="{{ customer.name|lower }} {% for device in customer.devices %}{{ device.device_id|lower }} {% for playlist in device.playlists %}{{ playlist.name|lower }} {% endfor %}{% endfor %}">
+    <article id="customer-{{ customer.id }}" class="customer-card" data-search="{{ customer.name|lower }} {% for device in customer.devices %}{{ device.display_name|default('', true)|lower }} {{ device.device_id|lower }} {% for playlist in device.playlists %}{{ playlist.name|lower }} {% endfor %}{% endfor %}">
       <header class="customer-head">
         <div class="customer-identity"><span class="customer-avatar">{{ customer.name[:1]|upper }}</span><div><small>KUNDE #{{ customer.id }}</small><h2>{{ customer.name }}</h2><p>{{ customer.devices|length }} Gerät(e) · {{ customer.playlist_count }} Playlist(s)</p></div></div>
         <div class="customer-actions">
@@ -72,11 +72,13 @@
         {% for device in customer.devices %}
         <section id="device-{{ device.id }}" class="device-card">
           <header class="device-head">
-            <div class="device-title"><span class="device-icon"><svg><use href="#i-device"/></svg></span><div><small>GERÄT</small><h3>{{ device.device_id }}</h3><p>{{ device.platform|capitalize }} · Soll v{{ device.config_version }} / Gerät v{{ device.applied_config_version or 0 }}</p></div></div>
+            <div class="device-title"><span class="device-icon"><svg><use href="#i-device"/></svg></span><div><small>GERÄT</small><h3>{{ device.display_name or device.device_id }}</h3><p>{% if device.display_name %}{{ device.device_id }} · {% endif %}{{ device.platform|capitalize }} · Soll v{{ device.config_version }} / Gerät v{{ device.applied_config_version or 0 }}</p></div></div>
             <div class="device-actions">
               {% if device.last_sync_status == 'error' %}<span class="sync-state error">Fehler</span>{% elif device.sync_pending %}<span class="sync-state pending">Ausstehend</span>{% else %}<span class="sync-state ok">Synchron</span>{% endif %}
+              <button class="button button-ghost button-small" type="button" data-open-dialog="rename-device-{{ device.id }}">Gerät umbenennen</button>
               <button class="button button-primary button-small" type="button" data-open-dialog="add-playlist-{{ device.id }}"><svg><use href="#i-plus"/></svg>Playlist</button>
               <form method="post" action="{{ url_for('v070_sync_device', device_id=device.id) }}"><button class="button button-secondary button-small" type="submit"><svg><use href="#i-sync"/></svg>Synchronisieren</button></form>
+              <form method="post" action="{{ url_for('v074_delete_device', device_id=device.id) }}" onsubmit="return confirm('Dieses Gerät samt seiner Playlists wirklich endgültig löschen? Der Kunde bleibt erhalten.')"><input type="hidden" name="confirm" value="DELETE_DEVICE:{{ device.id }}"><button class="button button-danger button-small" type="submit">Gerät löschen</button></form>
             </div>
           </header>
 
@@ -109,7 +111,7 @@
   <section class="unassigned-panel">
     <header><div><span class="eyebrow">NOCH ZUORDNEN</span><h2>Nicht zugewiesene Geräte</h2><p>Diese Geräte bleiben erhalten. Ordne sie jetzt einem Kunden zu.</p></div><span class="count-pill">{{ unassigned_devices|length }}</span></header>
     {% for device in unassigned_devices %}
-    <div class="unassigned-row"><div><strong>{{ device.device_id }}</strong><small>{{ device.platform|capitalize }} · {{ device.playlists|length }} Playlist(s)</small></div><form method="post" action="{{ url_for('v070_move_device', device_id=device.id) }}"><select name="customer_id" required><option value="">Kunde auswählen …</option>{% for customer in customers %}<option value="{{ customer.id }}">{{ customer.name }}</option>{% endfor %}</select><button class="button button-primary button-small" type="submit">Zuordnen</button></form></div>
+    <div class="unassigned-row"><div><strong>{{ device.display_name or device.device_id }}</strong><small>{% if device.display_name %}{{ device.device_id }} · {% endif %}{{ device.platform|capitalize }} · {{ device.playlists|length }} Playlist(s)</small></div><div class="device-actions"><button class="button button-ghost button-small" type="button" data-open-dialog="rename-device-{{ device.id }}">Gerät umbenennen</button><form method="post" action="{{ url_for('v070_move_device', device_id=device.id) }}"><select name="customer_id" required><option value="">Kunde auswählen …</option>{% for customer in customers %}<option value="{{ customer.id }}">{{ customer.name }}</option>{% endfor %}</select><button class="button button-primary button-small" type="submit">Zuordnen</button></form><form method="post" action="{{ url_for('v074_delete_device', device_id=device.id) }}" onsubmit="return confirm('Dieses nicht zugewiesene Gerät samt seiner Playlists wirklich endgültig löschen?')"><input type="hidden" name="confirm" value="DELETE_DEVICE:{{ device.id }}"><button class="button button-danger button-small" type="submit">Gerät löschen</button></form></div></div>
     {% endfor %}
   </section>
   {% endif %}
@@ -120,10 +122,15 @@
 {% for customer in customers %}
 <dialog id="rename-customer-{{ customer.id }}" class="modal compact-modal"><form method="post" action="{{ url_for('v070_rename_customer', customer_id=customer.id) }}"><div class="modal-head"><div><span class="section-kicker">KUNDE</span><h2>Umbenennen</h2></div><button class="modal-close" type="button" data-close-dialog>×</button></div><label><span>Kundenname</span><input name="name" value="{{ customer.name }}" required></label><div class="modal-actions"><button class="button button-ghost" type="button" data-close-dialog>Abbrechen</button><button class="button button-primary" type="submit">Speichern</button></div></form></dialog>
 {% for device in customer.devices %}
+<dialog id="rename-device-{{ device.id }}" class="modal compact-modal"><form method="post" action="{{ url_for('v074_rename_device', device_id=device.id) }}"><div class="modal-head"><div><span class="section-kicker">GERÄT</span><h2>Gerät umbenennen</h2></div><button class="modal-close" type="button" data-close-dialog>×</button></div><label><span>Anzeigename</span><input name="name" value="{{ device.display_name or device.device_id }}" maxlength="80" required></label><p class="form-hint">Die technische Geräte-ID <strong>{{ device.device_id }}</strong> bleibt unverändert.</p><div class="modal-actions"><button class="button button-ghost" type="button" data-close-dialog>Abbrechen</button><button class="button button-primary" type="submit">Speichern</button></div></form></dialog>
 <dialog id="add-playlist-{{ device.id }}" class="modal"><form method="post" action="{{ url_for('v070_add_playlist', device_id=device.id) }}"><div class="modal-head"><div><span class="section-kicker">{{ device.device_id }}</span><h2>Playlist hinzufügen</h2></div><button class="modal-close" type="button" data-close-dialog>×</button></div>{% include 'playlist_form_v070.html' %}<div class="modal-actions"><button class="button button-ghost" type="button" data-close-dialog>Abbrechen</button><button class="button button-primary" type="submit">Hinzufügen & synchronisieren</button></div></form></dialog>
 {% for playlist in device.playlists %}
 <dialog id="edit-playlist-{{ playlist.id }}" class="modal"><form method="post" action="{{ url_for('v070_update_playlist', playlist_id=playlist.id) }}"><div class="modal-head"><div><span class="section-kicker">{{ device.device_id }}</span><h2>{{ playlist.name }}</h2></div><button class="modal-close" type="button" data-close-dialog>×</button></div>{% include 'playlist_form_v070.html' %}<div class="modal-actions"><button class="button button-ghost" type="button" data-close-dialog>Abbrechen</button><button class="button button-primary" type="submit">Speichern & synchronisieren</button></div></form><div class="danger-zone"><div><strong>Playlist vom Gerät entfernen</strong><span>Der Kunde und das Gerät bleiben erhalten.</span></div><form method="post" action="{{ url_for('v070_delete_playlist', playlist_id=playlist.id) }}" onsubmit="return confirm('Playlist wirklich von diesem Gerät entfernen?')"><button class="button button-danger" type="submit">Playlist löschen</button></form></div></dialog>
 {% endfor %}{% endfor %}{% endfor %}
+
+{% for device in unassigned_devices %}
+<dialog id="rename-device-{{ device.id }}" class="modal compact-modal"><form method="post" action="{{ url_for('v074_rename_device', device_id=device.id) }}"><div class="modal-head"><div><span class="section-kicker">GERÄT</span><h2>Gerät umbenennen</h2></div><button class="modal-close" type="button" data-close-dialog>×</button></div><label><span>Anzeigename</span><input name="name" value="{{ device.display_name or device.device_id }}" maxlength="80" required></label><p class="form-hint">Die technische Geräte-ID <strong>{{ device.device_id }}</strong> bleibt unverändert.</p><div class="modal-actions"><button class="button button-ghost" type="button" data-close-dialog>Abbrechen</button><button class="button button-primary" type="submit">Speichern</button></div></form></dialog>
+{% endfor %}
 
 <script>
 (() => {
