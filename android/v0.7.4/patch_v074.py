@@ -112,6 +112,35 @@ s = s.replace(
     1,
 )
 
+old_episode_keys = '''                    KeyEvent.KEYCODE_1,
+                    KeyEvent.KEYCODE_NUMPAD_1,
+                    KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+                    KeyEvent.KEYCODE_CHANNEL_DOWN,
+                    KeyEvent.KEYCODE_PAGE_DOWN -> previousEpisode()
+
+                    KeyEvent.KEYCODE_3,
+                    KeyEvent.KEYCODE_NUMPAD_3,
+                    KeyEvent.KEYCODE_MEDIA_NEXT,
+                    KeyEvent.KEYCODE_CHANNEL_UP,
+                    KeyEvent.KEYCODE_PAGE_UP -> nextEpisode()'''
+new_episode_keys = '''                    KeyEvent.KEYCODE_1,
+                    KeyEvent.KEYCODE_NUMPAD_1,
+                    KeyEvent.KEYCODE_MEDIA_PREVIOUS -> previousEpisode()
+
+                    KeyEvent.KEYCODE_CHANNEL_DOWN,
+                    KeyEvent.KEYCODE_PAGE_DOWN ->
+                        if (item.kind == MediaKind.LIVE) switchLiveBy(-1) else previousEpisode()
+
+                    KeyEvent.KEYCODE_3,
+                    KeyEvent.KEYCODE_NUMPAD_3,
+                    KeyEvent.KEYCODE_MEDIA_NEXT -> nextEpisode()
+
+                    KeyEvent.KEYCODE_CHANNEL_UP,
+                    KeyEvent.KEYCODE_PAGE_UP ->
+                        if (item.kind == MediaKind.LIVE) switchLiveBy(1) else nextEpisode()'''
+require_once(s, old_episode_keys, 'Exo episode/channel keys')
+s = s.replace(old_episode_keys, new_episode_keys, 1)
+
 old_exo_ud = '''                    KeyEvent.KEYCODE_DPAD_UP -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(1) else true}else{controls=true;false}
                     KeyEvent.KEYCODE_DPAD_DOWN -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(-1) else true}else{controls=false;false}'''
 new_exo_ud = '''                    KeyEvent.KEYCODE_DPAD_UP -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(1) else true}else{controls=true;false}
