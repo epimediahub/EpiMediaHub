@@ -4,7 +4,7 @@ import json
 
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 
-from app import iso, migrate_receiver_sync, utcnow, web_auth
+from app import digest, iso, migrate_receiver_sync, normalize_code, utcnow, web_auth
 from dashboard_v061 import (
     UNASSIGNED_CUSTOMER_NAME,
     _ensure_unassigned_customer,
@@ -114,7 +114,7 @@ def install(app, db):
     app.extensions["epimediahub_dashboard_v070"] = True
     app.view_functions["dashboard"] = lambda: _dashboard(db)
     app.view_functions["health"] = lambda: jsonify(
-        status="ok", service="epimediahub-provisioning", api_version="0.7.0"
+        status="ok", service="epimediahub-provisioning", api_version="0.7.3"
     )
 
     @app.post("/admin/v070/customers")
@@ -151,6 +151,67 @@ def install(app, db):
                 abort(404)
         flash("Kundenname gespeichert.", "success")
         return redirect(url_for("dashboard", _anchor=f"customer-{customer_id}"))
+
+    @app.post("/admin/v073/pairings/claim")
+    def v073_claim_pairing():
+        guard = web_auth()
+        if guard:
+            return guard
+        code = normalize_code(request.form.get("code", ""))
+        try:
+            customer_id = int(request.form.get("customer_id", ""))
+        except (TypeError, ValueError):
+            customer_id = 0
+        if len(code) != 8 or not customer_id:
+            flash("Kopplungscode oder Kunde ist ungültig.", "error")
+            return redirect(url_for("dashboard"))
+
+        now = iso(utcnow())
+        with db() as con:
+            customer = con.execute(
+                "SELECT id FROM customers WHERE id=? AND enabled=1 AND name<>?",
+                (customer_id, UNASSIGNED_CUSTOMER_NAME),
+            ).fetchone()
+            row = con.execute(
+                "SELECT * FROM pairings WHERE code_hash=?",
+                (digest(code),),
+            ).fetchone()
+            if not customer:
+                flash("Der ausgewählte Kunde ist nicht verfügbar.", "error")
+            elif row is None:
+                flash("Der Kopplungscode ist ungültig.", "error")
+            elif row["expires_at"] <= now:
+                flash("Der Kopplungscode ist abgelaufen. Bitte in der App einen neuen erzeugen.", "warning")
+            elif row["customer_id"] is not None:
+                flash("Dieser Kopplungscode wurde bereits verwendet.", "warning")
+            else:
+                con.execute(
+                    "UPDATE pairings SET customer_id=?,claimed_at=? WHERE id=? AND customer_id IS NULL",
+                    (customer_id, now, row["id"]),
+                )
+                flash("Gerät wurde dem Kunden zugewiesen und verbindet sich automatisch.", "success")
+        return redirect(url_for("dashboard", _anchor="pair-device"))
+
+    @app.post("/admin/v073/customers/<int:customer_id>/delete")
+    def v073_delete_customer(customer_id):
+        guard = web_auth()
+        if guard:
+            return guard
+        if request.form.get("confirm", "") != f"DELETE:{customer_id}":
+            abort(400)
+        with db() as con:
+            customer = con.execute(
+                "SELECT id,name FROM customers WHERE id=? AND name<>?",
+                (customer_id, UNASSIGNED_CUSTOMER_NAME),
+            ).fetchone()
+            if not customer:
+                abort(404)
+            con.execute("DELETE FROM customers WHERE id=?", (customer_id,))
+        flash(
+            f"Kunde {customer['name']} sowie zugehörige Geräte, Playlists und Aktivierungscodes wurden gelöscht.",
+            "success",
+        )
+        return redirect(url_for("dashboard"))
 
     @app.post("/admin/v070/devices/<int:device_id>/playlists")
     def v070_add_playlist(device_id):

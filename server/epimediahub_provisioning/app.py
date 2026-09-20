@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import io
 import json
 import os
@@ -64,6 +65,14 @@ def make_code(length=12):
     return "".join(secrets.choice(CODE_ALPHABET) for _ in range(length))
 
 
+def pairing_session_token(pairing_secret):
+    return hmac.new(
+        SECRET_KEY.encode("utf-8"),
+        f"device-session:{pairing_secret}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
 def qr_data_uri(value):
     image = qrcode.make(value)
     buf = io.BytesIO()
@@ -110,6 +119,18 @@ def init_db():
                 enabled INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL,
                 UNIQUE(customer_id,device_id)
+            );
+            CREATE TABLE IF NOT EXISTS pairings(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code_hash TEXT NOT NULL UNIQUE,
+                secret_hash TEXT NOT NULL UNIQUE,
+                device_id TEXT NOT NULL,
+                device_name TEXT NOT NULL DEFAULT '',
+                platform TEXT NOT NULL,
+                customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+                expires_at TEXT NOT NULL,
+                claimed_at TEXT,
+                created_at TEXT NOT NULL
             );
             """
         )
@@ -500,6 +521,135 @@ def redeem_token():
     if not token:
         return jsonify(error="invalid_request"), 400
     return redeem_by("token_hash", token, body)
+
+
+@app.post("/v1/pair/start")
+def pair_start():
+    body = request.get_json(silent=True) or {}
+    device_id = str(body.get("device_id", "")).strip()[:160]
+    device_name = str(body.get("device_name", "")).strip()[:80]
+    platform = str(body.get("platform", "android")).strip()[:32] or "android"
+    if not device_id:
+        return jsonify(error="invalid_request"), 400
+
+    now = utcnow()
+    expires = now + timedelta(minutes=15)
+    pairing_secret = secrets.token_urlsafe(32)
+    with db() as con:
+        con.execute(
+            "DELETE FROM pairings WHERE expires_at<=? OR (device_id=? AND customer_id IS NULL)",
+            (iso(now), device_id),
+        )
+        for _ in range(8):
+            raw = make_code(8)
+            try:
+                con.execute(
+                    """
+                    INSERT INTO pairings(
+                        code_hash,secret_hash,device_id,device_name,platform,expires_at,created_at
+                    ) VALUES(?,?,?,?,?,?,?)
+                    """,
+                    (
+                        digest(raw),
+                        digest(pairing_secret),
+                        device_id,
+                        device_name,
+                        platform,
+                        iso(expires),
+                        iso(now),
+                    ),
+                )
+                break
+            except sqlite3.IntegrityError:
+                continue
+        else:
+            return jsonify(error="pairing_unavailable"), 503
+    return (
+        jsonify(
+            status="pending",
+            code=display_code(raw),
+            pairing_secret=pairing_secret,
+            expires_at=iso(expires),
+        ),
+        201,
+    )
+
+
+@app.post("/v1/pair/status")
+def pair_status():
+    body = request.get_json(silent=True) or {}
+    pairing_secret = str(body.get("pairing_secret", "")).strip()
+    if len(pairing_secret) < 32:
+        return jsonify(error="invalid_request"), 400
+
+    now = utcnow()
+    with db() as con:
+        migrate_receiver_sync(con)
+        row = con.execute(
+            """
+            SELECT p.*,c.enabled customer_enabled
+            FROM pairings p
+            LEFT JOIN customers c ON c.id=p.customer_id
+            WHERE p.secret_hash=?
+            """,
+            (digest(pairing_secret),),
+        ).fetchone()
+        if row is None:
+            return jsonify(error="pairing_not_found"), 404
+        if datetime.fromisoformat(row["expires_at"].replace("Z", "+00:00")) <= now:
+            return jsonify(error="pairing_expired"), 410
+        if row["customer_id"] is None:
+            return jsonify(status="pending", expires_at=row["expires_at"]), 202
+        if not row["customer_enabled"]:
+            return jsonify(error="customer_disabled"), 409
+
+        session_token = pairing_session_token(pairing_secret)
+        con.execute(
+            """
+            INSERT INTO devices(
+                customer_id,device_id,platform,session_token_hash,enabled,created_at,
+                applied_config_version,last_seen_at,last_sync_at,last_sync_status
+            ) VALUES(?,?,?,?,1,?,?,?,?,?)
+            ON CONFLICT(customer_id,device_id) DO UPDATE SET
+              platform=excluded.platform,
+              session_token_hash=excluded.session_token_hash,
+              enabled=1,
+              last_seen_at=excluded.last_seen_at,
+              last_sync_at=excluded.last_sync_at,
+              last_sync_status=excluded.last_sync_status,
+              last_sync_error=NULL
+            """,
+            (
+                row["customer_id"],
+                row["device_id"],
+                row["platform"],
+                digest(session_token),
+                iso(now),
+                0,
+                iso(now),
+                iso(now),
+                "ok",
+            ),
+        )
+        device = con.execute(
+            "SELECT id,config_version FROM devices WHERE customer_id=? AND device_id=?",
+            (row["customer_id"], row["device_id"]),
+        ).fetchone()
+        ensure_device_playlist_from_customer(con, int(device["id"]), int(row["customer_id"]))
+        version = int(device["config_version"] or 1)
+        con.execute(
+            "UPDATE devices SET applied_config_version=? WHERE id=?",
+            (version, device["id"]),
+        )
+        config = build_device_config(con, int(device["id"]))
+
+    return jsonify(
+        status="connected",
+        session_token=session_token,
+        customer_id=row["customer_id"],
+        config_version=version,
+        config=config,
+    )
 
 
 @app.post("/v1/admin/devices/<int:device_id>/revoke")

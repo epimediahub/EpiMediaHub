@@ -19,7 +19,7 @@ from app import db
 from wsgi import app
 
 client = app.test_client()
-assert client.get("/health").get_json()["api_version"] == "0.7.0"
+assert client.get("/health").get_json()["api_version"] == "0.7.3"
 assert client.post("/admin/login", data={"password": "test-admin-password"}).status_code == 302
 
 created = client.post(
@@ -106,7 +106,7 @@ assert [item["playlist_name"] for item in config["playlists"]] == ["Bestand neu"
 
 dashboard = client.get("/admin")
 assert dashboard.status_code == 200
-for text in (b"Familie Test", b"wohnzimmer-tv", b"Sport", b"Playlist hinzuf"):
+for text in (b"Familie Test", b"wohnzimmer-tv", b"Bestand neu", b"Playlist hinzuf"):
     assert text in dashboard.data
 
-print("Raspberry v0.7.0 customer-device-playlist hierarchy smoke test OK")
+print("Raspberry v0.7.3 customer-device-playlist hierarchy smoke test OK")

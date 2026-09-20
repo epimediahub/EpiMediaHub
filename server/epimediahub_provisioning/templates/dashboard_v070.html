@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#f4f6fa">
   <title>EpiMediaHub · Kunden & Geräte</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css', v='0.7.0') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v070.css', v='0.7.0') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css', v='0.7.3') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v070.css', v='0.7.3') }}">
 </head>
 <body class="admin-page hierarchy-page">
 <svg class="svg-sprite" aria-hidden="true">
@@ -20,7 +20,7 @@
 </svg>
 
 <header class="hierarchy-topbar">
-  <a class="hierarchy-brand" href="{{ url_for('dashboard') }}"><span>E</span><div><strong>EpiMediaHub</strong><small>CONTROL CENTER · 0.7.0</small></div></a>
+  <a class="hierarchy-brand" href="{{ url_for('dashboard') }}"><span>E</span><div><strong>EpiMediaHub</strong><small>CONTROL CENTER · 0.7.3</small></div></a>
   <form method="post" action="{{ url_for('logout') }}"><button class="button button-ghost" type="submit"><svg><use href="#i-logout"/></svg>Abmelden</button></form>
 </header>
 
@@ -41,6 +41,19 @@
     <div class="{% if pending_devices %}metric-attention{% endif %}"><span>Sync offen</span><strong>{{ pending_devices }}</strong></div>
   </section>
 
+  <section id="pair-device" class="pairing-panel">
+    <div class="pairing-copy">
+      <span class="eyebrow">NEUES GERÄT</span>
+      <h2>Gerät per Code verbinden</h2>
+      <p>Den achtstelligen Code aus der App eingeben, einen Kunden auswählen und verbinden. Das Gerät übernimmt die Zuordnung automatisch.</p>
+    </div>
+    <form class="pairing-form" method="post" action="{{ url_for('v073_claim_pairing') }}">
+      <label><span>Kopplungscode</span><input name="code" maxlength="9" placeholder="ABCD-EFGH" autocomplete="one-time-code" required></label>
+      <label><span>Kunde</span><select name="customer_id" required><option value="">Kunde auswählen …</option>{% for customer in customers %}<option value="{{ customer.id }}">{{ customer.name }}</option>{% endfor %}</select></label>
+      <button class="button button-primary" type="submit" {% if not customers %}disabled{% endif %}>Gerät verbinden</button>
+    </form>
+  </section>
+
   <label class="hierarchy-search"><svg><use href="#i-search"/></svg><input id="hierarchySearch" type="search" placeholder="Kunde, Gerät oder Playlist suchen …" autocomplete="off"></label>
 
   <section id="customerGrid" class="customer-grid">
@@ -50,7 +63,8 @@
         <div class="customer-identity"><span class="customer-avatar">{{ customer.name[:1]|upper }}</span><div><small>KUNDE #{{ customer.id }}</small><h2>{{ customer.name }}</h2><p>{{ customer.devices|length }} Gerät(e) · {{ customer.playlist_count }} Playlist(s)</p></div></div>
         <div class="customer-actions">
           <button class="button button-ghost button-small" type="button" data-open-dialog="rename-customer-{{ customer.id }}">Umbenennen</button>
-          <form method="post" action="{{ url_for('web_activation', customer_id=customer.id) }}"><button class="button button-secondary button-small" type="submit"><svg><use href="#i-plus"/></svg>Gerät verbinden</button></form>
+          <form method="post" action="{{ url_for('web_activation', customer_id=customer.id) }}"><button class="button button-secondary button-small" type="submit"><svg><use href="#i-plus"/></svg>12-stelliger Code</button></form>
+          <form class="delete-customer-form" method="post" action="{{ url_for('v073_delete_customer', customer_id=customer.id) }}" onsubmit="return confirm('Diesen Kunden einschließlich aller Geräte, Playlists und Aktivierungscodes endgültig löschen?')"><input type="hidden" name="confirm" value="DELETE:{{ customer.id }}"><button class="button button-danger button-small" type="submit">Kunde löschen</button></form>
         </div>
       </header>
 
