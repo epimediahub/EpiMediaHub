@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from flask import jsonify, render_template
+from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 
 from app import customer_config, migrate_receiver_sync, utcnow, web_auth
 from dashboard_v052 import install as install_dashboard_v052
@@ -158,3 +158,59 @@ def install(app, db):
     app.view_functions["health"] = lambda: jsonify(
         status="ok", service="epimediahub-provisioning", api_version="0.6.0"
     )
+
+    @app.post("/admin/devices/<int:device_id>/rename", endpoint="web_rename_device")
+    def web_rename_device(device_id: int):
+        guard = web_auth()
+        if guard:
+            return guard
+
+        display_name = request.form.get("display_name", "").strip()
+        if len(display_name) > 80:
+            display_name = display_name[:80]
+
+        with db() as con:
+            migrate_receiver_sync(con)
+            row = con.execute(
+                "SELECT id,device_id,display_name FROM devices WHERE id=?", (device_id,)
+            ).fetchone()
+            if not row:
+                abort(404)
+            con.execute(
+                "UPDATE devices SET display_name=? WHERE id=?",
+                (display_name or None, device_id),
+            )
+
+        if display_name:
+            flash(f"Gerät in „{display_name}“ umbenannt.", "success")
+        else:
+            flash("Gerätename zurückgesetzt. Es wird wieder die technische ID angezeigt.", "success")
+        return redirect(url_for("dashboard", _anchor="devices"))
+
+    @app.post("/admin/devices/<int:device_id>/delete", endpoint="web_delete_device")
+    def web_delete_device(device_id: int):
+        guard = web_auth()
+        if guard:
+            return guard
+        if request.form.get("confirm_delete") != "1":
+            abort(400)
+
+        with db() as con:
+            migrate_receiver_sync(con)
+            row = con.execute(
+                "SELECT id,customer_id,device_id,display_name FROM devices WHERE id=?", (device_id,)
+            ).fetchone()
+            if not row:
+                abort(404)
+            label = row["display_name"] or row["device_id"]
+            con.execute(
+                "DELETE FROM activations WHERE customer_id=? AND device_id=?",
+                (row["customer_id"], row["device_id"]),
+            )
+            con.execute("DELETE FROM devices WHERE id=?", (device_id,))
+
+        flash(
+            f"Gerät „{label}“ gelöscht. Kunde und Playlist bleiben erhalten.",
+            "success",
+        )
+        return redirect(url_for("dashboard", _anchor="devices"))
