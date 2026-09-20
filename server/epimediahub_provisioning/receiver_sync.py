@@ -35,6 +35,7 @@ def migrate(con):
     if "config_version" not in customer_cols:
         con.execute("ALTER TABLE customers ADD COLUMN config_version INTEGER NOT NULL DEFAULT 1")
     for name, ddl in (
+        ("display_name", "TEXT"),
         ("last_seen_at", "TEXT"),
         ("applied_config_version", "INTEGER NOT NULL DEFAULT 0"),
         ("last_sync_at", "TEXT"),
