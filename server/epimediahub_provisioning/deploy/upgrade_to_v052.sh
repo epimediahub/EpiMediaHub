@@ -7,6 +7,9 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 BRANCH="${EPIMEDIAHUB_UPGRADE_BRANCH:-raspberry-v0.5.2-dashboard}"
+TARGET_VERSION="${EPIMEDIAHUB_TARGET_VERSION:-0.5.2}"
+DASHBOARD_MODULE="${EPIMEDIAHUB_DASHBOARD_MODULE:-dashboard_v052.py}"
+SMOKE_TEST="${EPIMEDIAHUB_SMOKE_TEST:-tests/smoke_v052.py}"
 REPO="https://github.com/epimediahub/EpiMediaHub.git"
 APP_DIR=/opt/epimediahub/provisioning
 DATA_DIR=/var/lib/epimediahub
@@ -14,7 +17,8 @@ DB="$DATA_DIR/provisioning.db"
 ENV_FILE=/etc/epimediahub/provisioning.env
 SERVICE=epimediahub-provisioning.service
 STAMP="$(date +%Y%m%d-%H%M%S)"
-BACKUP_DIR="/var/backups/epimediahub/v052-$STAMP"
+VERSION_SLUG="$(printf '%s' "$TARGET_VERSION" | tr -d '.')"
+BACKUP_DIR="/var/backups/epimediahub/v${VERSION_SLUG}-$STAMP"
 TMP="$(mktemp -d)"
 ROLLBACK_ARMED=0
 
@@ -49,8 +53,8 @@ git clone --depth 1 --branch "$BRANCH" "$REPO" "$TMP/repo"
 SRC="$TMP/repo/server/epimediahub_provisioning"
 test -f "$SRC/app.py"
 test -f "$SRC/wsgi.py"
-test -f "$SRC/dashboard_v052.py"
-test -f "$SRC/tests/smoke_v052.py"
+test -f "$SRC/$DASHBOARD_MODULE"
+test -f "$SRC/$SMOKE_TEST"
 
 echo "Erstelle Sicherheitskopie in $BACKUP_DIR"
 mkdir -p "$BACKUP_DIR/code"
@@ -84,16 +88,16 @@ fi
 chown -R epimediahub:epimediahub "$APP_DIR" "$DATA_DIR"
 chmod 640 "$DB"
 
-# Vor dem Neustart Syntax und den isolierten v0.5.2-Smoke-Test pruefen.
+# Vor dem Neustart Syntax und den isolierten Dashboard-Smoke-Test pruefen.
 "$APP_DIR/.venv/bin/python" -m py_compile \
   "$APP_DIR/app.py" \
   "$APP_DIR/wsgi.py" \
   "$APP_DIR/receiver_sync.py" \
-  "$APP_DIR/dashboard_v052.py"
+  "$APP_DIR/$DASHBOARD_MODULE"
 
 (
   cd "$APP_DIR"
-  "$APP_DIR/.venv/bin/python" tests/smoke_v052.py
+  EPIMEDIAHUB_EXPECTED_API_VERSION="$TARGET_VERSION" "$APP_DIR/.venv/bin/python" "$SMOKE_TEST"
 )
 
 systemctl start "$SERVICE"
@@ -108,7 +112,7 @@ for _ in $(seq 1 20); do
 done
 [ "$ok" -eq 1 ]
 
-grep -q '"api_version":"0.5.2"' "$TMP/health.json" || grep -q '"api_version": "0.5.2"' "$TMP/health.json"
+grep -q "\"api_version\":\"$TARGET_VERSION\"" "$TMP/health.json" || grep -q "\"api_version\": \"$TARGET_VERSION\"" "$TMP/health.json"
 
 python3 - "$DB" <<'PY'
 import sqlite3, sys
@@ -124,7 +128,7 @@ dc={r[1] for r in con.execute("PRAGMA table_info(devices)")}
 for col in ("config_version",):
     if col not in cc:
         raise SystemExit("Fehlende customer-Spalte: "+col)
-for col in ("last_seen_at","applied_config_version","last_sync_at","last_sync_status","last_sync_error","sync_bootstrap_hash"):
+for col in ("display_name","last_seen_at","applied_config_version","last_sync_at","last_sync_status","last_sync_error","sync_bootstrap_hash"):
     if col not in dc:
         raise SystemExit("Fehlende device-Spalte: "+col)
 for table in ("customers","devices","activations"):
@@ -136,7 +140,7 @@ systemctl is-active --quiet "$SERVICE"
 ROLLBACK_ARMED=0
 
 echo
-echo "=== EpiMediaHub Raspberry Upgrade auf v0.5.2 erfolgreich ==="
+echo "=== EpiMediaHub Raspberry Upgrade auf v$TARGET_VERSION erfolgreich ==="
 cat "$TMP/health.json"
 echo
 echo "Backup: $BACKUP_DIR"
