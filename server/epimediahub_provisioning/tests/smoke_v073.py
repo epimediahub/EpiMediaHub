@@ -21,7 +21,7 @@ from wsgi import app
 client = app.test_client()
 admin_headers = {"Authorization": "Bearer test-admin-token"}
 
-assert client.get("/health").get_json()["api_version"] == "0.7.3"
+assert client.get("/health").get_json()["api_version"] == "0.7.4"
 assert client.post("/admin/login", data={"password": "test-admin-password"}).status_code == 302
 
 target = client.post(
@@ -77,6 +77,23 @@ assert connected_data["status"] == "connected"
 assert int(connected_data["customer_id"]) == target_id
 assert connected_data["config"]["playlists"][0]["playlist_name"] == "Rai Test"
 
+with db() as con:
+    target_device = con.execute(
+        "SELECT id,display_name FROM devices WHERE customer_id=? AND device_id=?",
+        (target_id, "android-installation-uuid"),
+    ).fetchone()
+    assert target_device is not None
+    target_device_id = int(target_device["id"])
+    assert target_device["display_name"] == "Fire TV Wohnzimmer"
+
+renamed = client.post(
+    f"/admin/v074/devices/{target_device_id}/rename",
+    data={"name": "Wohnzimmer Fire TV"},
+)
+assert renamed.status_code == 302
+with db() as con:
+    assert con.execute("SELECT display_name FROM devices WHERE id=?", (target_device_id,)).fetchone()[0] == "Wohnzimmer Fire TV"
+
 session_token = connected_data["session_token"]
 device_config = client.get(
     "/v1/device/config?version=0",
@@ -94,7 +111,14 @@ assert activation.status_code == 201
 
 dashboard = client.get("/admin")
 assert dashboard.status_code == 200
-for text in (b"Ger\xc3\xa4t per Code verbinden", b"Kunde l\xc3\xb6schen", b"ABCD-EFGH"):
+for text in (
+    b"Ger\xc3\xa4t per Code verbinden",
+    b"Kunde l\xc3\xb6schen",
+    b"Ger\xc3\xa4t umbenennen",
+    b"Ger\xc3\xa4t l\xc3\xb6schen",
+    b"Wohnzimmer Fire TV",
+    b"ABCD-EFGH",
+):
     assert text in dashboard.data
 
 wrong_confirmation = client.post(
@@ -123,4 +147,74 @@ revoked = client.get(
 )
 assert revoked.status_code == 401
 
-print("Raspberry v0.7.3 pairing and customer deletion smoke test OK")
+pairing2 = client.post(
+    "/v1/pair/start",
+    json={
+        "device_id": "android-delete-me",
+        "device_name": "Schlafzimmer TV",
+        "platform": "android",
+    },
+)
+assert pairing2.status_code == 201
+pairing2_data = pairing2.get_json()
+claim2 = client.post(
+    "/admin/v073/pairings/claim",
+    data={"code": pairing2_data["code"], "customer_id": survivor_id},
+)
+assert claim2.status_code == 302
+connected2 = client.post("/v1/pair/status", json={"pairing_secret": pairing2_data["pairing_secret"]})
+assert connected2.status_code == 200
+session_token2 = connected2.get_json()["session_token"]
+
+with db() as con:
+    delete_device = con.execute(
+        "SELECT id,display_name FROM devices WHERE customer_id=? AND device_id=?",
+        (survivor_id, "android-delete-me"),
+    ).fetchone()
+    assert delete_device is not None
+    delete_device_id = int(delete_device["id"])
+    assert delete_device["display_name"] == "Schlafzimmer TV"
+
+assert client.post(
+    f"/admin/v074/devices/{delete_device_id}/rename",
+    data={"name": "Testgerät löschen"},
+).status_code == 302
+
+added_playlist = client.post(
+    f"/admin/v070/devices/{delete_device_id}/playlists",
+    data={
+        "playlist_type": "M3U",
+        "playlist_name": "Delete Test",
+        "playlist_url": "https://example.invalid/delete.m3u",
+    },
+)
+assert added_playlist.status_code == 302
+
+wrong_device_confirmation = client.post(
+    f"/admin/v074/devices/{delete_device_id}/delete",
+    data={"confirm": "DELETE_DEVICE:999999"},
+)
+assert wrong_device_confirmation.status_code == 400
+
+deleted_device = client.post(
+    f"/admin/v074/devices/{delete_device_id}/delete",
+    data={"confirm": f"DELETE_DEVICE:{delete_device_id}"},
+)
+assert deleted_device.status_code == 302
+
+with db() as con:
+    assert con.execute("SELECT 1 FROM customers WHERE id=?", (survivor_id,)).fetchone() is not None
+    assert con.execute("SELECT 1 FROM devices WHERE id=?", (delete_device_id,)).fetchone() is None
+    assert con.execute("SELECT COUNT(*) FROM device_playlists WHERE device_id=?", (delete_device_id,)).fetchone()[0] == 0
+    assert con.execute(
+        "SELECT COUNT(*) FROM pairings WHERE customer_id=? AND device_id=?",
+        (survivor_id, "android-delete-me"),
+    ).fetchone()[0] == 0
+
+deleted_device_auth = client.get(
+    "/v1/device/config?version=0",
+    headers={"Authorization": f"Bearer {session_token2}"},
+)
+assert deleted_device_auth.status_code == 401
+
+print("Raspberry v0.7.4 device rename/delete and pairing dashboard smoke test OK")
