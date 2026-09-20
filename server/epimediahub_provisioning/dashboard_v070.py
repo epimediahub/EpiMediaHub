@@ -114,7 +114,7 @@ def install(app, db):
     app.extensions["epimediahub_dashboard_v070"] = True
     app.view_functions["dashboard"] = lambda: _dashboard(db)
     app.view_functions["health"] = lambda: jsonify(
-        status="ok", service="epimediahub-provisioning", api_version="0.7.3"
+        status="ok", service="epimediahub-provisioning", api_version="0.7.4"
     )
 
     @app.post("/admin/v070/customers")
@@ -151,6 +151,53 @@ def install(app, db):
                 abort(404)
         flash("Kundenname gespeichert.", "success")
         return redirect(url_for("dashboard", _anchor=f"customer-{customer_id}"))
+
+    @app.post("/admin/v074/devices/<int:device_id>/rename")
+    def v074_rename_device(device_id):
+        guard = web_auth()
+        if guard:
+            return guard
+        name = request.form.get("name", "").strip()[:80]
+        if not name:
+            abort(400)
+        with db() as con:
+            migrate_receiver_sync(con)
+            row = con.execute(
+                "SELECT id FROM devices WHERE id=?",
+                (device_id,),
+            ).fetchone()
+            if not row:
+                abort(404)
+            con.execute(
+                "UPDATE devices SET display_name=? WHERE id=?",
+                (name, device_id),
+            )
+        flash("Gerätename gespeichert.", "success")
+        return redirect(url_for("dashboard", _anchor=f"device-{device_id}"))
+
+    @app.post("/admin/v074/devices/<int:device_id>/delete")
+    def v074_delete_device(device_id):
+        guard = web_auth()
+        if guard:
+            return guard
+        if request.form.get("confirm", "") != f"DELETE_DEVICE:{device_id}":
+            abort(400)
+        with db() as con:
+            migrate_receiver_sync(con)
+            row = con.execute(
+                "SELECT id,customer_id,device_id,display_name FROM devices WHERE id=?",
+                (device_id,),
+            ).fetchone()
+            if not row:
+                abort(404)
+            con.execute(
+                "DELETE FROM pairings WHERE customer_id=? AND device_id=?",
+                (row["customer_id"], row["device_id"]),
+            )
+            con.execute("DELETE FROM devices WHERE id=?", (device_id,))
+        label = row["display_name"] or row["device_id"]
+        flash(f"Gerät {label} wurde gelöscht.", "success")
+        return redirect(url_for("dashboard", _anchor=f"customer-{row['customer_id']}"))
 
     @app.post("/admin/v073/pairings/claim")
     def v073_claim_pairing():
