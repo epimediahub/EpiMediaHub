@@ -19,7 +19,7 @@ from app import db
 from wsgi import app
 
 client = app.test_client()
-assert client.get("/health").get_json()["api_version"] == "0.7.3"
+assert client.get("/health").get_json()["api_version"] == "0.7.4"
 assert client.post("/admin/login", data={"password": "test-admin-password"}).status_code == 302
 
 created = client.post(
