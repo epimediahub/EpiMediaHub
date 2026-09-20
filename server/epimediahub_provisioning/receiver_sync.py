@@ -42,6 +42,7 @@ def migrate(con):
         ("last_sync_status", "TEXT"),
         ("last_sync_error", "TEXT"),
         ("sync_bootstrap_hash", "TEXT"),
+        ("display_name", "TEXT NOT NULL DEFAULT ''"),
     ):
         if name not in device_cols:
             con.execute(f"ALTER TABLE devices ADD COLUMN {name} {ddl}")
