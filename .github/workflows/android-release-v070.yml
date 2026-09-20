@@ -139,7 +139,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "0.7.3"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionName = "0.7.4"' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'versionCode = 704' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'https://api.epimediahub.com' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
           grep -Fq 'https://download.epimediahub.com/android/latest.json' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
@@ -177,7 +177,7 @@ jobs:
           SIZE_UNIVERSAL="$(stat -c %s dist/EpiMediaHub_Android_v0.7.4-test-universal.apk)"
           cat > dist/android-latest.json <<EOF
           {
-            "version": "0.7.3",
+            "version": "0.7.4",
             "versionCode": 704,
             "notes": "Live-TV mit einheitlicher Kategorieübersicht, gemerkter Kategorieposition und repariertem Senderwechsel. Der In-App-Updater nutzt EpiMediaHub-Domain plus GitHub-Fallback. Geräte-Kopplung, RAW/MP2-Audio-Fallback und Playlist-Aktualisierung bleiben enthalten.",
             "apks": {
@@ -217,7 +217,7 @@ jobs:
           set -euo pipefail
           TAG="v0.7.0-test"
           TITLE="EpiMediaHub Android v0.7.4 Test"
-          NOTES="Android 0.7.3 entfernt Tailscale vollständig aus der App, erzeugt eine private zufällige Installations-ID und koppelt Geräte per kurzlebigem 8-stelligem Code mit dem Kundendashboard. API und zukünftige Updates laufen über epimediahub.com. Separate ARM64- und ARMv7-APKs reduzieren den Speicherbedarf; ein Universal-APK bleibt für das Update von 0.7.2 erhalten. Der RAW/MP2-LibVLC-Fallback und die Playlist-Aktualisierung aus 0.7.2 bleiben enthalten. Im Dashboard ist außerdem das bestätigte Löschen eines Kunden samt zugehörigen Geräten und Aktivierungscodes ergänzt."
+          NOTES="Android 0.7.4 bringt die neue Live-TV-Kategorieübersicht ohne separate Einzel-Kategorieansicht, stellt die zuletzt gewählte Kategorie/Fokusposition wieder her, repariert den Senderwechsel für D-Pad sowie Channel/Page-Tasten und erweitert den In-App-Updater um einen GitHub-Fallback. Geräte-Kopplung, RAW/MP2-Audio-Fallback und Playlist-Aktualisierung bleiben enthalten."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
           else
