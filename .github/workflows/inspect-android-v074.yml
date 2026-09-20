@@ -51,6 +51,8 @@ jobs:
           JAVA="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app"
           echo '=== PLAYER LIVE SWITCH ==='
           grep -n -A260 -B30 'fun switchLiveBy' "$JAVA/ui/PlayerScreen.kt" || true
+          echo '=== PLAYER KEY BLOCK 0.7.4 ==='
+          sed -n '430,520p' "$JAVA/ui/PlayerScreen.kt" || true
           echo '=== LIVE LIBRARY / ROUTES ==='
           grep -Rni -E 'Screen\.Library|LibraryScreen|openLibrary|switchLibraryCategory|MediaKind\.LIVE|Live.*Screen|V070.*Live' "$JAVA" | head -n 500 || true
           echo '=== VM FUNCTIONS ==='
