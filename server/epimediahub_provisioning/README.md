@@ -11,7 +11,7 @@ Recommended split:
 - `https://epimediahub.com` / `https://www.epimediahub.com` — public website/downloads later
 - `https://admin.epimediahub.com` — protected customer/device admin interface
 - `https://setup.epimediahub.com` — customer activation URLs and QR codes
-- `https://api.epimediahub.com` — API hostname if/when the API is separated from setup
+- `https://api.epimediahub.com` — Android-Gerätekopplung und Gerätesynchronisierung
 
 For the current combined Raspberry deployment, the public provisioning base URL is:
 
@@ -33,6 +33,8 @@ https://setup.epimediahub.com/connect/<one-time-token>
 - Activation URLs contain a separate high-entropy token.
 - A setup code can be redeemed exactly once.
 - Successful redemption returns a per-device session token; activation codes are not reusable credentials.
+- New Android installations generate a random app-scoped installation ID. No MAC address or other hardware identifier is collected.
+- Normal setup uses a short-lived 8-character pairing code. The pairing secret and permanent device token are never shown in the dashboard.
 - Production traffic must be exposed through HTTPS reverse proxy/tunnel. The Flask service itself listens only on `127.0.0.1:8787`.
 
 ## Environment
@@ -62,6 +64,25 @@ Before exposing the service publicly:
 The exact DNS record type (A/AAAA/CNAME/tunnel target) depends on the chosen public-access method and domain provider.
 
 ## API v1
+
+### Start Android pairing
+`POST /v1/pair/start`
+
+```json
+{
+  "device_id": "android-random-installation-uuid",
+  "device_name": "Amazon AFTSSS",
+  "platform": "android"
+}
+```
+
+The response contains an 8-character `code`, a private `pairing_secret` and a 15-minute expiry. An authenticated administrator assigns the visible code to a customer in the dashboard. The app polls `POST /v1/pair/status` with the private secret until it receives its device session token and customer configuration.
+
+The previous 12-character one-time setup code remains available as a support fallback.
+
+### Delete customer
+
+The dashboard offers **Kunde löschen** with an explicit browser confirmation and a server-side confirmation value. Deleting a customer also deletes only that customer's devices, activation codes and claimed pairings through SQLite foreign-key cascades.
 
 ### Create customer
 `POST /v1/admin/customers`

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import base64, hashlib, io, json, os, secrets, sqlite3
+import base64, hashlib, hmac, io, json, os, secrets, sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import qrcode
@@ -18,6 +18,8 @@ def digest(value): return hashlib.sha256(value.encode()).hexdigest()
 def normalize_code(value): return "".join(c for c in value.upper() if c.isalnum())
 def display_code(raw): return "-".join(raw[i:i+4] for i in range(0,len(raw),4))
 def make_code(length=12): return "".join(secrets.choice(CODE_ALPHABET) for _ in range(length))
+def pairing_session_token(pairing_secret):
+    return hmac.new(SECRET_KEY.encode("utf-8"), f"device-session:{pairing_secret}".encode("utf-8"), hashlib.sha256).hexdigest()
 def qr_data_uri(value):
     image=qrcode.make(value); buf=io.BytesIO(); image.save(buf,format="PNG")
     return "data:image/png;base64,"+base64.b64encode(buf.getvalue()).decode("ascii")
@@ -27,7 +29,8 @@ def init_db():
     with db() as con: con.executescript("""
     CREATE TABLE IF NOT EXISTS customers(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,config_json TEXT NOT NULL DEFAULT '{}',enabled INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS activations(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,code_hash TEXT NOT NULL UNIQUE,token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,redeemed_at TEXT,device_id TEXT,platform TEXT,created_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS devices(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,device_id TEXT NOT NULL,platform TEXT NOT NULL,session_token_hash TEXT NOT NULL UNIQUE,enabled INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,UNIQUE(customer_id,device_id));""")
+    CREATE TABLE IF NOT EXISTS devices(id INTEGER PRIMARY KEY AUTOINCREMENT,customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,device_id TEXT NOT NULL,platform TEXT NOT NULL,session_token_hash TEXT NOT NULL UNIQUE,enabled INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,UNIQUE(customer_id,device_id));
+    CREATE TABLE IF NOT EXISTS pairings(id INTEGER PRIMARY KEY AUTOINCREMENT,code_hash TEXT NOT NULL UNIQUE,secret_hash TEXT NOT NULL UNIQUE,device_id TEXT NOT NULL,device_name TEXT NOT NULL DEFAULT '',platform TEXT NOT NULL,customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,expires_at TEXT NOT NULL,claimed_at TEXT,created_at TEXT NOT NULL);""")
 def require_admin_api():
     if not ADMIN_TOKEN or not secrets.compare_digest(request.headers.get("Authorization",""),f"Bearer {ADMIN_TOKEN}"): abort(401)
 def web_auth():
@@ -104,7 +107,7 @@ def dashboard():
             "xtream_output":cfg.get("xtream_output","ts"),
             "config_version":config_version(cfg),
         }); customers.append(item)
-    return render_template("dashboard.html",customers=customers,devices=devices)
+    return render_template("dashboard.html",customers=customers,devices=devices,notice=request.args.get("notice", ""))
 @app.post("/admin/customers")
 def web_create_customer():
     guard=web_auth()
@@ -126,6 +129,16 @@ def web_update_customer(customer_id):
         config=form_config(customer_config(row))
         con.execute("UPDATE customers SET name=?,config_json=? WHERE id=?",(name,json.dumps(config,separators=(",",":")),customer_id))
     return redirect(url_for("dashboard"))
+@app.post("/admin/customers/<int:customer_id>/delete")
+def web_delete_customer(customer_id):
+    guard=web_auth()
+    if guard:return guard
+    if request.form.get("confirm","") != f"DELETE:{customer_id}":abort(400)
+    with db() as con:
+        customer=con.execute("SELECT id FROM customers WHERE id=?",(customer_id,)).fetchone()
+        if not customer:abort(404)
+        con.execute("DELETE FROM customers WHERE id=?",(customer_id,))
+    return redirect(url_for("dashboard",notice="customer_deleted"))
 @app.post("/admin/customers/<int:customer_id>/activation")
 def web_activation(customer_id):
     guard=web_auth()
@@ -137,6 +150,25 @@ def web_activation(customer_id):
         con.execute("INSERT INTO activations(customer_id,code_hash,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)",(customer_id,digest(raw),digest(token),iso(expires),iso(utcnow())))
     activation_url=f"{PUBLIC_BASE_URL}/connect/{token}"
     return render_template("activation.html",customer=customer,code=display_code(raw),activation_url=activation_url,expires_at=iso(expires),qr_data=qr_data_uri(activation_url))
+@app.post("/admin/pairings/claim")
+def web_claim_pairing():
+    guard=web_auth()
+    if guard:return guard
+    code=normalize_code(request.form.get("code",""))
+    try:customer_id=int(request.form.get("customer_id",""))
+    except ValueError:return redirect(url_for("dashboard",notice="pair_invalid"))
+    if len(code)!=8:return redirect(url_for("dashboard",notice="pair_invalid"))
+    now=utcnow()
+    with db() as con:
+        customer=con.execute("SELECT id FROM customers WHERE id=? AND enabled=1",(customer_id,)).fetchone()
+        if not customer:return redirect(url_for("dashboard",notice="pair_customer_invalid"))
+        row=con.execute("SELECT * FROM pairings WHERE code_hash=?",(digest(code),)).fetchone()
+        if row is None:return redirect(url_for("dashboard",notice="pair_invalid"))
+        if datetime.fromisoformat(row["expires_at"].replace("Z","+00:00"))<=now:
+            return redirect(url_for("dashboard",notice="pair_expired"))
+        if row["customer_id"] is not None:return redirect(url_for("dashboard",notice="pair_used"))
+        con.execute("UPDATE pairings SET customer_id=?,claimed_at=? WHERE id=? AND customer_id IS NULL",(customer_id,iso(now),row["id"]))
+    return redirect(url_for("dashboard",notice="pair_claimed"))
 @app.post("/admin/devices/<int:device_id>/assign")
 def web_assign_device(device_id):
     guard=web_auth()
@@ -195,20 +227,42 @@ def redeem_token():
     body=request.get_json(silent=True) or {};token=str(body.get("token","")).strip()
     if not token:return jsonify(error="invalid_request"),400
     return redeem_by("token_hash",token,body)
-@app.get("/v1/device/config")
-def device_config():
-    row=device_session_row()
-    if row is None:return jsonify(error="device_not_authorized"),401
-    cfg=customer_config(row);version=config_version(cfg)
-    try:known=int(request.args.get("version","0"))
-    except ValueError:known=0
-    return jsonify(customer_id=row["customer_id"],config_version=version,changed=known!=version,config=public_config(cfg))
-@app.post("/v1/device/sync-result")
-def device_sync_result():
-    row=device_session_row()
-    if row is None:return jsonify(error="device_not_authorized"),401
+@app.post("/v1/pair/start")
+def pair_start():
     body=request.get_json(silent=True) or {}
-    return jsonify(status="accepted",config_version=body.get("config_version",0))
+    device_id=str(body.get("device_id","")).strip()[:160]
+    device_name=str(body.get("device_name","")).strip()[:80]
+    platform=str(body.get("platform","android")).strip()[:32] or "android"
+    if not device_id:return jsonify(error="invalid_request"),400
+    now=utcnow();expires=now+timedelta(minutes=15)
+    pairing_secret=secrets.token_urlsafe(32)
+    with db() as con:
+        con.execute("DELETE FROM pairings WHERE expires_at<=? OR (device_id=? AND customer_id IS NULL)",(iso(now),device_id))
+        for _ in range(8):
+            raw=make_code(8)
+            try:
+                con.execute("INSERT INTO pairings(code_hash,secret_hash,device_id,device_name,platform,expires_at,created_at) VALUES(?,?,?,?,?,?,?)",(digest(raw),digest(pairing_secret),device_id,device_name,platform,iso(expires),iso(now)))
+                break
+            except sqlite3.IntegrityError:
+                continue
+        else:return jsonify(error="pairing_unavailable"),503
+    return jsonify(status="pending",code=display_code(raw),pairing_secret=pairing_secret,expires_at=iso(expires)),201
+@app.post("/v1/pair/status")
+def pair_status():
+    body=request.get_json(silent=True) or {}
+    pairing_secret=str(body.get("pairing_secret","")).strip()
+    if len(pairing_secret)<32:return jsonify(error="invalid_request"),400
+    now=utcnow()
+    with db() as con:
+        row=con.execute("SELECT p.*,c.config_json,c.enabled customer_enabled FROM pairings p LEFT JOIN customers c ON c.id=p.customer_id WHERE p.secret_hash=?",(digest(pairing_secret),)).fetchone()
+        if row is None:return jsonify(error="pairing_not_found"),404
+        if datetime.fromisoformat(row["expires_at"].replace("Z","+00:00"))<=now:return jsonify(error="pairing_expired"),410
+        if row["customer_id"] is None:return jsonify(status="pending",expires_at=row["expires_at"]),202
+        if not row["customer_enabled"]:return jsonify(error="customer_disabled"),409
+        session_token=pairing_session_token(pairing_secret)
+        con.execute("INSERT INTO devices(customer_id,device_id,platform,session_token_hash,enabled,created_at) VALUES(?,?,?,?,1,?) ON CONFLICT(customer_id,device_id) DO UPDATE SET platform=excluded.platform,session_token_hash=excluded.session_token_hash,enabled=1",(row["customer_id"],row["device_id"],row["platform"],digest(session_token),iso(now)))
+        config=customer_config(row);version=config_version(config)
+    return jsonify(status="connected",session_token=session_token,customer_id=row["customer_id"],config_version=version,config=public_config(config))
 @app.post("/v1/admin/devices/<int:device_id>/revoke")
 def revoke_device(device_id):
     require_admin_api()

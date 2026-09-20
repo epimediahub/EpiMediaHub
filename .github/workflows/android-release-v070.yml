@@ -1,4 +1,4 @@
-name: Build signed EpiMediaHub Android v0.7.2 test
+name: Build signed EpiMediaHub Android v0.7.3 test
 
 on:
   workflow_dispatch:
@@ -9,10 +9,12 @@ on:
       - 'android/v0.7.0/**'
       - 'android/v0.7.1/**'
       - 'android/v0.7.2/**'
+      - 'android/v0.7.3/**'
       - 'android/hotfixes/v064_xtream_hotfix15.py'
       - 'build_tools/install_android_v070_source.sh'
       - 'build_tools/install_android_v071_source.sh'
       - 'build_tools/install_android_v072_source.sh'
+      - 'build_tools/install_android_v073_source.sh'
 
 concurrency:
   group: epimediahub-android-v070-test
@@ -22,13 +24,12 @@ permissions:
   contents: write
 
 jobs:
-  build-android-v070:
+  build-android-v073:
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
       ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      TAILSCALE_ANDROID_SHA: c412dfe3b28ed7c5dd4de233149fa1bd55065dfd
     steps:
       - uses: actions/checkout@v4
 
@@ -71,8 +72,8 @@ jobs:
           include(":app")
           EOF
 
-      - name: Install v0.7.2 source
-        run: bash build_tools/install_android_v072_source.sh
+      - name: Install v0.7.3 source
+        run: bash build_tools/install_android_v073_source.sh
 
       - name: Import existing premium skin assets
         run: bash build_tools/import_enigma_v0941_android_assets.sh
@@ -104,7 +105,9 @@ jobs:
           '''
           if anchor not in s: raise SystemExit('buildTypes anchor missing')
           s=s.replace(anchor, signing+anchor, 1)
-          s=s.replace('        release {\n            isMinifyEnabled = false','        release {\n            signingConfig = signingConfigs.getByName("release")\n            isMinifyEnabled = false',1)
+          release='        release {\n'
+          if release not in s: raise SystemExit('release build type missing')
+          s=s.replace(release, release+'            signingConfig = signingConfigs.getByName("release")\n', 1)
           p.write_text(s)
           PY
 
@@ -113,106 +116,93 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Configure Android SDK and NDK
+      - name: Configure Android SDK
         shell: bash
         run: |
           set -euo pipefail
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
-          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;23.1.7779620"
-
-      - name: Restore embedded Tailscale runtime cache
-        id: tailscale-cache
-        uses: actions/cache@v4
-        with:
-          path: .ci-cache/tailscale/${{ env.TAILSCALE_ANDROID_SHA }}
-          key: epimediahub-tailscale-${{ runner.os }}-${{ env.TAILSCALE_ANDROID_SHA }}-ndk23.1-v1
-
-      - name: Install cached Tailscale runtime
-        if: steps.tailscale-cache.outputs.cache-hit == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          CACHE_DIR=".ci-cache/tailscale/$TAILSCALE_ANDROID_SHA"
-          mkdir -p "$PROJECT_ROOT/app/libs"
-          cp "$CACHE_DIR/tailscale-embedded.aar" "$PROJECT_ROOT/app/libs/tailscale-embedded.aar"
-          cp "$CACHE_DIR/libtailscale.aar" "$PROJECT_ROOT/app/libs/libtailscale.aar"
-
-      - name: Build embedded official Tailscale runtime
-        if: steps.tailscale-cache.outputs.cache-hit != 'true'
-        run: bash build_tools/build_tailscale_embedded.sh
-
-      - name: Stage embedded Tailscale runtime for cache
-        if: steps.tailscale-cache.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          CACHE_DIR=".ci-cache/tailscale/$TAILSCALE_ANDROID_SHA"
-          mkdir -p "$CACHE_DIR"
-          cp "$PROJECT_ROOT/app/libs/tailscale-embedded.aar" "$CACHE_DIR/tailscale-embedded.aar"
-          cp "$PROJECT_ROOT/app/libs/libtailscale.aar" "$CACHE_DIR/libtailscale.aar"
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
 
-      - name: Build signed v0.7.2 test APK
+      - name: Build signed v0.7.3 APKs
         shell: bash
         run: |
           cd "$PROJECT_ROOT"
           gradle :app:assembleRelease --stacktrace --no-daemon
 
-      - name: Verify v0.7.2 and signing certificate
+      - name: Verify version, architecture and signing certificate
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "0.7.2"' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'versionCode = 702' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'fun V070HomeScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Home.kt"
-          grep -Fq 'V070WeatherClient.refresh' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Home.kt"
-          grep -Fq 'fun V070PlaylistsScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Playlists.kt"
-          grep -Fq 'OK · AUSWÄHLEN' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Playlists.kt"
-          grep -Fq 'height(if (isTv) 68.dp else 78.dp)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/BrowserRows.kt"
-          grep -Fq 'INTRO ÜBERSPRINGEN' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Intro.kt"
-          grep -Fq 'id == "default" || id == "epi_blue" || id == "epi_red"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/ThemeRepository.kt"
-          grep -Fq 'android:banner="@drawable/tv_launcher_banner"' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
-          grep -Fq 'releases/tags/v0.7.0-test' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
-          grep -Fq 'config.optJSONArray("playlists")' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
-          grep -Fq 'private fun canonicalMpegTsLiveUrl(streamId: String)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -Fq 'private fun V071CategoryRail(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
-          grep -Fq 'durationMillis = 145' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          grep -Fq 'versionName = "0.7.3"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 703' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'https://api.epimediahub.com' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
+          grep -Fq 'https://download.epimediahub.com/android/latest.json' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
           grep -Fq 'private fun V072UseVlcLiveFallback(item: MediaEntry)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq '(?:RAW|HEVC|H\.?265)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'if (V072UseVlcLiveFallback(item))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'fun refreshPlaylistsAtAppStart()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'Lifecycle.Event.ON_START' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
-          grep -Fq 'if (sync is DeviceSyncResult.Success) vm.refreshProfiles()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
-          grep -Fq 'setEnableDecoderFallback(true)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'org.videolan.android:libvlc-all:3.6.5' "$PROJECT_ROOT/app/build.gradle.kts"
-          APK="$PROJECT_ROOT/app/build/outputs/apk/release/app-release.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apk-signature.txt
-          CERT="$(grep -i 'certificate SHA-256 digest:' /tmp/apk-signature.txt | head -n1 | awk -F': ' '{print $2}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
-          test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+          ! grep -Rq 'com.tailscale' "$PROJECT_ROOT/app/src/main"
+          ! grep -Fq 'tailscale-embedded.aar' "$PROJECT_ROOT/app/build.gradle.kts"
+          for APK in "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk"
+          do
+            test -s "$APK"
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apk-signature.txt
+            CERT="$(grep -i 'certificate SHA-256 digest:' /tmp/apk-signature.txt | head -n1 | awk -F': ' '{print $2}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+            test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+          done
 
-      - name: Prepare test files
+      - name: Prepare APKs and domain update manifest
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist
-          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-release.apk" dist/EpiMediaHub_Android_v0.7.0-test.apk
-          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-release.apk" dist/EpiMediaHub_Android_v0.7.2-test.apk
-          sha256sum dist/EpiMediaHub_Android_v0.7.0-test.apk > dist/SHA256SUMS.txt
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" dist/EpiMediaHub_Android_v0.7.3-test-arm64-v8a.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" dist/EpiMediaHub_Android_v0.7.3-test-armeabi-v7a.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk" dist/EpiMediaHub_Android_v0.7.3-test-universal.apk
+          cp dist/EpiMediaHub_Android_v0.7.3-test-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+          SHA_ARM64="$(sha256sum dist/EpiMediaHub_Android_v0.7.3-test-arm64-v8a.apk | awk '{print $1}')"
+          SHA_ARMV7="$(sha256sum dist/EpiMediaHub_Android_v0.7.3-test-armeabi-v7a.apk | awk '{print $1}')"
+          SHA_UNIVERSAL="$(sha256sum dist/EpiMediaHub_Android_v0.7.3-test-universal.apk | awk '{print $1}')"
+          SIZE_ARM64="$(stat -c %s dist/EpiMediaHub_Android_v0.7.3-test-arm64-v8a.apk)"
+          SIZE_ARMV7="$(stat -c %s dist/EpiMediaHub_Android_v0.7.3-test-armeabi-v7a.apk)"
+          SIZE_UNIVERSAL="$(stat -c %s dist/EpiMediaHub_Android_v0.7.3-test-universal.apk)"
+          cat > dist/android-latest.json <<EOF
+          {
+            "version": "0.7.3",
+            "versionCode": 703,
+            "notes": "Ohne Tailscale im Android-Client, kleinere ARM-APKs, sichere Geräte-Kopplung und Updates über die EpiMediaHub-Domain. RAW/MP2-Audio-Fallback und Playlist-Aktualisierung aus 0.7.2 bleiben enthalten.",
+            "apks": {
+              "arm64-v8a": {
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.7.3-test-arm64-v8a.apk",
+                "sha256": "$SHA_ARM64",
+                "size": $SIZE_ARM64
+              },
+              "armeabi-v7a": {
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.7.3-test-armeabi-v7a.apk",
+                "sha256": "$SHA_ARMV7",
+                "size": $SIZE_ARMV7
+              },
+              "universal": {
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.7.3-test-universal.apk",
+                "sha256": "$SHA_UNIVERSAL",
+                "size": $SIZE_UNIVERSAL
+              }
+            }
+          }
+          EOF
+          cp dist/android-latest.json dist/latest.json
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+          ls -lh dist
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Android-v0.7.2-signed-test
-          path: |
-            dist/EpiMediaHub_Android_v0.7.0-test.apk
-            dist/EpiMediaHub_Android_v0.7.2-test.apk
-            dist/SHA256SUMS.txt
+          name: EpiMediaHub-Android-v0.7.3-signed-test
+          path: dist/
           retention-days: 30
 
       - name: Publish public GitHub prerelease
@@ -222,27 +212,13 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v0.7.0-test"
-          TITLE="EpiMediaHub Android v0.7.2 Test"
-          NOTES="Android 0.7.2 repariert den RAW-Audio-Fallback: Rai 1 RAW und weitere RAW/HEVC/H265-Live-Sender werden nun zuverlässig an LibVLC übergeben, damit MPEG Audio Layer I/II (MPGA/MP2) auf Android und Fire TV hörbar ist. Zusätzlich werden beim App-Start beziehungsweise beim erneuten Öffnen alle Playlist-Profile neu eingelesen und die Anbieter-Caches verworfen; Dashboard-Zuweisungen werden nach jedem erfolgreichen Start-Sync in die laufende Oberfläche übernommen. Alle Funktionen aus 0.7.1 bleiben enthalten."
+          TITLE="EpiMediaHub Android v0.7.3 Test"
+          NOTES="Android 0.7.3 entfernt Tailscale vollständig aus der App, erzeugt eine private zufällige Installations-ID und koppelt Geräte per kurzlebigem 8-stelligem Code mit dem Kundendashboard. API und zukünftige Updates laufen über epimediahub.com. Separate ARM64- und ARMv7-APKs reduzieren den Speicherbedarf; ein Universal-APK bleibt für das Update von 0.7.2 erhalten. Der RAW/MP2-LibVLC-Fallback und die Playlist-Aktualisierung aus 0.7.2 bleiben enthalten. Im Dashboard ist außerdem das bestätigte Löschen eines Kunden samt zugehörigen Geräten und Aktivierungscodes ergänzt."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
           else
             gh release create "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease --target "${GITHUB_SHA}"
           fi
-
-          upload_asset() {
-            local file="$1"
-            local attempt
-            for attempt in 1 2 3; do
-              if timeout 12m gh release upload "$TAG" "$file" --clobber; then
-                return 0
-              fi
-              echo "Release upload attempt $attempt failed for $file"
-              sleep "$((attempt * 5))"
-            done
-            return 1
-          }
-
-          upload_asset dist/EpiMediaHub_Android_v0.7.0-test.apk
-          upload_asset dist/EpiMediaHub_Android_v0.7.2-test.apk
-          upload_asset dist/SHA256SUMS.txt
+          for file in dist/*; do
+            timeout 12m gh release upload "$TAG" "$file" --clobber
+          done
