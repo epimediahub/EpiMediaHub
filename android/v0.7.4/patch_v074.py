@@ -114,12 +114,8 @@ s = s.replace(
 
 old_exo_ud = '''                    KeyEvent.KEYCODE_DPAD_UP -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(1) else true}else{controls=true;false}
                     KeyEvent.KEYCODE_DPAD_DOWN -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(-1) else true}else{controls=false;false}'''
-new_exo_ud = '''                    KeyEvent.KEYCODE_DPAD_UP,
-                    KeyEvent.KEYCODE_CHANNEL_UP,
-                    KeyEvent.KEYCODE_PAGE_UP -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(1) else true}else{controls=true;false}
-                    KeyEvent.KEYCODE_DPAD_DOWN,
-                    KeyEvent.KEYCODE_CHANNEL_DOWN,
-                    KeyEvent.KEYCODE_PAGE_DOWN -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(-1) else true}else{controls=false;false}'''
+new_exo_ud = '''                    KeyEvent.KEYCODE_DPAD_UP -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(1) else true}else{controls=true;false}
+                    KeyEvent.KEYCODE_DPAD_DOWN -> if(item.kind==MediaKind.LIVE){if(e.nativeKeyEvent.repeatCount==0)switchLiveBy(-1) else true}else{controls=false;false}'''
 require_once(s, old_exo_ud, 'Exo live up/down keys')
 player.write_text(s.replace(old_exo_ud, new_exo_ud, 1))
 
@@ -624,6 +620,7 @@ checks = [
     (build, 'versionName = "0.7.4"'),
     (build, 'versionCode = 704'),
     (player, 'KeyEvent.KEYCODE_CHANNEL_UP'),
+    (player, 'if (item.kind == MediaKind.LIVE) switchLiveBy(1) else nextEpisode()'),
     (player, 'KeyEvent.KEYCODE_DPAD_RIGHT -> switchLiveBy(1)'),
     (vm, 'fun rememberedLibraryCategory(kind: MediaKind)'),
     (vm, 'kind == MediaKind.SERIES || kind == MediaKind.LIVE'),
