@@ -607,11 +607,15 @@ def pair_status():
         con.execute(
             """
             INSERT INTO devices(
-                customer_id,device_id,platform,session_token_hash,enabled,created_at,
+                customer_id,device_id,platform,display_name,session_token_hash,enabled,created_at,
                 applied_config_version,last_seen_at,last_sync_at,last_sync_status
-            ) VALUES(?,?,?,?,1,?,?,?,?,?)
+            ) VALUES(?,?,?,?,?,1,?,?,?,?,?)
             ON CONFLICT(customer_id,device_id) DO UPDATE SET
               platform=excluded.platform,
+              display_name=CASE
+                WHEN COALESCE(devices.display_name,'')='' THEN excluded.display_name
+                ELSE devices.display_name
+              END,
               session_token_hash=excluded.session_token_hash,
               enabled=1,
               last_seen_at=excluded.last_seen_at,
@@ -623,6 +627,7 @@ def pair_status():
                 row["customer_id"],
                 row["device_id"],
                 row["platform"],
+                row["device_name"],
                 digest(session_token),
                 iso(now),
                 0,
