@@ -118,7 +118,7 @@ python3 - "$DB" <<'PY'
 import sqlite3, sys
 p=sys.argv[1]
 con=sqlite3.connect(f"file:{p}?mode=ro", uri=True)
-required={"customers","devices","activations","customer_config_history"}
+required={"customers","devices","activations","customer_config_history","customer_playlists"}
 tables={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 missing=required-tables
 if missing:
@@ -128,7 +128,7 @@ dc={r[1] for r in con.execute("PRAGMA table_info(devices)")}
 for col in ("config_version",):
     if col not in cc:
         raise SystemExit("Fehlende customer-Spalte: "+col)
-for col in ("last_seen_at","applied_config_version","last_sync_at","last_sync_status","last_sync_error","sync_bootstrap_hash"):
+for col in ("display_name","last_seen_at","applied_config_version","last_sync_at","last_sync_status","last_sync_error","sync_bootstrap_hash"):
     if col not in dc:
         raise SystemExit("Fehlende device-Spalte: "+col)
 for table in ("customers","devices","activations"):
