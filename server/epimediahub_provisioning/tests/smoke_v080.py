@@ -88,7 +88,7 @@ assert b"Kunde Nord" in dash1.data
 assert b"Nord IPTV" in dash1.data
 assert "Kunde Süd".encode("utf-8") not in dash1.data
 assert b"Nord Media" in dash1.data
-assert b"epimediahub-logo.svg" in dash1.data
+assert b"brand-mark-inline" in dash1.data
 
 dash2 = r2.get("/reseller")
 assert dash2.status_code == 200
