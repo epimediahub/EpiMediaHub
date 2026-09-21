@@ -40,7 +40,7 @@ for data in (
         "username": "sued",
         "password": "Passwort-456",
         "customer_limit": "5",
-        "device_limit": "10",
+        "device_limit": "1",
         "branding_name": "",
     },
 ):
