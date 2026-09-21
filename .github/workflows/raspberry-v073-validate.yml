@@ -1,0 +1,35 @@
+name: Validate Raspberry v0.7.3 pairing dashboard
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [raspberry-v0.7.0-customer-device-grid]
+    paths:
+      - 'server/epimediahub_provisioning/**'
+      - '.github/workflows/raspberry-v073-validate.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install backend dependencies
+        run: python -m pip install -r server/epimediahub_provisioning/requirements.txt
+      - name: Compile Python sources
+        run: |
+          python -m py_compile \
+            server/epimediahub_provisioning/app.py \
+            server/epimediahub_provisioning/wsgi.py \
+            server/epimediahub_provisioning/receiver_sync.py \
+            server/epimediahub_provisioning/dashboard_v052.py \
+            server/epimediahub_provisioning/dashboard_v060.py \
+            server/epimediahub_provisioning/dashboard_v061.py \
+            server/epimediahub_provisioning/dashboard_v070.py \
+            server/epimediahub_provisioning/dashboard_v080.py
+      - name: Run customer-device-playlist smoke test
+        run: EPIMEDIAHUB_EXPECTED_API_VERSION=0.8.0 python server/epimediahub_provisioning/tests/smoke_v070.py
+      - name: Run pairing and deletion smoke test
+        run: EPIMEDIAHUB_EXPECTED_API_VERSION=0.8.0 python server/epimediahub_provisioning/tests/smoke_v073.py

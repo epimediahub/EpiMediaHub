@@ -1,0 +1,142 @@
+name: Release signed EpiMediaHub Android v0.4.14
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [android-v0.4.14-device-sync]
+    paths:
+      - '.github/workflows/android-release-v0414.yml'
+
+concurrency:
+  group: epimediahub-android-v0414-release
+  cancel-in-progress: false
+permissions:
+  contents: write
+
+jobs:
+  release-android-v0414:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      TAILSCALE_ANDROID_SHA: c412dfe3b28ed7c5dd4de233149fa1bd55065dfd
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Require permanent signing secrets
+        run: |
+          test -n "$ANDROID_KEYSTORE_B64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+      - name: Reconstruct project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* > .ci-android/source.b64
+          base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
+          echo "192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c  .ci-android/source.tar.gz" | sha256sum -c -
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+      - name: Pin Gradle toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+      - name: Install v0.4.14 source
+        run: bash build_tools/install_android_v0414_source.sh
+      - name: Import Enigma v0.9.41 skins
+        run: bash build_tools/import_enigma_v0941_android_assets.sh
+      - name: Install permanent release signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/epimediahub-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias epimediahub >/dev/null
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_ROOT'])/'app/build.gradle.kts'
+          s=p.read_text(); anchor='    buildTypes {\n'
+          signing='''    signingConfigs {\n        create("release") {\n            storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))\n            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")\n            keyAlias = "epimediahub"\n            keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")\n        }\n    }\n\n'''
+          if anchor not in s: raise SystemExit('buildTypes anchor missing')
+          s=s.replace(anchor,signing+anchor,1)
+          s=s.replace('        release {\n            isMinifyEnabled = false','        release {\n            signingConfig = signingConfigs.getByName("release")\n            isMinifyEnabled = false',1)
+          p.write_text(s)
+          PY
+      - uses: actions/setup-java@v5
+        with: {distribution: temurin, java-version: '17'}
+      - name: Configure Android SDK and NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if [ ! -x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then SDK_ROOT="/usr/local/lib/android/sdk"; fi
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "platforms;android-36" "build-tools;36.0.0" "ndk;23.1.7779620"
+      - name: Build embedded official Tailscale runtime
+        run: bash build_tools/build_tailscale_embedded.sh
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.10.2'}
+      - name: Build signed v0.4.14
+        run: cd "$PROJECT_ROOT" && gradle :app:assembleRelease --stacktrace --no-daemon
+      - name: Verify permanent signing certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$PROJECT_ROOT/app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apk-signature.txt
+          CERT="$(grep -i 'certificate SHA-256 digest:' /tmp/apk-signature.txt | head -n1 | awk -F': ' '{print $2}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+      - name: Prepare release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-release.apk" dist/EpiMediaHub-Android.apk
+          cp dist/EpiMediaHub-Android.apk dist/EpiMediaHub_Android_v0.4.14-release.apk
+          SHA="$(sha256sum dist/EpiMediaHub-Android.apk | awk '{print $1}')"
+          sha256sum dist/EpiMediaHub-Android.apk > dist/SHA256SUMS.txt
+          python3 - "$SHA" <<'PY'
+          import json,sys
+          from pathlib import Path
+          data={"version":"0.4.14","versionCode":54,"url":"https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk","sha256":sys.argv[1],"notes":"Automatischer Geräte-Sync direkt nach Einrichtung und bei jedem App-Prozessstart; Fire-TV/Admin-Dashboard-Registrierung; FileProvider-Updater bleibt erhalten."}
+          Path('dist/update.json').write_text(json.dumps(data,indent=2,ensure_ascii=False)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-Android-v0.4.14-signed
+          path: |
+            dist/EpiMediaHub_Android_v0.4.14-release.apk
+            dist/SHA256SUMS.txt
+            dist/update.json
+          retention-days: 30
+      - name: Publish stable Downloader APK
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          set -euo pipefail
+          TAG="android-latest"
+          NOTES="Android v0.4.14: automatic provisioning sync on setup and app start, plus the repaired in-app updater from v0.4.13."
+          gh release upload "$TAG" dist/EpiMediaHub-Android.apk dist/update.json --clobber
+          gh release edit "$TAG" --title "EpiMediaHub Android v0.4.14" --notes "$NOTES"
+      - name: Show stable Downloader URL
+        run: echo "https://github.com/epimediahub/EpiMediaHub/releases/download/android-latest/EpiMediaHub-Android.apk"

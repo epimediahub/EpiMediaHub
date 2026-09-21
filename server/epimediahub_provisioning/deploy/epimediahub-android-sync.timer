@@ -1,0 +1,12 @@
+[Unit]
+Description=Check EpiMediaHub Android releases every 5 minutes
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=5min
+RandomizedDelaySec=20s
+Persistent=true
+Unit=epimediahub-android-sync.service
+
+[Install]
+WantedBy=timers.target
