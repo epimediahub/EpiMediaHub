@@ -125,14 +125,30 @@ prefs.write_text(p)
 vm = java / "MainViewModel.kt"
 v = vm.read_text()
 
-old_categories = '''            }.onSuccess { categories ->
-                if (_ui.value.active?.id == p.id) {
-                    set { it.copy(loading = false, categories = categories) }
-                    loadCatalogRows(kind, categories)
+cat_load_start, cat_load_end = function_span(v, "    private fun loadCategories(")
+new_load_categories = '''    private fun loadCategories(kind: MediaKind) {
+        val p = _ui.value.active ?: return
+        set {
+            it.copy(
+                loading = true,
+                categories = emptyList(),
+                catalogRows = emptyMap(),
+                catalogRowsLoading = kind == MediaKind.MOVIE || kind == MediaKind.SERIES,
+                error = ""
+            )
+        }
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    if (p.type == PlaylistType.XTREAM) {
+                        XtreamClient(p).categories(kind)
+                    } else if (kind == MediaKind.LIVE) {
+                        m3uResult(p).groups.map { MediaCategory(it, it) }
+                    } else {
+                        emptyList()
+                    }
                 }
-            }.onFailure { e ->
-'''
-new_categories = '''            }.onSuccess { categories ->
+            }.onSuccess { categories ->
                 if (_ui.value.active?.id == p.id) {
                     val visibleCategories = if (kind == MediaKind.MOVIE || kind == MediaKind.SERIES) {
                         listOf(MediaCategory("__recently_added__", "Zuletzt hinzugefügt")) + categories
@@ -143,10 +159,13 @@ new_categories = '''            }.onSuccess { categories ->
                     loadCatalogRows(kind, visibleCategories)
                 }
             }.onFailure { e ->
-'''
-if old_categories not in v:
-    raise SystemExit("loadCategories completion anchor missing")
-v = v.replace(old_categories, new_categories, 1)
+                if (_ui.value.active?.id == p.id) {
+                    set { it.copy(loading = false, catalogRowsLoading = false, error = e.message ?: "Fehler beim Laden") }
+                }
+            }
+        }
+    }'''
+v = v[:cat_load_start] + new_load_categories + v[cat_load_end:]
 
 cat_start, cat_end = function_span(v, "    private fun loadCatalogRows(")
 new_catalog = '''    private fun loadCatalogRows(kind: MediaKind, categories: List<MediaCategory>) {
