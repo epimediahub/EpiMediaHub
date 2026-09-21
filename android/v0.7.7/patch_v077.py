@@ -164,8 +164,7 @@ if s.count(context_anchor) != 1:
 startup = '''    var initialDashboardRedirectDone by remember { mutableStateOf(false) }
     LaunchedEffect(u.screen, u.playlists.size) {
         if (!initialDashboardRedirectDone &&
-            SetupCodeProvisioning.sessionToken(context.applicationContext) == null &&
-            u.playlists.isEmpty()
+            SetupCodeProvisioning.sessionToken(context.applicationContext) == null
         ) {
             initialDashboardRedirectDone = true
             vm.navigate(Screen.WebAdmin)
