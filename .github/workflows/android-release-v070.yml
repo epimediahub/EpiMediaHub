@@ -1,4 +1,4 @@
-name: Build signed EpiMediaHub Android v0.7.4 test
+name: Build signed EpiMediaHub Android v0.7.5 test
 
 on:
   workflow_dispatch:
@@ -9,12 +9,12 @@ on:
       - 'android/v0.7.0/**'
       - 'android/v0.7.1/**'
       - 'android/v0.7.2/**'
-      - 'android/v0.7.4/**'
+      - 'android/v0.7.5/**'
       - 'android/hotfixes/v064_xtream_hotfix15.py'
       - 'build_tools/install_android_v070_source.sh'
       - 'build_tools/install_android_v071_source.sh'
       - 'build_tools/install_android_v072_source.sh'
-      - 'build_tools/install_android_v074_source.sh'
+      - 'build_tools/install_android_v075_source.sh'
 
 concurrency:
   group: epimediahub-android-v070-test
@@ -72,8 +72,8 @@ jobs:
           include(":app")
           EOF
 
-      - name: Install v0.7.4 source
-        run: bash build_tools/install_android_v074_source.sh
+      - name: Install v0.7.5 source
+        run: bash build_tools/install_android_v075_source.sh
 
       - name: Import existing premium skin assets
         run: bash build_tools/import_enigma_v0941_android_assets.sh
@@ -129,7 +129,7 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build signed v0.7.4 APKs
+      - name: Build signed v0.7.5 APKs
         shell: bash
         run: |
           cd "$PROJECT_ROOT"
@@ -139,14 +139,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "0.7.4"' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'versionCode = 704' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionName = "0.7.5"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 705' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'https://api.epimediahub.com' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
           grep -Fq 'https://download.epimediahub.com/android/latest.json' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
           grep -Fq 'private fun V072UseVlcLiveFallback(item: MediaEntry)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'KeyEvent.KEYCODE_CHANNEL_UP' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'fun rememberedLibraryCategory(kind: MediaKind)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          grep -Fq 'MediaKind.LIVE -> "LIVE TV"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          grep -Fq 'fun V075LiveTvScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V075LiveTv.kt"
+          grep -Fq 'val wide = isTv || maxWidth >= 760.dp' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V075LiveTv.kt"
           grep -Fq 'RELEASE_API_URL' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
           grep -Fq 'Lifecycle.Event.ON_START' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
           grep -Fq 'org.videolan.android:libvlc-all:3.6.5' "$PROJECT_ROOT/app/build.gradle.kts"
@@ -165,34 +166,34 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" dist/EpiMediaHub_Android_v0.7.4-test-arm64-v8a.apk
-          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" dist/EpiMediaHub_Android_v0.7.4-test-armeabi-v7a.apk
-          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk" dist/EpiMediaHub_Android_v0.7.4-test-universal.apk
-          cp dist/EpiMediaHub_Android_v0.7.4-test-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
-          SHA_ARM64="$(sha256sum dist/EpiMediaHub_Android_v0.7.4-test-arm64-v8a.apk | awk '{print $1}')"
-          SHA_ARMV7="$(sha256sum dist/EpiMediaHub_Android_v0.7.4-test-armeabi-v7a.apk | awk '{print $1}')"
-          SHA_UNIVERSAL="$(sha256sum dist/EpiMediaHub_Android_v0.7.4-test-universal.apk | awk '{print $1}')"
-          SIZE_ARM64="$(stat -c %s dist/EpiMediaHub_Android_v0.7.4-test-arm64-v8a.apk)"
-          SIZE_ARMV7="$(stat -c %s dist/EpiMediaHub_Android_v0.7.4-test-armeabi-v7a.apk)"
-          SIZE_UNIVERSAL="$(stat -c %s dist/EpiMediaHub_Android_v0.7.4-test-universal.apk)"
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" dist/EpiMediaHub_Android_v0.7.5-test-arm64-v8a.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" dist/EpiMediaHub_Android_v0.7.5-test-armeabi-v7a.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk" dist/EpiMediaHub_Android_v0.7.5-test-universal.apk
+          cp dist/EpiMediaHub_Android_v0.7.5-test-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+          SHA_ARM64="$(sha256sum dist/EpiMediaHub_Android_v0.7.5-test-arm64-v8a.apk | awk '{print $1}')"
+          SHA_ARMV7="$(sha256sum dist/EpiMediaHub_Android_v0.7.5-test-armeabi-v7a.apk | awk '{print $1}')"
+          SHA_UNIVERSAL="$(sha256sum dist/EpiMediaHub_Android_v0.7.5-test-universal.apk | awk '{print $1}')"
+          SIZE_ARM64="$(stat -c %s dist/EpiMediaHub_Android_v0.7.5-test-arm64-v8a.apk)"
+          SIZE_ARMV7="$(stat -c %s dist/EpiMediaHub_Android_v0.7.5-test-armeabi-v7a.apk)"
+          SIZE_UNIVERSAL="$(stat -c %s dist/EpiMediaHub_Android_v0.7.5-test-universal.apk)"
           cat > dist/android-latest.json <<EOF
           {
-            "version": "0.7.4",
-            "versionCode": 704,
-            "notes": "Live-TV mit einheitlicher Kategorieübersicht, gemerkter Kategorieposition und repariertem Senderwechsel. Der In-App-Updater nutzt EpiMediaHub-Domain plus GitHub-Fallback. Geräte-Kopplung, RAW/MP2-Audio-Fallback und Playlist-Aktualisierung bleiben enthalten.",
+            "version": "0.7.5",
+            "versionCode": 705,
+            "notes": "Neue Receiver-Live-TV-Oberfläche für TV und Mobile: Kategorien links bzw. mobil als Leiste, Senderliste mit Logos, EPG/Programminfo und gemeinsamer responsiver Datenbasis. TV-Fernbedienung, Touch, Senderwechsel, Pairing, RAW/MP2-Fallback, Playlist-Sync und Updater bleiben enthalten.",
             "apks": {
               "arm64-v8a": {
-                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.7.4-test-arm64-v8a.apk",
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.7.5-test-arm64-v8a.apk",
                 "sha256": "$SHA_ARM64",
                 "size": $SIZE_ARM64
               },
               "armeabi-v7a": {
-                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.7.4-test-armeabi-v7a.apk",
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.7.5-test-armeabi-v7a.apk",
                 "sha256": "$SHA_ARMV7",
                 "size": $SIZE_ARMV7
               },
               "universal": {
-                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.7.4-test-universal.apk",
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.7.5-test-universal.apk",
                 "sha256": "$SHA_UNIVERSAL",
                 "size": $SIZE_UNIVERSAL
               }
@@ -205,7 +206,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Android-v0.7.4-signed-test
+          name: EpiMediaHub-Android-v0.7.5-signed-test
           path: dist/
           retention-days: 30
 
@@ -216,8 +217,8 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v0.7.0-test"
-          TITLE="EpiMediaHub Android v0.7.4 Test"
-          NOTES="Android 0.7.4 bringt die neue Live-TV-Kategorieübersicht ohne separate Einzel-Kategorieansicht, stellt die zuletzt gewählte Kategorie/Fokusposition wieder her, repariert den Senderwechsel für D-Pad sowie Channel/Page-Tasten und erweitert den In-App-Updater um einen GitHub-Fallback. Geräte-Kopplung, RAW/MP2-Audio-Fallback und Playlist-Aktualisierung bleiben enthalten."
+          TITLE="EpiMediaHub Android v0.7.5 Test"
+          NOTES="Android 0.7.5 vereinheitlicht TV und Mobile auf einer gemeinsamen responsiven Live-TV-Oberfläche im Receiver-Stil: Kategorien, Senderliste mit Logos sowie EPG/Programminfo. TV nutzt D-Pad/Fernbedienung, Mobile Touch bzw. im Querformat dieselbe Drei-Spalten-Ansicht. Senderwechsel, Geräte-Kopplung, RAW/MP2-Fallback, Playlist-Sync und Updater bleiben enthalten."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
           else
