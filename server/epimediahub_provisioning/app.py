@@ -447,6 +447,8 @@ def redeem_by(field, value, body):
         return jsonify(error="invalid_request"), 400
     with db() as con:
         migrate_receiver_sync(con)
+        if con.in_transaction:
+            con.commit()
         con.execute("BEGIN IMMEDIATE")
         row = con.execute(
             f"SELECT a.*,c.config_json,c.config_version,c.enabled customer_enabled FROM activations a JOIN customers c ON c.id=a.customer_id WHERE a.{field}=?",
