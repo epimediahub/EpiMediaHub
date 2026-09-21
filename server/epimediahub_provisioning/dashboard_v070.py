@@ -10,7 +10,7 @@ from dashboard_v061 import (
     _ensure_unassigned_customer,
     install as install_dashboard_v061,
 )
-from receiver_sync import bump_device_config
+from receiver_sync import bump_customer_devices, bump_device_config
 
 
 def _playlist_config(previous=None):
@@ -62,22 +62,21 @@ def _dashboard(db):
             "SELECT * FROM devices ORDER BY device_id COLLATE NOCASE,id"
         ).fetchall()
         playlist_rows = con.execute(
-            "SELECT * FROM device_playlists ORDER BY id"
+            "SELECT * FROM customer_playlists ORDER BY customer_id,id"
         ).fetchall()
 
-    playlists_by_device = {}
+    playlists_by_customer = {}
     for row in playlist_rows:
         item = dict(row)
         cfg = _config(row)
         item.update(cfg)
         item["source_display"] = str(cfg.get("xtream_server") or cfg.get("playlist_url") or "").split("?", 1)[0]
-        playlists_by_device.setdefault(int(row["device_id"]), []).append(item)
+        playlists_by_customer.setdefault(int(row["customer_id"]), []).append(item)
 
     devices_by_customer = {}
     unassigned_devices = []
     for row in device_rows:
         item = dict(row)
-        item["playlists"] = playlists_by_device.get(int(row["id"]), [])
         item["sync_pending"] = int(row["applied_config_version"] or 0) != int(row["config_version"] or 1)
         if int(row["customer_id"]) == unassigned_id:
             unassigned_devices.append(item)
@@ -88,7 +87,8 @@ def _dashboard(db):
     for row in customer_rows:
         item = dict(row)
         item["devices"] = devices_by_customer.get(int(row["id"]), [])
-        item["playlist_count"] = sum(len(device["playlists"]) for device in item["devices"])
+        item["playlists"] = playlists_by_customer.get(int(row["id"]), [])
+        item["playlist_count"] = len(item["playlists"])
         customers.append(item)
 
     all_devices = [device for customer in customers for device in customer["devices"]] + unassigned_devices
@@ -114,7 +114,7 @@ def install(app, db):
     app.extensions["epimediahub_dashboard_v070"] = True
     app.view_functions["dashboard"] = lambda: _dashboard(db)
     app.view_functions["health"] = lambda: jsonify(
-        status="ok", service="epimediahub-provisioning", api_version="0.7.4"
+        status="ok", service="epimediahub-provisioning", api_version="0.7.6"
     )
 
     @app.post("/admin/v070/customers")
@@ -127,12 +127,14 @@ def install(app, db):
             flash("Bitte einen Kundennamen eingeben.", "warning")
             return redirect(url_for("dashboard"))
         with db() as con:
-            con.execute(
+            cur = con.execute(
                 "INSERT INTO customers(name,config_json,created_at) VALUES(?,?,?)",
                 (name, "{}", iso(utcnow())),
             )
+            customer_id = int(cur.lastrowid)
+            migrate_receiver_sync(con)
         flash(f"Kunde {name} wurde angelegt.", "success")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("dashboard", _anchor=f"customer-{customer_id}"))
 
     @app.post("/admin/v070/customers/<int:customer_id>/rename")
     def v070_rename_customer(customer_id):
@@ -162,16 +164,10 @@ def install(app, db):
             abort(400)
         with db() as con:
             migrate_receiver_sync(con)
-            row = con.execute(
-                "SELECT id FROM devices WHERE id=?",
-                (device_id,),
-            ).fetchone()
+            row = con.execute("SELECT id FROM devices WHERE id=?", (device_id,)).fetchone()
             if not row:
                 abort(404)
-            con.execute(
-                "UPDATE devices SET display_name=? WHERE id=?",
-                (name, device_id),
-            )
+            con.execute("UPDATE devices SET display_name=? WHERE id=?", (name, device_id))
         flash("Gerätename gespeichert.", "success")
         return redirect(url_for("dashboard", _anchor=f"device-{device_id}"))
 
@@ -196,7 +192,7 @@ def install(app, db):
             )
             con.execute("DELETE FROM devices WHERE id=?", (device_id,))
         label = row["display_name"] or row["device_id"]
-        flash(f"Gerät {label} wurde gelöscht.", "success")
+        flash(f"Gerät {label} wurde gelöscht. Die Kunden-Playlists bleiben erhalten.", "success")
         return redirect(url_for("dashboard", _anchor=f"customer-{row['customer_id']}"))
 
     @app.post("/admin/v073/pairings/claim")
@@ -236,7 +232,7 @@ def install(app, db):
                     "UPDATE pairings SET customer_id=?,claimed_at=? WHERE id=? AND customer_id IS NULL",
                     (customer_id, now, row["id"]),
                 )
-                flash("Gerät wurde dem Kunden zugewiesen und verbindet sich automatisch.", "success")
+                flash("Gerät wurde dem Kunden zugewiesen. Es übernimmt automatisch alle Kunden-Playlists.", "success")
         return redirect(url_for("dashboard", _anchor="pair-device"))
 
     @app.post("/admin/v073/customers/<int:customer_id>/delete")
@@ -253,6 +249,9 @@ def install(app, db):
             ).fetchone()
             if not customer:
                 abort(404)
+            con.execute("DELETE FROM customer_playlists WHERE customer_id=?", (customer_id,))
+            con.execute("DELETE FROM pairings WHERE customer_id=?", (customer_id,))
+            con.execute("DELETE FROM devices WHERE customer_id=?", (customer_id,))
             con.execute("DELETE FROM customers WHERE id=?", (customer_id,))
         flash(
             f"Kunde {customer['name']} sowie zugehörige Geräte, Playlists und Aktivierungscodes wurden gelöscht.",
@@ -260,63 +259,122 @@ def install(app, db):
         )
         return redirect(url_for("dashboard"))
 
-    @app.post("/admin/v070/devices/<int:device_id>/playlists")
-    def v070_add_playlist(device_id):
+    @app.post("/admin/v076/customers/<int:customer_id>/playlists")
+    def v076_add_customer_playlist(customer_id):
         guard = web_auth()
         if guard:
             return guard
         config = _playlist_config()
         if not (config["playlist_url"] or config["xtream_server"]):
             flash("Bitte eine Playlist-Adresse oder einen Xtream-Server eintragen.", "warning")
-            return redirect(url_for("dashboard", _anchor=f"device-{device_id}"))
+            return redirect(url_for("dashboard", _anchor=f"customer-{customer_id}"))
         now = iso(utcnow())
         with db() as con:
             migrate_receiver_sync(con)
-            if not con.execute("SELECT id FROM devices WHERE id=?", (device_id,)).fetchone():
+            if not con.execute(
+                "SELECT id FROM customers WHERE id=? AND name<>?",
+                (customer_id, UNASSIGNED_CUSTOMER_NAME),
+            ).fetchone():
                 abort(404)
             con.execute(
-                "INSERT INTO device_playlists(device_id,name,config_json,created_at,updated_at) VALUES(?,?,?,?,?)",
-                (device_id, config["playlist_name"], json.dumps(config, separators=(",", ":")), now, now),
+                "INSERT INTO customer_playlists(customer_id,name,config_json,created_at,updated_at) VALUES(?,?,?,?,?)",
+                (
+                    customer_id,
+                    config["playlist_name"],
+                    json.dumps(config, separators=(",", ":")),
+                    now,
+                    now,
+                ),
             )
-            bump_device_config(con, device_id)
-        flash("Playlist hinzugefügt. Das Gerät übernimmt sie beim nächsten Abruf.", "success")
-        return redirect(url_for("dashboard", _anchor=f"device-{device_id}"))
+            bump_customer_devices(con, customer_id)
+        flash("Playlist dem Kunden hinzugefügt. Alle Geräte übernehmen sie automatisch.", "success")
+        return redirect(url_for("dashboard", _anchor=f"customer-{customer_id}"))
 
-    @app.post("/admin/v070/playlists/<int:playlist_id>/update")
-    def v070_update_playlist(playlist_id):
+    @app.post("/admin/v076/playlists/<int:playlist_id>/update")
+    def v076_update_customer_playlist(playlist_id):
         guard = web_auth()
         if guard:
             return guard
         with db() as con:
             migrate_receiver_sync(con)
-            row = con.execute("SELECT * FROM device_playlists WHERE id=?", (playlist_id,)).fetchone()
+            row = con.execute("SELECT * FROM customer_playlists WHERE id=?", (playlist_id,)).fetchone()
             if not row:
                 abort(404)
             config = _playlist_config(_config(row))
+            customer_id = int(row["customer_id"])
             con.execute(
-                "UPDATE device_playlists SET name=?,config_json=?,updated_at=? WHERE id=?",
-                (config["playlist_name"], json.dumps(config, separators=(",", ":")), iso(utcnow()), playlist_id),
+                "UPDATE customer_playlists SET name=?,config_json=?,updated_at=? WHERE id=?",
+                (
+                    config["playlist_name"],
+                    json.dumps(config, separators=(",", ":")),
+                    iso(utcnow()),
+                    playlist_id,
+                ),
             )
-            bump_device_config(con, int(row["device_id"]))
-            device_id = int(row["device_id"])
-        flash("Playlist gespeichert und zur Synchronisierung vorgemerkt.", "success")
-        return redirect(url_for("dashboard", _anchor=f"device-{device_id}"))
+            bump_customer_devices(con, customer_id)
+        flash("Playlist gespeichert. Alle Geräte des Kunden synchronisieren die Änderung.", "success")
+        return redirect(url_for("dashboard", _anchor=f"customer-{customer_id}"))
 
-    @app.post("/admin/v070/playlists/<int:playlist_id>/delete")
-    def v070_delete_playlist(playlist_id):
+    @app.post("/admin/v076/playlists/<int:playlist_id>/delete")
+    def v076_delete_customer_playlist(playlist_id):
         guard = web_auth()
         if guard:
             return guard
         with db() as con:
             migrate_receiver_sync(con)
-            row = con.execute("SELECT device_id,name FROM device_playlists WHERE id=?", (playlist_id,)).fetchone()
+            row = con.execute(
+                "SELECT customer_id,name FROM customer_playlists WHERE id=?",
+                (playlist_id,),
+            ).fetchone()
             if not row:
                 abort(404)
-            device_id = int(row["device_id"])
-            con.execute("DELETE FROM device_playlists WHERE id=?", (playlist_id,))
-            bump_device_config(con, device_id)
-        flash(f"Playlist {row['name']} wurde vom Gerät entfernt.", "success")
-        return redirect(url_for("dashboard", _anchor=f"device-{device_id}"))
+            customer_id = int(row["customer_id"])
+            con.execute("DELETE FROM customer_playlists WHERE id=?", (playlist_id,))
+            bump_customer_devices(con, customer_id)
+        flash(f"Playlist {row['name']} wurde beim Kunden entfernt.", "success")
+        return redirect(url_for("dashboard", _anchor=f"customer-{customer_id}"))
+
+    # Compatibility routes from the previous device-owned dashboard.
+    @app.post("/admin/v070/devices/<int:device_id>/playlists")
+    def v070_add_playlist(device_id):
+        guard = web_auth()
+        if guard:
+            return guard
+        with db() as con:
+            migrate_receiver_sync(con)
+            device = con.execute("SELECT customer_id FROM devices WHERE id=?", (device_id,)).fetchone()
+            if not device:
+                abort(404)
+            customer_id = int(device["customer_id"])
+        config = _playlist_config()
+        if not (config["playlist_url"] or config["xtream_server"]):
+            flash("Bitte eine Playlist-Adresse oder einen Xtream-Server eintragen.", "warning")
+            return redirect(url_for("dashboard", _anchor=f"customer-{customer_id}"))
+        now = iso(utcnow())
+        with db() as con:
+            con.execute(
+                "INSERT INTO customer_playlists(customer_id,name,config_json,created_at,updated_at) VALUES(?,?,?,?,?)",
+                (
+                    customer_id,
+                    config["playlist_name"],
+                    json.dumps(config, separators=(",", ":")),
+                    now,
+                    now,
+                ),
+            )
+            bump_customer_devices(con, customer_id)
+        flash("Playlist wurde dem Kunden zugeordnet und gilt jetzt für alle seine Geräte.", "success")
+        return redirect(url_for("dashboard", _anchor=f"customer-{customer_id}"))
+
+    @app.post("/admin/v070/playlists/<int:playlist_id>/update")
+    def v070_update_playlist(playlist_id):
+        # Old URL now points at customer playlists.
+        return v076_update_customer_playlist(playlist_id)
+
+    @app.post("/admin/v070/playlists/<int:playlist_id>/delete")
+    def v070_delete_playlist(playlist_id):
+        # Old URL now points at customer playlists.
+        return v076_delete_customer_playlist(playlist_id)
 
     @app.post("/admin/v070/devices/<int:device_id>/sync")
     def v070_sync_device(device_id):
@@ -328,7 +386,7 @@ def install(app, db):
             if not con.execute("SELECT id FROM devices WHERE id=?", (device_id,)).fetchone():
                 abort(404)
             bump_device_config(con, device_id)
-        flash("Synchronisierung angefordert. Das Gerät ruft die Änderung automatisch ab.", "success")
+        flash("Synchronisierung angefordert. Das Gerät ruft die Kunden-Playlists automatisch ab.", "success")
         return redirect(url_for("dashboard", _anchor=f"device-{device_id}"))
 
     @app.post("/admin/v070/devices/<int:device_id>/move")
@@ -341,10 +399,19 @@ def install(app, db):
         except ValueError:
             abort(400)
         with db() as con:
+            migrate_receiver_sync(con)
             if not con.execute("SELECT id FROM customers WHERE id=?", (customer_id,)).fetchone():
                 abort(404)
-            cur = con.execute("UPDATE devices SET customer_id=? WHERE id=?", (customer_id, device_id))
+            cur = con.execute(
+                """
+                UPDATE devices
+                SET customer_id=?,config_version=config_version+1,applied_config_version=0,
+                    last_sync_status='pending',last_sync_error=NULL
+                WHERE id=?
+                """,
+                (customer_id, device_id),
+            )
             if not cur.rowcount:
                 abort(404)
-        flash("Gerät wurde dem Kunden zugeordnet.", "success")
+        flash("Gerät wurde dem Kunden zugeordnet und übernimmt dessen Playlists.", "success")
         return redirect(url_for("dashboard", _anchor=f"customer-{customer_id}"))
