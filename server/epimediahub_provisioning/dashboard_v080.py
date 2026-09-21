@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import timedelta
 
 from flask import abort, flash, jsonify, redirect, render_template, request, session, url_for
@@ -21,6 +22,20 @@ from app import (
 from dashboard_v061 import UNASSIGNED_CUSTOMER_NAME, _ensure_unassigned_customer
 from dashboard_v070 import _config, _playlist_config, install as install_dashboard_v070
 from receiver_sync import bump_customer_devices, bump_device_config
+
+
+ADMIN_PUBLIC_HOST = os.environ.get("EPIMEDIAHUB_ADMIN_HOST", "admin.epimediahub.com").strip().lower()
+RESELLER_PUBLIC_HOST = os.environ.get("EPIMEDIAHUB_RESELLER_HOST", "reseller.epimediahub.com").strip().lower()
+
+
+def _request_host():
+    forwarded = request.headers.get("X-Forwarded-Host", "").split(",", 1)[0].strip()
+    raw = forwarded or request.host
+    return raw.split(":", 1)[0].strip().lower()
+
+
+def _is_managed_public_host(host):
+    return host == "epimediahub.com" or host.endswith(".epimediahub.com")
 
 
 def migrate_resellers(con):
@@ -232,6 +247,7 @@ def _admin_dashboard(db):
         recent_audit=[dict(r) for r in audit],
         unassigned_devices=unassigned_devices,
         unassigned_customer_id=unassigned_id,
+        reseller_portal_url=f"https://{RESELLER_PUBLIC_HOST}",
     )
 
 
@@ -266,6 +282,38 @@ def install(app, db):
 
     app.extensions["epimediahub_dashboard_v080"] = True
     app.view_functions["dashboard"] = lambda: _admin_dashboard(db)
+
+    @app.before_request
+    def v081_public_host_separation():
+        host = _request_host()
+        if not _is_managed_public_host(host):
+            return None
+
+        path = request.path
+        if path.startswith("/reseller") and host != RESELLER_PUBLIC_HOST:
+            if request.method not in {"GET", "HEAD"}:
+                abort(404)
+            suffix = path[len("/reseller"):]
+            target = f"https://{RESELLER_PUBLIC_HOST}/reseller{suffix}"
+            if request.query_string:
+                target += "?" + request.query_string.decode("utf-8", "ignore")
+            return redirect(target, code=302)
+
+        if path.startswith("/admin") and host == RESELLER_PUBLIC_HOST:
+            if request.method not in {"GET", "HEAD"}:
+                abort(404)
+            return redirect(f"https://{ADMIN_PUBLIC_HOST}/admin", code=302)
+
+        return None
+
+    @app.get("/")
+    def v081_portal_root():
+        host = _request_host()
+        if host == RESELLER_PUBLIC_HOST:
+            return redirect(url_for("v080_reseller_dashboard"))
+        if host == ADMIN_PUBLIC_HOST:
+            return redirect(url_for("dashboard"))
+        abort(404)
     app.view_functions["health"] = lambda: jsonify(
         status="ok", service="epimediahub-provisioning", api_version="0.8.0"
     )
