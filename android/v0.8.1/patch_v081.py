@@ -231,16 +231,6 @@ items_replacement = '''                        if (cat == "__recently_added__" &
 v = v.replace(items_anchor, items_replacement, 1)
 vm.write_text(v)
 
-# The cinematic hub already renders every category as a poster row.
-# Keep the "Alle Kategorien öffnen" action away from the synthetic recent row.
-hub = java / "ui/V060CinematicHub.kt"
-h = hub.read_text()
-old_all = 'vm.switchLibraryCategory(kind, u.categories.first())'
-new_all = 'vm.switchLibraryCategory(kind, u.categories.firstOrNull { it.id != "__recently_added__" } ?: u.categories.first())'
-if old_all not in h:
-    raise SystemExit("cinematic all categories anchor missing")
-hub.write_text(h.replace(old_all, new_all, 1))
-
 checks = [
     (gradle, 'versionName = "0.8.1"'),
     (gradle, 'versionCode = 801'),
