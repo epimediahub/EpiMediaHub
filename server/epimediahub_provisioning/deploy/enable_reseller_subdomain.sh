@@ -39,7 +39,7 @@ if f"hostname: {host}" not in text:
     path.write_text("\n".join(lines) + "\n")
 PY
 
-if cloudflared tunnel ingress validate "$CONFIG" >/dev/null 2>&1; then
+if cloudflared --config "$CONFIG" tunnel ingress validate >/dev/null 2>&1; then
   echo "Cloudflare ingress-Konfiguration ist gültig."
 else
   cp -f "$CONFIG.bak-$STAMP" "$CONFIG"
@@ -53,7 +53,11 @@ if [ -z "$TUNNEL" ]; then
   exit 1
 fi
 
-cloudflared tunnel route dns "$TUNNEL" "$HOST" >/dev/null 2>&1 || true
+if cloudflared --config "$CONFIG" tunnel route dns "$TUNNEL" "$HOST" >/dev/null 2>&1; then
+  echo "DNS-Route für $HOST wurde angelegt bzw. bestätigt."
+else
+  echo "Hinweis: DNS-Route konnte nicht automatisch angelegt werden. Die Tunnel-Ingress-Regel ist trotzdem gesetzt." >&2
+fi
 systemctl restart cloudflared
 systemctl is-active --quiet cloudflared
 
