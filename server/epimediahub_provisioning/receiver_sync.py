@@ -28,8 +28,19 @@ def _public_config(raw: str):
     return {k: v for k, v in config.items() if not str(k).startswith("_")}
 
 
+def _has_playlist(config: dict) -> bool:
+    return bool(config.get("playlist_url") or config.get("xtream_server"))
+
+
+def _playlist_signature(name: str, config: dict) -> str:
+    normalized = dict(config)
+    normalized.pop("id", None)
+    normalized["playlist_name"] = str(name or normalized.get("playlist_name") or "Playlist").strip()
+    return json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
 def migrate(con):
-    """Idempotent schema migration for Android/receiver configuration sync."""
+    """Idempotent schema migration for customer-owned playlists and device sync."""
     customer_cols = {r[1] for r in con.execute("PRAGMA table_info(customers)")}
     device_cols = {r[1] for r in con.execute("PRAGMA table_info(devices)")}
     if "config_version" not in customer_cols:
@@ -46,6 +57,8 @@ def migrate(con):
     ):
         if name not in device_cols:
             con.execute(f"ALTER TABLE devices ADD COLUMN {name} {ddl}")
+
+    # Legacy table is intentionally kept for one-time lossless migration/rollback.
     con.execute(
         """
         CREATE TABLE IF NOT EXISTS device_playlists(
@@ -63,8 +76,27 @@ def migrate(con):
     )
     con.execute(
         """
-        CREATE TABLE IF NOT EXISTS device_playlist_migrations(
-            device_id INTEGER PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+        CREATE TABLE IF NOT EXISTS customer_playlists(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            config_json TEXT NOT NULL DEFAULT '{}',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    con.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customer_playlists_customer
+        ON customer_playlists(customer_id,id)
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customer_playlist_migrations(
+            customer_id INTEGER PRIMARY KEY REFERENCES customers(id) ON DELETE CASCADE,
             migrated_at TEXT NOT NULL
         )
         """
@@ -81,105 +113,110 @@ def migrate(con):
         )
         """
     )
-    rows = con.execute(
-        """
-        SELECT d.id device_row_id,d.customer_id,c.name,c.config_json
-        FROM devices d JOIN customers c ON c.id=d.customer_id
-        WHERE NOT EXISTS(
-            SELECT 1 FROM device_playlist_migrations m WHERE m.device_id=d.id
-        )
-        """
+
+    # Convert all historic device-specific lists into one customer-owned union.
+    # A marker prevents deleted customer playlists from being resurrected later.
+    customers = con.execute(
+        "SELECT id,name,config_json FROM customers ORDER BY id"
     ).fetchall()
-    for row in rows:
-        config = _public_config(row["config_json"])
-        if config.get("_system_role") == "unassigned":
-            con.execute(
-                "INSERT OR IGNORE INTO device_playlist_migrations(device_id,migrated_at) VALUES(?,?)",
-                (row["device_row_id"], _iso_now()),
-            )
+    for customer in customers:
+        customer_id = int(customer["id"])
+        if con.execute(
+            "SELECT 1 FROM customer_playlist_migrations WHERE customer_id=?",
+            (customer_id,),
+        ).fetchone():
             continue
-        if not (config.get("playlist_url") or config.get("xtream_server")):
-            con.execute(
-                "INSERT OR IGNORE INTO device_playlist_migrations(device_id,migrated_at) VALUES(?,?)",
-                (row["device_row_id"], _iso_now()),
-            )
-            continue
-        now = _iso_now()
-        con.execute(
+
+        seen = set()
+        candidates = []
+        legacy = _public_config(customer["config_json"])
+        if legacy.get("_system_role") != "unassigned" and _has_playlist(legacy):
+            name = str(legacy.get("playlist_name") or customer["name"] or "Playlist").strip()
+            candidates.append((name, legacy))
+
+        rows = con.execute(
             """
-            INSERT OR IGNORE INTO device_playlists(
-                device_id,name,config_json,legacy_customer_id,created_at,updated_at
-            ) VALUES(?,?,?,?,?,?)
+            SELECT p.name,p.config_json
+            FROM device_playlists p
+            JOIN devices d ON d.id=p.device_id
+            WHERE d.customer_id=? AND p.enabled=1
+            ORDER BY p.id
             """,
-            (
-                row["device_row_id"],
-                str(config.get("playlist_name") or row["name"] or "Playlist").strip(),
-                json.dumps(config, separators=(",", ":")),
-                row["customer_id"],
-                now,
-                now,
-            ),
-        )
+            (customer_id,),
+        ).fetchall()
+        for row in rows:
+            cfg = _public_config(row["config_json"])
+            if _has_playlist(cfg):
+                candidates.append((str(row["name"] or cfg.get("playlist_name") or "Playlist").strip(), cfg))
+
+        now = _iso_now()
+        for name, cfg in candidates:
+            signature = _playlist_signature(name, cfg)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            cfg = dict(cfg)
+            cfg["playlist_name"] = name or "Playlist"
+            con.execute(
+                """
+                INSERT INTO customer_playlists(customer_id,name,config_json,created_at,updated_at)
+                VALUES(?,?,?,?,?)
+                """,
+                (
+                    customer_id,
+                    cfg["playlist_name"],
+                    json.dumps(cfg, separators=(",", ":"), ensure_ascii=False),
+                    now,
+                    now,
+                ),
+            )
+
         con.execute(
-            "INSERT OR IGNORE INTO device_playlist_migrations(device_id,migrated_at) VALUES(?,?)",
-            (row["device_row_id"], now),
+            "INSERT OR IGNORE INTO customer_playlist_migrations(customer_id,migrated_at) VALUES(?,?)",
+            (customer_id, now),
         )
 
 
 def ensure_device_playlist_from_customer(con, device_row_id: int, customer_id: int):
-    """Seed a newly registered device with the customer's legacy playlist."""
-    if con.execute(
-        "SELECT device_id FROM device_playlist_migrations WHERE device_id=?", (device_row_id,)
-    ).fetchone():
-        return
-    row = con.execute(
-        "SELECT name,config_json FROM customers WHERE id=?", (customer_id,)
-    ).fetchone()
-    if not row:
-        return
-    config = _public_config(row["config_json"])
-    if config.get("_system_role") == "unassigned" or not (
-        config.get("playlist_url") or config.get("xtream_server")
-    ):
-        con.execute(
-            "INSERT OR IGNORE INTO device_playlist_migrations(device_id,migrated_at) VALUES(?,?)",
-            (device_row_id, _iso_now()),
-        )
-        return
-    now = _iso_now()
+    """Compatibility hook: customer playlists are inherited automatically."""
+    migrate(con)
+    # Make a newly paired device fetch the current customer playlist set.
     con.execute(
         """
-        INSERT OR IGNORE INTO device_playlists(
-            device_id,name,config_json,legacy_customer_id,created_at,updated_at
-        ) VALUES(?,?,?,?,?,?)
+        UPDATE devices
+        SET applied_config_version=0,last_sync_status='pending',last_sync_error=NULL
+        WHERE id=? AND customer_id=?
         """,
-        (
-            device_row_id,
-            str(config.get("playlist_name") or row["name"] or "Playlist").strip(),
-            json.dumps(config, separators=(",", ":")),
-            customer_id,
-            now,
-            now,
-        ),
-    )
-    con.execute(
-        "INSERT OR IGNORE INTO device_playlist_migrations(device_id,migrated_at) VALUES(?,?)",
-        (device_row_id, now),
+        (device_row_id, customer_id),
     )
 
 
 def build_device_config(con, device_row_id: int):
-    """Build multi-playlist sync data while keeping old Android builds compatible."""
-    rows = con.execute(
-        "SELECT * FROM device_playlists WHERE device_id=? AND enabled=1 ORDER BY id",
+    """Return the owning customer's playlists to every device of that customer."""
+    device = con.execute(
+        "SELECT customer_id FROM devices WHERE id=?",
         (device_row_id,),
+    ).fetchone()
+    if not device:
+        return {"playlists": [], "active_playlist_id": ""}
+
+    rows = con.execute(
+        """
+        SELECT * FROM customer_playlists
+        WHERE customer_id=? AND enabled=1
+        ORDER BY id
+        """,
+        (int(device["customer_id"]),),
     ).fetchall()
+
     playlists = []
     for row in rows:
         config = _public_config(row["config_json"])
         config["id"] = f"managed-dashboard-{row['id']}"
         config["playlist_name"] = row["name"]
         playlists.append(config)
+
+    # Keep old Android builds compatible with the first top-level playlist.
     payload = dict(playlists[0]) if playlists else {}
     payload["playlists"] = playlists
     payload["active_playlist_id"] = playlists[0]["id"] if playlists else ""
@@ -198,8 +235,20 @@ def bump_device_config(con, device_row_id: int):
     )
 
 
+def bump_customer_devices(con, customer_id: int):
+    con.execute(
+        """
+        UPDATE devices
+        SET config_version=config_version+1,applied_config_version=0,
+            last_sync_status='pending',last_sync_error=NULL
+        WHERE customer_id=? AND enabled=1
+        """,
+        (customer_id,),
+    )
+
+
 def save_customer_config(con, customer_id: int, config: dict):
-    """Store a new config version and retain the previous config for rollback."""
+    """Legacy top-level config storage, retained for compatibility."""
     row = con.execute(
         "SELECT config_json,config_version FROM customers WHERE id=?", (customer_id,)
     ).fetchone()
@@ -216,10 +265,7 @@ def save_customer_config(con, customer_id: int, config: dict):
         "UPDATE customers SET config_json=?,config_version=? WHERE id=?",
         (json.dumps(config, separators=(",", ":")), new_version, customer_id),
     )
-    con.execute(
-        "UPDATE devices SET last_sync_status='pending',last_sync_error=NULL WHERE customer_id=? AND enabled=1",
-        (customer_id,),
-    )
+    bump_customer_devices(con, customer_id)
     return new_version
 
 
@@ -258,7 +304,7 @@ def _bearer():
 
 
 def register(app, db):
-    """Register the single authenticated /v1/device/* API used by Android v0.5.1."""
+    """Register authenticated /v1/device/* sync API used by Android/TV/mobile."""
 
     def authenticate_device(con):
         token = _bearer()
