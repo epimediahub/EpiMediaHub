@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='admin.css', v='0.7.6') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-v070.css', v='0.8.0') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-v080.css', v='0.8.1') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v081.css', v='0.8.1') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v081.css', v='0.8.2') }}">
 </head>
 <body class="admin-page hierarchy-page reseller-shell">
 <svg class="svg-sprite" aria-hidden="true">
@@ -19,6 +19,7 @@
   <symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M18 12a7 7 0 0 0-12-4l-2 4m2 0a7 7 0 0 0 12 4l2-4"/></symbol>
   <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
   <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 4H4v16h6M14 8l4 4-4 4m4-4H8"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
 </svg>
 
 <header class="hierarchy-topbar">
@@ -62,16 +63,18 @@
 
   <section id="customerGrid" class="customer-grid">
     {% for customer in customers %}
-    <article id="customer-{{ customer.id }}" class="customer-card" data-search="{{ customer.name|lower }} {% for playlist in customer.playlists %}{{ playlist.name|lower }} {% endfor %}{% for device in customer.devices %}{{ device.display_name|default('', true)|lower }} {{ device.device_id|lower }} {% endfor %}">
-      <header class="customer-head">
+    <article id="customer-{{ customer.id }}" class="customer-card" data-customer-name="{{ customer.name|lower }}" data-search="{{ customer.name|lower }} {% for playlist in customer.playlists %}{{ playlist.name|lower }} {% endfor %}{% for device in customer.devices %}{{ device.display_name|default('', true)|lower }} {{ device.device_id|lower }} {% endfor %}">
+      <header class="customer-head" data-customer-toggle="customer-details-{{ customer.id }}">
         <div class="customer-identity"><span class="customer-avatar">{{ customer.name[:1]|upper }}</span><div><small>KUNDE #{{ customer.id }}</small><h2>{{ customer.name }}</h2><p>{{ customer.devices|length }} Gerät(e) · {{ customer.playlist_count }} Playlist(s)</p></div></div>
         <div class="customer-actions">
           <button class="button button-primary button-small" type="button" data-open-dialog="add-customer-playlist-{{ customer.id }}"><svg><use href="#i-plus"/></svg>Playlist hinzufügen</button>
           <button class="button button-ghost button-small" type="button" data-open-dialog="rename-customer-{{ customer.id }}">Umbenennen</button>
           <form method="post" action="{{ url_for('v080_reseller_activation', customer_id=customer.id) }}"><button class="button button-secondary button-small" type="submit"><svg><use href="#i-plus"/></svg>12-stelliger Code</button></form>
           <form class="delete-customer-form" method="post" action="{{ url_for('v080_reseller_delete_customer', customer_id=customer.id) }}" onsubmit="return confirm('Diesen Kunden einschließlich aller Geräte, Playlists und Aktivierungscodes endgültig löschen?')"><input type="hidden" name="confirm" value="DELETE:{{ customer.id }}"><button class="button button-danger button-small" type="submit">Kunde löschen</button></form>
+          <button class="button button-ghost button-small customer-toggle-button" type="button" data-customer-toggle-button aria-expanded="false" aria-controls="customer-details-{{ customer.id }}"><span class="customer-toggle-label">Details</span><svg class="customer-chevron"><use href="#i-chevron"/></svg></button>
         </div>
       </header>
+      <div id="customer-details-{{ customer.id }}" class="customer-details" hidden>
 
       <div class="playlist-stack customer-playlist-stack">
         {% for playlist in customer.playlists %}
@@ -103,6 +106,7 @@
         {% else %}
         <div class="customer-empty"><span class="device-icon"><svg><use href="#i-device"/></svg></span><div><strong>Noch kein Gerät</strong><p>Verbinde Fire TV, Handy oder ein weiteres Gerät. Es übernimmt automatisch die Playlists dieses Kunden.</p></div><form method="post" action="{{ url_for('web_activation', customer_id=customer.id) }}"><button class="button button-primary button-small" type="submit">Gerät verbinden</button></form></div>
         {% endfor %}
+      </div>
       </div>
     </article>
     {% else %}
@@ -136,7 +140,48 @@
   const search = document.getElementById('hierarchySearch');
   const cards = [...document.querySelectorAll('.customer-card')];
   const empty = document.getElementById('noSearchResults');
-  search?.addEventListener('input', () => { const term = search.value.trim().toLowerCase(); let visible = 0; cards.forEach(card => { card.hidden = Boolean(term && !card.dataset.search.includes(term)); if (!card.hidden) visible += 1; }); empty.hidden = visible !== 0; });
+
+  const setCustomerOpen = (card, open) => {
+    const details = card.querySelector('.customer-details');
+    const toggle = card.querySelector('[data-customer-toggle-button]');
+    if (!details) return;
+    details.hidden = !open;
+    card.classList.toggle('is-open', open);
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', String(open));
+      const label = toggle.querySelector('.customer-toggle-label');
+      if (label) label.textContent = open ? 'Schließen' : 'Details';
+    }
+  };
+
+  cards.forEach(card => {
+    const head = card.querySelector('[data-customer-toggle]');
+    const toggle = card.querySelector('[data-customer-toggle-button]');
+    head?.addEventListener('click', event => {
+      if (event.target.closest('button,a,input,select,textarea,form,label')) return;
+      setCustomerOpen(card, !card.classList.contains('is-open'));
+    });
+    toggle?.addEventListener('click', event => {
+      event.stopPropagation();
+      setCustomerOpen(card, !card.classList.contains('is-open'));
+    });
+  });
+
+  search?.addEventListener('input', () => {
+    const term = search.value.trim().toLowerCase();
+    let visible = 0;
+    cards.forEach(card => {
+      const matches = !term || card.dataset.search.includes(term);
+      card.hidden = !matches;
+      if (matches) {
+        visible += 1;
+        const nameMatches = !term || (card.dataset.customerName || '').includes(term);
+        if (term && !nameMatches) setCustomerOpen(card, true);
+        if (!term) setCustomerOpen(card, false);
+      }
+    });
+    empty.hidden = visible !== 0;
+  });
 })();
 </script>
 </body>
