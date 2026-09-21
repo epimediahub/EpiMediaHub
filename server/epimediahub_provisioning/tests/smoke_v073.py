@@ -21,7 +21,7 @@ from wsgi import app
 client = app.test_client()
 admin_headers = {"Authorization": "Bearer test-admin-token"}
 
-assert client.get("/health").get_json()["api_version"] == "0.7.6"
+assert client.get("/health").get_json()["api_version"] == os.environ.get("EPIMEDIAHUB_EXPECTED_API_VERSION", "0.7.6")
 assert client.post("/admin/login", data={"password": "test-admin-password"}).status_code == 302
 
 target = client.post(
