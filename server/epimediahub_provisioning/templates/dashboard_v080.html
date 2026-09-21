@@ -23,7 +23,7 @@
 
 <header class="hierarchy-topbar">
   <a class="hierarchy-brand" href="{{ url_for('dashboard') }}">{% include 'brand_mark_v081.html' %}<div><strong>EpiMediaHub</strong><small>ADMIN CONTROL CENTER</small></div></a>
-  <div class="customer-actions"><a class="button button-ghost" href="{{ url_for('v080_reseller_login') }}">Reseller-Login</a><form method="post" action="{{ url_for('logout') }}"><button class="button button-ghost" type="submit"><svg><use href="#i-logout"/></svg>Abmelden</button></form></div>
+  <div class="customer-actions"><a class="button button-ghost" href="{{ reseller_portal_url }}">Reseller-Login</a><form method="post" action="{{ url_for('logout') }}"><button class="button button-ghost" type="submit"><svg><use href="#i-logout"/></svg>Abmelden</button></form></div>
 </header>
 
 <main class="hierarchy-shell">
