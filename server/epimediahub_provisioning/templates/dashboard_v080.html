@@ -3,10 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#f4f6fa">
+  <meta name="theme-color" content="#05080D">
   <title>EpiMediaHub · Admin & Reseller</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='admin.css', v='0.7.6') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v070.css', v='0.8.0') }}">\n  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v080.css', v='0.8.0') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v070.css', v='0.8.0') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v080.css', v='0.8.1') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v081.css', v='0.8.1') }}">
 </head>
 <body class="admin-page hierarchy-page">
 <svg class="svg-sprite" aria-hidden="true">
@@ -20,7 +22,7 @@
 </svg>
 
 <header class="hierarchy-topbar">
-  <a class="hierarchy-brand" href="{{ url_for('dashboard') }}"><img class="brand-logo-img" src="{{ url_for('static', filename='epimediahub-logo.svg') }}" alt="EpiMediaHub"><div><strong>EpiMediaHub</strong><small>ADMIN CONTROL CENTER · 0.8.0</small></div></a>
+  <a class="hierarchy-brand" href="{{ url_for('dashboard') }}">{% include 'brand_mark_v081.html' %}<div><strong>EpiMediaHub</strong><small>ADMIN CONTROL CENTER</small></div></a>
   <div class="customer-actions"><a class="button button-ghost" href="{{ url_for('v080_reseller_login') }}">Reseller-Login</a><form method="post" action="{{ url_for('logout') }}"><button class="button button-ghost" type="submit"><svg><use href="#i-logout"/></svg>Abmelden</button></form></div>
 </header>
 
