@@ -203,6 +203,12 @@ def _admin_dashboard(db):
         migrate_resellers(con)
         _ensure_unassigned_customer(con)
         customers, devices, total_playlists, pending_devices = _dashboard_rows(con)
+        unassigned_id = _ensure_unassigned_customer(con)
+        unassigned_devices = []
+        for row in con.execute("SELECT * FROM devices WHERE customer_id=? ORDER BY display_name COLLATE NOCASE,device_id COLLATE NOCASE,id", (unassigned_id,)).fetchall():
+            item = dict(row)
+            item["sync_pending"] = int(row["applied_config_version"] or 0) != int(row["config_version"] or 1)
+            unassigned_devices.append(item)
         reseller_rows = con.execute(
             """
             SELECT r.*,
@@ -224,6 +230,8 @@ def _admin_dashboard(db):
         total_playlists=total_playlists,
         pending_devices=pending_devices,
         recent_audit=[dict(r) for r in audit],
+        unassigned_devices=unassigned_devices,
+        unassigned_customer_id=unassigned_id,
     )
 
 
