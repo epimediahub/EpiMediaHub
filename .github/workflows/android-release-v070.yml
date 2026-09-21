@@ -12,6 +12,7 @@ on:
       - 'android/v0.8.0/**'
       - 'android/v0.8.1/**'
       - 'android/v0.8.2/**'
+      - 'android/v0.8.3/**'
       - 'android/v0.8.4/**'
       - 'android/hotfixes/v064_xtream_hotfix15.py'
       - 'build_tools/install_android_v070_source.sh'
@@ -20,6 +21,7 @@ on:
       - 'build_tools/install_android_v080_source.sh'
       - 'build_tools/install_android_v081_source.sh'
       - 'build_tools/install_android_v082_source.sh'
+      - 'build_tools/install_android_v083_source.sh'
       - 'build_tools/install_android_v084_source.sh'
 
 concurrency:
@@ -145,7 +147,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "0.8.3"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionName = "0.8.4"' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'versionCode = 804' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'https://api.epimediahub.com' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
           grep -Fq 'https://download.epimediahub.com/android/latest.json' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
@@ -160,9 +162,9 @@ jobs:
           grep -Fq 'repo.savePlaylists(emptyList())' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
           grep -Fq 'if (!dashboardPaired)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
           grep -Fq 'fun V078DashboardPairingGate' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V078DashboardPairingGate.kt"
-          grep -Fq 'ANDROID MOBILE · 0.8.3' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V078DashboardPairingGate.kt"
+          grep -Fq 'ANDROID MOBILE · 0.8.4' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V078DashboardPairingGate.kt"
           grep -Fq 'fun V083HomeScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
-          grep -Fq 'ANDROID TV · 0.8.3' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'ANDROID TV · 0.8.4' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
           grep -Fq 'targetValue = if (focused) 1.025f else 1f' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
           grep -Fq 'targetValue = if (focused) 1.035f else 1f' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
           grep -Fq 'targetValue = if (focused) 1.012f else 1f' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"
@@ -213,9 +215,9 @@ jobs:
           SIZE_UNIVERSAL="$(stat -c %s dist/EpiMediaHub_Android_v0.8.4-test-universal.apk)"
           cat > dist/android-latest.json <<EOF
           {
-            "version": "0.8.3",
+            "version": "0.8.4",
             "versionCode": 804,
-            "notes": "Android 0.8.4 ist der Motion-Polish: ruhigere Fokusanimationen, kleinere Scale-Bewegungen, weichere Schatten/Rahmen und entfernte Scroll-/Focus-Schleifen in Live TV sowie Filme/Serien. Funktionen und Layout bleiben ansonsten unverändert.",
+            "notes": "Android 0.8.4 nutzt für alle Live-TV-Sender den integrierten LibVLC-Kompatibilitätsplayer. Dadurch werden Audioformate unabhängig von RAW/HEVC-Namenszusätzen über denselben breiten Decoderpfad abgespielt. Filme und Serien bleiben auf Media3/ExoPlayer.",
             "apks": {
               "arm64-v8a": {
                 "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.8.4-test-arm64-v8a.apk",
@@ -253,7 +255,7 @@ jobs:
           set -euo pipefail
           TAG="v0.7.0-test"
           TITLE="EpiMediaHub Android v0.8.4 Test"
-          NOTES="Android 0.8.4 ist der Motion-Polish: ruhigere Fokusanimationen, kleinere Scale-Bewegungen, weichere Schatten/Rahmen und entfernte Scroll-/Focus-Schleifen in Live TV sowie Filme/Serien. Funktionen, Playlist-Name, Skin-Layout und Zuletzt hinzugefügt bleiben erhalten."
+          NOTES="Android 0.8.4 schaltet alle Live-TV-Sender auf den integrierten LibVLC-Kompatibilitätsplayer um. Ziel ist eine deutlich breitere Audio-Kompatibilität ohne RAW/HEVC-Sondererkennung; Filme und Serien bleiben auf Media3/ExoPlayer."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
           else
