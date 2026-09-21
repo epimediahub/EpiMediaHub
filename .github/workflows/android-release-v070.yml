@@ -159,7 +159,7 @@ jobs:
           grep -Fq 'ANDROID MOBILE · 0.8.2' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V078DashboardPairingGate.kt"
           grep -Fq 'fun V082HomeScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V082Home.kt"
           grep -Fq 'ANDROID TV · 0.8.2' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V082Home.kt"
-          grep -Fq 'alpha = if (isTv) .50f else .62f' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V082Home.kt"
+          grep -Fq 'alpha = if (isTv) .64f else .72f' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V082Home.kt"
           grep -Fq 'onBack != null && !isTvDevice' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
           grep -Fq 'V081WeatherSettingsCard(accent)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
           grep -Fq 'val addedAt: Long = 0L' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/model/Models.kt"
@@ -207,7 +207,7 @@ jobs:
           {
             "version": "0.8.2",
             "versionCode": 802,
-            "notes": "Android 0.8.2 entfernt den Playlist-/Provider-Namen rechts oben vollständig, vergrößert und verstärkt das zentrale Skin-Motiv, stellt Live TV wieder her und beschleunigt Filme/Serien durch einen einzigen Xtream-Katalogabruf mit lokaler Gruppierung. Zuletzt hinzugefügt bleibt erhalten.",
+            "notes": "Android 0.8.2 behält den Playlist-Namen rechts oben, entfernt dort aber jedes zusätzliche Skin-Logo. Das zentrale Skin-Motiv ist größer und sichtbarer, Live TV ist wiederhergestellt und Filme/Serien laden schneller durch einen einzigen Xtream-Katalogabruf mit lokaler Gruppierung. Zuletzt hinzugefügt bleibt erhalten.",
             "apks": {
               "arm64-v8a": {
                 "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.8.2-test-arm64-v8a.apk",
@@ -245,7 +245,7 @@ jobs:
           set -euo pipefail
           TAG="v0.7.0-test"
           TITLE="EpiMediaHub Android v0.8.2 Test"
-          NOTES="Android 0.8.2 entfernt den Playlist-/Provider-Namen rechts oben vollständig, vergrößert und verstärkt das zentrale Skin-Motiv, stellt die Live-TV-Senderlisten wieder her und beschleunigt Filme/Serien deutlich durch einen einzigen Xtream-Katalogabruf mit lokaler Gruppierung. Zuletzt hinzugefügt bleibt für Filme und Serien erhalten."
+          NOTES="Android 0.8.2 behält den Playlist-Namen rechts oben, entfernt dort aber jedes zusätzliche Skin-Logo. Das zentrale Skin-Motiv ist größer und sichtbarer, die Live-TV-Senderlisten sind wiederhergestellt und Filme/Serien laden schneller durch einen einzigen Xtream-Katalogabruf mit lokaler Gruppierung. Zuletzt hinzugefügt bleibt für Filme und Serien erhalten."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
           else
