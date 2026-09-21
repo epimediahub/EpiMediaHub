@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>EpiMediaHub · Reseller Login</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css', v='0.8.0') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v080.css', v='0.8.0') }}">
+</head>
+<body class="reseller-login-page">
+  <main class="reseller-login-card">
+    <div class="reseller-login-brand"><img src="{{ url_for('static', filename='epimediahub-logo.svg') }}" alt="EpiMediaHub"><div><strong>EpiMediaHub</strong><small>RESELLER CONTROL CENTER</small></div></div>
+    <h1>Reseller-Anmeldung</h1>
+    <p>Melde dich mit dem vom EpiMediaHub-Administrator vergebenen Zugang an.</p>
+    <form method="post">
+      <label>Benutzername<input name="username" autocomplete="username" required autofocus></label>
+      <label>Passwort<input type="password" name="password" autocomplete="current-password" required></label>
+      {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
+      <button class="button button-primary" type="submit">Anmelden</button>
+    </form>
+  </main>
+</body>
+</html>
