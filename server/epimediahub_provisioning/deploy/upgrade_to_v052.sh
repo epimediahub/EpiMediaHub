@@ -50,7 +50,8 @@ trap cleanup EXIT
 apt-get update
 apt-get install -y git rsync python3 python3-venv python3-pip curl ca-certificates
 
-git clone --depth 1 --branch "$BRANCH" "$REPO" "$TMP/repo"
+git clone --depth 1 --filter=blob:none --sparse --branch "$BRANCH" "$REPO" "$TMP/repo"
+git -C "$TMP/repo" sparse-checkout set server/epimediahub_provisioning
 SRC="$TMP/repo/server/epimediahub_provisioning"
 test -f "$SRC/app.py"
 test -f "$SRC/wsgi.py"
