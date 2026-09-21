@@ -365,3 +365,32 @@ label>span,.compact-modal label span,.pairing-form label>span,.form-grid label>s
 @media(max-width:520px){
   .customer-toggle-button{grid-column:1/-1}
 }
+
+
+.brand-mark-real{
+  width:auto;
+  height:46px;
+  display:inline-flex;
+  align-items:center;
+}
+.brand-logo-real{
+  display:block;
+  height:46px;
+  width:auto;
+  max-width:240px;
+  object-fit:contain;
+  filter:drop-shadow(0 8px 20px rgba(40,167,242,.18));
+}
+.reseller-login-brand .brand-mark-real,
+.login-card .brand-mark-real{
+  height:58px;
+}
+.reseller-login-brand .brand-logo-real,
+.login-card .brand-logo-real{
+  height:58px;
+  max-width:280px;
+}
+@media(max-width:700px){
+  .brand-mark-real,.brand-logo-real{height:38px}
+  .brand-logo-real{max-width:200px}
+}
