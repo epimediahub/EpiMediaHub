@@ -161,6 +161,40 @@ def public_config(config):
     return {k: v for k, v in dict(config or {}).items() if not str(k).startswith("_")}
 
 
+def reseller_device_limit_reached(con, customer_id, device_id):
+    """Return True only when a *new* device would exceed its reseller's hard device limit."""
+    tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "resellers" not in tables:
+        return False
+    customer_cols = {r[1] for r in con.execute("PRAGMA table_info(customers)")}
+    if "reseller_id" not in customer_cols:
+        return False
+    customer = con.execute("SELECT reseller_id FROM customers WHERE id=?", (customer_id,)).fetchone()
+    if not customer or customer["reseller_id"] is None:
+        return False
+    existing = con.execute(
+        "SELECT id FROM devices WHERE customer_id=? AND device_id=?",
+        (customer_id, device_id),
+    ).fetchone()
+    if existing:
+        return False
+    reseller = con.execute(
+        "SELECT device_limit FROM resellers WHERE id=?",
+        (customer["reseller_id"],),
+    ).fetchone()
+    if not reseller or not int(reseller["device_limit"] or 0):
+        return False
+    used = con.execute(
+        """
+        SELECT COUNT(*)
+        FROM devices d JOIN customers c ON c.id=d.customer_id
+        WHERE c.reseller_id=?
+        """,
+        (customer["reseller_id"],),
+    ).fetchone()[0]
+    return int(used) >= int(reseller["device_limit"])
+
+
 def form_config(previous=None):
     previous = dict(previous or {})
     kind = request.form.get("playlist_type", previous.get("playlist_type", "M3U")).strip().upper()
@@ -457,6 +491,8 @@ def redeem_by(field, value, body):
         claim, error = claim_activation(row, device_id, platform)
         if error:
             return error
+        if reseller_device_limit_reached(con, int(row["customer_id"]), device_id):
+            return jsonify(error="reseller_device_limit"), 409
         session_token, now = claim
         con.execute(
             "UPDATE activations SET redeemed_at=?,device_id=?,platform=? WHERE id=? AND redeemed_at IS NULL",
@@ -604,6 +640,8 @@ def pair_status():
             return jsonify(status="pending", expires_at=row["expires_at"]), 202
         if not row["customer_enabled"]:
             return jsonify(error="customer_disabled"), 409
+        if reseller_device_limit_reached(con, int(row["customer_id"]), row["device_id"]):
+            return jsonify(error="reseller_device_limit"), 409
 
         session_token = pairing_session_token(pairing_secret)
         con.execute(
