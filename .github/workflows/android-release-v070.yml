@@ -1,4 +1,4 @@
-name: Build signed EpiMediaHub Android v0.8.3 test
+name: Build signed EpiMediaHub Android v0.8.4 test
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ on:
       - 'android/v0.8.0/**'
       - 'android/v0.8.1/**'
       - 'android/v0.8.2/**'
-      - 'android/v0.8.3/**'
+      - 'android/v0.8.4/**'
       - 'android/hotfixes/v064_xtream_hotfix15.py'
       - 'build_tools/install_android_v070_source.sh'
       - 'build_tools/install_android_v071_source.sh'
@@ -20,7 +20,7 @@ on:
       - 'build_tools/install_android_v080_source.sh'
       - 'build_tools/install_android_v081_source.sh'
       - 'build_tools/install_android_v082_source.sh'
-      - 'build_tools/install_android_v083_source.sh'
+      - 'build_tools/install_android_v084_source.sh'
 
 concurrency:
   group: epimediahub-android-v070-test
@@ -30,7 +30,7 @@ permissions:
   contents: write
 
 jobs:
-  build-android-v083:
+  build-android-v084:
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
@@ -78,8 +78,8 @@ jobs:
           include(":app")
           EOF
 
-      - name: Install v0.8.3 source
-        run: bash build_tools/install_android_v083_source.sh
+      - name: Install v0.8.4 source
+        run: bash build_tools/install_android_v084_source.sh
 
       - name: Import existing premium skin assets
         run: bash build_tools/import_enigma_v0941_android_assets.sh
@@ -135,7 +135,7 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build signed v0.8.3 APKs
+      - name: Build signed v0.8.4 APKs
         shell: bash
         run: |
           cd "$PROJECT_ROOT"
@@ -146,10 +146,12 @@ jobs:
         run: |
           set -euo pipefail
           grep -Fq 'versionName = "0.8.3"' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'versionCode = 803' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 804' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'https://api.epimediahub.com' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
           grep -Fq 'https://download.epimediahub.com/android/latest.json' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
           grep -Fq 'private fun V072UseVlcLiveFallback(item: MediaEntry)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'return item.kind == MediaKind.LIVE' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq -- '--audio-replay-gain-mode=none' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'KeyEvent.KEYCODE_CHANNEL_UP' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'fun rememberedLibraryCategory(kind: MediaKind)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'fun V076LiveTvScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"
@@ -199,34 +201,34 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" dist/EpiMediaHub_Android_v0.8.3-test-arm64-v8a.apk
-          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" dist/EpiMediaHub_Android_v0.8.3-test-armeabi-v7a.apk
-          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk" dist/EpiMediaHub_Android_v0.8.3-test-universal.apk
-          cp dist/EpiMediaHub_Android_v0.8.3-test-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
-          SHA_ARM64="$(sha256sum dist/EpiMediaHub_Android_v0.8.3-test-arm64-v8a.apk | awk '{print $1}')"
-          SHA_ARMV7="$(sha256sum dist/EpiMediaHub_Android_v0.8.3-test-armeabi-v7a.apk | awk '{print $1}')"
-          SHA_UNIVERSAL="$(sha256sum dist/EpiMediaHub_Android_v0.8.3-test-universal.apk | awk '{print $1}')"
-          SIZE_ARM64="$(stat -c %s dist/EpiMediaHub_Android_v0.8.3-test-arm64-v8a.apk)"
-          SIZE_ARMV7="$(stat -c %s dist/EpiMediaHub_Android_v0.8.3-test-armeabi-v7a.apk)"
-          SIZE_UNIVERSAL="$(stat -c %s dist/EpiMediaHub_Android_v0.8.3-test-universal.apk)"
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" dist/EpiMediaHub_Android_v0.8.4-test-arm64-v8a.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" dist/EpiMediaHub_Android_v0.8.4-test-armeabi-v7a.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk" dist/EpiMediaHub_Android_v0.8.4-test-universal.apk
+          cp dist/EpiMediaHub_Android_v0.8.4-test-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+          SHA_ARM64="$(sha256sum dist/EpiMediaHub_Android_v0.8.4-test-arm64-v8a.apk | awk '{print $1}')"
+          SHA_ARMV7="$(sha256sum dist/EpiMediaHub_Android_v0.8.4-test-armeabi-v7a.apk | awk '{print $1}')"
+          SHA_UNIVERSAL="$(sha256sum dist/EpiMediaHub_Android_v0.8.4-test-universal.apk | awk '{print $1}')"
+          SIZE_ARM64="$(stat -c %s dist/EpiMediaHub_Android_v0.8.4-test-arm64-v8a.apk)"
+          SIZE_ARMV7="$(stat -c %s dist/EpiMediaHub_Android_v0.8.4-test-armeabi-v7a.apk)"
+          SIZE_UNIVERSAL="$(stat -c %s dist/EpiMediaHub_Android_v0.8.4-test-universal.apk)"
           cat > dist/android-latest.json <<EOF
           {
             "version": "0.8.3",
-            "versionCode": 803,
-            "notes": "Android 0.8.3 ist der Motion-Polish: ruhigere Fokusanimationen, kleinere Scale-Bewegungen, weichere Schatten/Rahmen und entfernte Scroll-/Focus-Schleifen in Live TV sowie Filme/Serien. Funktionen und Layout bleiben ansonsten unverändert.",
+            "versionCode": 804,
+            "notes": "Android 0.8.4 ist der Motion-Polish: ruhigere Fokusanimationen, kleinere Scale-Bewegungen, weichere Schatten/Rahmen und entfernte Scroll-/Focus-Schleifen in Live TV sowie Filme/Serien. Funktionen und Layout bleiben ansonsten unverändert.",
             "apks": {
               "arm64-v8a": {
-                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.8.3-test-arm64-v8a.apk",
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.8.4-test-arm64-v8a.apk",
                 "sha256": "$SHA_ARM64",
                 "size": $SIZE_ARM64
               },
               "armeabi-v7a": {
-                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.8.3-test-armeabi-v7a.apk",
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.8.4-test-armeabi-v7a.apk",
                 "sha256": "$SHA_ARMV7",
                 "size": $SIZE_ARMV7
               },
               "universal": {
-                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.8.3-test-universal.apk",
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.8.4-test-universal.apk",
                 "sha256": "$SHA_UNIVERSAL",
                 "size": $SIZE_UNIVERSAL
               }
@@ -239,7 +241,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Android-v0.8.3-signed-test
+          name: EpiMediaHub-Android-v0.8.4-signed-test
           path: dist/
           retention-days: 30
 
@@ -250,8 +252,8 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v0.7.0-test"
-          TITLE="EpiMediaHub Android v0.8.3 Test"
-          NOTES="Android 0.8.3 ist der Motion-Polish: ruhigere Fokusanimationen, kleinere Scale-Bewegungen, weichere Schatten/Rahmen und entfernte Scroll-/Focus-Schleifen in Live TV sowie Filme/Serien. Funktionen, Playlist-Name, Skin-Layout und Zuletzt hinzugefügt bleiben erhalten."
+          TITLE="EpiMediaHub Android v0.8.4 Test"
+          NOTES="Android 0.8.4 ist der Motion-Polish: ruhigere Fokusanimationen, kleinere Scale-Bewegungen, weichere Schatten/Rahmen und entfernte Scroll-/Focus-Schleifen in Live TV sowie Filme/Serien. Funktionen, Playlist-Name, Skin-Layout und Zuletzt hinzugefügt bleiben erhalten."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
           else
