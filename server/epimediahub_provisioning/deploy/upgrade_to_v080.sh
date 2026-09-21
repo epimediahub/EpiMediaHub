@@ -10,7 +10,8 @@ mkdir -p /var/tmp
 export TMPDIR=/var/tmp
 CORE_SCRIPT="$(mktemp -p /var/tmp epimediahub-core.XXXXXX)"
 SYNC_SCRIPT="$(mktemp -p /var/tmp epimediahub-sync.XXXXXX)"
-trap 'rm -f "$CORE_SCRIPT" "$SYNC_SCRIPT"' EXIT
+BRAND_SCRIPT="$(mktemp -p /var/tmp epimediahub-brand.XXXXXX)"
+trap 'rm -f "$CORE_SCRIPT" "$SYNC_SCRIPT" "$BRAND_SCRIPT"' EXIT
 
 CORE_REF="${EPIMEDIAHUB_CORE_REF:-9f9b64da18d0b76e9c28ea39725e9d95ca4ddbeb}"
 RAW_CORE="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/${CORE_REF}/server/epimediahub_provisioning/deploy"
@@ -18,6 +19,10 @@ RAW_BRANCH="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/${EPIMEDIA
 
 curl -fsSL "$RAW_CORE/upgrade_to_v052.sh" -o "$CORE_SCRIPT"
 bash "$CORE_SCRIPT"
+
+curl -fsSL "$RAW_BRANCH/install_dashboard_brand_from_android.sh?nocache=$(date +%s)" -o "$BRAND_SCRIPT"
+bash "$BRAND_SCRIPT"
+systemctl restart epimediahub-provisioning.service
 
 curl -fsSL "$RAW_BRANCH/install_android_release_sync.sh?nocache=$(date +%s)" -o "$SYNC_SCRIPT"
 bash "$SYNC_SCRIPT"
