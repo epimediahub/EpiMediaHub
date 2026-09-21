@@ -205,9 +205,7 @@ for path, marker in checks:
     if marker not in path.read_text():
         raise SystemExit(f"missing Android 0.8.2 marker {marker} in {path}")
 
-if 'playlist,' in dst.read_text():
-    raise SystemExit("home header still contains playlist/provider label")
-if 'u.active?.name' in dst.read_text():
-    raise SystemExit("home header still renders active playlist/provider name")
+if 'playlist = u.active?.name ?: "EpiMediaHub"' not in dst.read_text():
+    raise SystemExit("home header playlist label missing")
 
 print("Android 0.8.2 home/logo, fast movie-series rows and Live TV catalog restore applied")
