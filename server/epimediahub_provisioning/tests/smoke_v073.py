@@ -21,7 +21,7 @@ from wsgi import app
 client = app.test_client()
 admin_headers = {"Authorization": "Bearer test-admin-token"}
 
-assert client.get("/health").get_json()["api_version"] == "0.7.4"
+assert client.get("/health").get_json()["api_version"] == "0.7.6"
 assert client.post("/admin/login", data={"password": "test-admin-password"}).status_code == 302
 
 target = client.post(
@@ -140,6 +140,7 @@ with db() as con:
     assert con.execute("SELECT COUNT(*) FROM activations WHERE customer_id=?", (target_id,)).fetchone()[0] == 0
     assert con.execute("SELECT COUNT(*) FROM pairings WHERE customer_id=?", (target_id,)).fetchone()[0] == 0
     assert con.execute("SELECT COUNT(*) FROM device_playlists").fetchone()[0] == 0
+    assert con.execute("SELECT COUNT(*) FROM customer_playlists WHERE customer_id=?", (target_id,)).fetchone()[0] == 0
 
 revoked = client.get(
     "/v1/device/config?version=0",
@@ -206,6 +207,7 @@ with db() as con:
     assert con.execute("SELECT 1 FROM customers WHERE id=?", (survivor_id,)).fetchone() is not None
     assert con.execute("SELECT 1 FROM devices WHERE id=?", (delete_device_id,)).fetchone() is None
     assert con.execute("SELECT COUNT(*) FROM device_playlists WHERE device_id=?", (delete_device_id,)).fetchone()[0] == 0
+    assert con.execute("SELECT COUNT(*) FROM customer_playlists WHERE customer_id=?", (survivor_id,)).fetchone()[0] == 1
     assert con.execute(
         "SELECT COUNT(*) FROM pairings WHERE customer_id=? AND device_id=?",
         (survivor_id, "android-delete-me"),
@@ -217,4 +219,4 @@ deleted_device_auth = client.get(
 )
 assert deleted_device_auth.status_code == 401
 
-print("Raspberry v0.7.4 device rename/delete and pairing dashboard smoke test OK")
+print("Raspberry v0.7.6 device rename/delete, customer playlists and pairing dashboard smoke test OK")
