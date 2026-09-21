@@ -38,7 +38,7 @@ body,
 .hierarchy-brand strong{font-size:15px;letter-spacing:-.01em}
 .hierarchy-brand small{color:var(--muted-2)}
 .brand-mark-inline{width:44px;height:44px;display:inline-grid;place-items:center;flex:0 0 auto}
-.brand-mark-inline svg{width:44px;height:44px;display:block;filter:drop-shadow(0 10px 20px rgba(40,167,242,.18))}
+.brand-mark-inline svg{width:44px;height:44px;display:block;stroke:none;filter:drop-shadow(0 10px 20px rgba(40,167,242,.18))}
 .brand-logo-img{display:none!important}
 
 .hierarchy-shell{width:min(1320px,calc(100% - 38px));padding-top:34px}
@@ -287,3 +287,20 @@ label>span,.compact-modal label span,.pairing-form label>span,.form-grid label>s
 @media(max-width:520px){
   .brand-mark-inline,.brand-mark-inline svg{width:38px;height:38px}
 }
+
+.login-page{
+  background:
+    radial-gradient(circle at 50% 0,rgba(40,167,242,.14),transparent 28rem),
+    linear-gradient(180deg,#05080D,#070B11);
+}
+.login-card{
+  width:min(430px,calc(100% - 30px));
+  border:1px solid #253342;
+  background:linear-gradient(145deg,rgba(17,24,33,.98),rgba(9,14,20,.98));
+  color:var(--text);
+  box-shadow:0 35px 110px rgba(0,0,0,.48);
+}
+.login-card h1{color:var(--text)}
+.login-card .muted{color:var(--muted)}
+.login-card label{color:var(--muted)}
+.login-card .brand-mark-inline{margin:0 auto 8px}
