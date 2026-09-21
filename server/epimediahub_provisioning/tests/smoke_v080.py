@@ -95,6 +95,33 @@ assert dash2.status_code == 200
 assert "Kunde Süd".encode("utf-8") in dash2.data
 assert b"Kunde Nord" not in dash2.data
 
+# Hard device limit must also be enforced when a device is registered through the public activation API.
+headers = {"Authorization": "Bearer test-admin-token"}
+first_activation = admin.post(
+    f"/v1/admin/customers/{sued_id}/activation",
+    headers=headers,
+    json={"ttl_minutes": 60},
+)
+assert first_activation.status_code == 201
+first_redeem = anon.post(
+    "/v1/setup/redeem",
+    json={"code": first_activation.get_json()["code"], "device_id": "sued-tv-1", "platform": "android"},
+)
+assert first_redeem.status_code == 200, first_redeem.data
+
+second_activation = admin.post(
+    f"/v1/admin/customers/{sued_id}/activation",
+    headers=headers,
+    json={"ttl_minutes": 60},
+)
+assert second_activation.status_code == 201
+second_redeem = anon.post(
+    "/v1/setup/redeem",
+    json={"code": second_activation.get_json()["code"], "device_id": "sued-tv-2", "platform": "android"},
+)
+assert second_redeem.status_code == 409, second_redeem.data
+assert second_redeem.get_json()["error"] == "reseller_device_limit"
+
 pair = anon.post(
     "/v1/pair/start",
     json={"device_id": "nord-fire-tv", "device_name": "Wohnzimmer TV", "platform": "android"},
