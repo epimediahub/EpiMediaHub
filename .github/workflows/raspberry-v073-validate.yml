@@ -27,8 +27,9 @@ jobs:
             server/epimediahub_provisioning/dashboard_v052.py \
             server/epimediahub_provisioning/dashboard_v060.py \
             server/epimediahub_provisioning/dashboard_v061.py \
-            server/epimediahub_provisioning/dashboard_v070.py
+            server/epimediahub_provisioning/dashboard_v070.py \
+            server/epimediahub_provisioning/dashboard_v080.py
       - name: Run customer-device-playlist smoke test
-        run: python server/epimediahub_provisioning/tests/smoke_v070.py
+        run: EPIMEDIAHUB_EXPECTED_API_VERSION=0.8.0 python server/epimediahub_provisioning/tests/smoke_v070.py
       - name: Run pairing and deletion smoke test
-        run: python server/epimediahub_provisioning/tests/smoke_v073.py
+        run: EPIMEDIAHUB_EXPECTED_API_VERSION=0.8.0 python server/epimediahub_provisioning/tests/smoke_v073.py
