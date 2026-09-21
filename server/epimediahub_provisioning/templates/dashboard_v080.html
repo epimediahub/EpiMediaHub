@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='admin.css', v='0.7.6') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-v070.css', v='0.8.0') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-v080.css', v='0.8.1') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v081.css', v='0.8.2') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin-v081.css', v='0.8.3') }}">
 </head>
 <body class="admin-page hierarchy-page">
 <svg class="svg-sprite" aria-hidden="true">
@@ -22,9 +22,15 @@
   <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
 </svg>
 
-<header class="hierarchy-topbar">
-  <a class="hierarchy-brand" href="{{ url_for('dashboard') }}">{% include 'brand_mark_v081.html' %}<div><strong>EpiMediaHub</strong><small>ADMIN CONTROL CENTER</small></div></a>
-  <div class="customer-actions"><a class="button button-ghost" href="{{ reseller_portal_url }}">Reseller-Login</a><form method="post" action="{{ url_for('logout') }}"><button class="button button-ghost" type="submit"><svg><use href="#i-logout"/></svg>Abmelden</button></form></div>
+<header class="hierarchy-topbar hierarchy-topbar-premium">
+  <div class="hierarchy-branding">
+    <a class="hierarchy-brand hierarchy-brand-logo" href="{{ url_for('dashboard') }}" aria-label="EpiMediaHub Admin">{% include 'brand_mark_v081.html' %}</a>
+    <span class="hierarchy-brand-caption">ADMIN CONTROL CENTER</span>
+  </div>
+  <div class="hierarchy-topbar-actions">
+    <a class="button button-ghost" href="{{ reseller_portal_url }}">Reseller-Login</a>
+    <form method="post" action="{{ url_for('logout') }}"><button class="button button-ghost" type="submit"><svg><use href="#i-logout"/></svg>Abmelden</button></form>
+  </div>
 </header>
 
 <main class="hierarchy-shell">
