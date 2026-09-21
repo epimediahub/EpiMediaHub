@@ -394,3 +394,167 @@ label>span,.compact-modal label span,.pairing-form label>span,.form-grid label>s
   .brand-mark-real,.brand-logo-real{height:38px}
   .brand-logo-real{max-width:200px}
 }
+
+
+/* Premium topbar branding: one real logo, clear portal context, no duplicate name. */
+.hierarchy-topbar-premium{
+  min-height:96px;
+  height:auto;
+  padding-top:10px;
+  padding-bottom:10px;
+  align-items:center;
+}
+.hierarchy-branding{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:center;
+  gap:3px;
+}
+.hierarchy-brand-logo{
+  display:block;
+  line-height:0;
+  max-width:min(390px,46vw);
+}
+.hierarchy-brand-logo .brand-mark-real{
+  width:auto!important;
+  height:52px!important;
+  display:flex!important;
+  align-items:center!important;
+  overflow:visible;
+}
+.hierarchy-brand-logo .brand-logo-real{
+  display:block!important;
+  width:auto!important;
+  height:52px!important;
+  max-width:390px!important;
+  object-fit:contain!important;
+  object-position:left center;
+  filter:drop-shadow(0 8px 20px rgba(40,167,242,.16));
+}
+.hierarchy-brand-caption-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  padding-left:2px;
+}
+.hierarchy-brand-caption{
+  color:#718093;
+  font-size:8px;
+  line-height:1.2;
+  font-weight:850;
+  letter-spacing:.16em;
+}
+.hierarchy-reseller-name{
+  max-width:240px;
+  padding:3px 7px;
+  overflow:hidden;
+  border:1px solid rgba(40,167,242,.20);
+  border-radius:999px;
+  background:rgba(40,167,242,.08);
+  color:#9BD9FF;
+  font-size:8px;
+  font-weight:800;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.hierarchy-topbar-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.hierarchy-topbar-actions form{margin:0}
+.hierarchy-topbar-actions .button{
+  min-height:42px;
+  padding:9px 14px;
+}
+.hierarchy-topbar-premium + .hierarchy-shell{
+  padding-top:32px;
+}
+
+/* Login branding uses the same real logo without repeating the product name. */
+.reseller-login-brand-clean,
+.login-brand-clean{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:7px;
+  margin-bottom:20px;
+}
+.reseller-login-brand-clean .brand-mark-real,
+.login-brand-clean .brand-mark-real{
+  width:auto!important;
+  height:62px!important;
+}
+.reseller-login-brand-clean .brand-logo-real,
+.login-brand-clean .brand-logo-real{
+  display:block!important;
+  width:auto!important;
+  height:62px!important;
+  max-width:320px!important;
+  object-fit:contain!important;
+}
+.reseller-login-brand-clean>span,
+.login-brand-clean>span{
+  color:#758396;
+  font-size:8px;
+  font-weight:850;
+  letter-spacing:.18em;
+}
+.login-card h1,
+.reseller-login-card h1{
+  margin-top:0;
+}
+
+@media(max-width:800px){
+  .hierarchy-topbar-premium{
+    min-height:84px;
+    padding-top:8px;
+    padding-bottom:8px;
+  }
+  .hierarchy-brand-logo .brand-mark-real,
+  .hierarchy-brand-logo .brand-logo-real{
+    height:45px!important;
+  }
+  .hierarchy-brand-logo .brand-logo-real{max-width:300px!important}
+  .hierarchy-topbar-actions .button{
+    min-height:38px;
+    padding:8px 11px;
+    font-size:10px;
+  }
+}
+@media(max-width:580px){
+  .hierarchy-topbar-premium{
+    min-height:78px;
+    padding:8px 11px;
+    gap:8px;
+  }
+  .hierarchy-branding{max-width:54vw}
+  .hierarchy-brand-logo{max-width:54vw}
+  .hierarchy-brand-logo .brand-mark-real,
+  .hierarchy-brand-logo .brand-logo-real{
+    height:38px!important;
+  }
+  .hierarchy-brand-logo .brand-logo-real{
+    max-width:54vw!important;
+  }
+  .hierarchy-brand-caption{
+    font-size:7px;
+    letter-spacing:.11em;
+  }
+  .hierarchy-reseller-name{display:none}
+  .hierarchy-topbar-actions{
+    gap:6px;
+    flex-wrap:nowrap;
+  }
+  .hierarchy-topbar-actions .button{
+    min-height:36px;
+    padding:7px 9px;
+    font-size:9px;
+  }
+  .hierarchy-topbar-actions .button svg{display:none}
+}
