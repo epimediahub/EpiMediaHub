@@ -118,6 +118,7 @@ fun V082HomeScreen(vm: MainViewModel, isTv: Boolean, accent: Color) {
 
         Column(Modifier.fillMaxSize()) {
             V082Header(
+                playlist = u.active?.name ?: "EpiMediaHub",
                 isTv = isTv,
                 compact = compact,
                 accent = accent,
@@ -187,6 +188,7 @@ fun V082HomeScreen(vm: MainViewModel, isTv: Boolean, accent: Color) {
 
 @Composable
 private fun V082Header(
+    playlist: String,
     isTv: Boolean,
     compact: Boolean,
     accent: Color,
@@ -226,13 +228,24 @@ private fun V082Header(
             contentScale = ContentScale.Fit
         )
 
-        Text(
-            if (isTv) "ANDROID TV · 0.8.2" else "ANDROID MOBILE · 0.8.2",
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = if (compact) 2.dp else 6.dp),
-            color = Color.White.copy(.38f),
-            fontSize = if (isTv) 11.sp else 9.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Column(
+            Modifier.align(Alignment.TopEnd).padding(top = if (compact) 2.dp else 6.dp),
+            horizontalAlignment = Alignment.End
+        ) {
+            Text(
+                playlist,
+                color = Color.White,
+                fontSize = if (isTv) 20.sp else if (compact) 13.sp else 15.sp,
+                fontWeight = FontWeight.Black,
+                maxLines = 1
+            )
+            Text(
+                if (isTv) "ANDROID TV · 0.8.2" else "ANDROID MOBILE · 0.8.2",
+                color = Color.White.copy(.45f),
+                fontSize = if (isTv) 11.sp else 9.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
 
         if (!compact || isTv) {
             Column(
