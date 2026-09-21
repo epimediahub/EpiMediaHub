@@ -91,6 +91,8 @@ assert b"Nord Media" in dash1.data
 assert b"brand-mark-inline" in dash1.data
 assert b"customer-details-" in dash1.data
 assert b"data-customer-toggle-button" in dash1.data
+assert b"hierarchy-topbar-premium" in dash1.data
+assert b"RESELLER CONTROL CENTER" in dash1.data
 
 dash2 = r2.get("/reseller")
 assert dash2.status_code == 200
@@ -167,6 +169,8 @@ for expected in (
     b"brand-mark-inline",
     b"customer-details-",
     b"data-customer-toggle-button",
+    b"hierarchy-topbar-premium",
+    b"ADMIN CONTROL CENTER",
     b"https://reseller.epimediahub.com",
 ):
     assert expected in admin_dashboard.data, expected
