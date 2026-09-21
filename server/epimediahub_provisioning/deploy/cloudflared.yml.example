@@ -10,4 +10,6 @@ ingress:
     service: http://127.0.0.1:8787
   - hostname: api.epimediahub.com
     service: http://127.0.0.1:8787
+  - hostname: reseller.epimediahub.com
+    service: http://127.0.0.1:8787
   - service: http_status:404
