@@ -152,11 +152,38 @@ with db() as con:
 assert r1.post(f"/reseller/devices/{device_id}/rename", data={"name": "Nord Wohnzimmer"}).status_code == 302
 assert r2.post(f"/reseller/devices/{device_id}/rename", data={"name": "Fremd"}).status_code == 404
 
-# Admin can see and manage all tenants.
+# Admin can see and manage all tenants and uses the app-matched dark theme.
 admin_dashboard = admin.get("/admin")
 assert admin_dashboard.status_code == 200, admin_dashboard.data
-for expected in (b"Reseller Nord", "Reseller Süd".encode("utf-8"), b"Kunde Nord", "Kunde Süd".encode("utf-8"), b"Reseller-Zuordnung", b"epimediahub-logo.svg"):
+for expected in (
+    b"Reseller Nord",
+    "Reseller Süd".encode("utf-8"),
+    b"Kunde Nord",
+    "Kunde Süd".encode("utf-8"),
+    b"Reseller-Zuordnung",
+    b"admin-v081.css",
+    b"brand-mark-inline",
+    b"https://reseller.epimediahub.com",
+):
     assert expected in admin_dashboard.data, expected
+
+# Public hostname separation: admin and reseller portals have distinct URLs.
+root_reseller = anon.get("/", base_url="https://reseller.epimediahub.com")
+assert root_reseller.status_code == 302
+assert root_reseller.headers["Location"].endswith("/reseller")
+
+wrong_reseller_host = anon.get("/reseller/login", base_url="https://admin.epimediahub.com")
+assert wrong_reseller_host.status_code == 302
+assert wrong_reseller_host.headers["Location"].startswith("https://reseller.epimediahub.com/reseller/login")
+
+wrong_admin_host = anon.get("/admin", base_url="https://reseller.epimediahub.com")
+assert wrong_admin_host.status_code == 302
+assert wrong_admin_host.headers["Location"] == "https://admin.epimediahub.com/admin"
+
+reseller_login = anon.get("/reseller/login", base_url="https://reseller.epimediahub.com")
+assert reseller_login.status_code == 200
+assert b"admin-v081.css" in reseller_login.data
+assert b"brand-mark-inline" in reseller_login.data
 
 # Move Süd customer to Nord using admin; reseller Nord should then see it.
 moved = admin.post(f"/admin/v080/customers/{sued_id}/reseller", data={"reseller_id": str(r1_id)})
