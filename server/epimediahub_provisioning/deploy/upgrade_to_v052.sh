@@ -19,7 +19,8 @@ SERVICE=epimediahub-provisioning.service
 STAMP="$(date +%Y%m%d-%H%M%S)"
 VERSION_SLUG="$(printf '%s' "$TARGET_VERSION" | tr -d '.')"
 BACKUP_DIR="/var/backups/epimediahub/v${VERSION_SLUG}-$STAMP"
-TMP="$(mktemp -d)"
+mkdir -p /var/tmp
+TMP="$(mktemp -d -p /var/tmp epimediahub-upgrade.XXXXXX)"
 ROLLBACK_ARMED=0
 
 cleanup() { rm -rf "$TMP"; }
