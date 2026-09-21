@@ -325,6 +325,8 @@ def register(app, db):
             return jsonify(error="invalid_request"), 400
         with db() as con:
             migrate(con)
+            if con.in_transaction:
+                con.commit()
             con.execute("BEGIN IMMEDIATE")
             row = con.execute(
                 "SELECT d.*,c.enabled customer_enabled FROM devices d JOIN customers c ON c.id=d.customer_id WHERE d.device_id=? AND d.sync_bootstrap_hash=?",
