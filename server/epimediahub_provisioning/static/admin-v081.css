@@ -398,7 +398,7 @@ label>span,.compact-modal label span,.pairing-form label>span,.form-grid label>s
 
 /* Premium topbar branding: one real logo, clear portal context, no duplicate name. */
 .hierarchy-topbar-premium{
-  min-height:96px;
+  min-height:112px;
   height:auto;
   padding-top:10px;
   padding-bottom:10px;
@@ -419,7 +419,7 @@ label>span,.compact-modal label span,.pairing-form label>span,.form-grid label>s
 }
 .hierarchy-brand-logo .brand-mark-real{
   width:auto!important;
-  height:46px!important;
+  height:64px!important;
   display:flex!important;
   align-items:center!important;
   overflow:visible;
@@ -427,8 +427,8 @@ label>span,.compact-modal label span,.pairing-form label>span,.form-grid label>s
 .hierarchy-brand-logo .brand-logo-real{
   display:block!important;
   width:auto!important;
-  height:46px!important;
-  max-width:240px!important;
+  height:64px!important;
+  max-width:340px!important;
   object-fit:contain!important;
   object-position:left center;
   filter:drop-shadow(0 8px 20px rgba(40,167,242,.16));
@@ -518,9 +518,9 @@ label>span,.compact-modal label span,.pairing-form label>span,.form-grid label>s
   }
   .hierarchy-brand-logo .brand-mark-real,
   .hierarchy-brand-logo .brand-logo-real{
-    height:42px!important;
+    height:50px!important;
   }
-  .hierarchy-brand-logo .brand-logo-real{max-width:220px!important}
+  .hierarchy-brand-logo .brand-logo-real{max-width:270px!important}
   .hierarchy-topbar-actions .button{
     min-height:38px;
     padding:8px 11px;
