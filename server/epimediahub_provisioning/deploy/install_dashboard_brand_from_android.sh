@@ -134,6 +134,62 @@ def vector_to_svg(raw: bytes, colors: dict[str,str] | None = None) -> bytes:
     svg=f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {esc(vw)} {esc(vh)}" preserveAspectRatio="xMinYMid meet">{"".join(render(ch) for ch in root)}</svg>'
     return svg.encode()
 
+def try_enigma_ipk() -> tuple[str, bytes, str] | None:
+    commit = "4a40c09cd55bb944f731be18c77d6db95127d84d"
+    url = f"https://raw.githubusercontent.com/epimediahub/EpiMediaHub/{commit}/EpiMediaHub_v0.9.41.ipk"
+    req = urllib.request.Request(url, headers={"User-Agent":"EpiMediaHub-Dashboard-Brand/1.1"})
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        blob = resp.read()
+
+    if not blob.startswith(b"!<arch>\n"):
+        raise ValueError("IPK ist kein ar-Archiv")
+
+    pos = 8
+    data_tar = None
+    data_name = None
+    while pos + 60 <= len(blob):
+        header = blob[pos:pos+60]
+        pos += 60
+        name = header[:16].decode("utf-8", "ignore").strip().rstrip("/")
+        size_text = header[48:58].decode("ascii", "ignore").strip()
+        try:
+            size = int(size_text)
+        except ValueError:
+            raise ValueError("Ungültiger ar-Header im IPK")
+        payload = blob[pos:pos+size]
+        pos += size + (size % 2)
+        if name.startswith("data.tar"):
+            data_tar = payload
+            data_name = name
+            break
+
+    if not data_tar:
+        raise ValueError("data.tar im IPK nicht gefunden")
+
+    try:
+        tf = tarfile.open(fileobj=io.BytesIO(data_tar), mode="r:*")
+    except tarfile.ReadError as exc:
+        raise ValueError(f"{data_name} konnte nicht geöffnet werden: {exc}") from exc
+
+    wanted = None
+    for member in tf.getmembers():
+        normalized = member.name.lstrip("./")
+        if normalized == "usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/header.png":
+            wanted = member
+            break
+    if wanted is None:
+        # Fallback if package root differs slightly.
+        for member in tf.getmembers():
+            if member.isfile() and member.name.lower().endswith("/plugins/extensions/epimediahub/header.png"):
+                wanted = member
+                break
+    if wanted is None:
+        raise ValueError("header.png im EpiMediaHub-v0.9.41-IPK nicht gefunden")
+
+    raw = tf.extractfile(wanted).read()
+    return f"EpiMediaHub_v0.9.41.ipk:{wanted.name}", raw, "png"
+
+
 found = try_apk()
 if found:
     source, raw, ext = found
@@ -146,6 +202,17 @@ if found:
     tmp.write_text(partial)
     tmp.replace(target)
     print(f"Echtes Android-App-Logo aus APK installiert: {source}")
+    raise SystemExit(0)
+
+found = try_enigma_ipk()
+if found:
+    source, raw, ext = found
+    partial = image_partial(mime_for(ext), raw)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    tmp.write_text(partial)
+    tmp.replace(target)
+    print(f"Echtes Android-App-Logo aus Enigma-Asset installiert: {source}")
     raise SystemExit(0)
 
 # Fallback: source-lite archive. This may not contain binary premium assets,
@@ -182,4 +249,6 @@ PY
 chown epimediahub:epimediahub "$TARGET"
 chmod 644 "$TARGET"
 
-echo "Dashboard-Logo wurde aus der installierten Android-App übernommen."
+systemctl restart epimediahub-provisioning.service
+systemctl is-active --quiet epimediahub-provisioning.service
+echo "Dashboard-Logo wurde aus dem echten EpiMediaHub-App-Asset übernommen und der Dienst neu gestartet."
