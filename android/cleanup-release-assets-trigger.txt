@@ -1,0 +1,1 @@
+cleanup old Android test release assets after successful 0.8.9
