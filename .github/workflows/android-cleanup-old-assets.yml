@@ -1,0 +1,40 @@
+name: Cleanup old Android test release assets
+
+on:
+  push:
+    branches: [android-v0.7.0-ui]
+    paths:
+      - 'android/cleanup-release-assets-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep only Android 0.8.6 through 0.8.9 APK assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v0.7.0-test"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | [.id,.name] | @tsv' |
+          while IFS=$'\t' read -r id name; do
+            if [[ "$name" =~ ^EpiMediaHub_Android_v([0-9]+\.[0-9]+\.[0-9]+)-test-(arm64-v8a|armeabi-v7a|universal)\.apk$ ]]; then
+              version="${BASH_REMATCH[1]}"
+              case "$version" in
+                0.8.6|0.8.7|0.8.8|0.8.9)
+                  echo "KEEP $name"
+                  ;;
+                *)
+                  echo "DELETE $name"
+                  gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
+                  ;;
+              esac
+            else
+              echo "KEEP non-versioned/current metadata asset: $name"
+            fi
+          done
