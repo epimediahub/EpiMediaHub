@@ -221,7 +221,7 @@ jobs:
           cat > dist/android-latest.json <<EOF
           {
             "version": "0.8.6",
-            "versionCode": 804,
+            "versionCode": 806,
             "notes": "Android 0.8.6 erkennt nicht unterstützte Tonspuren automatisch und bietet für stumme Live-Sender den Schalter Audio-Kompatibilität. Bildwiedergabe über Media3 bleibt Standard.",
             "apks": {
               "arm64-v8a": {
