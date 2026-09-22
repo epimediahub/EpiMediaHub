@@ -64,9 +64,9 @@ internal fun V088VlcVideo(
             reportError.value("")
             runCatching {
                 check(url.isNotBlank()) { "Leere Stream-Adresse" }
-                // Decode audio to PCM instead of relying on HDMI passthrough.
-                player.setAudioOutput("android_audiotrack")
-                player.setAudioDigitalOutputEnabled(false)
+                // Keep LibVLC's device-selected audio output. It specifically uses
+                // OpenSL ES on Fire OS to avoid AudioTrack playback-clock issues.
+                // Digital output is disabled by default in this MediaPlayer.
                 val media = Media(libVlc, Uri.parse(url))
                 try {
                     media.addOption(":network-caching=1800")
