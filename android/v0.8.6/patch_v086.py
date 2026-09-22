@@ -93,13 +93,13 @@ change(path, '''                    Surface(color = accent.copy(alpha = .18f), s
                         Text(
                             "LIVE",''')
 
-# TV remotes can reach the compatibility decoder directly with the 0 key.
+# Fire TV remotes can reach the compatibility decoder via their menu key.
 # This also works when the on-screen controls have already faded away.
 change(path, '''                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                         controls = !controls
                         true
                     }
-                    else -> false''', '''                    KeyEvent.KEYCODE_0, KeyEvent.KEYCODE_NUMPAD_0 -> {
+                    else -> false''', '''                    KeyEvent.KEYCODE_MENU -> {
                         onSwitchPlayer()
                         true
                     }
@@ -109,8 +109,7 @@ change(path, '''                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCO
                     }
                     else -> false''')
 change(path, '''                    KeyEvent.KEYCODE_MENU -> { controls = true; true }
-                    KeyEvent.KEYCODE_DPAD_CENTER,''', '''                    KeyEvent.KEYCODE_MENU -> { controls = true; true }
-                    KeyEvent.KEYCODE_0, KeyEvent.KEYCODE_NUMPAD_0 -> {
+                    KeyEvent.KEYCODE_DPAD_CENTER,''', '''                    KeyEvent.KEYCODE_MENU -> {
                         manualPlayerChoice = true
                         useVlc = true
                         true
