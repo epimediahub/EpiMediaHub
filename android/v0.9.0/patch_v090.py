@@ -37,7 +37,7 @@ change(gradle, 'versionName = "0.8.9"', 'versionName = "0.9.0"', 'versionName')
 g = gradle.read_text()
 for artifact in ("media3-exoplayer", "media3-exoplayer-hls", "media3-ui"):
     old = f'implementation("androidx.media3:{artifact}:1.4.1")'
-    new = f'implementation("androidx.media3:{artifact}:1.10.1")'
+    new = f'implementation("androidx.media3:{artifact}:1.9.4")'
     if g.count(old) != 1:
         raise SystemExit(f"Media3 dependency anchor missing: {old}")
     g = g.replace(old, new, 1)
@@ -162,9 +162,9 @@ vm.write_text(s[:start] + search_impl + s[end:])
 checks = [
     (gradle, 'versionCode = 900'),
     (gradle, 'versionName = "0.9.0"'),
-    (gradle, 'androidx.media3:media3-exoplayer:1.10.1'),
-    (gradle, 'androidx.media3:media3-exoplayer-hls:1.10.1'),
-    (gradle, 'androidx.media3:media3-ui:1.10.1'),
+    (gradle, 'androidx.media3:media3-exoplayer:1.9.4'),
+    (gradle, 'androidx.media3:media3-exoplayer-hls:1.9.4'),
+    (gradle, 'androidx.media3:media3-ui:1.9.4'),
     (player, 'mutableStateOf(false)'),
     (player, '.setEnableDecoderFallback(true)'),
     (player, 'tracks.isTypeSupported(C.TRACK_TYPE_AUDIO)'),
