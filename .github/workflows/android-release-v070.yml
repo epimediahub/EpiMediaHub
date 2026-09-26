@@ -205,9 +205,9 @@ jobs:
           grep -Fq 'keepAwakeView.keepScreenOn = true' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'onDispose { keepAwakeView.keepScreenOn = previousKeepScreenOn }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'org.videolan.android:libvlc-all:3.6.5' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'androidx.media3:media3-exoplayer:1.11.1' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'androidx.media3:media3-exoplayer-hls:1.11.1' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'androidx.media3:media3-ui:1.11.1' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'androidx.media3:media3-exoplayer:1.10.1' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'androidx.media3:media3-exoplayer-hls:1.10.1' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'androidx.media3:media3-ui:1.10.1' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'var useVlc by remember(item.resumeKey, item.streamUrl) { mutableStateOf(false) }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           ! grep -Fq 'mutableStateOf(V072UseVlcLiveFallback(item))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'private var searchJob: kotlinx.coroutines.Job? = null' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
@@ -243,7 +243,7 @@ jobs:
           {
             "version": "0.9.0",
             "versionCode": 900,
-            "notes": "Android 0.9.0 priorisiert Exo/Media3 für Live TV, aktualisiert Media3 auf 1.11.1 und verhindert Fire-TV-Freezes durch eine debouncte, lokale Suche mit Abbruch veralteter Suchjobs.",
+            "notes": "Android 0.9.0 priorisiert Exo/Media3 für Live TV, aktualisiert Media3 auf 1.10.1 und verhindert Fire-TV-Freezes durch eine debouncte, lokale Suche mit Abbruch veralteter Suchjobs.",
             "apks": {
               "arm64-v8a": {
                 "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.9.0-test-arm64-v8a.apk",
@@ -294,7 +294,7 @@ jobs:
           set -euo pipefail
           TAG="v0.7.0-test"
           TITLE="EpiMediaHub Android v0.9.0 Test"
-          NOTES="Android 0.9.0: Exo/Media3 ist wieder der primäre Live-TV-Player; VLC startet nicht mehr aufgrund von Sendernamen. Media3 wurde auf 1.11.1 aktualisiert. Die Suche nutzt Debounce, Abbruch veralteter Jobs und den geladenen Katalog, damit Fire TV nicht mehr durch parallele Portalabfragen einfriert."
+          NOTES="Android 0.9.0: Exo/Media3 ist wieder der primäre Live-TV-Player; VLC startet nicht mehr aufgrund von Sendernamen. Media3 wurde auf 1.10.1 aktualisiert. Die Suche nutzt Debounce, Abbruch veralteter Jobs und den geladenen Katalog, damit Fire TV nicht mehr durch parallele Portalabfragen einfriert."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
           else
