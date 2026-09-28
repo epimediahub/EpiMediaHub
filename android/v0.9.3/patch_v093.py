@@ -219,7 +219,7 @@ fun setCategoryVisible(kind: MediaKind, categoryId: String, visible: Boolean) {
 vm.write_text(vs[:favorites_end] + category_methods + vs[favorites_end:])
 
 vs = vm.read_text()
-cat_start, cat_end = function_span(vs, "fun loadCategories(")
+cat_start, cat_end = function_span(vs, "private fun loadCategories(")
 cat_fn = vs[cat_start:cat_end]
 p_anchor = 'val p = _ui.value.active ?: return\n'
 if p_anchor not in cat_fn:
