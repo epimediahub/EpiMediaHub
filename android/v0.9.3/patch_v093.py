@@ -517,12 +517,14 @@ replace_once(
 player = java / "ui/PlayerScreen.kt"
 pl = player.read_text()
 
+player_start, player_end = function_span(pl, "fun PlayerScreen(")
+player_fn = pl[player_start:player_end]
 state_anchor = '''    var controls by remember(item.resumeKey) { mutableStateOf(true) }
     var playbackError by remember(item.resumeKey) { mutableStateOf("") }
 '''
-if state_anchor not in pl:
-    raise SystemExit("player state anchor missing")
-pl = pl.replace(
+if player_fn.count(state_anchor) != 1:
+    raise SystemExit(f"PlayerScreen state anchor count was {player_fn.count(state_anchor)}")
+player_fn = player_fn.replace(
     state_anchor,
     '''    var controls by remember(item.resumeKey) { mutableStateOf(true) }
     var playbackError by remember(item.resumeKey) { mutableStateOf("") }
@@ -531,6 +533,7 @@ pl = pl.replace(
 ''',
     1,
 )
+pl = pl[:player_start] + player_fn + pl[player_end:]
 
 old_autohide = '''    LaunchedEffect(item.resumeKey, controls) {
         if ((item.kind == MediaKind.LIVE || item.kind == MediaKind.EPISODE) && controls) {
