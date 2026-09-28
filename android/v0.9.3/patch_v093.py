@@ -191,14 +191,9 @@ replace_once(
 )
 
 vs = vm.read_text()
-open_favorites = '''fun openKindFavorites(kind: MediaKind) {
-set { it.copy(contentFilterKind = kind) }
-navigate(Screen.Favorites)
-}
-'''
-if open_favorites not in vs:
-    raise SystemExit("openKindFavorites anchor missing")
-category_methods = open_favorites + r'''
+_, favorites_end = function_span(vs, "fun openKindFavorites(")
+category_methods = r'''
+
 fun openCategoryManager(kind: MediaKind) {
     val profileId = _ui.value.active?.id.orEmpty()
     set {
@@ -221,7 +216,7 @@ fun setCategoryVisible(kind: MediaKind, categoryId: String, visible: Boolean) {
     set { it.copy(hiddenCategoryIds = hidden) }
 }
 '''
-vm.write_text(vs.replace(open_favorites, category_methods, 1))
+vm.write_text(vs[:favorites_end] + category_methods + vs[favorites_end:])
 
 vs = vm.read_text()
 load_start = '''private fun loadCategories(kind: MediaKind) {
