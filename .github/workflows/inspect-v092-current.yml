@@ -1,0 +1,57 @@
+name: Inspect Android v0.9.2 current source
+on:
+  push:
+    branches: [android-v0.7.0-ui]
+    paths:
+      - '.github/workflows/inspect-v092-current.yml'
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct base project
+        run: |
+          mkdir -p /tmp/epimediahub-android
+          cat android/source_parts/source_* | base64 -d | tar -xz -C /tmp/epimediahub-android
+          echo "PROJECT_ROOT=/tmp/epimediahub-android" >> "$GITHUB_ENV"
+      - name: Install current source
+        run: bash build_tools/install_android_v092_source.sh
+      - name: Print relevant source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path("/tmp/epimediahub-android/app/src/main/java/de/epimediahub/app")
+          def span(text, sig):
+              start=text.find(sig)
+              if start<0:
+                  print("NOT FOUND",sig); return ""
+              brace=text.find("{",start); depth=0
+              for i in range(brace,len(text)):
+                  if text[i]=="{": depth+=1
+                  elif text[i]=="}":
+                      depth-=1
+                      if depth==0: return text[start:i+1]
+              return text[start:]
+          def around(path, terms, radius=2500):
+              text=path.read_text()
+              print("\n===== FILE",path.name,"=====")
+              for term in terms:
+                  i=text.find(term)
+                  print("\n###",term)
+                  if i<0: print("NOT FOUND")
+                  else: print(text[max(0,i-radius):min(len(text),i+radius)])
+          prefs=root/"data/PrefsRepository.kt"
+          around(prefs,["fun loadContinue","fun clearPlaylistCollections","private fun collectionKey"],4000)
+          vm=root/"MainViewModel.kt"
+          around(vm,["sealed interface Screen","data class UiState","private fun refreshCollections","private fun loadCategories","private fun loadCatalogRows"],5000)
+          screens=root/"ui/Screens.kt"
+          print("\n===== ContinueWatchingScreen =====")
+          print(span(screens.read_text(),"fun ContinueWatchingScreen("))
+          hub=root/"ui/V060CinematicHub.kt"
+          print("\n===== V060CinematicHubScreen =====")
+          print(span(hub.read_text(),"fun V060CinematicHubScreen("))
+          app=root/"EpiMediaHubApp.kt"
+          around(app,["Screen.ContinueWatching","is Screen.Categories"],3000)
+          PY
