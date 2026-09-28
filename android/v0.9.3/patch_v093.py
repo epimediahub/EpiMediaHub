@@ -240,13 +240,14 @@ cat_fn = cat_fn.replace(
 vm.write_text(vs[:cat_start] + cat_fn + vs[cat_end:])
 
 vs = vm.read_text()
-select_reset = '''contentFilterKind = null,
-favorites = emptyList(),'''
-if select_reset not in vs:
-    raise SystemExit("selectPlaylist reset anchor missing")
-vm.write_text(vs.replace(select_reset, '''contentFilterKind = null,
-hiddenCategoryIds = emptySet(),
-favorites = emptyList(),''', 1))
+select_anchor = 'contentFilterKind = null,\n'
+if vs.count(select_anchor) != 1:
+    raise SystemExit(f"selectPlaylist contentFilter reset count was {vs.count(select_anchor)}")
+vm.write_text(vs.replace(
+    select_anchor,
+    select_anchor + 'hiddenCategoryIds = emptySet(),\n',
+    1,
+))
 
 # ---------------------------------------------------------------------------
 # Continue Watching full screen: episode identity + remaining minutes.
