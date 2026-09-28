@@ -225,7 +225,7 @@ jobs:
           grep -Fq 'categoryId = firstNonBlank(seriesInfo.optString("name"), seriesInfo.optString("title"))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           grep -Fq 'val ordered = episodeList.sortedWith(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'delay(if (item.kind == MediaKind.LIVE) 4500 else 3500)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'useController = item.kind != MediaKind.LIVE && !(isTv && item.kind == MediaKind.EPISODE)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'useController = item.kind != MediaKind.LIVE && !isTv' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'KeyEvent.KEYCODE_DPAD_LEFT -> if (item.kind == MediaKind.LIVE) switchLiveBy(-1) else { seekBy(-10_000L); true }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'val seriesTitle = item.categoryId.ifBlank { "Serie" }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'val needsCompatibilityPlayer = hasVideo || !hasAudio || !player.isPlaying' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
