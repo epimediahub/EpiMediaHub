@@ -57,6 +57,13 @@ jobs:
           hub=root/"ui/V060CinematicHub.kt"
           print("\n===== V060CinematicHubScreen =====")
           print(span(hub.read_text(),"fun V060CinematicHubScreen("))
+          print("\n===== V060PosterRow =====")
+          print(span(hub.read_text(),"private fun V060PosterRow("))
+          print("\n===== V060Poster =====")
+          print(span(hub.read_text(),"private fun V060Poster("))
+          live=root/"ui/V076LiveTv.kt"
+          print("\n===== V076LiveTvScreen =====")
+          print(span(live.read_text(),"fun V076LiveTvScreen("))
           app=root/"EpiMediaHubApp.kt"
           around(app,["Screen.ContinueWatching","is Screen.Categories"],3000)
           PY
