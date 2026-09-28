@@ -49,6 +49,11 @@ jobs:
           screens=root/"ui/Screens.kt"
           print("\n===== ContinueWatchingScreen =====")
           print(span(screens.read_text(),"fun ContinueWatchingScreen("))
+          models=root/"model/Models.kt"
+          around(models,["data class ContinueItem","data class MediaEntry"],3000)
+          player=root/"ui/PlayerScreen.kt"
+          print("\n===== PlayerScreen =====")
+          print(span(player.read_text(),"fun PlayerScreen("))
           hub=root/"ui/V060CinematicHub.kt"
           print("\n===== V060CinematicHubScreen =====")
           print(span(hub.read_text(),"fun V060CinematicHubScreen("))
