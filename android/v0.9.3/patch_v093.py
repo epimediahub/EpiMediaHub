@@ -219,36 +219,25 @@ fun setCategoryVisible(kind: MediaKind, categoryId: String, visible: Boolean) {
 vm.write_text(vs[:favorites_end] + category_methods + vs[favorites_end:])
 
 vs = vm.read_text()
-load_start = '''private fun loadCategories(kind: MediaKind) {
-val p = _ui.value.active ?: return
-set {
-it.copy(
-loading = true,
-categories = emptyList(),
-catalogRows = emptyMap(),
-catalogRowsLoading = kind == MediaKind.MOVIE || kind == MediaKind.SERIES || kind == MediaKind.LIVE,
-error = ""
-)
-}'''
-if load_start not in vs:
-    raise SystemExit("loadCategories start anchor missing")
-vm.write_text(vs.replace(
-    load_start,
-    '''private fun loadCategories(kind: MediaKind) {
-val p = _ui.value.active ?: return
-val hiddenForKind = prefs.loadHiddenCategories(p.id, kind)
-set {
-it.copy(
-loading = true,
-categories = emptyList(),
-catalogRows = emptyMap(),
-catalogRowsLoading = kind == MediaKind.MOVIE || kind == MediaKind.SERIES || kind == MediaKind.LIVE,
-hiddenCategoryIds = hiddenForKind,
-error = ""
-)
-}''',
+cat_start, cat_end = function_span(vs, "fun loadCategories(")
+cat_fn = vs[cat_start:cat_end]
+p_anchor = 'val p = _ui.value.active ?: return\n'
+if p_anchor not in cat_fn:
+    raise SystemExit("loadCategories profile anchor missing")
+cat_fn = cat_fn.replace(
+    p_anchor,
+    p_anchor + 'val hiddenForKind = prefs.loadHiddenCategories(p.id, kind)\n',
     1,
-))
+)
+loading_anchor = 'catalogRowsLoading = kind == MediaKind.MOVIE || kind == MediaKind.SERIES || kind == MediaKind.LIVE,\n'
+if loading_anchor not in cat_fn:
+    raise SystemExit("loadCategories loading anchor missing")
+cat_fn = cat_fn.replace(
+    loading_anchor,
+    loading_anchor + 'hiddenCategoryIds = hiddenForKind,\n',
+    1,
+)
+vm.write_text(vs[:cat_start] + cat_fn + vs[cat_end:])
 
 vs = vm.read_text()
 select_reset = '''contentFilterKind = null,
