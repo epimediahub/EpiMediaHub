@@ -108,12 +108,10 @@ replace_once(
     'PlayerView Live controller disable',
 )
 
-# Keep the useful remote hint for VOD/episodes only. It must not appear over Live TV.
-replace_once(
-    '        if (isTv && controls) {\n',
-    '        if (isTv && controls && item.kind != MediaKind.LIVE) {\n',
-    'TV help overlay Live exclusion',
-)
+# Keep the useful remote hint for VOD/episodes only when that legacy overlay exists.
+legacy_tv_help = '        if (isTv && controls) {\n'
+if legacy_tv_help in s:
+    s = s.replace(legacy_tv_help, '        if (isTv && controls && item.kind != MediaKind.LIVE) {\n', 1)
 
 # Dedicated station banner: channel logo, channel name and current EPG programme.
 anchor = '        if (isEpisode && controls) {\n'
@@ -185,7 +183,6 @@ final = path.read_text()
 assert 'useController = item.kind != MediaKind.LIVE' in final
 assert 'if (item.kind == MediaKind.LIVE) hideController()' in final
 assert 'if (item.kind == MediaKind.LIVE && controls)' in final
-assert 'if (isTv && controls && item.kind != MediaKind.LIVE)' in final
 assert 'nowProgramme' in final
 assert 'item.sourceProfileId' in final
 assert 'KEYCODE_ENTER -> { controls = !controls; item.kind == MediaKind.LIVE }' in final
