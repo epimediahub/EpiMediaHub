@@ -72,6 +72,14 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Inspect Mediathek generated source
+        shell: bash
+        run: |
+          echo '===== PARITY ====='
+          sed -n '1,520p' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
+          echo '===== CLIENT ====='
+          sed -n '1,420p' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/MediathekClient.kt"
+
       - name: Build v1.0.0 debug APKs
         shell: bash
         run: |
