@@ -100,6 +100,19 @@ if anchor not in text:
 text = text.replace(anchor, helper + anchor, 1)
 core.write_text(text)
 
+# Hidden movie/series categories must also be excluded from the synthetic
+# recently-added feed. The same filtered list drives both the Hero rotation
+# and the "Zuletzt hinzugefügt" row.
+hub = java / "ui/V060CinematicHub.kt"
+hub_text = hub.read_text()
+old_newest = '    val newest = u.catalogRows["__recently_added__"].orEmpty().sortedByDescending { it.addedAt }'
+new_newest = '''    val newest = u.catalogRows["__recently_added__"].orEmpty()
+        .filter { it.categoryId !in u.hiddenCategoryIds }
+        .sortedByDescending { it.addedAt }'''
+if old_newest not in hub_text:
+    raise SystemExit("recently-added hidden-category anchor missing")
+hub.write_text(hub_text.replace(old_newest, new_newest, 1))
+
 checks = [
     (gradle, "versionCode = 1002"),
     (gradle, 'versionName = "1.0.2"'),
@@ -107,6 +120,7 @@ checks = [
     (proguard, "-keep class com.liskovsoft.** { *; }"),
     (core, "delay(500)"),
     (core, "SmartTube-Core: "),
+    (hub, ".filter { it.categoryId !in u.hiddenCategoryIds }"),
 ]
 for path, marker in checks:
     if marker not in path.read_text():
