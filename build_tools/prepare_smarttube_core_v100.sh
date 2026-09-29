@@ -128,6 +128,23 @@ text = text.replace("    stfdroidImplementation 'com.eclipsesource.j2v8:j2v8:' +
                     "    implementation project(':j2v8')\n")
 yt.write_text(text)
 
+# Host dependency resolution uses modern OkHttp. Update the one Kotlin helper
+# that still calls the removed static HttpUrl.parse API.
+doh = shared / "sharedutils/src/main/java/com/liskovsoft/sharedutils/okhttp/DohProviders.kt"
+value = doh.read_text()
+if "HttpUrl.parse(s)" in value:
+    value = value.replace(
+        "import okhttp3.HttpUrl\n",
+        "import okhttp3.HttpUrl\nimport okhttp3.HttpUrl.Companion.toHttpUrlOrNull\n",
+        1,
+    )
+    value = value.replace(
+        'return HttpUrl.parse(s) ?: throw NullPointerException("unable to parse url")',
+        'return s.toHttpUrlOrNull() ?: throw NullPointerException("unable to parse url")',
+        1,
+    )
+    doh.write_text(value)
+
 # The core is hosted by EpiMediaHub, so it must not make USB host capability a
 # device-install requirement and must inherit the host's SDK declaration.
 manifest = media / "youtubeapi/src/main/AndroidManifest.xml"
