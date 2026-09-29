@@ -254,7 +254,14 @@ dep = "dependencies {\n"
 if dep not in ap:
     raise SystemExit("host dependencies block missing")
 if 'implementation(project(":youtubeapi"))' not in ap:
-    ap = ap.replace(dep, dep + '    implementation(project(":youtubeapi"))\n', 1)
+    ap = ap.replace(
+        dep,
+        dep
+        + '    implementation(project(":youtubeapi"))\n'
+        + '    implementation(project(":mediaserviceinterfaces"))\n'
+        + '    implementation(project(":sharedutils"))\n',
+        1,
+    )
 app.write_text(ap)
 
 # Preserve upstream attribution inside the APK.
