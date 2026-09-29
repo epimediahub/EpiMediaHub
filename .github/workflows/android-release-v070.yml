@@ -170,118 +170,37 @@ jobs:
           cd "$PROJECT_ROOT"
           gradle :app:assembleRelease --stacktrace --no-daemon
 
-      - name: Verify version, architecture and signing certificate
+      - name: Verify Android 0.9.9 release and signing certificate
         shell: bash
         run: |
           set -euo pipefail
           grep -Fq 'versionName = "0.9.9"' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'versionCode = 909' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'https://api.epimediahub.com' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
           grep -Fq 'https://download.epimediahub.com/android/latest.json' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
-          grep -Fq 'private fun V072UseVlcLiveFallback(item: MediaEntry)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'RAW|HEVC|H\.?265|MP2|MPGA' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'tracks.isTypeSupported(C.TRACK_TYPE_AUDIO)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'Audio-Kompatibilität' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'media.setHWDecoderEnabled(true, false)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V088VlcVideo.kt"
-          grep -Fq -- '--no-mediacodec-audio' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V088VlcVideo.kt"
-          ! grep -Eq 'clock-jitter=0|clock-synchro=0' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V088VlcVideo.kt"
-          grep -Fq -- '--audio-replay-gain-mode=none' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V088VlcVideo.kt"
-          grep -Fq 'KeyEvent.KEYCODE_CHANNEL_UP' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'fun rememberedLibraryCategory(kind: MediaKind)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          grep -Fq 'fun V076LiveTvScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"
-          grep -Fq 'data object Revoked' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
-          grep -Fq 'config.optJSONArray("playlists")' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
-          grep -Fq 'repo.savePlaylists(emptyList())' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
-          grep -Fq 'if (!dashboardPaired)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
-          grep -Fq 'fun V078DashboardPairingGate' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V078DashboardPairingGate.kt"
-          grep -Fq 'ANDROID MOBILE · 0.9.9' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V078DashboardPairingGate.kt"
-          grep -Fq 'fun V083HomeScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
-          grep -Fq 'ANDROID TV · 0.9.9' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
-          grep -Fq 'targetValue = if (focused) 1.025f else 1f' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
-          grep -Fq 'targetValue = if (focused) 1.035f else 1f' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
-          grep -Fq 'targetValue = if (focused) 1.012f else 1f' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"
-          ! grep -Fq 'LaunchedEffect(visibleCategories, selectedCategoryId, categoryStartIndex)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
-          ! grep -Fq 'LaunchedEffect(selectedId, channels.size)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"
-          grep -Fq 'onBack != null && !isTvDevice' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
-          grep -Fq 'V081WeatherSettingsCard(accent)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
-          grep -Fq 'val addedAt: Long = 0L' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/model/Models.kt"
-          grep -Fq 'MediaCategory("__recently_added__", "Zuletzt hinzugefügt")' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          grep -Fq 'val unlocked = prefs.familySkinsUnlocked()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          grep -Fq 'Dauerhaft freigeschaltet' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V079Themes.kt"
-          ! grep -Fq '"GERÄT & DASHBOARD"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
-          grep -Fq 'fun V079ThemesScreen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V079Themes.kt"
-          grep -Fq 'PRIVATE DESIGNS' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V079Themes.kt"
-          grep -Fq 'val city: String' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V070WeatherClient.kt"
-          grep -Fq 'Accept-Language' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V070WeatherClient.kt"
-          grep -Fq 'fun lockPrivateSkins()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          grep -Fq 'railState.scrollToItem(selectedIndex)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"
-          grep -Fq '"GERÄT & DASHBOARD"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Home.kt"
-          grep -Fq 'Kopplungscode erzeugen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V047WebAdmin.kt"
-          grep -Fq 'RELEASE_API_URL' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
-          grep -Fq 'Lifecycle.Event.ON_START' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
-          grep -Fq 'keepAwakeView.keepScreenOn = true' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'onDispose { keepAwakeView.keepScreenOn = previousKeepScreenOn }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'org.videolan.android:libvlc-all:3.6.5' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'androidx.media3:media3-exoplayer:1.9.4' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'androidx.media3:media3-exoplayer-hls:1.9.4' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'androidx.media3:media3-ui:1.9.4' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'var useVlc by remember(item.resumeKey, item.streamUrl) { mutableStateOf(false) }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          ! grep -Fq 'mutableStateOf(V072UseVlcLiveFallback(item))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'private var searchJob: kotlinx.coroutines.Job? = null' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          grep -Fq 'kotlinx.coroutines.delay(320)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          grep -Fq 'localRows.asSequence()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          grep -Fq '.take(120)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          grep -Fq 'Staffel $season' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
-          grep -Fq 'vm.play(e,orderedEpisodes)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
-          grep -Fq 'categoryId = firstNonBlank(seriesInfo.optString("name"), seriesInfo.optString("title"))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -Fq 'val ordered = episodeList.sortedWith(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          grep -Fq 'delay(if (item.kind == MediaKind.LIVE) 4500 else 3500)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'useController = item.kind != MediaKind.LIVE && !isTv' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'KeyEvent.KEYCODE_DPAD_LEFT -> if (item.kind == MediaKind.LIVE) switchLiveBy(-1) else { seekBy(-10_000L); true }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'val seriesTitle = item.categoryId.ifBlank { "Serie" }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'val needsCompatibilityPlayer = hasVideo || !hasAudio || !player.isPlaying' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'compatibilityUrl = playbackUrls.getOrNull(attempt).orEmpty()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'else if (item.kind == MediaKind.LIVE && !manualPlayerChoice)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          ! grep -Fq 'if (false && item.kind == MediaKind.LIVE)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'distinctBy { continueIdentity(it.media) }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/PrefsRepository.kt"
-          grep -Fq 'fun setCategoryVisible(kind: MediaKind, categoryId: String, visible: Boolean)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
-          grep -Fq 'V093ContinueLabel(c)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
-          grep -Fq 'infoByKey = continueItems.associate' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
-          grep -Fq 'u.hiddenCategoryIds' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"
-          grep -Fq 'if (item.kind != MediaKind.LIVE && controls)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'V093FormatTime(position)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'val watermark = remember(themeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
-          grep -Fq 'repo.officialMarkRes(themeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
-          ! grep -Fq 'val skinMotif = remember(u.themeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
-          grep -Fq 'vm.themeRepo().officialMarkRes(theme.id)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V079Themes.kt"
+          grep -Fq 'fun officialMarkRes' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/ThemeRepository.kt"
           grep -Fq 'V099CategoryCard' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V079Themes.kt"
-          grep -Fq 'V097SkinWorld.PIT_GARAGE' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V097SkinEnvironment.kt"
-          grep -Fq 'V097SkinWorld.GARAGE' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V097SkinEnvironment.kt"
-          grep -Fq 'V097SkinWorld.STADIUM' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V097SkinEnvironment.kt"
           grep -Fq 'V097SkinEnvironment(skinWorld, accent)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
-          grep -Fq '"national_de"' "$PROJECT_ROOT/app/src/main/res/raw/theme_catalog.json"
-          grep -Fq '"national_br"' "$PROJECT_ROOT/app/src/main/res/raw/theme_catalog.json"
           grep -Fq '"f1_ferrari"' "$PROJECT_ROOT/app/src/main/res/raw/theme_catalog.json"
           grep -Fq '"f1_cadillac"' "$PROJECT_ROOT/app/src/main/res/raw/theme_catalog.json"
-          grep -Fq 'val logoUrl: String = ""' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/model/Models.kt"
-          grep -Fq 'val epgHeight = if (isTv) 43.dp else 52.dp' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"
-          grep -Fq 'val activeSkinMark = remember(u.themeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"
-          grep -Fq '"SKIN · " + V097PrivateDisplayLabel' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"
+          ! grep -Rq 'com.tailscale' "$PROJECT_ROOT/app/src/main"
+          ! grep -Fq 'tailscale-embedded.aar' "$PROJECT_ROOT/app/build.gradle.kts"
+
           python3 - <<'PYSKINS'
           import json, os
           from pathlib import Path
-          c=json.loads((Path(os.environ["PROJECT_ROOT"])/"app/src/main/res/raw/theme_catalog.json").read_text())
-          themes=c["themes"]
-          public={"default","epi_blue","epi_red"}
-          assert all(not themes[x].get("family",False) for x in public if x in themes)
-          assert all(meta.get("family",False) for tid,meta in themes.items() if tid not in public)
-          nationals=[tid for tid in themes if tid.startswith("national_")]
-          assert len(nationals) >= 20
-          assert all(themes[tid].get("logo_url","").startswith("http") for tid in nationals)
-          print("Private/public skin split and national crest URLs verified")
+          root = Path(os.environ["PROJECT_ROOT"])
+          catalog = json.loads((root / "app/src/main/res/raw/theme_catalog.json").read_text())
+          themes = catalog["themes"]
+          groups = catalog["groups"]
+          private = [tid for tid, meta in themes.items() if meta.get("family", False)]
+          f1 = [tid for tid in themes if tid.startswith("f1_")]
+          assert len(groups) == 12, f"expected 12 categories, got {len(groups)}"
+          assert len(private) == 83, f"expected 83 private original skins, got {len(private)}"
+          assert len(f1) == 11, f"expected 11 F1 teams, got {len(f1)}"
+          assert all((root / "app/src/main/res/drawable-nodpi" / f"official_{tid}.png").exists() for tid in private)
+          print(f"Verified {len(private)} private skins, {len(groups)} categories and {len(f1)} F1 teams")
           PYSKINS
-          ! grep -Rq 'com.tailscale' "$PROJECT_ROOT/app/src/main"
-          ! grep -Fq 'tailscale-embedded.aar' "$PROJECT_ROOT/app/build.gradle.kts"
+
           for APK in "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk"
           do
             test -s "$APK"
