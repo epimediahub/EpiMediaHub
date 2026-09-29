@@ -128,6 +128,12 @@ root_gradle.write_text(rg)
 
 settings = root / "settings.gradle.kts"
 st = settings.read_text()
+if 'https://jitpack.io' not in st:
+    st = st.replace(
+        'repositories { google(); mavenCentral() }',
+        'repositories { google(); mavenCentral(); maven { url = uri("https://jitpack.io") } }',
+        1,
+    )
 marker = 'include(":app")'
 if marker not in st:
     raise SystemExit("host settings :app anchor missing")
