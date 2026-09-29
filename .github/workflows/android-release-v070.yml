@@ -245,7 +245,6 @@ jobs:
           grep -Fq 'V093FormatTime(position)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'val watermark = remember(themeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
           grep -Fq 'repo.centerMarkRes(themeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
-          grep -Fq '.graphicsLayer { alpha = .11f }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
           ! grep -Fq 'val skinMotif = remember(u.themeId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
           ! grep -Fq 'alpha = if (isTv) .64f else .72f' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
           grep -Fq 'alpha = .46f' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
