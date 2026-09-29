@@ -26,6 +26,23 @@ for relative in ("ui/Screens.kt", "ui/V078DashboardPairingGate.kt", "ui/V083Home
 shutil.copyfile(here / "V104SmartTubeCore.kt", java / "ui/V104SmartTubeCore.kt")
 shutil.copyfile(here / "V104SmartTubeShell.kt", java / "ui/V104SmartTubeShell.kt")
 
+# SmartTube's RxJava API is exposed through SignInService, but youtubeapi
+# declares RxJava as an implementation dependency. Add it explicitly to the
+# host so the EpiMediaHub account UI can compile against Observable/Disposable.
+g = gradle.read_text()
+dep_anchor = "dependencies {\n"
+if 'implementation("io.reactivex.rxjava2:rxjava:2.2.21")' not in g:
+    if dep_anchor not in g:
+        raise SystemExit("app dependencies anchor missing")
+    g = g.replace(
+        dep_anchor,
+        dep_anchor
+        + '    implementation("io.reactivex.rxjava2:rxjava:2.2.21")\\n'
+        + '    implementation("io.reactivex.rxjava2:rxandroid:2.1.1")\\n',
+        1,
+    )
+    gradle.write_text(g)
+
 home = java / "ui/V083Home.kt"
 replace_once(
     home,
