@@ -76,6 +76,8 @@ for path in (
     text = text.replace("    testImplementation project(':youtubeapi')\n", "")
     text = text.replace("    androidTestImplementation project(':youtubeapi')\n", "")
     text = text.replace("    testImplementation project(':sharedtests')\n", "")
+    text = text.replace("    androidTestImplementation project(':sharedtests')\n", "")
+    text = text.replace("    androidTestImplementation project(path: ':sharedtests')\n", "")
     path.write_text(text)
 
 yt = media / "youtubeapi/build.gradle"
