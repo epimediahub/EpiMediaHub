@@ -307,7 +307,7 @@ if provider_title not in ps:
     raise SystemExit("Mediathek provider title anchor missing")
 ps = ps.replace(
     provider_title,
-    '''V100BroadcasterLogo(provider.label, accent, isTv)
+    '''V100BroadcasterLogo(provider.label, accent)
             Text(provider.label, color = Color.White, fontWeight = FontWeight.Black, fontSize = 19.sp)''',
     1,
 )
@@ -326,7 +326,7 @@ checks = [
     (java / "ui/V100SmartTubeShell.kt", 'fun V100SmartTubeShell'),
     (java / "ui/V100SmartTubeCore.kt", "internal object V100SmartTubeCore"),
     (java / "ui/V100MediathekBranding.kt", "fun V100BroadcasterLogo"),
-    (java / "ui/ParityScreens.kt", "V100BroadcasterLogo(provider.label, accent, isTv)"),
+    (java / "ui/ParityScreens.kt", "V100BroadcasterLogo(provider.label, accent)"),
 ]
 for path, marker in checks:
     if marker not in path.read_text():
