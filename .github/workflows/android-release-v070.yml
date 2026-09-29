@@ -1,4 +1,4 @@
-name: Build signed EpiMediaHub Android v0.9.9 test
+name: Build signed EpiMediaHub Android v0.9.9 release
 
 on:
   workflow_dispatch:
@@ -369,13 +369,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="v0.9.9"
+          TAG="v0.7.0-test"
           TITLE="EpiMediaHub Android v0.9.9"
           NOTES="Android 0.9.9: Private Original-Skins sind jetzt sauber nach Liga/Kategorie organisiert. Jede Kategorie nutzt einen festen neutralen Hintergrund; Teams und Marken wechseln nur über Originalwappen bzw. Original-Teamlogos und dezente Menüakzente. Formel 1 enthält die Original-Teamlogos einschließlich Audi und Cadillac. Der Katalog enthält 83 Original-Skins in 12 Kategorien."
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
           else
-            gh release create "$TAG" --title "$TITLE" --notes "$NOTES" --target "${GITHUB_SHA}"
+            gh release create "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease --target "${GITHUB_SHA}"
           fi
           # Publish metadata only after all APKs are downloadable by the Pi sync.
           for file in dist/*.apk dist/SHA256SUMS.txt; do
