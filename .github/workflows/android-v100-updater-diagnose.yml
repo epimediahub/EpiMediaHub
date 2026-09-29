@@ -45,3 +45,11 @@ jobs:
             "$APKSIGNER" verify --verbose "$FILE"
             "$AAPT" dump badging "$FILE" | head -n 12
           done
+      - name: Compare previous v0.9.9 minimum Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          curl -fL --retry 3 --connect-timeout 15 "https://github.com/epimediahub/EpiMediaHub/releases/download/v0.7.0-test/EpiMediaHub_Android_v0.9.9-armeabi-v7a.apk" -o old.apk
+          echo "=== v0.9.9 armeabi-v7a ==="
+          "$AAPT" dump badging old.apk | grep -E "package:|sdkVersion|targetSdkVersion|native-code"
