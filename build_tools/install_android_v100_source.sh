@@ -3,6 +3,7 @@ set -euo pipefail
 : "${PROJECT_ROOT:?PROJECT_ROOT must point at the reconstructed Android project}"
 
 bash build_tools/install_android_v099_source.sh
+bash build_tools/prepare_smarttube_core_v100.sh
 python3 android/v1.0.0/patch_v100.py
 
 grep -Fq 'versionCode = 1000' "$PROJECT_ROOT/app/build.gradle.kts"
