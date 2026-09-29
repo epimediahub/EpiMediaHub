@@ -68,6 +68,16 @@ value = value[:start] + '''            V097SkinEnvironment(skinWorld, accent)
 
             // Same photograph for every skin in the category. Only the
             // transparent, centred original crest and menu accents change.
+            if (skinWorld == V097SkinWorld.GARAGE && watermark != 0) {
+                // Dark factory marks need neutral showroom light behind them.
+                Box(
+                    Modifier.align(Alignment.Center)
+                        .fillMaxHeight(.64f).fillMaxWidth(.48f)
+                        .background(Brush.radialGradient(
+                            listOf(Color.White.copy(.42f), Color.White.copy(.12f), Color.Transparent)
+                        ))
+                )
+            }
             if (watermark != 0) {
                 Image(
                     painter = painterResource(watermark),

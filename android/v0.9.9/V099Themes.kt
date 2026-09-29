@@ -246,6 +246,11 @@ private fun V099ThemePreview(vm: MainViewModel, theme: ThemeInfo, active: Boolea
         V097SkinEnvironment(world, accent)
         Box(Modifier.fillMaxSize().background(
             Brush.horizontalGradient(listOf(Color(0xD700050A), Color(0x6100050A), Color(0x4400050A)))))
+        if (world == V097SkinWorld.GARAGE) {
+            Box(Modifier.align(Alignment.Center).fillMaxHeight(.98f).fillMaxWidth(.50f)
+                .background(Brush.radialGradient(
+                    listOf(Color.White.copy(.44f), Color.White.copy(.12f), Color.Transparent))))
+        }
         Image(
             painterResource(logoRes), contentDescription = theme.label,
             modifier = Modifier.align(Alignment.Center)
