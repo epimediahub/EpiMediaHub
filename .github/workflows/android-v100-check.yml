@@ -98,7 +98,7 @@ jobs:
           test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeShell.kt"
           grep -Fq 'internal object V100SmartTubeCore' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeCore.kt"
           grep -Fq 'YouTubeServiceManager.instance()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeCore.kt"
-          grep -Fq 'V100BroadcasterLogo(provider.label, accent, isTv)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
+          grep -Fq 'V100BroadcasterLogo(provider.label, accent)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
           grep -Fq 'project(":youtubeapi")' "$PROJECT_ROOT/settings.gradle.kts"
           test -f "$PROJECT_ROOT/app/src/main/assets/licenses/SmartTube-MIT.txt"
           ! grep -Rq 'com.tailscale' "$PROJECT_ROOT/app/src/main"
