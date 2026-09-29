@@ -90,3 +90,62 @@ jobs:
           path: ${{ env.PROJECT_ROOT }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Configure permanent signing for update test
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          KEYSTORE="$RUNNER_TEMP/epimediahub-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias epimediahub >/dev/null
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p = Path(os.environ['PROJECT_ROOT']) / 'app/build.gradle.kts'
+          s = p.read_text()
+          anchor = '    buildTypes {\n'
+          signing = '''    signingConfigs {
+              create("release") {
+                  storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))
+                  storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                  keyAlias = "epimediahub"
+                  keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+              }
+          }
+
+          '''
+          if anchor not in s:
+              raise SystemExit('buildTypes anchor missing')
+          s = s.replace(anchor, signing + anchor, 1)
+          release = '        release {\n'
+          if release not in s:
+              raise SystemExit('release build type missing')
+          s = s.replace(release, release + '            signingConfig = signingConfigs.getByName("release")\n', 1)
+          p.write_text(s)
+          PY
+
+      - name: Build signed update APKs
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          cd "$PROJECT_ROOT"
+          gradle :app:assembleRelease --stacktrace --no-daemon
+
+      - name: Upload signed update APKs
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-Android-v0.9.9-private-skins-signed
+          path: ${{ env.PROJECT_ROOT }}/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
