@@ -82,6 +82,10 @@ for path in (
 
 yt = media / "youtubeapi/build.gradle"
 text = yt.read_text()
+text = text.replace(
+    "implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:' + kotlinVersion",
+    "implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:' + kotlinxVersion"
+)
 start = text.find('    flavorDimensions "default"')
 if start < 0:
     raise SystemExit("youtubeapi flavorDimensions anchor missing")
