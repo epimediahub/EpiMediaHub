@@ -257,7 +257,7 @@ jobs:
           ! grep -Fq 'alpha = if (isTv) .64f else .72f' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
           grep -Fq 'alpha = .46f' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
           grep -Fq 'Color(0x7604080D)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
-          grep -Fq '.graphicsLayer { alpha = .30f }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
+          grep -Fq '.graphicsLayer { alpha = .34f }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
           grep -Fq 'scaleX = 1.85f' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
           grep -Fq 'transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, .5f)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
           grep -Fq 'vm.themeRepo().centerMarkRes(theme.id)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V079Themes.kt"
