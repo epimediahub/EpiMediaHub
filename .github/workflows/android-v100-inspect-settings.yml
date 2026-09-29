@@ -11,7 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct and install v1 source
+
+      - name: Reconstruct project
         shell: bash
         run: |
           set -euo pipefail
@@ -20,7 +21,12 @@ jobs:
           base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
           tar -xzf .ci-android/source.tar.gz -C .ci-android
           PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
-          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"\n          export PROJECT_ROOT
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+
+      - name: Pin Gradle toolchain
+        shell: bash
+        run: |
           cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
           plugins {
               id("com.android.application") version "8.5.2" apply false
@@ -30,18 +36,21 @@ jobs:
           EOF
           cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral(); maven("https://jitpack.io") } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
           rootProject.name = "EpiMediaHubAndroid"
           include(":app")
           EOF
-          bash build_tools/install_android_v100_source.sh
+
+      - name: Install v1.0.0 source
+        run: bash build_tools/install_android_v100_source.sh
+
       - name: Show settings and category management anchors
         shell: bash
         run: |
           set +e
           echo "=== CATEGORY MANAGEMENT MATCHES ==="
-          grep -RniE 'Kategorien verwalten|Kategorie.*verwalten|categor.*manage|manage.*categor|hiddenCategor|categoryVisibility|visibleCategor' "$PROJECT_ROOT/app/src/main/java" | head -n 250
+          grep -RniE 'Kategorien verwalten|Kategorie.*verwalten|categor.*manage|manage.*categor|hiddenCategor|categoryVisibility|visibleCategor' "$PROJECT_ROOT/app/src/main/java" | head -n 300
           echo "=== SETTINGS SCREEN MATCHES ==="
-          grep -RniE 'fun .*Settings|Screen.Settings|EINSTELLUNGEN|Einstellungen' "$PROJECT_ROOT/app/src/main/java" | head -n 250
+          grep -RniE 'fun .*Settings|Screen.Settings|EINSTELLUNGEN|Einstellungen' "$PROJECT_ROOT/app/src/main/java" | head -n 300
           echo "=== SCREEN DEFINITIONS ==="
-          grep -RniE 'sealed .*Screen|object .*Settings|data object .*Settings|Category' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app" | head -n 300
+          grep -RniE 'sealed .*Screen|object .*Settings|data object .*Settings|Category' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app" | head -n 350
