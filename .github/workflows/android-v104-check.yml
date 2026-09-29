@@ -4,7 +4,7 @@ on:
   push:
     branches: [android-v1.0.4-dev]
     paths:
-      - '.github/workflows/android-v103-check.yml'
+      - '.github/workflows/android-v104-check.yml'
       - 'android/v1.0.4/**'
       - 'build_tools/install_android_v104_source.sh'
   workflow_dispatch:
