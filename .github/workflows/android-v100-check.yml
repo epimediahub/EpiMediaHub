@@ -8,6 +8,11 @@ on:
       - '.github/workflows/android-v100-check.yml'
       - 'android/v1.0.0/**'
       - 'build_tools/install_android_v100_source.sh'
+      - 'build_tools/prepare_smarttube_core_v100.sh'
+
+concurrency:
+  group: epimediahub-android-v100-dev
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -72,14 +77,6 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Inspect Mediathek generated source
-        shell: bash
-        run: |
-          echo '===== PARITY ====='
-          sed -n '1,520p' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
-          echo '===== CLIENT ====='
-          sed -n '1,420p' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/MediathekClient.kt"
-
       - name: Build v1.0.0 debug APKs
         shell: bash
         run: |
@@ -99,6 +96,11 @@ jobs:
           grep -Fq 'delay(4_000L)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
           grep -Fq '"ZULETZT HINZUGEFÜGT"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
           test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeShell.kt"
+          grep -Fq 'internal object V100SmartTubeCore' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeCore.kt"
+          grep -Fq 'YouTubeServiceManager.instance()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeCore.kt"
+          grep -Fq 'V100BroadcasterLogo(provider.label, accent, isTv)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
+          grep -Fq 'project(":youtubeapi")' "$PROJECT_ROOT/settings.gradle.kts"
+          test -f "$PROJECT_ROOT/app/src/main/assets/licenses/SmartTube-MIT.txt"
           ! grep -Rq 'com.tailscale' "$PROJECT_ROOT/app/src/main"
           ! grep -Fq 'tailscale-embedded.aar' "$PROJECT_ROOT/app/build.gradle.kts"
 
