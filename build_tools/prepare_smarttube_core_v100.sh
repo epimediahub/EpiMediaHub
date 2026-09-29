@@ -145,6 +145,53 @@ if "HttpUrl.parse(s)" in value:
     )
     doh.write_text(value)
 
+# SmartTube's pinned service core predates OkHttp 4's Kotlin property API.
+# Java bytecode remains compatible; update the Kotlin call sites that OkHttp 4
+# marks as compile-time errors when hosted in EpiMediaHub.
+drive = media / "youtubeapi/src/main/java/com/liskovsoft/googleapi/drive3/DriveServiceInt.kt"
+value = drive.read_text()
+value = value.replace(
+    "import okhttp3.MediaType\nimport okhttp3.RequestBody\n",
+    "import okhttp3.MediaType.Companion.toMediaTypeOrNull\n"
+    "import okhttp3.RequestBody\n"
+    "import okhttp3.RequestBody.Companion.asRequestBody\n"
+    "import okhttp3.RequestBody.Companion.toRequestBody\n",
+    1,
+)
+value = value.replace(
+    "uploadFile(RequestBody.create(MediaType.parse(FILE_MIME_TYPE), file), path)",
+    "uploadFile(file.asRequestBody(FILE_MIME_TYPE.toMediaTypeOrNull()), path)",
+    1,
+)
+value = value.replace(
+    "uploadFile(RequestBody.create(MediaType.parse(FILE_MIME_TYPE), content), path)",
+    "uploadFile(content.toRequestBody(FILE_MIME_TYPE.toMediaTypeOrNull()), path)",
+    1,
+)
+drive.write_text(value)
+
+retrofit_helper = media / "youtubeapi/src/main/java/com/liskovsoft/googlecommon/common/helpers/RetrofitOkHttpHelper.kt"
+value = retrofit_helper.read_text()
+value = value.replace("request.headers()", "request.headers")
+value = value.replace("request.url()", "request.url")
+retrofit_helper.write_text(value)
+
+for relative in (
+    "youtubeapi/app/nsigsolver/common/InfoExtractor.kt",
+    "youtubeapi/app/potokennp2/generators/PoTokenV8.kt",
+    "youtubeapi/app/potokennp2/generators/PoTokenWebView.kt",
+    "youtubeapi/app/potokennp2/generators/PoTokenWebView2.kt",
+    "youtubeapi/app/potokennp2/generators/PoTokenWebView3.kt",
+    "youtubeapi/app/potokennp2/generators/PoTokenWebView4.kt",
+    "youtubeapi/app/potokennp2/misc/JavaScriptUtil.kt",
+    "youtubeapi/innertube/initialresponse/InitialResponseService.kt",
+):
+    path = media / "youtubeapi/src/main/java/com/liskovsoft" / relative
+    value = path.read_text()
+    value = value.replace(".body()", ".body")
+    value = value.replace(".code()", ".code")
+    path.write_text(value)
+
 # The core is hosted by EpiMediaHub, so it must not make USB host capability a
 # device-install requirement and must inherit the host's SDK declaration.
 manifest = media / "youtubeapi/src/main/AndroidManifest.xml"
