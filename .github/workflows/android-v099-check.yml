@@ -10,6 +10,14 @@ on:
       - 'android/v0.6.3/patch_v063_player.py'
       - 'build_tools/install_android_v063_source.sh'
       - 'build_tools/install_android_v099_source.sh'
+  pull_request:
+    branches: [android-v0.7.0-ui]
+    paths:
+      - '.github/workflows/android-v099-check.yml'
+      - 'android/v0.9.9/**'
+      - 'android/v0.6.3/patch_v063_player.py'
+      - 'build_tools/install_android_v063_source.sh'
+      - 'build_tools/install_android_v099_source.sh'
 
 permissions:
   contents: read
