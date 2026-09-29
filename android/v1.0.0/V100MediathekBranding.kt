@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -77,9 +78,9 @@ private fun v100BroadcasterInitials(label: String): String {
 @Composable
 internal fun V100BroadcasterLogo(
     label: String,
-    accent: Color,
-    isTv: Boolean
+    accent: Color
 ) {
+    val isTv = LocalConfiguration.current.screenWidthDp >= 720
     val domain = v100BroadcasterDomain(label)
     val shape = RoundedCornerShape(if (isTv) 13.dp else 10.dp)
     Box(
