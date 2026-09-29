@@ -42,7 +42,7 @@ def replace_once(path: Path, old: str, new: str, label: str):
         raise SystemExit(f"{label}: expected one anchor in {path}, got {value.count(old)}")
     path.write_text(value.replace(old, new, 1))
 
-def add_namespace(path: Path, namespace: str, build_config: bool = False):
+def add_namespace(path: Path, namespace: str, build_config: bool = False, kotlin_jvm8: bool = False):
     text = path.read_text()
     anchor = "android {\n"
     if anchor not in text:
@@ -50,17 +50,19 @@ def add_namespace(path: Path, namespace: str, build_config: bool = False):
     extra = f"android {{\n    namespace '{namespace}'\n"
     if build_config:
         extra += "    buildFeatures { buildConfig true }\n"
+    if kotlin_jvm8:
+        extra += "    kotlinOptions { jvmTarget = '1.8' }\n"
     text = text.replace(anchor, extra, 1)
     text = text.replace("        lintConfig rootProject.file('lint.xml')\n", "")
     text = text.replace("    lintConfig rootProject.file('lint.xml')\n", "")
     path.write_text(text)
 
 # AGP 8 requires explicit namespaces for these older library modules.
-add_namespace(shared / "sharedutils/build.gradle", "com.liskovsoft.sharedutils", True)
+add_namespace(shared / "sharedutils/build.gradle", "com.liskovsoft.sharedutils", True, True)
 add_namespace(shared / "commons-io-2.8.0/build.gradle", "org.apache.commons.commonsio")
 add_namespace(shared / "j2v8/build.gradle", "com.eclipsesource.v8")
 add_namespace(media / "mediaserviceinterfaces/build.gradle", "com.liskovsoft.mediaserviceinterfaces")
-add_namespace(media / "youtubeapi/build.gradle", "com.liskovsoft.youtubeapi")
+add_namespace(media / "youtubeapi/build.gradle", "com.liskovsoft.youtubeapi", False, True)
 
 # AGP 8 takes the package/namespace from Gradle. Older library manifests still
 # declare package= and fail processing, so remove only that legacy attribute.
