@@ -28,7 +28,7 @@ if g.count('versionName = "1.0.0"') != 1:
     raise SystemExit("versionName 1.0.0 anchor missing")
 g = g.replace("versionCode = 1000", "versionCode = 1001", 1)
 g = g.replace('versionName = "1.0.0"', 'versionName = "1.0.1"', 1)
-g, count = re.subn(r'\\bminSdk\\s*=\\s*26\\b', 'minSdk = 25', g, count=1)
+g, count = re.subn(r'\bminSdk\s*=\s*26\b', 'minSdk = 25', g, count=1)
 if count != 1:
     raise SystemExit("minSdk 26 anchor missing")
 gradle.write_text(g)
@@ -43,17 +43,17 @@ shutil.copyfile(here / "V101CategorySettings.kt", java / "ui/V101CategorySetting
 vm = java / "MainViewModel.kt"
 replace_once(
     vm,
-    "    data object Settings : Screen\\n",
-    "    data object Settings : Screen\\n    data object CategorySettings : Screen\\n",
+    "    data object Settings : Screen\n",
+    "    data object Settings : Screen\n    data object CategorySettings : Screen\n",
     "CategorySettings screen route",
 )
 
 app = java / "EpiMediaHubApp.kt"
 replace_once(
     app,
-    "                Screen.Settings -> SettingsScreen(vm, accent)\\n",
-    "                Screen.Settings -> SettingsScreen(vm, accent)\\n"
-    "                Screen.CategorySettings -> V101CategorySettingsScreen(vm, accent, isTv)\\n",
+    "                Screen.Settings -> SettingsScreen(vm, accent)\n",
+    "                Screen.Settings -> SettingsScreen(vm, accent)\n"
+    "                Screen.CategorySettings -> V101CategorySettingsScreen(vm, accent, isTv)\n",
     "CategorySettings app route",
 )
 
