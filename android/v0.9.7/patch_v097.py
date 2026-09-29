@@ -138,11 +138,12 @@ common.write_text(c)
 themes = java / "ui/V079Themes.kt"
 t = themes.read_text()
 
-replace_once(
-    themes,
-    'Text(group.label.uppercase(),',
-    'Text(V097GroupDisplayLabel(group.label).uppercase(),',
-    'private group display wording'
+if t.count('group.label.uppercase(),') != 1:
+    raise SystemExit(f"private group display wording: expected exactly one anchor, found {t.count('group.label.uppercase(),')}")
+t = t.replace(
+    'group.label.uppercase(),',
+    'V097GroupDisplayLabel(group.label).uppercase(),',
+    1
 )
 
 preview_anchor = '''    val motifRes = vm.themeRepo().centerMarkRes(theme.id).takeIf { it != 0 }
