@@ -13,6 +13,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.graphicsLayer
+import coil.compose.AsyncImage
 import kotlin.math.sin
 
 internal enum class V097SkinWorld {
@@ -139,6 +142,17 @@ private fun V097Initials(themeId: String, label: String): String {
         .ifBlank { "EMH" }
 }
 
+private fun V098EnvironmentPhotoUrl(world: V097SkinWorld): String = when (world) {
+    V097SkinWorld.STADIUM -> "https://images.unsplash.com/photo-1652541090220-c9a0d15edbe4?auto=format&fit=crop&w=2400&q=86"
+    V097SkinWorld.GARAGE -> "https://images.unsplash.com/photo-1698491973400-65c0cc1fb0ce?auto=format&fit=crop&w=2400&q=86"
+    V097SkinWorld.PIT_GARAGE -> "https://images.unsplash.com/photo-1759169955484-1cb6f123fc64?auto=format&fit=crop&w=2400&q=86"
+    V097SkinWorld.LUXURY -> "https://images.unsplash.com/photo-1681310483042-64aa6776f112?auto=format&fit=crop&w=2400&q=86"
+    V097SkinWorld.STANDARD_DARK,
+    V097SkinWorld.STANDARD_BLUE,
+    V097SkinWorld.STANDARD_RED -> "https://images.unsplash.com/photo-1764195287345-2086f504cb0b?auto=format&fit=crop&w=2400&q=86"
+    V097SkinWorld.NEUTRAL -> ""
+}
+
 @Composable
 internal fun V097SkinEnvironment(world: V097SkinWorld, accent: Color) {
     if (world == V097SkinWorld.NEUTRAL) return
@@ -169,8 +183,38 @@ internal fun V097SkinEnvironment(world: V097SkinWorld, accent: Color) {
         else -> Brush.verticalGradient(listOf(Color.Black, Color.Black))
     }
 
+    val photoUrl = V098EnvironmentPhotoUrl(world)
+
     Box(Modifier.fillMaxSize().background(bg)) {
-        Canvas(Modifier.fillMaxSize()) {
+        if (photoUrl.isNotBlank()) {
+            AsyncImage(
+                model = photoUrl,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = .72f },
+                contentScale = ContentScale.Crop
+            )
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.Black.copy(alpha = .23f),
+                            accent.copy(alpha = .14f),
+                            Color.Black.copy(alpha = .38f)
+                        )
+                    )
+                )
+            )
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.radialGradient(
+                        listOf(accent.copy(alpha = .18f), Color.Transparent),
+                        radius = 1250f
+                    )
+                )
+            )
+        }
+
+        if (photoUrl.isBlank()) Canvas(Modifier.fillMaxSize()) {
             val h = size.height
             val w = size.width
             when (world) {
