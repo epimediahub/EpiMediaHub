@@ -28,6 +28,7 @@ clone_pin "https://github.com/yuliskov/MediaServiceCore.git" "$MEDIA_ROOT" "$MED
 
 python3 - <<'PY'
 import os
+import re
 from pathlib import Path
 
 root = Path(os.environ["PROJECT_ROOT"])
@@ -56,10 +57,23 @@ def add_namespace(path: Path, namespace: str, build_config: bool = False):
 
 # AGP 8 requires explicit namespaces for these older library modules.
 add_namespace(shared / "sharedutils/build.gradle", "com.liskovsoft.sharedutils", True)
-add_namespace(shared / "commons-io-2.8.0/build.gradle", "com.liskovsoft.commonsio")
-add_namespace(shared / "j2v8/build.gradle", "com.liskovsoft.j2v8")
+add_namespace(shared / "commons-io-2.8.0/build.gradle", "org.apache.commons.commonsio")
+add_namespace(shared / "j2v8/build.gradle", "com.eclipsesource.v8")
 add_namespace(media / "mediaserviceinterfaces/build.gradle", "com.liskovsoft.mediaserviceinterfaces")
 add_namespace(media / "youtubeapi/build.gradle", "com.liskovsoft.youtubeapi")
+
+# AGP 8 takes the package/namespace from Gradle. Older library manifests still
+# declare package= and fail processing, so remove only that legacy attribute.
+for manifest in (
+    shared / "sharedutils/src/main/AndroidManifest.xml",
+    shared / "commons-io-2.8.0/src/main/AndroidManifest.xml",
+    shared / "j2v8/src/main/AndroidManifest.xml",
+    media / "mediaserviceinterfaces/src/main/AndroidManifest.xml",
+):
+    if manifest.exists():
+        value = manifest.read_text()
+        value = re.sub(r'\\s+package="[^"]+"', '', value, count=1)
+        manifest.write_text(value)
 
 # Strip test-only project self references and old product flavors. The 1.0.0
 # host uses one pinned SmartTube-core variant and packages the local j2v8 module.
