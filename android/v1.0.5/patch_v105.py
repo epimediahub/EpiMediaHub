@@ -27,14 +27,10 @@ for relative in ("ui/Screens.kt", "ui/V078DashboardPairingGate.kt", "ui/V083Home
 # the playback resolver with a Media3-compatible SmartTube provider.
 shutil.copyfile(here / "V105SmartTubeCore.kt", java / "ui/V105SmartTubeCore.kt")
 shell = java / "ui/V104SmartTubeShell.kt"
-replace_once(
-    shell,
-    "V104SmartTubeCore.",
-    "V105SmartTubeCore.",
-    "SmartTube 1.0.5 core route #1",
-)
-# Replace all remaining core references in the same shell.
-shell.write_text(shell.read_text().replace("V104SmartTubeCore.", "V105SmartTubeCore."))
+shell_text = shell.read_text()
+if "V104SmartTubeCore." not in shell_text:
+    raise SystemExit("SmartTube 1.0.4 core references missing")
+shell.write_text(shell_text.replace("V104SmartTubeCore.", "V105SmartTubeCore."))
 
 # Add a public bridge inside the pinned MediaServiceCore module. This bridge
 # can call internal FormatInfoWrapper APIs while exposing only the one host
