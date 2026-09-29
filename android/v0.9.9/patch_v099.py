@@ -32,6 +32,9 @@ for image in (here / "assets").glob("*.png"):
     shutil.copyfile(image, draw / image.name)
 for image in (here / "assets").glob("*.webp"):
     shutil.copyfile(image, draw / image.name)
+# Resource shrinking cannot infer getIdentifier("official_" + id). Keep every
+# original mark in a signed release build as well as in a debug APK.
+shutil.copyfile(here / "keep.xml", res / "raw/keep.xml")
 
 shutil.copyfile(here / "V099SkinEnvironment.kt", java / "ui/V097SkinEnvironment.kt")
 shutil.copyfile(here / "V099Themes.kt", java / "ui/V079Themes.kt")
