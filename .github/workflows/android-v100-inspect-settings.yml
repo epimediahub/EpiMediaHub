@@ -20,7 +20,7 @@ jobs:
           base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
           tar -xzf .ci-android/source.tar.gz -C .ci-android
           PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
-          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"\n          export PROJECT_ROOT
           cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
           plugins {
               id("com.android.application") version "8.5.2" apply false
