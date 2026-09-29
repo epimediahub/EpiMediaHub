@@ -36,6 +36,7 @@ for relative in ("ui/Screens.kt", "ui/V078DashboardPairingGate.kt", "ui/V083Home
 # integrated behind it on the development branch.
 # ---------------------------------------------------------------------------
 shutil.copyfile(here / "V100SmartTubeShell.kt", java / "ui/V100SmartTubeShell.kt")
+shutil.copyfile(here / "V100MediathekBranding.kt", java / "ui/V100MediathekBranding.kt")
 
 home = java / "ui/V083Home.kt"
 h = home.read_text()
@@ -290,6 +291,26 @@ newest_row = '''                    if (newest.isNotEmpty()) {
 s = s.replace(actions_end, newest_row + actions_end, 1)
 hub.write_text(s)
 
+# ---------------------------------------------------------------------------
+# Mediathek: keep the existing country -> provider hierarchy, make the country
+# stage explicit, and add recognizable broadcaster marks to provider cards.
+# ---------------------------------------------------------------------------
+parity = java / "ui/ParityScreens.kt"
+ps = parity.read_text()
+if 'EpiTopBar("MEDIATHEK",' in ps:
+    ps = ps.replace('EpiTopBar("MEDIATHEK",', 'EpiTopBar("MEDIATHEK · LÄNDER",', 1)
+
+provider_title = 'Text(provider.label, color = Color.White, fontWeight = FontWeight.Black, fontSize = 19.sp)'
+if provider_title not in ps:
+    raise SystemExit("Mediathek provider title anchor missing")
+ps = ps.replace(
+    provider_title,
+    '''V100BroadcasterLogo(provider.label, accent, isTv)
+            Text(provider.label, color = Color.White, fontWeight = FontWeight.Black, fontSize = 19.sp)''',
+    1,
+)
+parity.write_text(ps)
+
 # Guards for the first 1.0.0 development slice.
 checks = [
     (gradle, 'versionCode = 1000'),
@@ -301,6 +322,8 @@ checks = [
     (hub, 'delay(4_000L)'),
     (hub, '"ZULETZT HINZUGEFÜGT"'),
     (java / "ui/V100SmartTubeShell.kt", 'fun V100SmartTubeShell'),
+    (java / "ui/V100MediathekBranding.kt", "fun V100BroadcasterLogo"),
+    (java / "ui/ParityScreens.kt", "V100BroadcasterLogo(provider.label, accent, isTv)"),
 ]
 for path, marker in checks:
     if marker not in path.read_text():
