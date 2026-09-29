@@ -277,6 +277,8 @@ proguard = root / "app/proguard-rules.pro"
 pg = proguard.read_text() if proguard.exists() else ""
 if "-dontwarn org.slf4j.impl.**" not in pg:
     pg += "\n# SmartTube / SLF4J optional backend\n-dontwarn org.slf4j.impl.**\n"
+if "-dontwarn sun.net.spi.nameservice.**" not in pg:
+    pg += "\n# dnsjava contains an optional JVM NameService SPI that Android does not provide\n-dontwarn sun.net.spi.nameservice.**\n"
 proguard.write_text(pg)
 
 # Preserve upstream attribution inside the APK.
