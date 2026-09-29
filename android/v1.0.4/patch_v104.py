@@ -37,8 +37,8 @@ if 'implementation("io.reactivex.rxjava2:rxjava:2.2.21")' not in g:
     g = g.replace(
         dep_anchor,
         dep_anchor
-        + '    implementation("io.reactivex.rxjava2:rxjava:2.2.21")\\n'
-        + '    implementation("io.reactivex.rxjava2:rxandroid:2.1.1")\\n',
+        + '    implementation("io.reactivex.rxjava2:rxjava:2.2.21")\n'
+        + '    implementation("io.reactivex.rxjava2:rxandroid:2.1.1")\n',
         1,
     )
     gradle.write_text(g)
