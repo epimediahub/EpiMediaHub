@@ -260,7 +260,8 @@ ls = ls.replace('Modifier.fillMaxWidth().height(epgHeight).padding(horizontal = 
 ls = ls.replace('modifier = Modifier.width(32.dp),', 'modifier = Modifier.width(if (isTv) 27.dp else 30.dp),', 1)
 ls = ls.replace('modifier = Modifier.width(if (isTv) 52.dp else 58.dp).fillMaxHeight()',
                 'modifier = Modifier.width(if (isTv) 40.dp else 52.dp).fillMaxHeight()', 1)
-ls = ls.replace('modifier = Modifier.fillMaxSize().padding(4.dp),', 'modifier = Modifier.fillMaxSize().padding(if (isTv) 3.dp else 4.dp),', 1)
+ls = ls.replace('modifier = Modifier.fillMaxSize().padding(4.dp),',
+                'modifier = Modifier.fillMaxSize().padding(3.dp),', 1)
 ls = ls.replace('Spacer(Modifier.width(9.dp))', 'Spacer(Modifier.width(if (isTv) 7.dp else 9.dp))', 1)
 ls = ls.replace('fontSize = if (isTv) 15.sp else 14.sp,', 'fontSize = if (isTv) 13.sp else 14.sp,', 1)
 ls = ls.replace('Text("LIVE", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)',
