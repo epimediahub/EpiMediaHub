@@ -262,7 +262,22 @@ if 'implementation(project(":youtubeapi"))' not in ap:
         + '    implementation(project(":sharedutils"))\n',
         1,
     )
+if 'org.slf4j:slf4j-nop:1.7.36' not in ap:
+    ap = ap.replace(
+        dep,
+        dep + '    implementation("org.slf4j:slf4j-nop:1.7.36")\n',
+        1,
+    )
 app.write_text(ap)
+
+# SmartTube transitively pulls the SLF4J API. R8 checks for the optional
+# binding class in release builds; EpiMediaHub already owns logging, so use
+# SLF4J's no-op backend and silence optional binder warnings.
+proguard = root / "app/proguard-rules.pro"
+pg = proguard.read_text() if proguard.exists() else ""
+if "-dontwarn org.slf4j.impl.**" not in pg:
+    pg += "\n# SmartTube / SLF4J optional backend\n-dontwarn org.slf4j.impl.**\n"
+proguard.write_text(pg)
 
 # Preserve upstream attribution inside the APK.
 assets = root / "app/src/main/assets/licenses"
