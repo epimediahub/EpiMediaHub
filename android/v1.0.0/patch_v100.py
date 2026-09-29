@@ -3,6 +3,7 @@
 SmartTube in-app shell, and rotating recently-added cinema focus."""
 import os
 import shutil
+import re
 from pathlib import Path
 
 root = Path(os.environ["PROJECT_ROOT"])
@@ -196,22 +197,20 @@ home.write_text(h)
 # ---------------------------------------------------------------------------
 hub = java / "ui/V060CinematicHub.kt"
 s = hub.read_text()
-old_vars = '''    val recent = u.recentlyWatched.filter { it.kind == kind || (kind == MediaKind.SERIES && it.kind == MediaKind.EPISODE) }
-    val continueItems = u.continueWatching.filter { it.media.kind == kind || (kind == MediaKind.SERIES && it.media.kind == MediaKind.EPISODE) }
-    val visibleCategories = u.categories.filter { it.id !in u.hiddenCategoryIds && u.catalogRows[it.id].orEmpty().isNotEmpty() }
-    val firstCatalog = visibleCategories.asSequence().mapNotNull { u.catalogRows[it.id]?.firstOrNull() }.firstOrNull()
-    val hero = recent.firstOrNull() ?: firstCatalog
-'''
-if old_vars not in s:
-    # v0.9.3 may not yet be in the reconstructed source in some historical test snapshots.
-    old_vars = '''    val recent = u.recentlyWatched.filter { it.kind == kind || (kind == MediaKind.SERIES && it.kind == MediaKind.EPISODE) }
-    val continueItems = u.continueWatching.filter { it.media.kind == kind || (kind == MediaKind.SERIES && it.media.kind == MediaKind.EPISODE) }
-    val visibleCategories = u.categories.filter { u.catalogRows[it.id].orEmpty().isNotEmpty() }
-    val firstCatalog = visibleCategories.asSequence().mapNotNull { u.catalogRows[it.id]?.firstOrNull() }.firstOrNull()
-    val hero = recent.firstOrNull() ?: firstCatalog
-'''
-if old_vars not in s:
-    raise SystemExit("cinematic variables anchor missing")
+
+# Replace only the variable declaration slice, tolerant of formatting changes
+# introduced by the 0.8/0.9 patches.
+recent_match = re.search(r'^\s{4}val recent = .*$', s, re.M)
+continue_match = re.search(r'^\s{4}val continueItems = .*$', s, re.M)
+visible_match = re.search(r'^\s{4}val visibleCategories = .*$', s, re.M)
+first_match = re.search(r'^\s{4}val firstCatalog = .*$', s, re.M)
+hero_match = re.search(r'^\s{4}val hero = .*$', s, re.M)
+if not all((recent_match, continue_match, visible_match, first_match, hero_match)):
+    fn = s.find("fun V060CinematicHubScreen")
+    raise SystemExit("cinematic variable declarations missing: " + s[fn:fn + 1800])
+
+slice_start = recent_match.start()
+slice_end = hero_match.end()
 new_vars = '''    val recent = u.recentlyWatched.filter { it.kind == kind || (kind == MediaKind.SERIES && it.kind == MediaKind.EPISODE) }
     val continueItems = u.continueWatching.filter { it.media.kind == kind || (kind == MediaKind.SERIES && it.media.kind == MediaKind.EPISODE) }
     val newest = u.catalogRows["__recently_added__"].orEmpty().sortedByDescending { it.addedAt }
@@ -229,31 +228,41 @@ new_vars = '''    val recent = u.recentlyWatched.filter { it.kind == kind || (ki
             heroIndex = (heroIndex + 1) % newest.size
         }
     }
-    val hero = newest.getOrNull(heroIndex) ?: recent.firstOrNull() ?: firstCatalog
-'''
-s = s.replace(old_vars, new_vars, 1)
+    val hero = newest.getOrNull(heroIndex) ?: recent.firstOrNull() ?: firstCatalog'''
+s = s[:slice_start] + new_vars + s[slice_end:]
 
-old_index = '''        (if (hero != null) 1 else 0) +
-        1 +
-        (if (continueItems.isNotEmpty()) 1 else 0) +
-        (if (recent.isNotEmpty()) 1 else 0)
-'''
-if old_index not in s:
+index_match = re.search(
+    r'    val categoryStartIndex =\n(?:        .*\n){1,8}',
+    s,
+)
+if not index_match:
     raise SystemExit("cinematic category index anchor missing")
-s = s.replace(
-    old_index,
-    '''        (if (hero != null) 1 else 0) +
+old_index_block = index_match.group(0)
+# Stop at the blank line following the arithmetic expression if the regex
+# captured more than the expression.
+parts = old_index_block.split("\n")
+kept = []
+for line in parts:
+    if kept and line == "":
+        break
+    kept.append(line)
+old_index_block = "\n".join(kept)
+new_index = '''    val categoryStartIndex =
+        (if (hero != null) 1 else 0) +
         1 +
         (if (newest.isNotEmpty()) 1 else 0) +
         (if (continueItems.isNotEmpty()) 1 else 0) +
-        (if (recent.isNotEmpty()) 1 else 0)
-''',
-    1,
-)
+        (if (recent.isNotEmpty()) 1 else 0)'''
+s = s.replace(old_index_block, new_index, 1)
 
 # Fixed key prevents the whole hero row from being recreated as a different list
 # item every four seconds.
-s = s.replace('item(key = "hero:" + featured.resumeKey)', 'item(key = "hero-focus")', 1)
+if 'item(key = "hero:" + featured.resumeKey)' in s:
+    s = s.replace('item(key = "hero:" + featured.resumeKey)', 'item(key = "hero-focus")', 1)
+elif 'item(key = "hero:${featured.resumeKey}")' in s:
+    s = s.replace('item(key = "hero:${featured.resumeKey}")', 'item(key = "hero-focus")', 1)
+else:
+    raise SystemExit("cinematic hero key anchor missing")
 
 actions_end = '''                    if (continueItems.isNotEmpty()) {
 '''
