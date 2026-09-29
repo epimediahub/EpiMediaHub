@@ -192,6 +192,19 @@ for relative in (
     value = value.replace(".code()", ".code")
     path.write_text(value)
 
+# AGP 8 rejects legacy library manifests that still declare package= when a
+# namespace is supplied in Gradle. Strip only that obsolete package attribute.
+for manifest_path in (
+    shared / "sharedutils/src/main/AndroidManifest.xml",
+    shared / "commons-io-2.8.0/src/main/AndroidManifest.xml",
+    shared / "j2v8/src/main/AndroidManifest.xml",
+    media / "mediaserviceinterfaces/src/main/AndroidManifest.xml",
+):
+    if manifest_path.exists():
+        mt = manifest_path.read_text()
+        mt = re.sub(r'\s+package="[^"]+"', '', mt, count=1)
+        manifest_path.write_text(mt)
+
 # The core is hosted by EpiMediaHub, so it must not make USB host capability a
 # device-install requirement and must inherit the host's SDK declaration.
 manifest = media / "youtubeapi/src/main/AndroidManifest.xml"
