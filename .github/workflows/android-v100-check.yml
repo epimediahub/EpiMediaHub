@@ -1,0 +1,109 @@
+name: Check EpiMediaHub Android v1.0.0 development
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [android-v1.0.0-dev]
+    paths:
+      - '.github/workflows/android-v100-check.yml'
+      - 'android/v1.0.0/**'
+      - 'build_tools/install_android_v100_source.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-v100-dev:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* > .ci-android/source.b64
+          base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
+          EXPECTED="192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          ACTUAL="$(sha256sum .ci-android/source.tar.gz | awk '{print $1}')"
+          test "$ACTUAL" = "$EXPECTED"
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+
+      - name: Pin Gradle toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+
+      - name: Install v1.0.0 development source
+        run: bash build_tools/install_android_v100_source.sh
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build v1.0.0 debug APKs
+        shell: bash
+        run: |
+          cd "$PROJECT_ROOT"
+          gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Verify v1.0.0 development markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'versionName = "1.0.0"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 1000' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq '"SMARTTUBE"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'showPlaylistSwitch = u.playlists.size > 1' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'Modifier.align(Alignment.TopCenter)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'val newest = u.catalogRows["__recently_added__"]' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          grep -Fq 'delay(4_000L)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          grep -Fq '"ZULETZT HINZUGEFÜGT"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeShell.kt"
+          ! grep -Rq 'com.tailscale' "$PROJECT_ROOT/app/src/main"
+          ! grep -Fq 'tailscale-embedded.aar' "$PROJECT_ROOT/app/build.gradle.kts"
+
+      - name: Collect debug APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find "$PROJECT_ROOT/app/build/outputs/apk/debug" -type f -name '*.apk' -print -exec cp {} dist/ \;
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-Android-v1.0.0-dev
+          path: dist/
+          retention-days: 14
