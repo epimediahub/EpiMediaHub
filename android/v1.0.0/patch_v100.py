@@ -36,6 +36,7 @@ for relative in ("ui/Screens.kt", "ui/V078DashboardPairingGate.kt", "ui/V083Home
 # integrated behind it on the development branch.
 # ---------------------------------------------------------------------------
 shutil.copyfile(here / "V100SmartTubeShell.kt", java / "ui/V100SmartTubeShell.kt")
+shutil.copyfile(here / "V100SmartTubeCore.kt", java / "ui/V100SmartTubeCore.kt")
 shutil.copyfile(here / "V100MediathekBranding.kt", java / "ui/V100MediathekBranding.kt")
 
 home = java / "ui/V083Home.kt"
@@ -60,6 +61,7 @@ h = h.replace(
 
     if (smartTubeOpen) {
         V100SmartTubeShell(
+            vm = vm,
             accent = accent,
             isTv = isTv,
             onBack = { smartTubeOpen = false }
@@ -322,6 +324,7 @@ checks = [
     (hub, 'delay(4_000L)'),
     (hub, '"ZULETZT HINZUGEFÜGT"'),
     (java / "ui/V100SmartTubeShell.kt", 'fun V100SmartTubeShell'),
+    (java / "ui/V100SmartTubeCore.kt", "internal object V100SmartTubeCore"),
     (java / "ui/V100MediathekBranding.kt", "fun V100BroadcasterLogo"),
     (java / "ui/ParityScreens.kt", "V100BroadcasterLogo(provider.label, accent, isTv)"),
 ]
