@@ -52,5 +52,11 @@ jobs:
           grep -RniE 'Kategorien verwalten|Kategorie.*verwalten|categor.*manage|manage.*categor|hiddenCategor|categoryVisibility|visibleCategor' "$PROJECT_ROOT/app/src/main/java" | head -n 300
           echo "=== SETTINGS SCREEN MATCHES ==="
           grep -RniE 'fun .*Settings|Screen.Settings|EINSTELLUNGEN|Einstellungen' "$PROJECT_ROOT/app/src/main/java" | head -n 300
+          echo "=== SETTINGS SCREEN BODY ==="
+          sed -n '400,485p' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+          echo "=== CATEGORY MANAGER BODY ==="
+          sed -n '1,130p' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V093CategoryVisibility.kt"
+          echo "=== CATEGORY VM METHODS ==="
+          sed -n '132,170p' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           echo "=== SCREEN DEFINITIONS ==="
           grep -RniE 'sealed .*Screen|object .*Settings|data object .*Settings|Category' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app" | head -n 350
