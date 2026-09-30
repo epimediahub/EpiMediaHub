@@ -47,6 +47,7 @@ fun V110SmartTubeShell(
         v110NeedsLegacyFireTvKeyboard()
     }
     val ui by vm.ui.collectAsState()
+    val legacyFireTvIme = isTv && Build.VERSION.SDK_INT <= 25
     val smartTubeBackgroundRes = vm.themeRepo().backgroundRes(ui.themeId)
     val smartTubeMotifRes = vm.themeRepo().homeMotifRes(ui.themeId).takeIf { it != 0 }
         ?: vm.themeRepo().markRes(ui.themeId)
