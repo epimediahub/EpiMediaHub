@@ -47,8 +47,8 @@ checks = [
     (java / "ui/V111SmartTubeShell.kt", "V097SkinEnvironment(smartTubeSkinWorld, accent)"),
     (java / "ui/V111SmartTubeShell.kt", "V111SmartTubeSidebar("),
     (java / "ui/V111SmartTubeShell.kt", "V111SmartTubeVideoCard("),
-    (java / "ui/V111SmartTubePlayer.kt", "fontSize = if (isTv) 28.sp"),
-    (java / "ui/V111SmartTubePlayer.kt", "V111FormatTime"),
+    (java / "ui/V111SmartTubePlayer.kt", "fontSize = if (isTv) 30.sp"),
+    (java / "ui/V111SmartTubePlayer.kt", "v111FormatPlaybackTime"),
     (java / "ui/V111MenuMemory.kt", "internal object V111MenuMemory"),
 ]
 for path, marker in checks:
