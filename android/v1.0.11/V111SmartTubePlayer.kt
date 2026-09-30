@@ -3,9 +3,11 @@ package de.epimediahub.app.ui
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,7 +21,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -243,119 +247,146 @@ internal fun V111SmartTubePlayer(
         }
 
         if (controlsVisible && errorText.isBlank()) {
-            val durationMs = player?.duration?.takeIf { it > 0L }
-            val progress = if (durationMs != null) {
-                (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-            } else 0f
-
+            // YouTube-TV-like control layer: large readable title, big transport
+            // controls, full-width timeline and clearly visible elapsed/total time.
             Box(
-                modifier = Modifier
+                Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .height(270.dp)
+                    .height(if (isTv) 330.dp else 245.dp)
                     .background(
                         androidx.compose.ui.graphics.Brush.verticalGradient(
                             listOf(
                                 Color.Transparent,
-                                Color.Black.copy(alpha = .56f),
-                                Color.Black.copy(alpha = .92f),
-                                Color.Black
+                                Color.Black.copy(alpha = .52f),
+                                Color.Black.copy(alpha = .94f)
                             )
                         )
+                    )
+            )
+
+            Row(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalArrangement = Arrangement.spacedBy(if (isTv) 34.dp else 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (!video.live) {
+                    V111PlayerControlBubble(
+                        label = "−10",
+                        subtitle = "Sek.",
+                        isTv = isTv,
+                        onClick = { seekBy(-10_000L) }
+                    )
+                }
+
+                V111PlayerControlBubble(
+                    label = if (isPlaying) "Ⅱ" else "▶",
+                    subtitle = if (isPlaying) "Pause" else "Play",
+                    isTv = isTv,
+                    primary = true,
+                    onClick = {
+                        player?.let { active ->
+                            if (active.isPlaying) active.pause() else active.play()
+                        }
+                        controlsVisible = true
+                    }
+                )
+
+                if (!video.live) {
+                    V111PlayerControlBubble(
+                        label = "+10",
+                        subtitle = "Sek.",
+                        isTv = isTv,
+                        onClick = { seekBy(10_000L) }
+                    )
+                }
+            }
+
+            Column(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(
+                        start = if (isTv) 48.dp else 20.dp,
+                        end = if (isTv) 48.dp else 20.dp,
+                        bottom = if (isTv) 30.dp else 18.dp
                     )
             ) {
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .fillMaxWidth()
-                        .padding(start = 54.dp, end = 54.dp, bottom = 28.dp)
-                ) {
+                Text(
+                    video.title,
+                    color = Color.White,
+                    fontSize = if (isTv) 30.sp else 22.sp,
+                    lineHeight = if (isTv) 35.sp else 27.sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1
+                )
+
+                if (video.author.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        video.title,
-                        color = Color.White,
-                        fontSize = 28.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
-                        maxLines = 2
+                        video.author,
+                        color = Color.White.copy(alpha = .74f),
+                        fontSize = if (isTv) 17.sp else 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
                     )
-                    if (video.author.isNotBlank()) {
-                        Spacer(Modifier.height(5.dp))
+                }
+
+                Spacer(Modifier.height(if (isTv) 18.dp else 12.dp))
+
+                if (!video.live) {
+                    val duration = player?.duration?.takeIf { it > 0L }
+                    LinearProgressIndicator(
+                        progress = {
+                            if (duration == null) 0f
+                            else (positionMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(if (isTv) 9.dp else 6.dp),
+                        color = accent,
+                        trackColor = Color.White.copy(alpha = .26f)
+                    )
+                    Spacer(Modifier.height(if (isTv) 10.dp else 7.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            video.author,
-                            color = Color.White.copy(alpha = .72f),
-                            fontSize = 16.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                            maxLines = 1
+                            v111FormatPlaybackTime(positionMs) + " / " +
+                                v111FormatPlaybackTime(duration ?: 0L),
+                            color = Color.White,
+                            fontSize = if (isTv) 20.sp else 15.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "◀ 10 Sek.    OK Play/Pause    10 Sek. ▶",
+                            color = Color.White.copy(alpha = .76f),
+                            fontSize = if (isTv) 15.sp else 11.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
-
-                    Spacer(Modifier.height(18.dp))
-
-                    if (!video.live && durationMs != null) {
-                        LinearProgressIndicator(
-                            progress = { progress },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(7.dp),
-                            color = accent,
-                            trackColor = Color.White.copy(alpha = .28f)
-                        )
-                        Spacer(Modifier.height(9.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "${v111PlayerTime(positionMs)} / ${v111PlayerTime(durationMs)}",
-                                color = Color.White,
-                                fontSize = 17.sp,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                            )
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                "Links/Rechts · 10 Sekunden",
-                                color = Color.White.copy(alpha = .62f),
-                                fontSize = 14.sp
-                            )
-                        }
-                    } else {
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
-                            color = Color(0xFFC60000),
+                            color = Color(0xFFE62117),
                             shape = MaterialTheme.shapes.small
                         ) {
                             Text(
                                 "LIVE",
                                 color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                fontSize = if (isTv) 15.sp else 11.sp,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                             )
                         }
-                    }
-
-                    Spacer(Modifier.height(14.dp))
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        if (!video.live) {
-                            V111PlayerControlChip("↶", "10 SEK.", accent)
-                        }
-                        V111PlayerControlChip(
-                            if (isPlaying) "Ⅱ" else "▶",
-                            if (isPlaying) "PAUSE" else "PLAY",
-                            accent,
-                            primary = true
-                        )
-                        if (!video.live) {
-                            V111PlayerControlChip("↷", "10 SEK.", accent)
-                        }
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(12.dp))
                         Text(
-                            "OK · Play/Pause",
-                            color = Color.White.copy(alpha = .72f),
-                            fontSize = 15.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                            if (isPlaying) "OK · Pause" else "OK · Wiedergabe",
+                            color = Color.White.copy(alpha = .82f),
+                            fontSize = if (isTv) 17.sp else 12.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
@@ -424,6 +455,54 @@ private fun v111PlayerTime(ms: Long): String {
     val minutes = (total % 3600L) / 60L
     val seconds = total % 60L
     return if (hours > 0L) {
+        "%d:%02d:%02d".format(hours, minutes, seconds)
+    } else {
+        "%d:%02d".format(minutes, seconds)
+    }
+}
+
+
+@Composable
+private fun V111PlayerControlBubble(
+    label: String,
+    subtitle: String,
+    isTv: Boolean,
+    primary: Boolean = false,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(if (isTv) 92.dp else 68.dp),
+        color = if (primary) Color.White.copy(alpha = .97f) else Color.Black.copy(alpha = .68f),
+        contentColor = if (primary) Color.Black else Color.White,
+        shape = CircleShape,
+        border = if (primary) null else BorderStroke(1.dp, Color.White.copy(alpha = .28f))
+    ) {
+        Column(
+            Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                label,
+                fontSize = if (isTv) 30.sp else 22.sp,
+                fontWeight = FontWeight.Black
+            )
+            Text(
+                subtitle,
+                fontSize = if (isTv) 11.sp else 9.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+private fun v111FormatPlaybackTime(ms: Long): String {
+    val totalSeconds = ms.coerceAtLeast(0L) / 1000L
+    val seconds = totalSeconds % 60
+    val minutes = (totalSeconds / 60) % 60
+    val hours = totalSeconds / 3600
+    return if (hours > 0) {
         "%d:%02d:%02d".format(hours, minutes, seconds)
     } else {
         "%d:%02d".format(minutes, seconds)
