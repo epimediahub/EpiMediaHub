@@ -386,8 +386,8 @@ replace_function(
     val u by vm.ui.collectAsState()
     val memoryKey = "settings"
     val state = rememberLazyListState()
-    val requesters = remember { List(7) { FocusRequester() } }
-    val remembered = V111MenuMemory.index(memoryKey).coerceIn(0, 6)
+    val requesters = remember { List(8) { FocusRequester() } }
+    val remembered = V111MenuMemory.index(memoryKey).coerceIn(0, 7)
     BackHandler { vm.back() }
 
     LaunchedEffect(Unit) {
@@ -474,6 +474,16 @@ replace_function(
                     accent = accent,
                     modifier = rememberedModifier(6),
                     onClick = { vm.setSubtitleLanguage(nextSub(u.preferredSubtitleLanguage)) }
+                )
+            }
+            item {
+                FocusCard(
+                    "App-Update",
+                    "Automatisch alle 24h oder jetzt manuell prüfen",
+                    R.drawable.icon_settings,
+                    accent = accent,
+                    modifier = rememberedModifier(7),
+                    onClick = { vm.navigate(Screen.Updates) }
                 )
             }
             item {
@@ -613,22 +623,25 @@ if "v111RememberLazyListState(rowKey)" not in row:
                     accent,
                     isTv,
                     infoByKey[item.resumeKey].orEmpty(),
-                    rememberedFocus = v111RememberFocus(rowKey, item.resumeKey, index, isTv)
+                    rememberedFocus = v111RememberFocus(rowKey, item.resumeKey, index, isTv, scopeKey = "cinematic:" + (if (item.kind == MediaKind.EPISODE) MediaKind.SERIES.name else item.kind.name))
                 ) { onItem(item) }
             }'''
     if current_items in row:
         row = row.replace(current_items, replacement_items, 1)
     else:
-        old_items = '            items(entries.take(24), key = { it.resumeKey }) { item -> V060Poster(item, accent, isTv) { onItem(item) } }'
-        if old_items in row:
+        old_items = next((anchor for anchor in (
+            '            items(entries, key = { it.resumeKey }) { item -> V060Poster(item, accent, isTv) { onItem(item) } }',
+            '            items(entries.take(24), key = { it.resumeKey }) { item -> V060Poster(item, accent, isTv) { onItem(item) } }',
+        ) if anchor in row), None)
+        if old_items is not None:
             row = row.replace(
                 old_items,
-                '''            itemsIndexed(entries.take(24), key = { _, item -> item.resumeKey }) { index, item ->
+                '''            itemsIndexed(entries, key = { _, item -> item.resumeKey }) { index, item ->
                 V060Poster(
                     item,
                     accent,
                     isTv,
-                    rememberedFocus = v111RememberFocus(rowKey, item.resumeKey, index, isTv)
+                    rememberedFocus = v111RememberFocus(rowKey, item.resumeKey, index, isTv, scopeKey = "cinematic:" + (if (item.kind == MediaKind.EPISODE) MediaKind.SERIES.name else item.kind.name))
                 ) { onItem(item) }
             }''',
                 1,
@@ -876,8 +889,8 @@ if "fun V060RecentlyWatchedScreen(" in h:
     fn = h[a:b]
     if 'v111RememberLazyGridState("recently-watched")' not in fn:
         fn = fn.replace(
-            "        else LazyVerticalGrid(\n",
-            '        else LazyVerticalGrid(\n            state = v111RememberLazyGridState("recently-watched"),\n',
+            "        else LazyVerticalGrid(\n            GridCells.Adaptive(if (isTv) 170.dp else 124.dp), Modifier.fillMaxSize(),",
+            '        else LazyVerticalGrid(\n            state = v111RememberLazyGridState("recently-watched"),\n            columns = GridCells.Adaptive(if (isTv) 170.dp else 124.dp), modifier = Modifier.fillMaxSize(),',
             1,
         )
     h = h[:a] + fn + h[b:]

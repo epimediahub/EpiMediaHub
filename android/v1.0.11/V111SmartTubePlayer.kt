@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -46,6 +47,7 @@ import kotlinx.coroutines.delay
 internal fun V111SmartTubePlayer(
     video: V100SmartTubeVideo,
     playback: V100SmartTubePlayback,
+    isTv: Boolean,
     accent: Color,
     onBack: () -> Unit,
     onEnded: () -> Unit
@@ -318,7 +320,8 @@ internal fun V111SmartTubePlayer(
                     fontSize = if (isTv) 30.sp else 22.sp,
                     lineHeight = if (isTv) 35.sp else 27.sp,
                     fontWeight = FontWeight.Black,
-                    maxLines = 1
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 if (video.author.isNotBlank()) {

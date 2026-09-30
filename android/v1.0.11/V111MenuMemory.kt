@@ -9,7 +9,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key as compositionKey
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -31,6 +33,8 @@ internal object V111MenuMemory {
     private val indices = ConcurrentHashMap<String, Int>()
     private val ids = ConcurrentHashMap<String, String>()
     private val texts = ConcurrentHashMap<String, String>()
+    private val scrollPositions = ConcurrentHashMap<String, Pair<Int, Int>>()
+    private val focusOwners = ConcurrentHashMap<String, String>()
 
     fun remember(key: String, index: Int, id: String = "") {
         indices[key] = index.coerceAtLeast(0)
@@ -45,32 +49,66 @@ internal object V111MenuMemory {
     }
 
     fun text(key: String): String = texts[key].orEmpty()
+
+    fun rememberScroll(key: String, index: Int, offset: Int) {
+        scrollPositions[key] = index.coerceAtLeast(0) to offset.coerceAtLeast(0)
+    }
+
+    fun scroll(key: String): Pair<Int, Int> = scrollPositions[key] ?: (0 to 0)
+
+    fun rememberFocus(key: String, index: Int, id: String, scopeKey: String) {
+        remember(key, index, id)
+        focusOwners[scopeKey] = key
+    }
+
+    fun ownsFocus(key: String, scopeKey: String): Boolean =
+        focusOwners[scopeKey]?.let { it == key } ?: true
 }
 
 @Composable
 internal fun v111RememberLazyListState(key: String): LazyListState {
-    val state = rememberLazyListState(
-        initialFirstVisibleItemIndex = V111MenuMemory.index(key)
-    )
-    LaunchedEffect(state, key) {
-        snapshotFlow { state.firstVisibleItemIndex }
-            .distinctUntilChanged()
-            .collect { V111MenuMemory.remember(key, it) }
+    return compositionKey(key) {
+        val position = remember(key) { V111MenuMemory.scroll(key) }
+        val state = rememberLazyListState(position.first, position.second)
+        LaunchedEffect(state, key) {
+            snapshotFlow {
+                Triple(state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset, state.layoutInfo.totalItemsCount)
+            }.distinctUntilChanged().collect { (index, offset, count) ->
+                if (count > 0) V111MenuMemory.rememberScroll(key, index, offset)
+            }
+        }
+        DisposableEffect(state, key) {
+            onDispose {
+                if (state.layoutInfo.totalItemsCount > 0) {
+                    V111MenuMemory.rememberScroll(key, state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset)
+                }
+            }
+        }
+        state
     }
-    return state
 }
 
 @Composable
 internal fun v111RememberLazyGridState(key: String): LazyGridState {
-    val state = rememberLazyGridState(
-        initialFirstVisibleItemIndex = V111MenuMemory.index(key)
-    )
-    LaunchedEffect(state, key) {
-        snapshotFlow { state.firstVisibleItemIndex }
-            .distinctUntilChanged()
-            .collect { V111MenuMemory.remember(key, it) }
+    return compositionKey(key) {
+        val position = remember(key) { V111MenuMemory.scroll(key) }
+        val state = rememberLazyGridState(position.first, position.second)
+        LaunchedEffect(state, key) {
+            snapshotFlow {
+                Triple(state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset, state.layoutInfo.totalItemsCount)
+            }.distinctUntilChanged().collect { (index, offset, count) ->
+                if (count > 0) V111MenuMemory.rememberScroll(key, index, offset)
+            }
+        }
+        DisposableEffect(state, key) {
+            onDispose {
+                if (state.layoutInfo.totalItemsCount > 0) {
+                    V111MenuMemory.rememberScroll(key, state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset)
+                }
+            }
+        }
+        state
     }
-    return state
 }
 
 /**
@@ -83,13 +121,15 @@ internal fun v111RememberFocus(
     itemId: String,
     index: Int,
     enabled: Boolean = true,
-    restoreDelayMs: Long = 110L
+    restoreDelayMs: Long = 110L,
+    scopeKey: String = menuKey
 ): Modifier {
     val requester = remember(menuKey, itemId) { FocusRequester() }
     val rememberedId = V111MenuMemory.id(menuKey)
 
-    LaunchedEffect(enabled, rememberedId, itemId) {
-        if (enabled && rememberedId.isNotBlank() && rememberedId == itemId) {
+    LaunchedEffect(enabled, menuKey, itemId, scopeKey) {
+        if (enabled && rememberedId.isNotBlank() && rememberedId == itemId &&
+            V111MenuMemory.ownsFocus(menuKey, scopeKey)) {
             delay(restoreDelayMs)
             runCatching { requester.requestFocus() }
         }
@@ -98,7 +138,7 @@ internal fun v111RememberFocus(
     return Modifier
         .focusRequester(requester)
         .onFocusChanged {
-            if (it.isFocused) V111MenuMemory.remember(menuKey, index, itemId)
+            if (it.isFocused) V111MenuMemory.rememberFocus(menuKey, index, itemId, scopeKey)
         }
 }
 

@@ -5,6 +5,7 @@ set -euo pipefail
 bash build_tools/install_android_v1010_source.sh
 python3 android/v1.0.11/patch_v111.py
 python3 android/v1.0.11/patch_navigation_memory_v111.py
+python3 android/v1.0.11/patch_remaining_menus_v111.py
 
 grep -Fq 'versionCode = 1011' "$PROJECT_ROOT/app/build.gradle.kts"
 grep -Fq 'versionName = "1.0.11"' "$PROJECT_ROOT/app/build.gradle.kts"

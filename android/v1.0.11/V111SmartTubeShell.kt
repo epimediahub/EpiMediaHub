@@ -69,7 +69,7 @@ fun V111SmartTubeShell(
     var selectedSection by remember {
         mutableStateOf(
             V108SmartTubeSection.entries.firstOrNull {
-                it.name == V111MenuMemory.id(smartTubeMenuKey)
+                it.name == V111MenuMemory.text("smarttube-selected-section")
             } ?: V108SmartTubeSection.HOME
         )
     }
@@ -97,7 +97,7 @@ fun V111SmartTubeShell(
 
     fun reloadSection(section: V108SmartTubeSection = selectedSection) {
         selectedSection = section
-        V111MenuMemory.remember(smartTubeMenuKey, section.ordinal, section.name)
+        V111MenuMemory.rememberText("smarttube-selected-section", section.name)
         searchTitle = ""
         error = ""
         loading = true
@@ -207,8 +207,8 @@ fun V111SmartTubeShell(
 
     LaunchedEffect(rows.size, selectedSection, searchTitle) {
         if (isTv && rows.isNotEmpty()) {
-            val index = V111MenuMemory.index(smartTubeContentKey).coerceIn(0, rows.lastIndex)
-            smartTubeContentState.scrollToItem(index)
+            val position = V111MenuMemory.scroll(smartTubeContentKey)
+            smartTubeContentState.scrollToItem(position.first.coerceIn(0, rows.lastIndex), position.second)
         }
     }
 
@@ -443,6 +443,7 @@ fun V111SmartTubeShell(
                         itemsIndexed(rows, key = { _, row -> "st-row:" + row.title }) { _, row ->
                             V111SmartTubeRowView(
                                 row = row,
+                                menuKey = smartTubeContentKey,
                                 accent = accent,
                                 isTv = isTv,
                                 resolvingId = resolvingId,
@@ -677,7 +678,8 @@ private fun V111SidebarItem(
                     menuKey = "smarttube-section",
                     itemId = section.name,
                     index = index,
-                    enabled = true
+                    enabled = true,
+                    scopeKey = "smarttube-focus"
                 )
             )
             .onFocusChanged { focused = it.isFocused },
@@ -725,12 +727,13 @@ private fun V111SidebarItem(
 @Composable
 private fun V111SmartTubeRowView(
     row: V100SmartTubeRow,
+    menuKey: String,
     accent: Color,
     isTv: Boolean,
     resolvingId: String?,
     onVideo: (V100SmartTubeVideo) -> Unit
 ) {
-    val rowKey = "smarttube-row:" + row.title
+    val rowKey = menuKey + ":row:" + row.title
     val rowState = v111RememberLazyListState(rowKey)
 
     Column {
@@ -755,7 +758,8 @@ private fun V111SmartTubeRowView(
                         menuKey = rowKey,
                         itemId = video.videoId,
                         index = index,
-                        enabled = isTv
+                        enabled = isTv,
+                        scopeKey = "smarttube-focus"
                     ),
                     onClick = {
                         V111MenuMemory.remember(rowKey, index, video.videoId)
