@@ -1,11 +1,12 @@
 package de.epimediahub.app.ui
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.view.View
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalInputModeManager
@@ -36,7 +37,18 @@ class V116SkipEditorTest {
     @get:Rule val compose = createComposeRule()
     private fun settle() { compose.waitForIdle(); compose.mainClock.advanceTimeBy(250); compose.waitForIdle() }
     private fun screenshot(name: String) {
-        val bitmap = compose.onNodeWithTag("skip-editor").captureToImage().asAndroidBitmap()
+        // SDK 28's Robolectric does not drive PixelCopy redraw callbacks.
+        // Draw the actual dialog window, including its visible focus ring.
+        lateinit var bitmap: Bitmap
+        compose.runOnIdle {
+            val windows = Class.forName("android.view.WindowManagerGlobal")
+            val global = windows.getMethod("getInstance").invoke(null)
+            @Suppress("UNCHECKED_CAST")
+            val roots = windows.getDeclaredField("mViews").apply { isAccessible = true }.get(global) as List<View>
+            val root = roots.last()
+            bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+            root.draw(Canvas(bitmap))
+        }
         File("build/reports/ui").mkdirs()
         File("build/reports/ui", name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }

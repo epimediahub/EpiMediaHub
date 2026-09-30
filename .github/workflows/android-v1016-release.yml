@@ -2,6 +2,12 @@ name: Build signed EpiMediaHub Android v1.0.16 test release
 
 on:
   workflow_dispatch:
+  push:
+    branches: [android-v1.0.16-dev]
+    paths:
+      - '.github/workflows/android-v1016-release.yml'
+      - 'android/v1.0.16/**'
+      - 'build_tools/install_android_v1016_source.sh'
 
 concurrency:
   group: epimediahub-android-v1016-release
@@ -169,7 +175,10 @@ jobs:
           grep -Fq '.v114FocusRing()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
           grep -Fq '"App-Update"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
           grep -Fq 'V116VodPlayer(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
-          grep -Fq 'FOCUS_BLOCK_DESCENDANTS' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V115VodPlayer.kt"
+          grep -Fq 'FOCUS_BLOCK_DESCENDANTS' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V116VodPlayer.kt"
+          grep -Fq 'V116Playback.skip(player, segment)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V116VodPlayer.kt"
+          grep -Fq 'player.play()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V116VodPlayer.kt"
+          grep -Fq 'skipRepository.presence(item)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
           grep -Fq 'list_versions=true' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V115SkipRepository.kt"
           grep -Fq 'clearOverridesOfType' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V115Tracks.kt"
 
@@ -262,7 +271,6 @@ jobs:
           set -euo pipefail
           TAG="v0.7.0-test"
           TITLE="EpiMediaHub Android v1.0.16 Test"
-          NOTES="Android 1.0.16 Test: Intro überspringen startet die Wiedergabe automatisch. Eigene Intro-, Rückblick- und Abspannmarken pro Videodatei, falsche Marken ausblenden, Titelzuordnung prüfen und benannte Videokapitel nutzen. Zentrale Freigaben und Audioanalyse benötigen das Raspberry-Update 0.8.2. Netflix-Player, Tonsprachen, Untertitel und Folgenauswahl bleiben enthalten."
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --title "$TITLE" --notes-file android/v1.0.16/RELEASE_NOTES.md --prerelease --draft --target "${GITHUB_SHA}"
           fi
