@@ -440,15 +440,12 @@ fun V111SmartTubeShell(
                             }
                         }
 
-                        itemsIndexed(rows, key = { _, row -> "st-row:" + row.title }) { rowIndex, row ->
-                            val memoryKey = "smarttube-content:" + selectedSection.name + ":" + searchTitle
+                        itemsIndexed(rows, key = { _, row -> "st-row:" + row.title }) { _, row ->
                             V111SmartTubeRowView(
                                 row = row,
                                 accent = accent,
                                 isTv = isTv,
                                 resolvingId = resolvingId,
-                                memoryKey = memoryKey,
-                                rowIndex = rowIndex,
                                 onVideo = ::play
                             )
                         }
@@ -731,19 +728,10 @@ private fun V111SmartTubeRowView(
     accent: Color,
     isTv: Boolean,
     resolvingId: String?,
-    memoryKey: String,
-    rowIndex: Int,
     onVideo: (V100SmartTubeVideo) -> Unit
 ) {
-    val rowKey = memoryKey + ":" + row.title
-    val rowState = rememberLazyListState()
-    val rememberedVideoIndex = V111MenuMemory.index(rowKey)
-
-    LaunchedEffect(row.videos.size, isTv) {
-        if (isTv && row.videos.isNotEmpty()) {
-            rowState.scrollToItem(rememberedVideoIndex.coerceIn(0, row.videos.lastIndex))
-        }
-    }
+    val rowKey = "smarttube-row:" + row.title
+    val rowState = v111RememberLazyListState(rowKey)
 
     Column {
         Text(
@@ -753,8 +741,6 @@ private fun V111SmartTubeRowView(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = 2.dp, bottom = 10.dp)
         )
-        val rowKey = "smarttube-row:" + row.title
-        val rowState = v111RememberLazyListState(rowKey)
         LazyRow(
             state = rowState,
             horizontalArrangement = Arrangement.spacedBy(if (isTv) 17.dp else 10.dp)
@@ -771,7 +757,10 @@ private fun V111SmartTubeRowView(
                         index = index,
                         enabled = isTv
                     ),
-                    onClick = { onVideo(video) }
+                    onClick = {
+                        V111MenuMemory.remember(rowKey, index, video.videoId)
+                        onVideo(video)
+                    }
                 )
             }
         }
