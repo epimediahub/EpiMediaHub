@@ -12,16 +12,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-internal enum class V108SmartTubeSection(val label: String, val shortMark: String) {
-    HOME("Startseite", "S"),
-    SUBSCRIPTIONS("Abos", "A"),
-    HISTORY("Verlauf", "V"),
+internal enum class V108SmartTubeSection(
+    val label: String,
+    val shortMark: String,
+    val requiresAuth: Boolean = false
+) {
+    HOME("Startseite", "ST"),
+    SUBSCRIPTIONS("Abos", "AB", true),
+    HISTORY("Verlauf", "VL", true),
+    PLAYLISTS("Playlists", "PL", true),
     SHORTS("Shorts", "SH"),
-    TRENDING("Trending", "T"),
-    MUSIC("Musik", "M"),
-    GAMING("Gaming", "G"),
-    NEWS("Nachrichten", "N"),
-    LIVE("Live", "L")
+    TRENDING("Trends", "TR"),
+    MUSIC("Musik", "MU"),
+    GAMING("Gaming", "GM"),
+    NEWS("Nachrichten", "NW"),
+    LIVE("Live", "LI")
 }
 
 internal data class V108SmartTubeAuthState(
@@ -64,18 +69,20 @@ internal object V108SmartTubeCore {
                     mapGroups(listOfNotNull(service.getSubscriptions()))
                 V108SmartTubeSection.HISTORY ->
                     mapGroups(listOfNotNull(service.getHistory()))
+                V108SmartTubeSection.PLAYLISTS ->
+                    mapGroups(collectSingleGroups(service.getPlaylistsObserve()))
                 V108SmartTubeSection.SHORTS ->
-                    mapGroups(listOfNotNull(service.getShortsObserve().blockingFirst()))
+                    mapGroups(collectSingleGroups(service.getShortsObserve()))
                 V108SmartTubeSection.TRENDING ->
-                    mapGroups(service.getTrendingObserve().blockingFirst())
+                    mapGroups(collectGroups(service.getTrendingObserve()))
                 V108SmartTubeSection.MUSIC ->
-                    mapGroups(service.getMusicObserve().blockingFirst())
+                    mapGroups(collectGroups(service.getMusicObserve()))
                 V108SmartTubeSection.GAMING ->
-                    mapGroups(service.getGamingObserve().blockingFirst())
+                    mapGroups(collectGroups(service.getGamingObserve()))
                 V108SmartTubeSection.NEWS ->
-                    mapGroups(service.getNewsObserve().blockingFirst())
+                    mapGroups(collectGroups(service.getNewsObserve()))
                 V108SmartTubeSection.LIVE ->
-                    mapGroups(service.getLiveObserve().blockingFirst())
+                    mapGroups(collectGroups(service.getLiveObserve()))
             }
         }
     }
@@ -150,6 +157,12 @@ internal object V108SmartTubeCore {
             )
         }
     }
+
+    private fun collectGroups(source: Observable<List<MediaGroup>>): List<MediaGroup> =
+        source.toList().blockingGet().flatten()
+
+    private fun collectSingleGroups(source: Observable<MediaGroup>): List<MediaGroup> =
+        source.toList().blockingGet()
 
     private fun homeRows(service: ContentService): List<V100SmartTubeRow> {
         val primary = mapGroups(service.getHome())
