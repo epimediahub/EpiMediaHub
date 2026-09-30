@@ -7,6 +7,7 @@ on:
       - '.github/workflows/android-v109-check.yml'
       - 'android/v1.0.9/**'
       - 'build_tools/install_android_v109_source.sh'
+      - 'build_tools/generate_intro_sound_v109.py'
   workflow_dispatch:
 
 jobs:
