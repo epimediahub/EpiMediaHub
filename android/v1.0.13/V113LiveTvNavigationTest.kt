@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.Key
@@ -38,7 +39,7 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 /** Exercises the actual Live TV panes with remote-control keys and state updates. */
-@OptIn(ExperimentalTestApi::class)
+@OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], qualifiers = "w960dp-h540dp-land")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

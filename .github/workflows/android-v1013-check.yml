@@ -44,7 +44,10 @@ jobs:
           include(":app")
           EOF
       - name: Install v1.0.13 source
-        run: bash build_tools/install_android_v1013_source.sh
+        run: |
+          bash build_tools/install_android_v1013_source.sh
+          grep -Fq 'https://download.epimediahub.com/android/latest.json' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+          grep -Fq 'releases/tags/v0.7.0-test' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
