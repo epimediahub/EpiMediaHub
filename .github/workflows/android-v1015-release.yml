@@ -2,6 +2,13 @@ name: Build signed EpiMediaHub Android v1.0.15 test release
 
 on:
   workflow_dispatch:
+  push:
+    branches: [android-v1.0.15-dev]
+    paths:
+      - '.github/workflows/android-v1015-release.yml'
+      - 'android/v1.0.15/**'
+      - 'build_tools/install_android_v1015_source.sh'
+      - 'build_tools/prepare_smarttube_core_v100.sh'
 
 concurrency:
   group: epimediahub-android-v1015-release
