@@ -47,7 +47,7 @@ checks = [
     (java / "ui/V110SmartTubeShell.kt", "filterNot { it == V108SmartTubeSection.TRENDING }"),
     (java / "ui/V110SmartTubeShell.kt", "smartTubeBackgroundRes"),
     (java / "ui/V110SmartTubeShell.kt", "smartTubeMotifRes"),
-    (java / "ui/V110SmartTubeShell.kt", "V110SmartTubeTvSearchDialog("),
+    (java / "ui/V110SmartTubeShell.kt", "V110TvKeyboardDialog("),
     (java / "ui/V110SmartTubeShell.kt", "nextVideoAfter(video)"),
     (java / "ui/V110SmartTubePlayer.kt", "Player.STATE_ENDED"),
     (java / "ui/V110SmartTubePlayer.kt", "onEnded()"),
