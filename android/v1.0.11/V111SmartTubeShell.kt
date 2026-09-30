@@ -11,6 +11,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -61,7 +64,14 @@ fun V111SmartTubeShell(
         )
     }
 
-    var selectedSection by remember { mutableStateOf(V108SmartTubeSection.HOME) }
+    val smartTubeMenuKey = "smarttube-section"
+    var selectedSection by remember {
+        mutableStateOf(
+            V108SmartTubeSection.entries.firstOrNull {
+                it.name == V111MenuMemory.id(smartTubeMenuKey)
+            } ?: V108SmartTubeSection.HOME
+        )
+    }
     var rows by remember { mutableStateOf<List<V100SmartTubeRow>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf("") }
@@ -84,6 +94,7 @@ fun V111SmartTubeShell(
 
     fun reloadSection(section: V108SmartTubeSection = selectedSection) {
         selectedSection = section
+        V111MenuMemory.remember(smartTubeMenuKey, section.ordinal, section.name)
         searchTitle = ""
         error = ""
         loading = true
@@ -214,34 +225,57 @@ fun V111SmartTubeShell(
     }
 
     Column(Modifier.fillMaxSize()) {
-        EpiTopBar(
-            "SMARTTUBE",
-            R.drawable.brand_header,
-            onBack,
-            actions = {
-                V108TopAction(
-                    label = if (auth.signed) {
-                        auth.accountName.ifBlank { "KONTO" }.uppercase()
-                    } else "ANMELDEN",
-                    accent = accent,
-                    onClick = { accountDialog = true }
+        Surface(
+            modifier = Modifier.fillMaxWidth().height(if (isTv) 72.dp else 58.dp),
+            color = Color(0xF20B0B0B),
+            tonalElevation = 0.dp
+        ) {
+            Row(
+                Modifier.fillMaxSize().padding(horizontal = if (isTv) 18.dp else 9.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                V111HeaderIcon(
+                    icon = { Icon(Icons.Default.ArrowBack, null, tint = Color.White) },
+                    onClick = onBack
                 )
-                Spacer(Modifier.width(7.dp))
-                V108TopAction(
-                    label = "SUCHE",
-                    accent = accent,
-                    leading = { Icon(Icons.Default.Search, null, tint = Color.White) },
+                Spacer(Modifier.width(if (isTv) 14.dp else 8.dp))
+                Surface(
+                    color = Color(0xFFE62117),
+                    shape = RoundedCornerShape(7.dp)
+                ) {
+                    Text(
+                        "▶",
+                        color = Color.White,
+                        fontSize = if (isTv) 18.sp else 14.sp,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                    )
+                }
+                Spacer(Modifier.width(9.dp))
+                Text(
+                    "SmartTube",
+                    color = Color.White,
+                    fontSize = if (isTv) 24.sp else 19.sp,
+                    fontWeight = FontWeight.Black
+                )
+                Spacer(Modifier.weight(1f))
+                V111HeaderIcon(
+                    icon = { Icon(Icons.Default.Search, null, tint = Color.White) },
                     onClick = { searchDialog = true }
                 )
                 Spacer(Modifier.width(7.dp))
-                V108TopAction(
-                    label = "NEU",
-                    accent = accent,
-                    leading = { Icon(Icons.Default.Refresh, null, tint = Color.White) },
+                V111HeaderIcon(
+                    icon = { Icon(Icons.Default.Refresh, null, tint = Color.White) },
                     onClick = { reloadSection(selectedSection) }
                 )
+                Spacer(Modifier.width(9.dp))
+                V111AccountPill(
+                    label = if (auth.signed) auth.accountName.ifBlank { "Konto" } else "Anmelden",
+                    accent = accent,
+                    onClick = { accountDialog = true }
+                )
             }
-        )
+        }
 
         Box(
             Modifier
@@ -281,7 +315,7 @@ fun V111SmartTubeShell(
 
             Row(Modifier.fillMaxSize()) {
             if (isTv) {
-                V108SmartTubeSidebar(
+                V111SmartTubeSidebar(
                     selected = selectedSection,
                     accent = accent,
                     onSelect = { reloadSection(it) }
@@ -301,10 +335,9 @@ fun V111SmartTubeShell(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        if (searchTitle.isNotBlank()) searchTitle.uppercase()
-                        else selectedSection.label.uppercase(),
+                        if (searchTitle.isNotBlank()) searchTitle else selectedSection.label,
                         color = Color.White,
-                        fontSize = if (isTv) 21.sp else 16.sp,
+                        fontSize = if (isTv) 26.sp else 19.sp,
                         fontWeight = FontWeight.Black,
                         letterSpacing = .6.sp
                     )
@@ -381,7 +414,7 @@ fun V111SmartTubeShell(
                         }
 
                         items(rows, key = { "st-row:" + it.title }) { row ->
-                            V108SmartTubeRowView(
+                            V111SmartTubeRowView(
                                 row = row,
                                 accent = accent,
                                 isTv = isTv,
@@ -508,38 +541,57 @@ fun V111SmartTubeShell(
 }
 
 @Composable
-private fun V108TopAction(
+private fun V111HeaderIcon(
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit
+) {
+    var focused by remember { mutableStateOf(false) }
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(46.dp).onFocusChanged { focused = it.isFocused },
+        color = if (focused) Color.White.copy(.18f) else Color.Transparent,
+        shape = RoundedCornerShape(23.dp),
+        border = BorderStroke(if (focused) 2.dp else 0.dp, if (focused) Color.White else Color.Transparent)
+    ) {
+        Box(contentAlignment = Alignment.Center) { icon() }
+    }
+}
+
+@Composable
+private fun V111AccountPill(
     label: String,
     accent: Color,
-    leading: (@Composable () -> Unit)? = null,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
         modifier = Modifier
-            .height(38.dp)
+            .height(44.dp)
+            .widthIn(max = 210.dp)
             .onFocusChanged { focused = it.isFocused },
-        color = if (focused) accent.copy(.42f) else Color(0x32101620),
-        contentColor = Color.White,
-        shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(
-            if (focused) 2.dp else 1.dp,
-            if (focused) Color.White else Color.White.copy(.16f)
-        )
+        color = if (focused) Color.White.copy(.18f) else Color(0xFF202020),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(if (focused) 2.dp else 1.dp, if (focused) Color.White else Color.White.copy(.10f))
     ) {
         Row(
-            Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            Modifier.padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (leading != null) {
-                leading()
-                Spacer(Modifier.width(6.dp))
+            Surface(
+                modifier = Modifier.size(28.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = accent
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Person, null, tint = Color.Black, modifier = Modifier.size(17.dp))
+                }
             }
+            Spacer(Modifier.width(8.dp))
             Text(
                 label,
                 color = Color.White,
-                fontWeight = FontWeight.Black,
+                fontWeight = FontWeight.SemiBold,
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -549,27 +601,25 @@ private fun V108TopAction(
 }
 
 @Composable
-private fun V108SmartTubeSidebar(
+private fun V111SmartTubeSidebar(
     selected: V108SmartTubeSection,
     accent: Color,
     onSelect: (V108SmartTubeSection) -> Unit
 ) {
     Surface(
-        modifier = Modifier
-            .width(188.dp)
-            .fillMaxHeight(),
-        color = Color(0xD80B1017),
-        border = BorderStroke(1.dp, Color.White.copy(.07f))
+        modifier = Modifier.width(164.dp).fillMaxHeight(),
+        color = Color.Black.copy(alpha = .58f),
+        border = BorderStroke(0.dp, Color.Transparent)
     ) {
         LazyColumn(
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp)
+            contentPadding = PaddingValues(horizontal = 9.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             items(
                 V108SmartTubeSection.entries.filterNot { it == V108SmartTubeSection.TRENDING },
                 key = { it.name }
             ) { section ->
-                V108SidebarItem(
+                V111SidebarItem(
                     section = section,
                     selected = section == selected,
                     accent = accent,
@@ -581,7 +631,7 @@ private fun V108SmartTubeSidebar(
 }
 
 @Composable
-private fun V108SidebarItem(
+private fun V111SidebarItem(
     section: V108SmartTubeSection,
     selected: Boolean,
     accent: Color,
@@ -592,50 +642,42 @@ private fun V108SidebarItem(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(46.dp)
             .onFocusChanged { focused = it.isFocused },
         color = when {
-            focused -> accent.copy(.34f)
-            selected -> accent.copy(.18f)
+            focused -> Color.White.copy(.18f)
+            selected -> Color.White.copy(.11f)
             else -> Color.Transparent
         },
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(
-            if (focused) 2.dp else 1.dp,
-            when {
-                focused -> Color.White
-                selected -> accent.copy(.75f)
-                else -> Color.Transparent
-            }
-        )
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(if (focused) 2.dp else 0.dp, if (focused) Color.White else Color.Transparent)
     ) {
         Row(
-            Modifier.fillMaxSize().padding(horizontal = 10.dp),
+            Modifier.fillMaxSize().padding(horizontal = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                modifier = Modifier.size(30.dp),
-                color = when {
-                    focused -> Color.White
-                    selected -> accent
-                    else -> Color.White.copy(.08f)
-                },
-                shape = RoundedCornerShape(9.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
+            Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+                if (section == V108SmartTubeSection.HOME) {
+                    Icon(
+                        Icons.Default.Home,
+                        null,
+                        tint = if (selected || focused) Color.White else Color.White.copy(.72f),
+                        modifier = Modifier.size(21.dp)
+                    )
+                } else {
                     Text(
                         section.shortMark,
-                        color = if (focused) Color.Black else if (selected) Color.Black else Color.White,
-                        fontWeight = FontWeight.Black,
-                        fontSize = if (section.shortMark.length > 1) 9.sp else 11.sp
+                        color = if (selected || focused) Color.White else Color.White.copy(.72f),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black
                     )
                 }
             }
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(9.dp))
             Text(
                 section.label,
-                color = Color.White,
-                fontWeight = if (focused || selected) FontWeight.Black else FontWeight.SemiBold,
+                color = if (selected || focused) Color.White else Color.White.copy(.78f),
+                fontWeight = if (selected || focused) FontWeight.Bold else FontWeight.Medium,
                 fontSize = 13.sp,
                 maxLines = 1
             )
@@ -644,7 +686,7 @@ private fun V108SidebarItem(
 }
 
 @Composable
-private fun V108SmartTubeRowView(
+private fun V111SmartTubeRowView(
     row: V100SmartTubeRow,
     accent: Color,
     isTv: Boolean,
@@ -653,16 +695,15 @@ private fun V108SmartTubeRowView(
 ) {
     Column {
         Text(
-            row.title.uppercase(),
+            row.title,
             color = Color.White,
-            fontSize = if (isTv) 18.sp else 14.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = .5.sp,
-            modifier = Modifier.padding(start = 2.dp, bottom = 9.dp)
+            fontSize = if (isTv) 20.sp else 15.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 2.dp, bottom = 10.dp)
         )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(if (isTv) 12.dp else 8.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(if (isTv) 15.dp else 10.dp)) {
             items(row.videos, key = { it.videoId }) { video ->
-                V108SmartTubeVideoCard(
+                V111SmartTubeVideoCard(
                     video = video,
                     accent = accent,
                     isTv = isTv,
@@ -675,7 +716,7 @@ private fun V108SmartTubeRowView(
 }
 
 @Composable
-private fun V108SmartTubeVideoCard(
+private fun V111SmartTubeVideoCard(
     video: V100SmartTubeVideo,
     accent: Color,
     isTv: Boolean,
@@ -683,23 +724,21 @@ private fun V108SmartTubeVideoCard(
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
-    val width = if (isTv) 246.dp else 178.dp
-    val imageHeight = if (isTv) 138.dp else 100.dp
-    val shape = RoundedCornerShape(if (isTv) 14.dp else 12.dp)
+    val width = if (isTv) 278.dp else 188.dp
+    val imageHeight = if (isTv) 156.dp else 106.dp
+    val imageShape = RoundedCornerShape(if (isTv) 12.dp else 10.dp)
 
-    Surface(
-        onClick = onClick,
-        modifier = Modifier
+    Column(
+        Modifier
             .width(width)
-            .onFocusChanged { focused = it.isFocused },
-        color = if (focused) accent.copy(.20f) else Color(0xC6101720),
-        shape = shape,
-        border = BorderStroke(
-            if (focused) 3.dp else 1.dp,
-            if (focused) Color.White else Color.White.copy(.12f)
-        )
+            .onFocusChanged { focused = it.isFocused }
     ) {
-        Column {
+        Surface(
+            onClick = onClick,
+            shape = imageShape,
+            color = Color(0xFF181818),
+            border = BorderStroke(if (focused) 4.dp else 0.dp, if (focused) Color.White else Color.Transparent)
+        ) {
             Box(Modifier.fillMaxWidth().height(imageHeight)) {
                 if (video.image.isNotBlank()) {
                     AsyncImage(
@@ -710,13 +749,12 @@ private fun V108SmartTubeVideoCard(
                     )
                 } else {
                     Box(
-                        Modifier.fillMaxSize().background(Color(0xFF18222E)),
+                        Modifier.fillMaxSize().background(Color(0xFF202020)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("YouTube", color = accent, fontWeight = FontWeight.Black)
+                        Text("SmartTube", color = Color.White.copy(.72f), fontWeight = FontWeight.Bold)
                     }
                 }
-
                 if (video.live) {
                     Text(
                         "LIVE",
@@ -725,47 +763,44 @@ private fun V108SmartTubeVideoCard(
                         fontWeight = FontWeight.Black,
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(7.dp)
-                            .background(Color(0xD9B5161E), RoundedCornerShape(5.dp))
+                            .padding(8.dp)
+                            .background(Color(0xFFE62117), RoundedCornerShape(4.dp))
                             .padding(horizontal = 6.dp, vertical = 3.dp)
                     )
                 }
-
                 if (resolving) {
                     Box(
                         Modifier.fillMaxSize().background(Color.Black.copy(.58f)),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(if (isTv) 30.dp else 24.dp),
+                            modifier = Modifier.size(if (isTv) 34.dp else 26.dp),
                             color = Color.White,
-                            strokeWidth = 2.dp
+                            strokeWidth = 3.dp
                         )
                     }
                 }
             }
-
-            Column(Modifier.padding(horizontal = 10.dp, vertical = 9.dp)) {
-                Text(
-                    video.title,
-                    color = Color.White,
-                    fontSize = if (isTv) 14.sp else 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = if (isTv) 17.sp else 14.sp
-                )
-                if (video.author.isNotBlank()) {
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        video.author,
-                        color = Color.White.copy(.58f),
-                        fontSize = if (isTv) 11.sp else 9.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            video.title,
+            color = Color.White,
+            fontSize = if (isTv) 15.sp else 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            lineHeight = if (isTv) 18.sp else 14.sp
+        )
+        if (video.author.isNotBlank()) {
+            Spacer(Modifier.height(3.dp))
+            Text(
+                video.author,
+                color = Color.White.copy(.62f),
+                fontSize = if (isTv) 12.sp else 10.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
