@@ -154,13 +154,160 @@ replace_once(
     "SmartTube 1.0.8 shell route",
 )
 
+
+# ---------------------------------------------------------------------------
+# SmartTube playback startup speed.
+#
+# 1.0.5 deliberately scanned playback clients from scratch for every video so
+# Media3 could avoid SABR-only responses. That is robust but slow. Remember the
+# last compatible legacy client and try it first on the next video. Only scan
+# other clients again if that fast path stops working.
+# ---------------------------------------------------------------------------
+media_root = root / ".smarttube/MediaServiceCore"
+format_wrapper = media_root / "youtubeapi/src/main/java/com/liskovsoft/youtubeapi/service/internal/FormatInfoWrapper.kt"
+fw = format_wrapper.read_text()
+
+state_anchor = "    private var mTryInnertubeFirst: Boolean = true\n"
+if state_anchor not in fw:
+    raise SystemExit("FormatInfoWrapper playback state anchor missing")
+if "mEpiMedia3LegacyReady" not in fw:
+    fw = fw.replace(
+        state_anchor,
+        state_anchor + "    private var mEpiMedia3LegacyReady: Boolean = false\n",
+        1,
+    )
+
+reset_old = """    @JvmStatic
+    fun resetFormat() {
+        getVideoInfoService().resetInfoType()
+    }
+"""
+reset_new = """    @JvmStatic
+    fun resetFormat() {
+        mEpiMedia3LegacyReady = false
+        mTryInnertubeFirst = true
+        getVideoInfoService().resetInfoType()
+    }
+"""
+if reset_old not in fw:
+    raise SystemExit("FormatInfoWrapper resetFormat anchor missing")
+fw = fw.replace(reset_old, reset_new, 1)
+
+method_start = fw.find("    @JvmStatic\n    fun getMedia3CompatibleFormatInfo(")
+helper_start = fw.find("    private fun isMedia3Compatible", method_start)
+if method_start < 0 or helper_start < 0:
+    raise SystemExit("FormatInfoWrapper Media3 method anchors missing")
+
+fast_method = """    @JvmStatic
+    fun getMedia3CompatibleFormatInfo(
+        videoId: String,
+        clickTrackingParams: String?
+    ): MediaItemFormatInfo? {
+        invalidateCache()
+        mTryInnertubeFirst = false
+        var fallback: MediaItemFormatInfo? = null
+
+        // Fast path: reuse the client that produced a Media3-compatible stream
+        // for the previous video. This avoids re-probing YouTube clients on
+        // every click.
+        if (mEpiMedia3LegacyReady) {
+            val preferred = mLegacyProvider(videoId, clickTrackingParams)
+            if (preferred != null && !preferred.isUnplayable) {
+                fallback = preferred
+                if (isMedia3Compatible(preferred)) {
+                    return preferred
+                }
+            }
+            getVideoInfoService().switchNextFormat(true)
+        } else {
+            // First playback: skip VISIONOS (commonly SABR-only) and begin with
+            // TV_DOWNGRADED, which supports authenticated playback.
+            getVideoInfoService().resetInfoType()
+            getVideoInfoService().switchNextFormat(true)
+        }
+
+        var attempts = 0
+        var endReached = false
+        while (!endReached && attempts < 10) {
+            invalidateCache()
+            val candidate = mLegacyProvider(videoId, clickTrackingParams)
+
+            if (candidate != null && !candidate.isUnplayable) {
+                fallback = candidate
+                if (isMedia3Compatible(candidate)) {
+                    mEpiMedia3LegacyReady = true
+                    return candidate
+                }
+            }
+
+            endReached = getVideoInfoService().switchNextFormat(true)
+            attempts++
+        }
+
+        // Rare fallback only: allow the normal Innertube provider one chance.
+        // If it is SABR-only, the caller will surface the existing friendly
+        // compatibility error instead of repeatedly probing.
+        mEpiMedia3LegacyReady = false
+        mTryInnertubeFirst = true
+        invalidateCache()
+        val initial = mInnertubeProvider(videoId, clickTrackingParams)
+        return if (isMedia3Compatible(initial)) initial else (fallback ?: initial)
+    }
+
+"""
+fw = fw[:method_start] + fast_method + fw[helper_start:]
+format_wrapper.write_text(fw)
+
+# Start rendering with a smaller initial buffer. Keep a healthy forward buffer
+# so faster startup does not turn into constant rebuffering on Fire TV.
+player = java / "ui/V106SmartTubePlayer.kt"
+ps = player.read_text()
+if "import androidx.media3.exoplayer.DefaultLoadControl\n" not in ps:
+    import_anchor = "import androidx.media3.exoplayer.ExoPlayer\n"
+    if import_anchor not in ps:
+        raise SystemExit("SmartTube ExoPlayer import anchor missing")
+    ps = ps.replace(
+        import_anchor,
+        "import androidx.media3.exoplayer.DefaultLoadControl\n" + import_anchor,
+        1,
+    )
+
+data_anchor = "            val dataSource = DefaultDataSource.Factory(context, http)\n"
+if data_anchor not in ps:
+    raise SystemExit("SmartTube data source anchor missing")
+if "val loadControl = DefaultLoadControl.Builder()" not in ps:
+    ps = ps.replace(
+        data_anchor,
+        data_anchor +
+        """            val loadControl = DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    5_000,
+                    30_000,
+                    750,
+                    1_250
+                )
+                .build()
+""",
+        1,
+    )
+
+builder_anchor = "            ExoPlayer.Builder(context)\n                .setMediaSourceFactory(sourceFactory)\n"
+if builder_anchor not in ps:
+    raise SystemExit("SmartTube source factory builder anchor missing")
+ps = ps.replace(
+    builder_anchor,
+    "            ExoPlayer.Builder(context)\n                .setLoadControl(loadControl)\n                .setMediaSourceFactory(sourceFactory)\n",
+    1,
+)
+player.write_text(ps)
+
 checks = [
     (gradle, "versionCode = 1008"),
     (gradle, 'versionName = "1.0.8"'),
     (gradle, "minSdk = 25"),
     (home, "V108SmartTubeShell("),
     (java / "ui/V108SmartTubeCore.kt", "V108SmartTubeSection"),
-    (java / "ui/V108SmartTubeCore.kt", "getTrendingObserve().blockingFirst()"),
+    (java / "ui/V108SmartTubeCore.kt", "collectGroups(service.getTrendingObserve())"),
     (java / "ui/V108SmartTubeShell.kt", "V108SmartTubeSidebar("),
     (java / "ui/V108SmartTubeShell.kt", "V108TopAction("),
     (java / "ui/V108SmartTubeShell.kt", "if (focused) 2.dp else 1.dp"),
