@@ -712,6 +712,62 @@ ts = ts.replace(
 )
 themes.write_text(ts)
 
+
+# Mediathek and secondary grids: preserve scroll position as part of the same
+# global Back-navigation rule.
+parity = java / "ui/ParityScreens.kt"
+if parity.exists():
+    ps = parity.read_text()
+
+    if "fun ParityMediathekHomeScreen(" in ps:
+        a, b = function_span(ps, "fun ParityMediathekHomeScreen(")
+        fn = ps[a:b]
+        if 'v111RememberLazyGridState("mediathek-countries")' not in fn:
+            fn = fn.replace(
+                "        LazyVerticalGrid(\n",
+                '        LazyVerticalGrid(\n            state = v111RememberLazyGridState("mediathek-countries"),\n',
+                1,
+            )
+        ps = ps[:a] + fn + ps[b:]
+
+    if "fun ParityMediathekDirectoryScreen(" in ps:
+        a, b = function_span(ps, "fun ParityMediathekDirectoryScreen(")
+        fn = ps[a:b]
+        if 'v111RememberLazyListState("mediathek-providers:' not in fn:
+            fn = fn.replace(
+                "        LazyColumn(\n            Modifier.fillMaxSize()",
+                '        LazyColumn(\n            state = v111RememberLazyListState("mediathek-providers:" + countryId),\n            modifier = Modifier.fillMaxSize()',
+                1,
+            )
+        ps = ps[:a] + fn + ps[b:]
+
+    if "fun ParityMediathekListScreen(" in ps:
+        a, b = function_span(ps, "fun ParityMediathekListScreen(")
+        fn = ps[a:b]
+        if 'v111RememberLazyGridState("mediathek-list:' not in fn:
+            fn = fn.replace(
+                "            LazyVerticalGrid(\n                columns =",
+                '            LazyVerticalGrid(\n                state = v111RememberLazyGridState("mediathek-list:" + providerId),\n                columns =',
+                1,
+            )
+        ps = ps[:a] + fn + ps[b:]
+
+    parity.write_text(ps)
+
+# Recently watched is a separate full-screen grid and should obey the same rule.
+h = hub.read_text()
+if "fun V060RecentlyWatchedScreen(" in h:
+    a, b = function_span(h, "fun V060RecentlyWatchedScreen(")
+    fn = h[a:b]
+    if 'v111RememberLazyGridState("recently-watched")' not in fn:
+        fn = fn.replace(
+            "        else LazyVerticalGrid(\n",
+            '        else LazyVerticalGrid(\n            state = v111RememberLazyGridState("recently-watched"),\n',
+            1,
+        )
+    h = h[:a] + fn + h[b:]
+    hub.write_text(h)
+
 checks = [
     (home, 'V111MenuMemory.id(homeMemoryKey)'),
     (home, 'V111MenuMemory.remember(homeMemoryKey'),
@@ -723,6 +779,8 @@ checks = [
     (hub, 'v111RememberLazyListState(rowKey)'),
     (live, 'v111RememberLazyListState("livetv-categories")'),
     (themes_path, 'v111RememberLazyListState("themes-overview")'),
+    (parity, 'v111RememberLazyGridState("mediathek-countries")'),
+    (hub, 'v111RememberLazyGridState("recently-watched")'),
     (legacy_screens, 'val memoryKey = "settings"'),
     (legacy_screens, 'val memoryKey = "playlists"'),
 ]
