@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalInputModeManager
@@ -34,6 +35,7 @@ internal fun V115TrackDialog(state: V115PlaybackUiState, isTv: Boolean, onDismis
     onTrack: (V115TrackChoice) -> Unit, onOff: () -> Unit) {
     val audio = remember(state.tracks) { V115Tracks.choices(state.tracks, C.TRACK_TYPE_AUDIO) }
     val subtitles = remember(state.tracks) { V115Tracks.choices(state.tracks, C.TRACK_TYPE_TEXT) }
+    val initialAudio = audio.indexOfFirst { it.selected }.coerceAtLeast(0)
     val first = remember { FocusRequester() }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         val inputMode = LocalInputModeManager.current
@@ -49,7 +51,7 @@ internal fun V115TrackDialog(state: V115PlaybackUiState, isTv: Boolean, onDismis
                             items(audio.size) { index ->
                                 val choice = audio[index]
                                 V115Option(choice.label, choice.selected, isTv,
-                                    Modifier.then(if (index == 0) Modifier.focusRequester(first) else Modifier).testTag("track-audio-$index")) { onTrack(choice) }
+                                    Modifier.then(if (index == initialAudio) Modifier.focusRequester(first) else Modifier).testTag("track-audio-$index")) { onTrack(choice) }
                             }
                         }
                     }
@@ -95,11 +97,15 @@ private fun V115Option(label: String, selected: Boolean, isTv: Boolean, modifier
 }
 
 @Composable
-internal fun V115EpisodeDialog(current: MediaEntry, episodes: List<MediaEntry>, season: Int, listState: LazyListState,
-    isTv: Boolean, onDismiss: () -> Unit, onSeason: (Int) -> Unit, onEpisode: (MediaEntry) -> Unit) {
+internal fun V115EpisodeDialog(current: MediaEntry, episodes: List<MediaEntry>, season: Int, listState: LazyListState, focusedId: String,
+    isTv: Boolean, onDismiss: () -> Unit, onFocused: (String) -> Unit, onSeason: (Int) -> Unit, onEpisode: (MediaEntry) -> Unit) {
     val visible = episodes.filter { it.season == season }
     val first = remember(season) { FocusRequester() }
-    val initialIndex = listState.firstVisibleItemIndex.coerceAtMost(visible.lastIndex.coerceAtLeast(0))
+    val initialIndex = remember(season) {
+        visible.indexOfFirst { it.resumeKey == focusedId }.takeIf { it >= 0 }
+            ?: visible.indexOfFirst { it.resumeKey == current.resumeKey }.takeIf { it >= 0 }
+            ?: listState.firstVisibleItemIndex.coerceAtMost(visible.lastIndex.coerceAtLeast(0))
+    }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         val inputMode = LocalInputModeManager.current
         Surface(Modifier.fillMaxWidth(if (isTv) .80f else .94f).widthIn(max = 900.dp).testTag("vod-episode-dialog"),
@@ -120,12 +126,21 @@ internal fun V115EpisodeDialog(current: MediaEntry, episodes: List<MediaEntry>, 
                     items(visible, key = { it.resumeKey }) { episode ->
                         val index = visible.indexOf(episode)
                         V115Option("Folge ${episode.episode} · ${episode.name}", episode.resumeKey == current.resumeKey, isTv,
-                            Modifier.then(if (index == initialIndex) Modifier.focusRequester(first) else Modifier).testTag("vod-episode-${episode.season}-${episode.episode}")) { onEpisode(episode) }
+                            Modifier.then(if (index == initialIndex) Modifier.focusRequester(first) else Modifier)
+                                .onFocusChanged { if (it.isFocused) onFocused(episode.resumeKey) }
+                                .testTag("vod-episode-${episode.season}-${episode.episode}")) { onEpisode(episode) }
                     }
                 }
                 TextButton(onClick = onDismiss, modifier = Modifier.v114FocusRing().testTag("vod-episode-close")) { Text("Schließen", color = Color.White, fontSize = 18.sp) }
             }
         }
-        LaunchedEffect(season) { if (isTv) { inputMode.requestInputMode(InputMode.Keyboard); delay(110L); runCatching { first.requestFocus() } } }
+        LaunchedEffect(season) {
+            if (isTv) {
+                inputMode.requestInputMode(InputMode.Keyboard)
+                if (listState.layoutInfo.visibleItemsInfo.none { it.index == initialIndex }) listState.scrollToItem(initialIndex)
+                delay(110L)
+                runCatching { first.requestFocus() }
+            }
+        }
     }
 }

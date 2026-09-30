@@ -78,6 +78,7 @@ internal fun V115PlayerChrome(
     var dragPosition by remember(item.resumeKey) { mutableStateOf<Long?>(null) }
     var selectedSeason by remember(item.resumeKey) { mutableIntStateOf(item.season) }
     val episodeStates = remember(item.resumeKey) { mutableMapOf<Int, LazyListState>() }
+    val episodeFocusIds = remember(item.resumeKey) { mutableStateMapOf<Int, String>() }
     val ordered = remember(item.resumeKey, episodes) { v115OrderedEpisodes(item, episodes) }
     val currentIndex = ordered.indexOfFirst { it.resumeKey == item.resumeKey }
     val next = ordered.getOrNull(currentIndex + 1).takeIf { currentIndex >= 0 }
@@ -270,7 +271,8 @@ internal fun V115PlayerChrome(
             val listState = episodeStates.getOrPut(selectedSeason) {
                 LazyListState(seasonEpisodes.indexOfFirst { it.resumeKey == item.resumeKey }.coerceAtLeast(0), 0)
             }
-            V115EpisodeDialog(item, ordered, selectedSeason, listState, isTv, ::closeDialog,
+            V115EpisodeDialog(item, ordered, selectedSeason, listState, episodeFocusIds[selectedSeason].orEmpty(), isTv, ::closeDialog,
+                onFocused = { episodeFocusIds[selectedSeason] = it },
                 onSeason = { selectedSeason = it }, onEpisode = { cancelledNext = true; dialog = null; onEpisode(it) })
         }
     }

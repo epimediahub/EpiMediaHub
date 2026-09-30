@@ -174,6 +174,18 @@ class V115PlayerTest {
         assertEquals(19, switched.single().episode)
     }
 
+    @Test fun reopeningEpisodePickerRestoresItsLastFocusedEpisode() {
+        screen()
+        compose.onNodeWithTag("vod-episodes").performClick(); settle()
+        repeat(15) { key("vod-episode-list", Key.DirectionDown) }
+        compose.onNodeWithTag("vod-episode-1-33").assertIsFocused()
+        compose.onNodeWithTag("vod-episode-close").performClick(); settle()
+        compose.onNodeWithTag("vod-episodes").assertIsFocused()
+        key("vod-episodes", Key.Enter)
+        compose.onNodeWithTag("vod-episode-1-33").assertIsFocused().assertIsDisplayed()
+        assertTrue(switched.isEmpty())
+    }
+
     @Test fun completedEpisodeAutomaticallyAdvancesExactlyOnce() {
         playback.value = playback.value.copy(ended = true, playing = false)
         screen()
