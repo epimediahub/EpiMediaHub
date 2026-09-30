@@ -1,0 +1,11 @@
+[Unit]
+Description=Run EpiMediaHub intro analysis while playback is idle
+
+[Timer]
+OnBootSec=3min
+OnUnitInactiveSec=2min
+RandomizedDelaySec=20s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -23,7 +23,7 @@ r1 = app.test_client()
 r2 = app.test_client()
 anon = app.test_client()
 
-assert admin.get("/health").get_json()["api_version"] == "0.8.0"
+assert admin.get("/health").get_json()["api_version"] == os.environ.get("EPIMEDIAHUB_EXPECTED_API_VERSION", "0.8.0")
 assert admin.post("/admin/login", data={"password": "test-admin-password"}).status_code == 302
 
 for data in (

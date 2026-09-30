@@ -44,3 +44,6 @@ def connect_page(token: str):
 
 
 install_dashboard_v080(app, db)
+
+from skip_markers import install as install_skip_markers
+install_skip_markers(app, db)
