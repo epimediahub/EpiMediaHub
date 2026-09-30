@@ -195,6 +195,15 @@ class V115PlayerTest {
         assertEquals(1, switched.size)
     }
 
+    @Test fun browsingEpisodesAtTheEndCancelsThePendingAutomaticChange() {
+        playback.value = playback.value.copy(ended = true, playing = false)
+        screen()
+        compose.onNodeWithTag("vod-episodes").performClick(); settle()
+        compose.mainClock.advanceTimeBy(12_000); settle()
+        compose.onNodeWithTag("vod-episode-dialog").assertIsDisplayed()
+        assertTrue(switched.isEmpty())
+    }
+
     @Test fun offeredAudioAndSubtitlesAreSelectableAndFocusReturnsToTheirLauncher() {
         val audio = TrackGroup("audio", Format.Builder().setSampleMimeType("audio/aac").setLanguage("de").build(), Format.Builder().setSampleMimeType("audio/aac").setLanguage("it").build())
         val text = TrackGroup("text", Format.Builder().setSampleMimeType("text/vtt").setLanguage("en").build())

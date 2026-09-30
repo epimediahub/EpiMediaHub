@@ -87,7 +87,7 @@ internal fun V115PlayerChrome(
     val active = segments.filter { it.active(state.positionMs) }
     val red = Color(0xFFE50914)
 
-    fun touch() { controls = true; interaction++ }
+    fun touch() { controls = true; interaction++; if (state.ended) cancelledNext = true }
     fun show() { restore = "play"; touch() }
     fun closeDialog() { dialog = null; touch() }
 
