@@ -730,6 +730,63 @@ ts = ts.replace(
 themes.write_text(ts)
 
 
+
+# Series season/episode browser: remember selected season and episode-grid scroll.
+if legacy_screens.exists():
+    es = legacy_screens.read_text()
+    if "fun EpisodesScreen(" in es:
+        a, b = function_span(es, "fun EpisodesScreen(")
+        fn = es[a:b]
+        if 'val episodeMemoryKey = "episodes:" + series.resumeKey' not in fn:
+            fn = fn.replace(
+                "    val seasons = remember(orderedEpisodes) { orderedEpisodes.map { it.season }.distinct() }\n",
+                '''    val seasons = remember(orderedEpisodes) { orderedEpisodes.map { it.season }.distinct() }
+    val episodeMemoryKey = "episodes:" + series.resumeKey
+''',
+                1,
+            )
+            fn = fn.replace(
+                "    var selectedSeason by remember(series.resumeKey, seasons) { mutableStateOf(seasons.firstOrNull()) }\n",
+                '''    var selectedSeason by remember(series.resumeKey, seasons) {
+        mutableStateOf(
+            V111MenuMemory.text(episodeMemoryKey + ":season").toIntOrNull()
+                ?.takeIf { it in seasons }
+                ?: seasons.firstOrNull()
+        )
+    }
+''',
+                1,
+            )
+            fn = fn.replace(
+                "            LazyRow(\n                modifier=Modifier.fillMaxWidth(),",
+                '''            LazyRow(
+                state=v111RememberLazyListState(episodeMemoryKey + ":seasons"),
+                modifier=Modifier.fillMaxWidth(),''',
+                1,
+            )
+            fn = fn.replace(
+                "                        onClick={selectedSeason=season},",
+                '''                        onClick={
+                            selectedSeason=season
+                            V111MenuMemory.rememberText(episodeMemoryKey + ":season", season.toString())
+                        },''',
+                1,
+            )
+            fn = fn.replace(
+                "            LazyVerticalGrid(\n                GridCells.Fixed(if(isTv)5 else 2),",
+                '''            LazyVerticalGrid(
+                state=v111RememberLazyGridState(episodeMemoryKey + ":grid"),
+                columns=GridCells.Fixed(if(isTv)5 else 2),''',
+                1,
+            )
+            fn = fn.replace(
+                "                Modifier.fillMaxSize().padding(horizontal=14.dp,vertical=6.dp),",
+                "                modifier=Modifier.fillMaxSize().padding(horizontal=14.dp,vertical=6.dp),",
+                1,
+            )
+        es = es[:a] + fn + es[b:]
+        legacy_screens.write_text(es)
+
 # Mediathek and secondary grids: preserve scroll position as part of the same
 # global Back-navigation rule.
 parity = java / "ui/ParityScreens.kt"
@@ -969,6 +1026,7 @@ checks = [
     (hub, 'v111RememberLazyGridState("recently-watched")'),
     (legacy_screens, 'val memoryKey = "settings"'),
     (legacy_screens, 'val memoryKey = "playlists"'),
+    (legacy_screens, 'val episodeMemoryKey = "episodes:" + series.resumeKey'),
     (legacy_screens, 'Screen.CategorySettings'),
     (weather, 'modifier: Modifier = Modifier'),
     (category_settings, 'v111RememberFocus(memoryKey'),
