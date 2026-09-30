@@ -75,7 +75,7 @@ class V115PlayerTest {
         }
         settle()
     }
-    private fun settle() { compose.waitForIdle(); compose.mainClock.advanceTimeBy(80); compose.waitForIdle() }
+    private fun settle() { compose.waitForIdle(); compose.mainClock.advanceTimeBy(250); compose.waitForIdle() }
     private fun key(tag: String, key: Key) { compose.onNodeWithTag(tag).performKeyInput { keyDown(key); keyUp(key) }; settle() }
     private fun screenshot(name: String) {
         lateinit var bitmap: Bitmap

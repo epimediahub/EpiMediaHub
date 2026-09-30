@@ -34,15 +34,15 @@ s = client.read_text()
 # Provider catalog/detail IDs survive navigation, favourites and playback history.
 anchor = '                                addedAt = o.optString("added").toLongOrNull() ?: 0L\n'
 assert s.count(anchor) == 2
-s = s.replace(anchor, '                                addedAt = o.optString("added").toLongOrNull() ?: 0L,\n                                imdbId = V115SkipPolicy.imdb(firstNonBlank(o.optString("imdb_id"), o.optString("imdb"))),\n                                tmdbId = V115SkipPolicy.tmdb(firstNonBlank(o.optString("tmdb_id"), o.optString("tmdb"))).takeIf { it > 0 }?.toString().orEmpty()\n')
+s = s.replace(anchor, '                                addedAt = o.optString("added").toLongOrNull() ?: 0L,\n                                imdbId = V115SkipPolicy.firstImdb(o.optString("imdb_id"), o.optString("imdb")),\n                                tmdbId = V115SkipPolicy.firstTmdb(o.optString("tmdb_id"), o.optString("tmdb")).takeIf { it > 0 }?.toString().orEmpty()\n')
 anchor = '            trailer = firstNonBlank(info.optString("youtube_trailer"), info.optString("trailer"), item.trailer)\n'
 assert s.count(anchor) == 2
-s = s.replace(anchor, '            trailer = firstNonBlank(info.optString("youtube_trailer"), info.optString("trailer"), item.trailer),\n            imdbId = V115SkipPolicy.imdb(firstNonBlank(info.optString("imdb_id"), info.optString("imdb"), item.imdbId)),\n            tmdbId = V115SkipPolicy.tmdb(firstNonBlank(info.optString("tmdb_id"), info.optString("tmdb"), item.tmdbId)).takeIf { it > 0 }?.toString().orEmpty()\n')
+s = s.replace(anchor, '            trailer = firstNonBlank(info.optString("youtube_trailer"), info.optString("trailer"), item.trailer),\n            imdbId = V115SkipPolicy.firstImdb(info.optString("imdb_id"), info.optString("imdb"), item.imdbId),\n            tmdbId = V115SkipPolicy.firstTmdb(info.optString("tmdb_id"), info.optString("tmdb"), item.tmdbId).takeIf { it > 0 }?.toString().orEmpty()\n')
 anchor = '                    releaseDate = info.optString("releasedate")\n'
 assert s.count(anchor) == 1
 # Episode metadata may expose an episode TMDB ID. Only series_info IDs identify
 # the parent show for timestamp services, which also require season + episode.
-s = s.replace(anchor, '                    releaseDate = info.optString("releasedate"),\n                    year = firstNonBlank(seriesInfo.optString("year"), seriesInfo.optString("releaseDate").take(4), seriesInfo.optString("releasedate").take(4)),\n                    imdbId = V115SkipPolicy.imdb(firstNonBlank(seriesInfo.optString("imdb_id"), seriesInfo.optString("imdb"))),\n                    tmdbId = V115SkipPolicy.tmdb(firstNonBlank(seriesInfo.optString("tmdb_id"), seriesInfo.optString("tmdb"))).takeIf { it > 0 }?.toString().orEmpty()\n')
+s = s.replace(anchor, '                    releaseDate = info.optString("releasedate"),\n                    year = firstNonBlank(seriesInfo.optString("year"), seriesInfo.optString("releaseDate").take(4), seriesInfo.optString("releasedate").take(4)),\n                    imdbId = V115SkipPolicy.firstImdb(seriesInfo.optString("imdb_id"), seriesInfo.optString("imdb")),\n                    tmdbId = V115SkipPolicy.firstTmdb(seriesInfo.optString("tmdb_id"), seriesInfo.optString("tmdb")).takeIf { it > 0 }?.toString().orEmpty()\n')
 client.write_text(s)
 
 vm = java / 'MainViewModel.kt'
@@ -58,6 +58,7 @@ s = s.replace(anchor, '''    fun selectV115Episode(current: MediaEntry, selected
     }
 
 ''' + anchor, 1)
+s = s.replace('navigate(Screen.Player(item, siblings), remember = true)', 'val prepared = siblings.firstOrNull { it.id == item.id && it.seriesId == item.seriesId } ?: item.copy(sourceProfileId = profile.id)\n                navigate(Screen.Player(prepared, siblings), remember = true)')
 vm.write_text(s)
 
 player = java / 'ui/PlayerScreen.kt'

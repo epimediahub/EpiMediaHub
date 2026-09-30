@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +58,7 @@ internal fun V115PlayerChrome(
     onEpisode: (MediaEntry) -> Unit, onTrack: (V115TrackChoice) -> Unit, onSubtitlesOff: () -> Unit,
     video: @Composable (Modifier) -> Unit
 ) {
+    val inputMode = LocalInputModeManager.current
     val rootFocus = remember(item.resumeKey) { FocusRequester() }
     val playFocus = remember(item.resumeKey) { FocusRequester() }
     val audioFocus = remember(item.resumeKey) { FocusRequester() }
@@ -96,6 +99,8 @@ internal fun V115PlayerChrome(
             val target = if (!controls) rootFocus else when (restore) {
                 "audio" -> audioFocus; "episodes" -> episodesFocus; "next" -> nextFocus; else -> playFocus
             }
+            inputMode.requestInputMode(InputMode.Keyboard)
+            delay(110L) // Wait for AndroidView/dialog layout and focus nodes to attach.
             runCatching { target.requestFocus() }
         }
     }

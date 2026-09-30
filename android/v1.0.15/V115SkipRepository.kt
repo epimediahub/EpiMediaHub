@@ -34,6 +34,8 @@ internal data class V115Segment(
 internal object V115SkipPolicy {
     fun imdb(value: String): String = Regex("tt[0-9]{7,10}").find(value)?.value.orEmpty()
     fun tmdb(value: String): Int = value.trim().toIntOrNull()?.takeIf { it in 1..100_000_000 } ?: 0
+    fun firstImdb(vararg values: String): String = values.firstNotNullOfOrNull { imdb(it).takeIf(String::isNotBlank) }.orEmpty()
+    fun firstTmdb(vararg values: String): Int = values.firstNotNullOfOrNull { tmdb(it).takeIf { id -> id > 0 } } ?: 0
     fun cleanTitle(value: String): String = value
         .replace(Regex("(?i)^\\s*(?:DE|GER|IT|ITA|EN|ENG|FR|TR|ES|US|UK)\\s*[|:–-]\\s*"), "")
         .replace(Regex("(?i)\\s*(?:[\\[(](?:19|20)[0-9]{2}[\\])])?\\s+(?:4K|UHD|FHD|HD|SD|HEVC|H265|H264|1080P|720P)(?:\\s.*)?$"), "")
@@ -85,6 +87,7 @@ internal object V115SkipPolicy {
             val a = root.optJSONArray(key) ?: return@flatMap emptyList()
             (0 until a.length()).mapNotNull { index ->
                 val s = a.optJSONObject(index) ?: return@mapNotNull null
+                if (!s.has("start_ms") || !s.has("end_ms")) return@mapNotNull null
                 val start = if (s.isNull("start_ms") && kind != V115SegmentKind.OUTRO) 0L else s.optLong("start_ms", -1L)
                 val end = if (s.isNull("end_ms") && kind == V115SegmentKind.OUTRO) duration else s.optLong("end_ms", -1L)
                 V115Segment(kind, start, end, "TheIntroDB", matchedVersion, s.optDouble("confidence", .9))

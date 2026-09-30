@@ -11,6 +11,10 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class V115SkipPolicyTest {
+    @Test fun invalidProviderIdsDoNotEraseAnExistingCanonicalId() {
+        assertEquals("tt0903747", V115SkipPolicy.firstImdb("0", "null", "tt0903747"))
+        assertEquals(1396, V115SkipPolicy.firstTmdb("0", "null", "1396"))
+    }
     @Test fun wrongCutAndSeasonEstimatesNeverCreateSkipButtons() {
         val response = JSONObject("""{"segments":{"intro":{"start_ms":229500,"end_ms":246500,"match":"out-of-range","adjusted":false,"confidence":0.99}},"intro_length_estimate_ms":17000}""")
         assertTrue(V115SkipPolicy.select(V115SkipPolicy.skipDb(response, 3_480_000), 3_480_000).isEmpty())

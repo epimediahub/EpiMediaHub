@@ -16,6 +16,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -23,6 +25,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.C
 import de.epimediahub.app.model.MediaEntry
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun V115TrackDialog(state: V115PlaybackUiState, isTv: Boolean, onDismiss: () -> Unit,
@@ -31,6 +34,7 @@ internal fun V115TrackDialog(state: V115PlaybackUiState, isTv: Boolean, onDismis
     val subtitles = remember(state.tracks) { V115Tracks.choices(state.tracks, C.TRACK_TYPE_TEXT) }
     val first = remember { FocusRequester() }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        val inputMode = LocalInputModeManager.current
         Surface(Modifier.fillMaxWidth(if (isTv) .88f else .94f).widthIn(max = 980.dp).testTag("vod-track-dialog"),
             color = Color(0xFF151515), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color.DarkGray)) {
             Column(Modifier.padding(if (isTv) 24.dp else 18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -74,7 +78,7 @@ internal fun V115TrackDialog(state: V115PlaybackUiState, isTv: Boolean, onDismis
                 TextButton(onClick = onDismiss, modifier = Modifier.v114FocusRing().testTag("vod-track-close")) { Text("Schließen", color = Color.White, fontSize = 18.sp) }
             }
         }
-        LaunchedEffect(Unit) { if (isTv) runCatching { first.requestFocus() } }
+        LaunchedEffect(Unit) { if (isTv) { inputMode.requestInputMode(InputMode.Keyboard); delay(110L); runCatching { first.requestFocus() } } }
     }
 }
 
@@ -95,6 +99,7 @@ internal fun V115EpisodeDialog(current: MediaEntry, episodes: List<MediaEntry>, 
     val first = remember(season) { FocusRequester() }
     val initialIndex = listState.firstVisibleItemIndex.coerceAtMost(visible.lastIndex.coerceAtLeast(0))
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        val inputMode = LocalInputModeManager.current
         Surface(Modifier.fillMaxWidth(if (isTv) .80f else .94f).widthIn(max = 900.dp).testTag("vod-episode-dialog"),
             color = Color(0xFF151515), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color.DarkGray)) {
             Column(Modifier.padding(if (isTv) 24.dp else 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -119,6 +124,6 @@ internal fun V115EpisodeDialog(current: MediaEntry, episodes: List<MediaEntry>, 
                 TextButton(onClick = onDismiss, modifier = Modifier.v114FocusRing().testTag("vod-episode-close")) { Text("Schließen", color = Color.White, fontSize = 18.sp) }
             }
         }
-        LaunchedEffect(season) { if (isTv) runCatching { first.requestFocus() } }
+        LaunchedEffect(season) { if (isTv) { inputMode.requestInputMode(InputMode.Keyboard); delay(110L); runCatching { first.requestFocus() } } }
     }
 }
