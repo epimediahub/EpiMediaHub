@@ -347,7 +347,7 @@ replace_function(
 ) {
     val u by vm.ui.collectAsState()
     if (item.kind == MediaKind.LIVE) {
-        LiveChannelRow(item, "Live TV", accent, modifier) { vm.play(item) }
+        LiveChannelRow(item, "Live TV", accent, modifier = modifier) { vm.play(item) }
     } else {
         LaunchedEffect(item.resumeKey) { vm.ensureDetails(item) }
         val detail = u.details[item.resumeKey] ?: item
@@ -356,7 +356,7 @@ replace_function(
             u.detailLoading.contains(item.resumeKey),
             accent,
             isTv,
-            modifier
+            modifier = modifier
         ) {
             if (item.kind == MediaKind.SERIES) vm.navigate(Screen.Episodes(detail)) else vm.play(detail)
         }
@@ -603,30 +603,65 @@ if "v111RememberLazyListState(rowKey)" not in row:
         "        LazyRow(\n            state = rowState,\n",
         1,
     )
-    row = row.replace(
-        "            items(entries.take(24), key = { it.resumeKey }) { item -> V060Poster(item, accent, isTv) { onItem(item) } }",
-        """            itemsIndexed(entries.take(24), key = { _, item -> item.resumeKey }) { index, item ->
+
+    current_items = '''            items(entries, key = { it.resumeKey }) { item ->
+                V060Poster(item, accent, isTv, infoByKey[item.resumeKey].orEmpty()) { onItem(item) }
+            }'''
+    replacement_items = '''            itemsIndexed(entries, key = { _, item -> item.resumeKey }) { index, item ->
+                V060Poster(
+                    item,
+                    accent,
+                    isTv,
+                    infoByKey[item.resumeKey].orEmpty(),
+                    rememberedFocus = v111RememberFocus(rowKey, item.resumeKey, index, isTv)
+                ) { onItem(item) }
+            }'''
+    if current_items in row:
+        row = row.replace(current_items, replacement_items, 1)
+    else:
+        old_items = '            items(entries.take(24), key = { it.resumeKey }) { item -> V060Poster(item, accent, isTv) { onItem(item) } }'
+        if old_items in row:
+            row = row.replace(
+                old_items,
+                '''            itemsIndexed(entries.take(24), key = { _, item -> item.resumeKey }) { index, item ->
                 V060Poster(
                     item,
                     accent,
                     isTv,
                     rememberedFocus = v111RememberFocus(rowKey, item.resumeKey, index, isTv)
                 ) { onItem(item) }
-            }""",
-        1,
-    )
+            }''',
+                1,
+            )
+        else:
+            raise SystemExit("cinematic poster row items anchor missing")
 h = h[:a] + row + h[b:]
 
 a, b = function_span(h, "private fun V060Poster(")
 poster = h[a:b]
 if "rememberedFocus: Modifier = Modifier" not in poster:
+    current_sig = "private fun V060Poster(item: MediaEntry, accent: Color, isTv: Boolean, infoText: String = \"\", onClick: () -> Unit)"
+    old_sig = "private fun V060Poster(item: MediaEntry, accent: Color, isTv: Boolean, onClick: () -> Unit)"
+    if current_sig in poster:
+        poster = poster.replace(
+            current_sig,
+            "private fun V060Poster(item: MediaEntry, accent: Color, isTv: Boolean, infoText: String = \"\", rememberedFocus: Modifier = Modifier, onClick: () -> Unit)",
+            1,
+        )
+    elif old_sig in poster:
+        poster = poster.replace(
+            old_sig,
+            "private fun V060Poster(item: MediaEntry, accent: Color, isTv: Boolean, rememberedFocus: Modifier = Modifier, onClick: () -> Unit)",
+            1,
+        )
+    else:
+        raise SystemExit("cinematic poster signature anchor missing")
+
+    shadow_anchor = ".shadow(shadow, shape)\n            .onFocusChanged"
+    if shadow_anchor not in poster:
+        raise SystemExit("cinematic poster focus anchor missing")
     poster = poster.replace(
-        "private fun V060Poster(item: MediaEntry, accent: Color, isTv: Boolean, onClick: () -> Unit)",
-        "private fun V060Poster(item: MediaEntry, accent: Color, isTv: Boolean, rememberedFocus: Modifier = Modifier, onClick: () -> Unit)",
-        1,
-    )
-    poster = poster.replace(
-        ".shadow(shadow, shape)\n            .onFocusChanged",
+        shadow_anchor,
         ".shadow(shadow, shape)\n            .then(rememberedFocus)\n            .onFocusChanged",
         1,
     )
@@ -696,6 +731,12 @@ themes_path.write_text(theme_text)
 
 themes = java / "ui/V079Themes.kt"
 ts = themes.read_text()
+if "import androidx.compose.ui.focus.focusRequester" not in ts:
+    ts = ts.replace(
+        "import androidx.compose.ui.focus.onFocusChanged\n",
+        "import androidx.compose.ui.focus.focusRequester\nimport androidx.compose.ui.focus.onFocusChanged\n",
+        1,
+    )
 ts = ts.replace(
 '''    var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.015f else 1f, label = "categoryFocus")
