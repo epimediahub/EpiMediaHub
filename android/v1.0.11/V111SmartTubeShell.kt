@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -20,6 +21,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -35,6 +38,7 @@ import coil.compose.AsyncImage
 import de.epimediahub.app.MainViewModel
 import de.epimediahub.app.R
 import io.reactivex.disposables.Disposable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -72,6 +76,7 @@ fun V111SmartTubeShell(
             } ?: V108SmartTubeSection.HOME
         )
     }
+    val smartTubeMainListState = v111RememberLazyListState("smarttube-main")
     var rows by remember { mutableStateOf<List<V100SmartTubeRow>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf("") }
@@ -206,6 +211,7 @@ fun V111SmartTubeShell(
         V111SmartTubePlayer(
             video = video,
             playback = playback,
+            accent = accent,
             onBack = { activePlayback = null },
             onEnded = {
                 nextVideoAfter(video)?.let { next ->
@@ -387,6 +393,7 @@ fun V111SmartTubeShell(
                     }
                 } else {
                     LazyColumn(
+                        state = smartTubeMainListState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             start = if (isTv) 24.dp else 12.dp,
@@ -701,13 +708,24 @@ private fun V111SmartTubeRowView(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = 2.dp, bottom = 10.dp)
         )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(if (isTv) 15.dp else 10.dp)) {
-            items(row.videos, key = { it.videoId }) { video ->
+        val rowKey = "smarttube-row:" + row.title
+        val rowState = v111RememberLazyListState(rowKey)
+        LazyRow(
+            state = rowState,
+            horizontalArrangement = Arrangement.spacedBy(if (isTv) 15.dp else 10.dp)
+        ) {
+            itemsIndexed(row.videos, key = { _, video -> video.videoId }) { index, video ->
                 V111SmartTubeVideoCard(
                     video = video,
                     accent = accent,
                     isTv = isTv,
                     resolving = resolvingId == video.videoId,
+                    rememberedFocus = v111RememberFocus(
+                        menuKey = rowKey,
+                        itemId = video.videoId,
+                        index = index,
+                        enabled = isTv
+                    ),
                     onClick = { onVideo(video) }
                 )
             }
@@ -721,6 +739,7 @@ private fun V111SmartTubeVideoCard(
     accent: Color,
     isTv: Boolean,
     resolving: Boolean,
+    rememberedFocus: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -731,6 +750,7 @@ private fun V111SmartTubeVideoCard(
     Column(
         Modifier
             .width(width)
+            .then(rememberedFocus)
             .onFocusChanged { focused = it.isFocused }
     ) {
         Surface(
