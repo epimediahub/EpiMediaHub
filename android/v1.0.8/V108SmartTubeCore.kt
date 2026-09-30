@@ -35,6 +35,30 @@ internal data class V108SmartTubeAuthState(
 )
 
 internal object V108SmartTubeCore {
+    private data class CachedPlayback(
+        val value: V100SmartTubePlayback,
+        val expiresAtMs: Long
+    )
+
+    private val playbackCache = LinkedHashMap<String, CachedPlayback>()
+
+    private fun cachedPlayback(videoId: String): V100SmartTubePlayback? = synchronized(playbackCache) {
+        val now = System.currentTimeMillis()
+        playbackCache.entries.removeAll { it.value.expiresAtMs <= now }
+        playbackCache[videoId]?.value
+    }
+
+    private fun rememberPlayback(videoId: String, value: V100SmartTubePlayback) = synchronized(playbackCache) {
+        playbackCache[videoId] = CachedPlayback(
+            value = value,
+            expiresAtMs = System.currentTimeMillis() + 5 * 60 * 1000L
+        )
+        while (playbackCache.size > 12) {
+            val first = playbackCache.keys.firstOrNull() ?: break
+            playbackCache.remove(first)
+        }
+    }
+
     private fun manager(context: Context) = run {
         GlobalPreferences.instance(context.applicationContext)
         YouTubeServiceManager.instance()
@@ -100,6 +124,10 @@ internal object V108SmartTubeCore {
         context: Context,
         video: V100SmartTubeVideo
     ): Result<V100SmartTubePlayback> = withContext(Dispatchers.IO) {
+        cachedPlayback(video.videoId)?.let {
+            return@withContext Result.success(it)
+        }
+
         runCatching {
             val info = EpiMediaPlaybackBridge.getMedia3CompatibleFormatInfo(video.videoId)
                 ?: error("SmartTube konnte keine Wiedergabeinformationen laden.")
@@ -155,7 +183,7 @@ internal object V108SmartTubeCore {
                 (info.playabilityReason?.takeIf { it.isNotBlank() }?.plus(" · ") ?: "") +
                     "SmartTube-Wiedergabe: $mode konnte nicht an Media3 übergeben werden."
             )
-        }
+        }.onSuccess { rememberPlayback(video.videoId, it) }
     }
 
     private fun collectGroups(source: Observable<List<MediaGroup>>): List<MediaGroup> =
