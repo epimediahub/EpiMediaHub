@@ -379,7 +379,7 @@ fun V110SmartTubeShell(
         } else {
             AlertDialog(
                 onDismissRequest = { searchDialog = false },
-                title = { Text(title) },
+                title = { Text("SmartTube durchsuchen") },
                 text = {
                     OutlinedTextField(
                         value = query,
@@ -759,7 +759,7 @@ internal fun V110TvKeyboardDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("SmartTube durchsuchen") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Surface(
