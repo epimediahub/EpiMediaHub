@@ -552,6 +552,131 @@ replace_function(
 }'''
 )
 
+
+# Movies / Series: remember both the vertical shelf and the exact horizontal
+# poster inside every shelf. This prevents Back from jumping to the hero/top.
+hub = java / "ui/V060CinematicHub.kt"
+h = hub.read_text()
+if "import androidx.compose.foundation.lazy.itemsIndexed" not in h:
+    h = h.replace(
+        "import androidx.compose.foundation.lazy.items\n",
+        "import androidx.compose.foundation.lazy.items\nimport androidx.compose.foundation.lazy.itemsIndexed\n",
+        1,
+    )
+
+if "val contentState = rememberLazyListState()" in h:
+    h = h.replace(
+        "    val contentState = rememberLazyListState()\n",
+        '    val contentState = v111RememberLazyListState("cinematic-main:" + kind.name)\n',
+        1,
+    )
+
+a, b = function_span(h, "private fun V060PosterRow(")
+row = h[a:b]
+if "v111RememberLazyListState(rowKey)" not in row:
+    row = row.replace(
+        "    Column(Modifier.fillMaxWidth()) {\n",
+        '    val rowKey = "cinematic-row:" + title\n'
+        '    val rowState = v111RememberLazyListState(rowKey)\n'
+        "    Column(Modifier.fillMaxWidth()) {\n",
+        1,
+    )
+    row = row.replace(
+        "        LazyRow(\n",
+        "        LazyRow(\n            state = rowState,\n",
+        1,
+    )
+    row = row.replace(
+        "            items(entries.take(24), key = { it.resumeKey }) { item -> V060Poster(item, accent, isTv) { onItem(item) } }",
+        """            itemsIndexed(entries.take(24), key = { _, item -> item.resumeKey }) { index, item ->
+                V060Poster(
+                    item,
+                    accent,
+                    isTv,
+                    rememberedFocus = v111RememberFocus(rowKey, item.resumeKey, index, isTv)
+                ) { onItem(item) }
+            }""",
+        1,
+    )
+h = h[:a] + row + h[b:]
+
+a, b = function_span(h, "private fun V060Poster(")
+poster = h[a:b]
+if "rememberedFocus: Modifier = Modifier" not in poster:
+    poster = poster.replace(
+        "private fun V060Poster(item: MediaEntry, accent: Color, isTv: Boolean, onClick: () -> Unit)",
+        "private fun V060Poster(item: MediaEntry, accent: Color, isTv: Boolean, rememberedFocus: Modifier = Modifier, onClick: () -> Unit)",
+        1,
+    )
+    poster = poster.replace(
+        ".shadow(shadow, shape)\n            .onFocusChanged",
+        ".shadow(shadow, shape)\n            .then(rememberedFocus)\n            .onFocusChanged",
+        1,
+    )
+h = h[:a] + poster + h[b:]
+hub.write_text(h)
+
+# Live TV already remembered IDs; also persist the two rail scroll states.
+live = java / "ui/V076LiveTv.kt"
+ls = live.read_text()
+ls = ls.replace(
+    "    val railState = rememberLazyListState()\n",
+    '    val railState = v111RememberLazyListState("livetv-categories")\n',
+    1,
+)
+ls = ls.replace(
+    "    val state = rememberLazyListState()\n",
+    '    val state = v111RememberLazyListState("livetv-channels:" + selectedId)\n',
+    1,
+)
+live.write_text(ls)
+
+# Theme browser: remember which category was open and the scroll position in
+# both overview and category detail views.
+themes_path = java / "ui/V079Themes.kt"
+theme_text = themes_path.read_text()
+theme_text = theme_text.replace(
+    '    var selectedGroupId by rememberSaveable { mutableStateOf<String?>(null) }\n',
+    '''    var selectedGroupId by rememberSaveable {
+        mutableStateOf<String?>(V111MenuMemory.text("themes-group").takeIf { it.isNotBlank() })
+    }
+''',
+    1,
+)
+theme_text = theme_text.replace(
+    'selectedGroupId = item.group.id',
+    'selectedGroupId = item.group.id; V111MenuMemory.rememberText("themes-group", item.group.id)',
+)
+detail_anchor = '''                LazyColumn(
+                    Modifier.fillMaxSize().padding(horizontal = if (isTv) 44.dp else 12.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 28.dp),
+'''
+if detail_anchor in theme_text:
+    theme_text = theme_text.replace(
+        detail_anchor,
+        '''                LazyColumn(
+                    state = v111RememberLazyListState("themes-detail:" + selected.group.id),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = if (isTv) 44.dp else 12.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 28.dp),
+''',
+        1,
+    )
+overview_anchor = '''                LazyColumn(
+                    Modifier.fillMaxSize().padding(horizontal = if (isTv) 44.dp else 12.dp),
+                    contentPadding = PaddingValues(top = 9.dp, bottom = 30.dp),
+'''
+if overview_anchor in theme_text:
+    theme_text = theme_text.replace(
+        overview_anchor,
+        '''                LazyColumn(
+                    state = v111RememberLazyListState("themes-overview"),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = if (isTv) 44.dp else 12.dp),
+                    contentPadding = PaddingValues(top = 9.dp, bottom = 30.dp),
+''',
+        1,
+    )
+themes_path.write_text(theme_text)
+
 themes = java / "ui/V079Themes.kt"
 ts = themes.read_text()
 ts = ts.replace(
@@ -594,6 +719,10 @@ checks = [
     (screens, 'itemsIndexed(u.searchResults'),
     (screens, 'itemsIndexed(filtered'),
     (themes, 'V111MenuMemory.id("theme-categories")'),
+    (hub, 'v111RememberLazyListState("cinematic-main:" + kind.name)'),
+    (hub, 'v111RememberLazyListState(rowKey)'),
+    (live, 'v111RememberLazyListState("livetv-categories")'),
+    (themes_path, 'v111RememberLazyListState("themes-overview")'),
     (legacy_screens, 'val memoryKey = "settings"'),
     (legacy_screens, 'val memoryKey = "playlists"'),
 ]
