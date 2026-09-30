@@ -63,7 +63,6 @@ internal fun V116VodPlayer(player: Player, item: MediaEntry, episodes: List<Medi
         onDispose { player.removeListener(listener) }
     }
     LaunchedEffect(player, item.resumeKey) { while (true) { state = snapshot(); delay(250L) } }
-    LaunchedEffect(item.resumeKey) { while (true) { repository.presence(item); delay(25_000L) } }
     LaunchedEffect(item.resumeKey, state.durationMs / 1000, refresh) {
         automatic = emptyList(); disabled = emptySet()
         if (state.durationMs > 0) {

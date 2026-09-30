@@ -19,7 +19,16 @@ for p in java.rglob('*.kt'):
 player = java / 'ui/PlayerScreen.kt'
 s = player.read_text()
 assert s.count('V115VodPlayer(') == 1
-player.write_text(s.replace('V115VodPlayer(', 'V116VodPlayer('))
+s = s.replace('V115VodPlayer(', 'V116VodPlayer(')
+anchor = '    val keepAwakeView = LocalView.current'
+assert s.count(anchor) == 1
+s = s.replace(anchor, '''    val v116Context = LocalContext.current.applicationContext
+    LaunchedEffect(item.resumeKey) {
+        val skipRepository = de.epimediahub.app.data.V116SkipRepository(v116Context)
+        while (true) { skipRepository.presence(item); delay(25_000L) }
+    }
+''' + anchor)
+player.write_text(s)
 
 chrome = java / 'ui/V115PlayerChrome.kt'
 s = chrome.read_text()

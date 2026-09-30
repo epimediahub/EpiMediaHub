@@ -1,9 +1,11 @@
 package de.epimediahub.app.ui
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalInputModeManager
@@ -23,6 +25,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 import java.lang.reflect.Proxy
+import java.io.File
 
 @OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -32,6 +35,11 @@ import java.lang.reflect.Proxy
 class V116SkipEditorTest {
     @get:Rule val compose = createComposeRule()
     private fun settle() { compose.waitForIdle(); compose.mainClock.advanceTimeBy(250); compose.waitForIdle() }
+    private fun screenshot(name: String) {
+        val bitmap = compose.onNodeWithTag("skip-editor").captureToImage().asAndroidBitmap()
+        File("build/reports/ui").mkdirs()
+        File("build/reports/ui", name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
 
     @Test fun skipExplicitlySeeksThenResumesAPausedOrBufferingPlayer() {
         val calls = mutableListOf<String>()
@@ -59,10 +67,12 @@ class V116SkipEditorTest {
             onSeek = { position = it }, onSave = { _, start, end, _ -> saved += V116Draft(start, end) }, onReset = {}, onResolve = {}, onDismiss = {}) } }
         settle()
         compose.onNodeWithTag("mark-type-INTRO").assertIsFocused()
+        screenshot("v116-tv-skip-editor.png")
         compose.onNodeWithTag("mark-save").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithTag("mark-start").performScrollTo().performClick(); settle()
         compose.runOnIdle { position = 90_000L }
         compose.onNodeWithTag("mark-end").performScrollTo().performClick(); settle()
+        screenshot("v116-tv-skip-editor-marked.png")
         compose.onNodeWithTag("mark-save").performScrollTo().assertIsEnabled().performClick(); settle()
         assertEquals(listOf(V116Draft(30_000, 90_000)), saved)
     }
