@@ -230,6 +230,10 @@ fun V111SmartTubeShell(
         }
     }
 
+    val smartTubeContentState = v111RememberLazyListState(
+        "smarttube-content:" + selectedSection.name
+    )
+
     Column(Modifier.fillMaxSize()) {
         Surface(
             modifier = Modifier.fillMaxWidth().height(if (isTv) 72.dp else 58.dp),
@@ -290,34 +294,48 @@ fun V111SmartTubeShell(
         ) {
             V097SkinEnvironment(smartTubeSkinWorld, accent)
 
-            if (smartTubeSkinMark != 0) {
-                Image(
-                    painter = painterResource(smartTubeSkinMark),
-                    contentDescription = activeTheme?.label,
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight(if (isTv) .64f else .48f)
-                        .fillMaxWidth(if (isTv) .43f else .38f)
-                        .padding(end = if (isTv) 34.dp else 10.dp)
-                        .graphicsLayer { alpha = if (isTv) .28f else .20f },
-                    contentScale = ContentScale.Fit
-                )
-            }
-
             Box(
                 Modifier
                     .fillMaxSize()
                     .background(
                         Brush.horizontalGradient(
                             listOf(
-                                Color(0xEE05080D),
-                                Color(0xC9080C12),
-                                Color(0x83070A10),
-                                Color(0x5205090D)
+                                Color(0xD905080D),
+                                Color(0xAF080C12),
+                                Color(0x65070A10),
+                                Color(0x2B05090D)
                             )
                         )
                     )
             )
+
+            if (smartTubeSkinMark != 0 && ui.themeId != "default") {
+                Box(
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight(if (isTv) .78f else .58f)
+                        .fillMaxWidth(if (isTv) .46f else .44f)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(
+                                    Color.White.copy(alpha = .13f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
+                )
+                Image(
+                    painter = painterResource(smartTubeSkinMark),
+                    contentDescription = activeTheme?.label,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight(if (isTv) .70f else .52f)
+                        .fillMaxWidth(if (isTv) .40f else .38f)
+                        .padding(end = if (isTv) 38.dp else 10.dp)
+                        .graphicsLayer { alpha = if (isTv) .46f else .34f },
+                    contentScale = ContentScale.Fit
+                )
+            }
 
             Row(Modifier.fillMaxSize()) {
             if (isTv) {
@@ -401,7 +419,7 @@ fun V111SmartTubeShell(
                             top = 6.dp,
                             bottom = 30.dp
                         ),
-                        verticalArrangement = Arrangement.spacedBy(if (isTv) 22.dp else 15.dp)
+                        verticalArrangement = Arrangement.spacedBy(if (isTv) 30.dp else 18.dp)
                     ) {
                         if (error.isNotBlank()) {
                             item(key = "smarttube-error") {
@@ -630,6 +648,7 @@ private fun V111SmartTubeSidebar(
                     section = section,
                     selected = section == selected,
                     accent = accent,
+                    index = section.ordinal,
                     onClick = { onSelect(section) }
                 )
             }
@@ -642,6 +661,7 @@ private fun V111SidebarItem(
     section: V108SmartTubeSection,
     selected: Boolean,
     accent: Color,
+    index: Int,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -649,7 +669,15 @@ private fun V111SidebarItem(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .height(46.dp)
+            .height(50.dp)
+            .then(
+                v111RememberFocus(
+                    menuKey = "smarttube-section",
+                    itemId = section.name,
+                    index = index,
+                    enabled = true
+                )
+            )
             .onFocusChanged { focused = it.isFocused },
         color = when {
             focused -> Color.White.copy(.18f)
@@ -704,7 +732,7 @@ private fun V111SmartTubeRowView(
         Text(
             row.title,
             color = Color.White,
-            fontSize = if (isTv) 20.sp else 15.sp,
+            fontSize = if (isTv) 22.sp else 16.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = 2.dp, bottom = 10.dp)
         )
@@ -712,7 +740,7 @@ private fun V111SmartTubeRowView(
         val rowState = v111RememberLazyListState(rowKey)
         LazyRow(
             state = rowState,
-            horizontalArrangement = Arrangement.spacedBy(if (isTv) 15.dp else 10.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (isTv) 17.dp else 10.dp)
         ) {
             itemsIndexed(row.videos, key = { _, video -> video.videoId }) { index, video ->
                 V111SmartTubeVideoCard(
@@ -743,8 +771,8 @@ private fun V111SmartTubeVideoCard(
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
-    val width = if (isTv) 278.dp else 188.dp
-    val imageHeight = if (isTv) 156.dp else 106.dp
+    val width = if (isTv) 306.dp else 198.dp
+    val imageHeight = if (isTv) 172.dp else 111.dp
     val imageShape = RoundedCornerShape(if (isTv) 12.dp else 10.dp)
 
     Column(
@@ -786,6 +814,19 @@ private fun V111SmartTubeVideoCard(
                             .padding(horizontal = 6.dp, vertical = 3.dp)
                     )
                 }
+                if (!video.live && video.durationMs > 0L) {
+                    Text(
+                        v111FormatCardDuration(video.durationMs),
+                        color = Color.White,
+                        fontSize = if (isTv) 11.sp else 9.sp,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(7.dp)
+                            .background(Color.Black.copy(alpha = .80f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    )
+                }
                 if (resolving) {
                     Box(
                         Modifier.fillMaxSize().background(Color.Black.copy(.58f)),
@@ -804,18 +845,18 @@ private fun V111SmartTubeVideoCard(
         Text(
             video.title,
             color = Color.White,
-            fontSize = if (isTv) 15.sp else 12.sp,
+            fontSize = if (isTv) 16.sp else 13.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            lineHeight = if (isTv) 18.sp else 14.sp
+            lineHeight = if (isTv) 20.sp else 16.sp
         )
         if (video.author.isNotBlank()) {
             Spacer(Modifier.height(3.dp))
             Text(
                 video.author,
                 color = Color.White.copy(.62f),
-                fontSize = if (isTv) 12.sp else 10.sp,
+                fontSize = if (isTv) 13.sp else 10.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -936,3 +977,13 @@ internal fun V110TvKeyboardDialog(
 internal fun v110NeedsLegacyFireTvKeyboard(): Boolean =
     Build.MANUFACTURER.equals("Amazon", ignoreCase = true) &&
         Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1
+
+
+private fun v111FormatCardDuration(ms: Long): String {
+    val total = ms.coerceAtLeast(0L) / 1000L
+    val seconds = total % 60L
+    val minutes = (total / 60L) % 60L
+    val hours = total / 3600L
+    return if (hours > 0L) "%d:%02d:%02d".format(hours, minutes, seconds)
+    else "%d:%02d".format(minutes, seconds)
+}
