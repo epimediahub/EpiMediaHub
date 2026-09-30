@@ -77,12 +77,46 @@ internal class V116SkipRepository(private val context: Context) {
         finally { connection.disconnect() }
     }
 
-    fun payload(item: MediaEntry, duration: Long): JSONObject = JSONObject()
-        .put("asset_key", V116SkipKeys.asset(item)).put("source_key", V116SkipKeys.series(item))
+    private fun playlistId(item: MediaEntry): Int = if (item.sourceProfileId.startsWith("managed-dashboard-")) item.sourceProfileId.removePrefix("managed-dashboard-").toIntOrNull()?.takeIf { it > 0 } ?: 0 else 0
+
+    fun payload(item: MediaEntry, duration: Long): JSONObject {
+        val known = identity(item) ?: V115Identity(V115SkipPolicy.imdb(item.imdbId), V115SkipPolicy.tmdb(item.tmdbId))
+        val file = Uri.parse(item.streamUrl).lastPathSegment.orEmpty()
+        return JSONObject().put("asset_key", V116SkipKeys.asset(item)).put("source_key", V116SkipKeys.series(item))
         .put("media_type", if (item.kind == MediaKind.EPISODE) "episode" else "movie")
         .put("title", V116Names.clean(if (item.kind == MediaKind.EPISODE) item.categoryId else item.name).take(180))
-        .put("year", item.year.take(4)).put("season", item.season).put("episode", item.episode)
-        .put("duration_ms", duration).put("imdb_id", V115SkipPolicy.imdb(item.imdbId)).put("tmdb_id", V115SkipPolicy.tmdb(item.tmdbId))
+        .put("year", item.year.take(4).takeIf { it.matches(Regex("(?:19|20)[0-9]{2}")) }.orEmpty())
+        .put("season", if (item.kind == MediaKind.EPISODE) item.season else 0).put("episode", if (item.kind == MediaKind.EPISODE) item.episode else 0)
+        .put("duration_ms", duration).put("imdb_id", known.imdb).put("tmdb_id", known.tmdb)
+        .put("playlist_id", playlistId(item)).put("stream_id", file.substringBeforeLast('.').takeIf { it.matches(Regex("[0-9]{1,12}")) }.orEmpty())
+        .put("extension", file.substringAfterLast('.', "").lowercase())
+    }
+
+    suspend fun presence(item: MediaEntry) {
+        val id = playlistId(item)
+        if (id > 0) request("${SetupCodeProvisioning.provisioningBaseUrl(context)}/v1/device/skip/presence", JSONObject().put("playlist_id", id), true)
+    }
+
+    suspend fun flushPending() {
+        if (SetupCodeProvisioning.sessionToken(context).isNullOrBlank()) return
+        var count = 0
+        for (key in prefs.all.keys.filter { it.startsWith("own:") }) {
+            val root = read(key) ?: continue
+            val marks = root.optJSONObject("marks") ?: continue
+            for (kind in V115SegmentKind.values()) {
+                val row = marks.optJSONObject(kind.name) ?: continue
+                if (!row.optBoolean("pending") || (row.optString("scope").isNotBlank() && row.optString("scope") != tokenScope())) continue
+                if (++count > 5) return
+                val body = JSONObject(row.toString()).apply { remove("scope"); remove("pending") }
+                val accepted = request("${SetupCodeProvisioning.provisioningBaseUrl(context)}/v1/device/skip/submit", body, true) ?: return
+                if (accepted.optString("status") !in listOf("pending", "approved", "rejected", "superseded")) return
+                val latest = read(key) ?: continue
+                val current = latest.optJSONObject("marks")?.optJSONObject(kind.name) ?: continue
+                if (current.toString() != row.toString()) continue
+                current.put("pending", false).put("scope", tokenScope()); write(key, latest)
+            }
+        }
+    }
 
     fun overrides(item: MediaEntry, duration: Long): Map<V115SegmentKind, V115Segment?> {
         val rows = read("own:${V116SkipKeys.local(item, duration)}")?.optJSONObject("marks") ?: return emptyMap()
@@ -141,11 +175,11 @@ internal class V116SkipRepository(private val context: Context) {
             val latest = read(key) ?: continue
             val current = latest.optJSONObject("marks")?.optJSONObject(kind.name) ?: continue
             if (current.toString() != row.toString()) continue
-            if (accepted?.optString("status") in listOf("pending", "approved")) {
+            if (accepted?.optString("status") in listOf("pending", "approved", "rejected", "superseded")) {
                 current.put("pending", false).put("scope", tokenScope()); write(key, latest)
             } else pending = true
         }
-        return if (pending) "Auf diesem Gerät gespeichert · zentrale Übertragung wird später erneut versucht" else "Auf diesem Gerät gespeichert · zentrale Vorschläge zur Prüfung gesendet"
+        return if (pending) "Auf diesem Gerät gespeichert · zentrale Übertragung wird später erneut versucht" else "Auf diesem Gerät gespeichert · zentrale Freigabe im Dashboard prüfen"
     }
 
     private fun approved(root: JSONObject, item: MediaEntry, duration: Long): Pair<List<V115Segment>, Set<V115SegmentKind>> {
@@ -166,6 +200,7 @@ internal class V116SkipRepository(private val context: Context) {
     suspend fun load(item: MediaEntry, duration: Long): V116SkipResult = supervisorScope {
         val cacheKey = "remote:${tokenScope()}:${V116SkipKeys.local(item, duration)}"
         val remote = request("${SetupCodeProvisioning.provisioningBaseUrl(context)}/v1/device/skip/lookup", payload(item, duration), true)
+            ?.takeIf { it.optString("asset_key") == V116SkipKeys.asset(item) && it.optString("source_key") == V116SkipKeys.series(item) }
             ?.also { write(cacheKey, JSONObject().put("expires", System.currentTimeMillis() + 3_600_000L).put("data", it)) }
             ?: read(cacheKey)?.takeIf { it.optLong("expires") > System.currentTimeMillis() }?.optJSONObject("data")
         val resolved = identity(item) ?: remote?.optJSONObject("identity")?.let {

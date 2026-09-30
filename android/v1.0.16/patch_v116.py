@@ -50,6 +50,17 @@ end = s.index('    fun normalized(value: String): String =', start)
 s = s[:start] + '    fun cleanTitle(value: String): String = V116Names.clean(value)\n' + s[end:]
 repo.write_text(s)
 
+worker = java / 'data/DashboardSyncWorker.kt'
+s = worker.read_text()
+anchor = 'is DeviceSyncResult.Success -> Result.success()'
+assert s.count(anchor) == 1
+worker.write_text(s.replace(anchor, 'is DeviceSyncResult.Success -> { V116SkipRepository(applicationContext).flushPending(); Result.success() }'))
+provisioning = java / 'data/SetupCodeProvisioning.kt'
+s = provisioning.read_text()
+anchor = '    fun clearDeviceConfiguration(context: Context) {'
+assert s.count(anchor) == 1
+provisioning.write_text(s.replace(anchor, anchor + '\n        context.getSharedPreferences("v116_own_skip", Context.MODE_PRIVATE).edit().clear().apply()'))
+
 for package, names in {'ui': ('V116VodPlayer.kt', 'V116SkipEditor.kt'), 'data': ('V116SkipRepository.kt', 'V116Chapters.kt')}.items():
     for name in names:
         shutil.copyfile(here / name, java / package / name)
