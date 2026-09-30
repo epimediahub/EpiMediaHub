@@ -66,6 +66,15 @@ jobs:
         run: |
           cd "$PROJECT_ROOT"
           gradle :app:testDebugUnitTest --stacktrace --no-daemon -Dorg.gradle.workers.max=2
+      - name: Preserve navigation test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-v1013-test-reports
+          path: |
+            ${{ env.PROJECT_ROOT }}/app/build/reports/tests/testDebugUnitTest
+            ${{ env.PROJECT_ROOT }}/app/build/test-results/testDebugUnitTest
+          if-no-files-found: ignore
       - name: Build debug APKs
         shell: bash
         run: |

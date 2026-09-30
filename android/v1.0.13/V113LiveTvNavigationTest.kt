@@ -23,8 +23,10 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.unit.dp
 import de.epimediahub.app.model.MediaCategory
 import de.epimediahub.app.model.MediaEntry
@@ -161,6 +163,8 @@ class V113LiveTvNavigationTest {
         focus(fixture, 0)
         compose.runOnIdle { fixture.playlist = firstPlaylist }
         settle()
+        println("Returned selection=${fixture.selected()} memory=${V111MenuMemory.id(V113LiveTvKeys.channels(firstPlaylist, fixture.category))} scroll=${V111MenuMemory.scroll(V113LiveTvKeys.channels(firstPlaylist, fixture.category))}")
+        println(compose.onRoot(useUnmergedTree = true).printToString())
         compose.onNodeWithTag(fixture.tag(17)).assertIsFocused().assertIsDisplayed()
         move(fixture, 17, 18)
     }

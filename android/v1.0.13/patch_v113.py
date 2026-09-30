@@ -42,6 +42,17 @@ g = replace(g, '    testImplementation("junit:junit:4.13.2")\n', '''    testImpl
 ''', "Compose UI regression tests")
 gradle.write_text(g)
 
+with gradle.open("a") as output:
+    output.write('''
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showStandardStreams = true
+    }
+}
+''')
+
 for relative in ("ui/Screens.kt", "ui/V078DashboardPairingGate.kt", "ui/V083Home.kt", "data/V070WeatherClient.kt", "ui/V112SmartTubePlayer.kt"):
     path = java / relative
     path.write_text(path.read_text().replace("1.0.12", "1.0.13"))
