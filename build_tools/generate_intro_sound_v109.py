@@ -45,7 +45,7 @@ def add_piano(freq, start, amp, pan=0.0, decay=1.0):
     for i in range(i0, N):
         local = i / SR - start
         env = (1.0 - math.exp(-local / 0.012)) * math.exp(-local / decay)
-        sample = 0.18 * math.exp(-local / 0.045) * math.sin(2.0 * math.pi * (freq * 2.7) * local)
+        sample = 0.14 * math.exp(-local / 0.040) * math.sin(2.0 * math.pi * (freq * 2.6) * local)
         for mult, rel in partials:
             sample += rel * math.sin(2.0 * math.pi * freq * mult * local)
         sample *= amp * env
@@ -56,7 +56,7 @@ def add_glass(freq, start, amp, pan=0.0, decay=0.65):
     i0 = int(start * SR)
     lg = math.sqrt((1.0 - pan) * 0.5)
     rg = math.sqrt((1.0 + pan) * 0.5)
-    partials = [(1.0, 1.0), (2.72, 0.42), (4.11, 0.22), (5.43, 0.11)]
+    partials = [(1.0, 1.0), (2.72, 0.42), (4.11, 0.20), (5.43, 0.09)]
     for i in range(i0, N):
         local = i / SR - start
         env = (1.0 - math.exp(-local / 0.006)) * math.exp(-local / decay)
@@ -99,15 +99,47 @@ add_glass(880.000, 1.34, 0.050, -0.22, 0.72)
 add_glass(1174.659, 1.61, 0.040, 0.18, 0.64)
 add_glass(1318.510, 1.86, 0.032, 0.30, 0.58)
 
+# Stronger v2 final cinematic bloom chosen for the app.
+# Add a second low orchestral anchor just before the logo locks in so the
+# ending has noticeably more weight on soundbars, while the upper harmonics
+# keep the same punch audible on phone speakers.
+add_tone(73.416, 1.70, 2.63, 0.105, 0.08, 0.43,
+         [(1, 1.0), (2, 0.50), (3, 0.20), (4, 0.08)], -0.02, 0.0)
+add_tone(110.000, 1.76, 2.58, 0.060, 0.07, 0.38,
+         [(1, 1.0), (2, 0.35), (3, 0.12)], 0.03, 0.0)
+
+# Stronger D-major-add9 punctuation at the end.
+for freq, amp, pan in [
+    (146.832, 0.060, -0.10),
+    (220.000, 0.050, -0.04),
+    (293.665, 0.047, 0.03),
+    (369.994, 0.039, 0.08),
+    (659.255, 0.025, 0.14),
+]:
+    add_piano(freq, 1.82, amp, pan, 0.65)
+
+# Extra low-mid orchestral body for physical impact without relying on sub-bass.
+for freq, amp, pan in [
+    (196.000, 0.032, -0.18),
+    (246.940, 0.028, 0.15),
+    (329.630, 0.020, 0.22),
+]:
+    add_tone(freq, 1.58, 2.72, amp, 0.17, 0.48,
+             [(1, 1.0), (2, 0.12)], pan, 0.0)
+
+# Slightly brighter final glass shimmer, still soft rather than metallic.
+add_glass(1174.659, 2.00, 0.020, -0.25, 0.48)
+add_glass(1318.510, 2.12, 0.017, 0.28, 0.44)
+
 # Subtle air bloom.
 last = 0.0
 for i in range(int(0.65 * SR), int(1.45 * SR)):
     now = i / SR
     noise = random.uniform(-1.0, 1.0)
-    last = 0.92 * last + 0.08 * noise
+    last = 0.94 * last + 0.06 * noise
     high = noise - last
     env = smoothstep((now - 0.65) / 0.18) * smoothstep((1.45 - now) / 0.45)
-    air = high * 0.010 * env
+    air = high * 0.0085 * env
     left[i] += air * 0.92
     right[i] += air * 1.08
 
@@ -138,8 +170,20 @@ def highpass(sig):
 left = highpass(left)
 right = highpass(right)
 
+# Mild parallel glue in the final second so the stronger ending feels like
+# one coherent orchestral hit rather than stacked tones.
+den_glue = math.tanh(1.35)
+for i in range(N):
+    mix = smoothstep((i / SR - 1.55) / 0.40) * 0.16
+    if mix <= 0.0:
+        continue
+    sat_l = math.tanh(left[i] * 1.35) / den_glue
+    sat_r = math.tanh(right[i] * 1.35) / den_glue
+    left[i] = left[i] * (1.0 - mix) + sat_l * mix
+    right[i] = right[i] * (1.0 - mix) + sat_r * mix
+
 # End cleanly at the 2.85 second visual cut.
-fade_start = int(2.62 * SR)
+fade_start = int(2.67 * SR)
 for i in range(fade_start, N):
     k = smoothstep((N - i) / (N - fade_start))
     left[i] *= k
