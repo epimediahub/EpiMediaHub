@@ -18,7 +18,8 @@ fun V035SearchScreen(vm: MainViewModel, accent: Color, isTv: Boolean) {
     val u by vm.ui.collectAsState()
     val kind = u.contentFilterKind
     var query by remember { mutableStateOf("") }
-    var tvKeyboardOpen by remember(isTv) { mutableStateOf(isTv) }
+    val legacyFireTvKeyboard = remember { isTv && v110NeedsLegacyFireTvKeyboard() }
+    var tvKeyboardOpen by remember(legacyFireTvKeyboard) { mutableStateOf(legacyFireTvKeyboard) }
     BackHandler { vm.back() }
 
     Column(Modifier.fillMaxSize()) {
@@ -28,7 +29,7 @@ fun V035SearchScreen(vm: MainViewModel, accent: Color, isTv: Boolean) {
             { vm.back() }
         )
 
-        if (isTv) {
+        if (legacyFireTvKeyboard) {
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -78,7 +79,7 @@ fun V035SearchScreen(vm: MainViewModel, accent: Color, isTv: Boolean) {
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 9.dp)
+                    .padding(horizontal = if (isTv) 70.dp else 14.dp, vertical = 9.dp)
             )
         }
 
@@ -96,7 +97,7 @@ fun V035SearchScreen(vm: MainViewModel, accent: Color, isTv: Boolean) {
         }
     }
 
-    if (isTv && tvKeyboardOpen) {
+    if (legacyFireTvKeyboard && tvKeyboardOpen) {
         V110TvKeyboardDialog(
             title = (kind?.let { sectionTitle35(it) + " · " }.orEmpty()) + "Suche",
             initialValue = query,
@@ -126,7 +127,7 @@ path.write_text(updated)
 
 for marker in (
     "V110TvKeyboardDialog(",
-    "var tvKeyboardOpen by remember(isTv)",
+    "v110NeedsLegacyFireTvKeyboard()",
     'Text("Tastatur"',
 ):
     if marker not in updated:
