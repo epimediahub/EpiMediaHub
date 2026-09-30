@@ -128,11 +128,11 @@ jobs:
           cd "$PROJECT_ROOT"
           gradle :app:assembleRelease --stacktrace --no-daemon
 
-      - name: Verify Android 1.0.9 release
+      - name: Verify Android 1.0.10 release
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "1.0.9"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionName = "1.0.10"' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'versionCode = 1010' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'SmartTube-Core:' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeCore.kt"
           grep -Fq '.filter { it.categoryId !in u.hiddenCategoryIds }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
@@ -160,7 +160,7 @@ jobs:
             test -s "$APK"
             "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > /tmp/apk-badging.txt
             grep -F "versionCode='1010'" /tmp/apk-badging.txt
-            grep -F "versionName='1.0.9'" /tmp/apk-badging.txt
+            grep -F "versionName='1.0.10'" /tmp/apk-badging.txt
             grep -F "sdkVersion:'25'" /tmp/apk-badging.txt
             "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" dex packages --defined-only "$APK" > /tmp/media3-packages.txt
             grep -F 'androidx.media3.exoplayer.dash.DashMediaSource$Factory' /tmp/media3-packages.txt
@@ -189,7 +189,7 @@ jobs:
 
           cat > dist/android-latest.json <<EOF
           {
-            "version": "1.0.9",
+            "version": "1.0.10",
             "versionCode": 1010,
             "notes": "Android 1.0.10 Test: SmartTube-Skin, Auto-Weiter und Fire-TV-Playersteuerung; Trends entfernt; Legacy-Fire-TV-Suche nutzt eine eigene D-Pad-Tastatur, neuere Fire TVs behalten die Systemtastatur.",
             "apks": {
