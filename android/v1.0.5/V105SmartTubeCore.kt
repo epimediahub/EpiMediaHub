@@ -11,11 +11,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-internal data class V104SmartTubeAuthState(
-    val signed: Boolean,
-    val accountName: String
-)
-
 internal object V105SmartTubeCore {
     private fun manager(context: Context) = run {
         GlobalPreferences.instance(context.applicationContext)
