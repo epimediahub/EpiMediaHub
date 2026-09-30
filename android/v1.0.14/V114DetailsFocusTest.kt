@@ -1,6 +1,8 @@
 package de.epimediahub.app.ui
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.view.View
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
@@ -12,10 +14,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -39,13 +41,15 @@ import java.io.File
 @LooperMode(LooperMode.Mode.PAUSED)
 class V114DetailsFocusTest {
     @get:Rule val compose = createComposeRule()
+    private lateinit var rootView: View
     private val paragraph = "Eine Gruppe reist an einen abgelegenen Ort. Dort entdeckt sie ein Geheimnis und muss gemeinsam einen Weg nach Hause finden. "
 
     private fun screen(tv: Boolean = true, series: Boolean = false, description: String = paragraph.repeat(55), visible: androidx.compose.runtime.MutableState<Boolean>? = null) {
         val key = "detail-test-${System.nanoTime()}"
         compose.setContent {
             val inputMode = LocalInputModeManager.current
-            SideEffect { inputMode.requestInputMode(InputMode.Keyboard) }
+            val view = LocalView.current
+            SideEffect { inputMode.requestInputMode(InputMode.Keyboard); rootView = view }
             MaterialTheme {
                 Box(Modifier.fillMaxSize().background(Color(0xFFFFDB55))) {
                     if (visible?.value != false) V114DetailLayout(
@@ -81,10 +85,21 @@ class V114DetailsFocusTest {
         settle()
     }
 
+    // Draw the real view into a native canvas. PixelCopy needs a window compositor,
+    // which this headless Robolectric runner does not provide.
+    private fun render(): Bitmap {
+        lateinit var result: Bitmap
+        compose.runOnIdle {
+            result = Bitmap.createBitmap(rootView.width, rootView.height, Bitmap.Config.ARGB_8888)
+            rootView.draw(Canvas(result))
+        }
+        return result
+    }
+
     private fun saveScreenshot(name: String) {
         val directory = File("build/reports/ui")
         directory.mkdirs()
-        File(directory, name).outputStream().use { compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) }
+        File(directory, name).outputStream().use { render().compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
     @Test fun descriptionScrollsDownAndBackUpToPlayWithoutGettingTrapped() {
@@ -117,8 +132,9 @@ class V114DetailsFocusTest {
         for (tag in listOf("detail-play", "detail-favorite", "detail-trailer", "detail-description")) {
             focus(tag)
             compose.onNodeWithTag(tag).assertIsFocused().assert(SemanticsMatcher.expectValue(V114FocusVisible, true))
-            val image = compose.onNodeWithTag(tag).captureToImage().asAndroidBitmap()
-            val color = image.getPixel(image.width / 2, 4)
+            val image = render()
+            val bounds = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+            val color = image.getPixel(bounds.center.x.toInt(), (bounds.top + 4f).toInt())
             assertTrue("Focus must draw a white outline", android.graphics.Color.red(color) > 230 && android.graphics.Color.green(color) > 230 && android.graphics.Color.blue(color) > 230)
         }
         compose.onNodeWithText("Staffeln & Episoden").assertIsDisplayed()
@@ -128,7 +144,8 @@ class V114DetailsFocusTest {
     @Test fun commonTilesTransferTheirVisibleSelectionWithTheRemote() {
         compose.setContent {
             val mode = LocalInputModeManager.current
-            SideEffect { mode.requestInputMode(InputMode.Keyboard) }
+            val view = LocalView.current
+            SideEffect { mode.requestInputMode(InputMode.Keyboard); rootView = view }
             MaterialTheme {
                 Row(Modifier.fillMaxSize().background(Color.White), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     FocusCard("Erste Kachel", accent = Color.Yellow, onClick = {}, modifier = Modifier.width(280.dp).height(140.dp).testTag("first"))
