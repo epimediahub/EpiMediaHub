@@ -1,5 +1,6 @@
 package de.epimediahub.app.ui
 
+import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
@@ -33,62 +34,73 @@ internal fun V106SmartTubePlayer(
     val context = LocalContext.current
     var playbackError by remember(video.videoId, playback.url) { mutableStateOf("") }
 
-    val player = remember(video.videoId, playback.url) {
-        val http = DefaultHttpDataSource.Factory()
-            .setUserAgent("EpiMediaHub/1.0.6")
-            .setAllowCrossProtocolRedirects(true)
-        val dataSource = DefaultDataSource.Factory(context, http)
-        ExoPlayer.Builder(context)
-            .setMediaSourceFactory(
-                DefaultMediaSourceFactory(context).setDataSourceFactory(dataSource)
-            )
-            .build()
+    val playerResult = remember(context, video.videoId, playback.url) {
+        runCatching {
+            val http = DefaultHttpDataSource.Factory()
+                .setUserAgent("EpiMediaHub/1.0.6")
+                .setAllowCrossProtocolRedirects(true)
+            val dataSource = DefaultDataSource.Factory(context, http)
+            ExoPlayer.Builder(context)
+                .setMediaSourceFactory(
+                    DefaultMediaSourceFactory(context).setDataSourceFactory(dataSource)
+                )
+                .build()
+        }
+    }
+    val player = playerResult.getOrNull()
+    val errorText = playbackError.ifBlank {
+        playerResult.exceptionOrNull()?.let {
+            "SmartTube-Player konnte nicht erstellt werden: " +
+                (it.message ?: it.javaClass.simpleName).take(220)
+        }.orEmpty()
     }
 
     BackHandler {
-        player.stop()
+        runCatching { player?.stop() }
         onBack()
     }
 
-    DisposableEffect(player, video.videoId, playback.url) {
-        val listener = object : Player.Listener {
-            override fun onPlayerError(error: PlaybackException) {
-                playbackError = buildString {
-                    append("SmartTube-Player: ")
-                    append(error.errorCodeName)
-                    error.cause?.message?.takeIf { it.isNotBlank() }?.let {
-                        append(" · ")
-                        append(it.take(220))
+    if (player != null) {
+        DisposableEffect(player, video.videoId, playback.url) {
+            val listener = object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    playbackError = buildString {
+                        append("SmartTube-Player: ")
+                        append(error.errorCodeName)
+                        error.cause?.message?.takeIf { it.isNotBlank() }?.let {
+                            append(" · ")
+                            append(it.take(220))
+                        }
                     }
                 }
             }
-        }
-        player.addListener(listener)
+            player.addListener(listener)
 
-        val mime = when (playback.extension.lowercase()) {
-            "mpd" -> MimeTypes.APPLICATION_MPD
-            "m3u8" -> MimeTypes.APPLICATION_M3U8
-            "webm" -> MimeTypes.VIDEO_WEBM
-            else -> null
-        }
+            val mime = when (playback.extension.lowercase()) {
+                "mpd" -> MimeTypes.APPLICATION_MPD
+                "m3u8" -> MimeTypes.APPLICATION_M3U8
+                "webm" -> MimeTypes.VIDEO_WEBM
+                else -> null
+            }
 
-        runCatching {
-            val item = MediaItem.Builder()
-                .setUri(playback.url)
-                .apply { if (mime != null) setMimeType(mime) }
-                .build()
-            player.setMediaItem(item)
-            player.prepare()
-            player.playWhenReady = true
-        }.onFailure {
-            playbackError = "SmartTube-Player konnte nicht gestartet werden: " +
-                (it.message ?: it.javaClass.simpleName)
-        }
+            runCatching {
+                val item = MediaItem.Builder()
+                    .setUri(playback.url)
+                    .apply { if (mime != null) setMimeType(mime) }
+                    .build()
+                player.setMediaItem(item)
+                player.prepare()
+                player.playWhenReady = true
+            }.onFailure {
+                playbackError = "SmartTube-Player konnte nicht gestartet werden: " +
+                    (it.message ?: it.javaClass.simpleName)
+            }
 
-        onDispose {
-            runCatching { player.removeListener(listener) }
-            runCatching { player.stop() }
-            runCatching { player.release() }
+            onDispose {
+                runCatching { player.removeListener(listener) }
+                runCatching { player.stop() }
+                runCatching { player.release() }
+            }
         }
     }
 
@@ -97,19 +109,31 @@ internal fun V106SmartTubePlayer(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        AndroidView(
-            factory = {
-                PlayerView(it).apply {
-                    this.player = player
-                    useController = true
-                    controllerAutoShow = true
-                }
-            },
-            update = { it.player = player },
-            modifier = Modifier.fillMaxSize()
-        )
+        if (player != null) {
+            AndroidView(
+                factory = {
+                    try {
+                        PlayerView(it).apply {
+                            this.player = player
+                            useController = true
+                            controllerAutoShow = true
+                            keepScreenOn = true
+                            requestFocus()
+                        }
+                    } catch (error: Exception) {
+                        runCatching { player.stop() }
+                        playbackError = "SmartTube-Playeransicht konnte nicht geöffnet werden: " +
+                            (error.message ?: error.javaClass.simpleName).take(220)
+                        FrameLayout(it)
+                    }
+                },
+                update = { (it as? PlayerView)?.player = player },
+                onRelease = { (it as? PlayerView)?.player = null },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
-        if (playbackError.isNotBlank()) {
+        if (errorText.isNotBlank()) {
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -117,11 +141,12 @@ internal fun V106SmartTubePlayer(
                 color = Color(0xEA181B22),
                 shape = MaterialTheme.shapes.medium
             ) {
-                Text(
-                    playbackError,
-                    color = Color.White,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)
-                )
+                Column(Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
+                    Text(errorText, color = Color.White)
+                    TextButton(onClick = onBack) {
+                        Text("Zurück zu SmartTube", color = Color.White)
+                    }
+                }
             }
         }
     }
