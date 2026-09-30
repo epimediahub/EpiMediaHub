@@ -360,11 +360,13 @@ fun V110SmartTubeShell(
 
     if (searchDialog) {
         if (isTv) {
-            V110SmartTubeTvSearchDialog(
+            V110TvKeyboardDialog(
+                title = "SmartTube durchsuchen",
                 initialValue = query,
                 accent = accent,
                 onDismiss = { searchDialog = false },
-                onSearch = { value ->
+                onValueChange = { query = it },
+                onSubmit = { value ->
                     query = value
                     submitSearch(value)
                 }
@@ -372,7 +374,7 @@ fun V110SmartTubeShell(
         } else {
             AlertDialog(
                 onDismissRequest = { searchDialog = false },
-                title = { Text("SmartTube durchsuchen") },
+                title = { Text(title) },
                 text = {
                     OutlinedTextField(
                         value = query,
@@ -732,11 +734,13 @@ private fun V108SmartTubeVideoCard(
 
 
 @Composable
-private fun V110SmartTubeTvSearchDialog(
+internal fun V110TvKeyboardDialog(
+    title: String,
     initialValue: String,
     accent: Color,
     onDismiss: () -> Unit,
-    onSearch: (String) -> Unit
+    onValueChange: (String) -> Unit = {},
+    onSubmit: (String) -> Unit
 ) {
     var value by remember(initialValue) { mutableStateOf(initialValue) }
     val rows = remember {
@@ -780,7 +784,10 @@ private fun V110SmartTubeTvSearchDialog(
                     ) {
                         keyRow.forEach { key ->
                             OutlinedButton(
-                                onClick = { value += key.lowercase() },
+                                onClick = {
+                                    value += key.lowercase()
+                                    onValueChange(value)
+                                },
                                 modifier = Modifier.weight(1f).height(38.dp),
                                 contentPadding = PaddingValues(0.dp),
                                 border = BorderStroke(1.dp, Color.White.copy(.18f)),
@@ -797,15 +804,26 @@ private fun V110SmartTubeTvSearchDialog(
                     horizontalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
                     OutlinedButton(
-                        onClick = { value += " " },
+                        onClick = {
+                            value += " "
+                            onValueChange(value)
+                        },
                         modifier = Modifier.weight(1.4f)
                     ) { Text("LEERZEICHEN", fontSize = 11.sp) }
                     OutlinedButton(
-                        onClick = { if (value.isNotEmpty()) value = value.dropLast(1) },
+                        onClick = {
+                            if (value.isNotEmpty()) {
+                                value = value.dropLast(1)
+                                onValueChange(value)
+                            }
+                        },
                         modifier = Modifier.weight(1f)
                     ) { Text("⌫", fontSize = 17.sp) }
                     OutlinedButton(
-                        onClick = { value = "" },
+                        onClick = {
+                            value = ""
+                            onValueChange(value)
+                        },
                         modifier = Modifier.weight(1f)
                     ) { Text("LÖSCHEN", fontSize = 10.sp) }
                 }
@@ -814,7 +832,7 @@ private fun V110SmartTubeTvSearchDialog(
         confirmButton = {
             Button(
                 enabled = value.isNotBlank(),
-                onClick = { onSearch(value) }
+                onClick = { onSubmit(value) }
             ) { Text("Suchen") }
         },
         dismissButton = {
