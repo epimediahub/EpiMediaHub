@@ -163,9 +163,14 @@ class V113LiveTvNavigationTest {
         focus(fixture, 0)
         compose.runOnIdle { fixture.playlist = firstPlaylist }
         settle()
-        println("Returned selection=${fixture.selected()} memory=${V111MenuMemory.id(V113LiveTvKeys.channels(firstPlaylist, fixture.category))} scroll=${V111MenuMemory.scroll(V113LiveTvKeys.channels(firstPlaylist, fixture.category))}")
-        println(compose.onRoot(useUnmergedTree = true).printToString())
-        compose.onNodeWithTag(fixture.tag(17)).assertIsFocused().assertIsDisplayed()
+        try {
+            compose.onNodeWithTag(fixture.tag(17)).assertIsFocused().assertIsDisplayed()
+        } catch (failure: AssertionError) {
+            val key = V113LiveTvKeys.channels(firstPlaylist, fixture.category)
+            println("Returned selection=${fixture.selected()} memory=${V111MenuMemory.id(key)} scroll=${V111MenuMemory.scroll(key)} ownsFocus=${V111MenuMemory.ownsFocus(key, V113LiveTvKeys.focus(firstPlaylist))}")
+            println(compose.onRoot(useUnmergedTree = true).printToString())
+            throw failure
+        }
         move(fixture, 17, 18)
     }
 }

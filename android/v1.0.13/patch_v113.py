@@ -29,6 +29,13 @@ def span(text, signature):
     raise SystemExit(f"unclosed function: {signature}")
 
 
+def playlist_scope(function):
+    """Replace the pane's focus nodes when its owning playlist/category changes."""
+    brace = function.index("{")
+    body = function[brace + 1:-1].strip("\n")
+    return function[:brace + 1] + "\n    key(memoryKey) {\n" + "\n".join("    " + line if line else "" for line in body.splitlines()) + "\n    }\n}"
+
+
 gradle = root / "app/build.gradle.kts"
 g = gradle.read_text()
 g = replace(g, "versionCode = 1012", "versionCode = 1013", "version code")
@@ -94,7 +101,7 @@ category = replace(category, "onSelected = { onCategory(category) }", """onSelec
                             V111MenuMemory.rememberFocus(memoryKey, index, category.id, focusScope)
                             onCategory(category)
                         }""", "remember focused category")
-s = s[:a] + category + s[b:]
+s = s[:a] + playlist_scope(category) + s[b:]
 
 a, b = span(s, "private fun V076ChannelPane(")
 channels = s[a:b]
@@ -122,7 +129,7 @@ channels = replace(channels, "                        isTv = isTv,\n", """      
                             scopeKey = focusScope
                         ),
 """, "exact channel focus restoration")
-s = s[:a] + channels + s[b:]
+s = s[:a] + playlist_scope(channels) + s[b:]
 
 a, b = span(s, "private fun V076ChannelRow(")
 row = s[a:b]
