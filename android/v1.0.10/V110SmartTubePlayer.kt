@@ -4,10 +4,16 @@ import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -27,6 +33,7 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
+import kotlinx.coroutines.delay
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -38,6 +45,10 @@ internal fun V110SmartTubePlayer(
 ) {
     val context = LocalContext.current
     var playbackError by remember(video.videoId, playback.url) { mutableStateOf("") }
+    var controlsVisible by remember(video.videoId) { mutableStateOf(true) }
+    var isPlaying by remember(video.videoId) { mutableStateOf(false) }
+    var positionMs by remember(video.videoId) { mutableLongStateOf(0L) }
+    val remoteFocusRequester = remember { FocusRequester() }
 
     val playerResult = remember(context, video.videoId, playback.url) {
         runCatching {
@@ -67,6 +78,36 @@ internal fun V110SmartTubePlayer(
         }.orEmpty()
     }
 
+
+    fun seekBy(deltaMs: Long) {
+        val active = player ?: return
+        if (video.live) return
+        val max = active.duration.takeIf { it > 0L } ?: Long.MAX_VALUE
+        active.seekTo((active.currentPosition + deltaMs).coerceIn(0L, max))
+        positionMs = active.currentPosition
+        controlsVisible = true
+    }
+
+    LaunchedEffect(player, video.videoId) {
+        if (player != null) {
+            runCatching { remoteFocusRequester.requestFocus() }
+        }
+    }
+
+    LaunchedEffect(player, video.videoId) {
+        while (player != null) {
+            positionMs = runCatching { player.currentPosition.coerceAtLeast(0L) }.getOrDefault(0L)
+            delay(500L)
+        }
+    }
+
+    LaunchedEffect(controlsVisible, isPlaying, video.videoId) {
+        if (controlsVisible && isPlaying) {
+            delay(3_000L)
+            controlsVisible = false
+        }
+    }
+
     BackHandler {
         runCatching { player?.stop() }
         onBack()
@@ -76,6 +117,11 @@ internal fun V110SmartTubePlayer(
         DisposableEffect(player, video.videoId, playback.url) {
             var endDispatched = false
             val listener = object : Player.Listener {
+                override fun onIsPlayingChanged(playing: Boolean) {
+                    isPlaying = playing
+                    if (!playing) controlsVisible = true
+                }
+
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (
                         playbackState == Player.STATE_ENDED &&
@@ -132,6 +178,41 @@ internal fun V110SmartTubePlayer(
         Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .focusRequester(remoteFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) {
+                    false
+                } else {
+                    when (event.key) {
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause -> {
+                            val active = player
+                            if (active != null) {
+                                if (active.isPlaying) active.pause() else active.play()
+                                controlsVisible = true
+                                true
+                            } else false
+                        }
+                        Key.DirectionLeft -> {
+                            if (!video.live && player != null) {
+                                seekBy(-10_000L)
+                                true
+                            } else false
+                        }
+                        Key.DirectionRight -> {
+                            if (!video.live && player != null) {
+                                seekBy(10_000L)
+                                true
+                            } else false
+                        }
+                        Key.DirectionUp, Key.DirectionDown -> {
+                            controlsVisible = true
+                            true
+                        }
+                        else -> false
+                    }
+                }
+            }
     ) {
         if (player != null) {
             AndroidView(
@@ -139,10 +220,11 @@ internal fun V110SmartTubePlayer(
                     try {
                         PlayerView(it).apply {
                             this.player = player
-                            useController = true
-                            controllerAutoShow = true
+                            useController = false
+                            controllerAutoShow = false
                             keepScreenOn = true
-                            requestFocus()
+                            isFocusable = false
+                            isFocusableInTouchMode = false
                         }
                     } catch (error: Exception) {
                         runCatching { player.stop() }
@@ -155,6 +237,52 @@ internal fun V110SmartTubePlayer(
                 onRelease = { (it as? PlayerView)?.player = null },
                 modifier = Modifier.fillMaxSize()
             )
+        }
+
+        if (controlsVisible && errorText.isBlank()) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 24.dp, vertical = 22.dp),
+                color = Color(0xD9141820),
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Column(
+                    Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        video.title,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1
+                    )
+                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        if (video.live) {
+                            "OK · ${if (isPlaying) "Pause" else "Wiedergabe"}"
+                        } else {
+                            "◀ 10 Sek.   ·   OK ${if (isPlaying) "Pause" else "Wiedergabe"}   ·   10 Sek. ▶"
+                        },
+                        color = Color.White.copy(alpha = .88f),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (!video.live) {
+                        val duration = player?.duration?.takeIf { it > 0L }
+                        if (duration != null) {
+                            Spacer(Modifier.height(7.dp))
+                            LinearProgressIndicator(
+                                progress = {
+                                    (positionMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+                                },
+                                modifier = Modifier.widthIn(min = 280.dp, max = 560.dp),
+                                color = Color.White,
+                                trackColor = Color.White.copy(alpha = .20f)
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         if (errorText.isNotBlank()) {
