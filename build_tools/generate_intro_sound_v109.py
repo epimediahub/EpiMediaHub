@@ -133,12 +133,12 @@ add_glass(1318.510, 2.12, 0.017, 0.28, 0.44)
 
 # Subtle air bloom.
 last = 0.0
-for i in range(int(0.65 * SR), int(1.45 * SR)):
+for i in range(int(0.67 * SR), int(1.48 * SR)):
     now = i / SR
     noise = random.uniform(-1.0, 1.0)
     last = 0.94 * last + 0.06 * noise
     high = noise - last
-    env = smoothstep((now - 0.65) / 0.18) * smoothstep((1.45 - now) / 0.45)
+    env = smoothstep((now - 0.67) / 0.16) * smoothstep((1.48 - now) / 0.45)
     air = high * 0.0085 * env
     left[i] += air * 0.92
     right[i] += air * 1.08
@@ -189,10 +189,8 @@ for i in range(fade_start, N):
     left[i] *= k
     right[i] *= k
 
-# Soft saturation then normalize to about -1 dBFS peak.
-den = math.tanh(1.25)
-left = [math.tanh(v * 1.25) / den for v in left]
-right = [math.tanh(v * 1.25) / den for v in right]
+# Final peak normalization for the approved v2 master. The parallel glue
+# above is the only saturation stage so the stronger ending keeps its dynamics.
 peak = max(max(abs(v) for v in left), max(abs(v) for v in right))
 gain = (10.0 ** (-1.0 / 20.0)) / peak if peak else 1.0
 
