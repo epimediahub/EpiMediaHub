@@ -102,7 +102,7 @@ internal object V108SmartTubeCore {
             val manager = manager(context)
             val service = manager.contentService
             val groups = when (section) {
-                V108SmartTubeSection.HOME -> collectGroups(service.getHomeObserve())
+                V108SmartTubeSection.HOME -> collectGroups(Observable.fromCallable { service.getHome().orEmpty() })
                 V108SmartTubeSection.SUBSCRIPTIONS -> collectSingleGroups(service.getSubscriptionsObserve())
                 V108SmartTubeSection.HISTORY -> collectSingleGroups(service.getHistoryObserve())
                 V108SmartTubeSection.PLAYLISTS -> collectSingleGroups(service.getPlaylistsObserve())
