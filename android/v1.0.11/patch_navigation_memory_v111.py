@@ -371,6 +371,7 @@ replace_function(
 legacy_screens = java / "ui/Screens.kt"
 for imp in (
     "import androidx.compose.foundation.lazy.rememberLazyListState",
+    "import androidx.compose.foundation.lazy.itemsIndexed",
     "import androidx.compose.ui.focus.FocusRequester",
     "import androidx.compose.ui.focus.focusRequester",
     "import androidx.compose.ui.focus.onFocusChanged",
@@ -385,8 +386,8 @@ replace_function(
     val u by vm.ui.collectAsState()
     val memoryKey = "settings"
     val state = rememberLazyListState()
-    val requesters = remember { List(5) { FocusRequester() } }
-    val remembered = V111MenuMemory.index(memoryKey).coerceIn(0, 4)
+    val requesters = remember { List(7) { FocusRequester() } }
+    val remembered = V111MenuMemory.index(memoryKey).coerceIn(0, 6)
     BackHandler { vm.back() }
 
     LaunchedEffect(Unit) {
@@ -431,11 +432,27 @@ replace_function(
             }
             item {
                 FocusCard(
+                    "Kategorien verwalten",
+                    "Live TV · Filme · Serien",
+                    R.drawable.icon_live,
+                    accent = accent,
+                    modifier = rememberedModifier(2),
+                    onClick = { vm.navigate(Screen.CategorySettings) }
+                )
+            }
+            item {
+                V081WeatherSettingsCard(
+                    accent,
+                    modifier = rememberedModifier(3)
+                )
+            }
+            item {
+                FocusCard(
                     "Gerät & Dashboard",
                     if (u.webAdminRunning) "Aktiv · " + u.webAdminUrl else "Kopplung · Websetup · Fernverwaltung",
                     R.drawable.icon_playlist,
                     accent = accent,
-                    modifier = rememberedModifier(2),
+                    modifier = rememberedModifier(4),
                     onClick = { vm.navigate(Screen.WebAdmin) }
                 )
             }
@@ -445,7 +462,7 @@ replace_function(
                     lang(u.preferredAudioLanguage),
                     R.drawable.icon_settings,
                     accent = accent,
-                    modifier = rememberedModifier(3),
+                    modifier = rememberedModifier(5),
                     onClick = { vm.setAudioLanguage(nextAudio(u.preferredAudioLanguage)) }
                 )
             }
@@ -455,7 +472,7 @@ replace_function(
                     lang(u.preferredSubtitleLanguage),
                     R.drawable.icon_settings,
                     accent = accent,
-                    modifier = rememberedModifier(4),
+                    modifier = rememberedModifier(6),
                     onClick = { vm.setSubtitleLanguage(nextSub(u.preferredSubtitleLanguage)) }
                 )
             }
@@ -768,6 +785,175 @@ if "fun V060RecentlyWatchedScreen(" in h:
     h = h[:a] + fn + h[b:]
     hub.write_text(h)
 
+
+# Weather card participates in Settings focus restoration.
+weather = java / "ui/V081WeatherSettings.kt"
+if weather.exists():
+    ws = weather.read_text()
+    ws = ws.replace(
+        'fun V081WeatherSettingsCard(accent: androidx.compose.ui.graphics.Color) {',
+        'fun V081WeatherSettingsCard(accent: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {',
+        1,
+    )
+    ws = ws.replace(
+        '''        accent = accent,
+        onClick = { showDialog = true }
+''',
+        '''        accent = accent,
+        modifier = modifier,
+        onClick = { showDialog = true }
+''',
+        1,
+    )
+    weather.write_text(ws)
+
+# Category manager entry screen restores the last selected media type.
+category_settings = java / "ui/V101CategorySettings.kt"
+if category_settings.exists():
+    cs = category_settings.read_text()
+    if 'val memoryKey = "category-settings"' not in cs:
+        cs = cs.replace(
+            '    BackHandler { vm.back() }\n',
+            '    val memoryKey = "category-settings"\n'
+            '    val listState = v111RememberLazyListState(memoryKey)\n'
+            '    BackHandler { vm.back() }\n',
+            1,
+        )
+        cs = cs.replace(
+            '''        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(if (isTv) 20.dp else 14.dp),''',
+            '''        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().padding(if (isTv) 20.dp else 14.dp),''',
+            1,
+        )
+        cards = [
+            ("Live-TV-Kategorien", "live", 0),
+            ("Film-Kategorien", "movie", 1),
+            ("Serien-Kategorien", "series", 2),
+        ]
+        for title, item_id, index in cards:
+            marker = f'                    "{title}",'
+            pos = cs.find(marker)
+            if pos < 0:
+                raise SystemExit(f"category settings card missing: {title}")
+            click = cs.find("                    onClick =", pos)
+            if click < 0:
+                raise SystemExit(f"category settings onClick missing: {title}")
+            cs = cs[:click] + (
+                f'                    modifier = v111RememberFocus(memoryKey, "{item_id}", {index}, enabled = isTv),\n'
+            ) + cs[click:]
+    category_settings.write_text(cs)
+
+# Mediathek country/provider menus also restore exact focus and scroll.
+parity = java / "ui/ParityScreens.kt"
+if parity.exists():
+    ps = parity.read_text()
+    if "import androidx.compose.foundation.lazy.itemsIndexed\n" not in ps:
+        ps = ps.replace(
+            "import androidx.compose.foundation.lazy.items\n",
+            "import androidx.compose.foundation.lazy.items\nimport androidx.compose.foundation.lazy.itemsIndexed\n",
+            1,
+        )
+    if "itemsIndexed as gridItemsIndexed" not in ps:
+        ps = ps.replace(
+            "import androidx.compose.foundation.lazy.grid.items as gridItems\n",
+            "import androidx.compose.foundation.lazy.grid.items as gridItems\n"
+            "import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed\n",
+            1,
+        )
+    ps = ps.replace(
+        '''fun ParityMediathekHomeScreen(vm: MainViewModel, accent: Color, isTv: Boolean) {
+    BackHandler { vm.back() }''',
+        '''fun ParityMediathekHomeScreen(vm: MainViewModel, accent: Color, isTv: Boolean) {
+    val gridState = v111RememberLazyGridState("mediathek:countries")
+    BackHandler { vm.back() }''',
+        1,
+    )
+    ps = ps.replace(
+        '''        LazyVerticalGrid(
+            columns = GridCells.Fixed(if (isTv) 3 else 2),''',
+        '''        LazyVerticalGrid(
+            state = gridState,
+            columns = GridCells.Fixed(if (isTv) 3 else 2),''',
+        1,
+    )
+    ps = ps.replace(
+        '''            gridItems(MediathekClient.countries, key = { it.id }) { country ->
+                ParityDirectoryCard(country.label, country.meta, country.info, accent) {''',
+        '''            gridItemsIndexed(MediathekClient.countries, key = { _, item -> item.id }) { index, country ->
+                ParityDirectoryCard(
+                    country.label, country.meta, country.info, accent,
+                    modifier = v111RememberFocus(
+                        "mediathek:countries", country.id, index, enabled = isTv
+                    )
+                ) {''',
+        1,
+    )
+    ps = ps.replace(
+        '''    val providers = remember(countryId) { MediathekClient.providers(countryId) }
+    BackHandler { vm.back() }''',
+        '''    val providers = remember(countryId) { MediathekClient.providers(countryId) }
+    val memoryKey = "mediathek:providers:" + countryId
+    val providerState = v111RememberLazyListState(memoryKey)
+    BackHandler { vm.back() }''',
+        1,
+    )
+    ps = ps.replace(
+        '''        LazyColumn(
+            Modifier.fillMaxSize().padding(horizontal = if (isTv) 70.dp else 14.dp, vertical = 12.dp),''',
+        '''        LazyColumn(
+            state = providerState,
+            modifier = Modifier.fillMaxSize().padding(horizontal = if (isTv) 70.dp else 14.dp, vertical = 12.dp),''',
+        1,
+    )
+    ps = ps.replace(
+        '''            items(providers, key = { it.id }) { provider ->
+                ParityProviderRow(provider, accent) { vm.navigate(ParityMediathekList(provider.id)) }
+''',
+        '''            itemsIndexed(providers, key = { _, provider -> provider.id }) { index, provider ->
+                ParityProviderRow(
+                    provider,
+                    accent,
+                    modifier = v111RememberFocus(memoryKey, provider.id, index, enabled = isTv)
+                ) { vm.navigate(ParityMediathekList(provider.id)) }
+''',
+        1,
+    )
+    ps = ps.replace(
+        'private fun ParityDirectoryCard(title: String, meta: String, info: String, accent: Color, onClick: () -> Unit) {',
+        '''private fun ParityDirectoryCard(
+    title: String,
+    meta: String,
+    info: String,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {''',
+        1,
+    )
+    ps = ps.replace(
+        '        Modifier.heightIn(min = 150.dp).onFocusChanged',
+        '        modifier.heightIn(min = 150.dp).onFocusChanged',
+        1,
+    )
+    ps = ps.replace(
+        'private fun ParityProviderRow(provider: MediathekClient.Provider, accent: Color, onClick: () -> Unit) {',
+        '''private fun ParityProviderRow(
+    provider: MediathekClient.Provider,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {''',
+        1,
+    )
+    ps = ps.replace(
+        '        Modifier.fillMaxWidth().onFocusChanged',
+        '        modifier.fillMaxWidth().onFocusChanged',
+        1,
+    )
+    parity.write_text(ps)
+
 checks = [
     (home, 'V111MenuMemory.id(homeMemoryKey)'),
     (home, 'V111MenuMemory.remember(homeMemoryKey'),
@@ -783,6 +969,10 @@ checks = [
     (hub, 'v111RememberLazyGridState("recently-watched")'),
     (legacy_screens, 'val memoryKey = "settings"'),
     (legacy_screens, 'val memoryKey = "playlists"'),
+    (legacy_screens, 'Screen.CategorySettings'),
+    (weather, 'modifier: Modifier = Modifier'),
+    (category_settings, 'v111RememberFocus(memoryKey'),
+    (parity, '"mediathek:countries"'),
 ]
 for path, marker in checks:
     if marker not in path.read_text():
