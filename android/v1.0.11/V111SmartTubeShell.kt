@@ -748,13 +748,11 @@ private fun V111SmartTubeVideoCard(
     val imageShape = RoundedCornerShape(if (isTv) 12.dp else 10.dp)
 
     Column(
-        Modifier
-            .width(width)
-            .then(rememberedFocus)
-            .onFocusChanged { focused = it.isFocused }
+        Modifier.width(width)
     ) {
         Surface(
             onClick = onClick,
+            modifier = rememberedFocus.onFocusChanged { focused = it.isFocused },
             shape = imageShape,
             color = Color(0xFF181818),
             border = BorderStroke(if (focused) 4.dp else 0.dp, if (focused) Color.White else Color.Transparent)
