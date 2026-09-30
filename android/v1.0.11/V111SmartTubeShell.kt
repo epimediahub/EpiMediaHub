@@ -10,8 +10,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -23,10 +21,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -42,8 +36,6 @@ import coil.compose.AsyncImage
 import de.epimediahub.app.MainViewModel
 import de.epimediahub.app.R
 import io.reactivex.disposables.Disposable
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -56,7 +48,7 @@ fun V111SmartTubeShell(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val legacyFireTvKeyboard = remember {
-        v110NeedsLegacyFireTvKeyboard()
+        v111NeedsLegacyFireTvKeyboard()
     }
     val ui by vm.ui.collectAsState()
     val legacyFireTvIme = isTv && Build.VERSION.SDK_INT <= 25
@@ -81,13 +73,13 @@ fun V111SmartTubeShell(
             } ?: V108SmartTubeSection.HOME
         )
     }
-    val smartTubeMainListState = v111RememberLazyListState("smarttube-main")
     var rows by remember { mutableStateOf<List<V100SmartTubeRow>>(emptyList()) }
-    val smartTubeContentState = rememberLazyListState()
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf("") }
     var generation by remember { mutableIntStateOf(0) }
     var searchTitle by remember { mutableStateOf("") }
+    val smartTubeContentKey = "smarttube-content:" + selectedSection.name + ":" + searchTitle
+    val smartTubeContentState = v111RememberLazyListState(smartTubeContentKey)
 
     var searchDialog by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -215,8 +207,7 @@ fun V111SmartTubeShell(
 
     LaunchedEffect(rows.size, selectedSection, searchTitle) {
         if (isTv && rows.isNotEmpty()) {
-            val key = "smarttube-content:" + selectedSection.name + ":" + searchTitle
-            val index = V111MenuMemory.index(key).coerceIn(0, rows.lastIndex)
+            val index = V111MenuMemory.index(smartTubeContentKey).coerceIn(0, rows.lastIndex)
             smartTubeContentState.scrollToItem(index)
         }
     }
@@ -226,6 +217,7 @@ fun V111SmartTubeShell(
             video = video,
             playback = playback,
             accent = accent,
+            isTv = isTv,
             onBack = { activePlayback = null },
             onEnded = {
                 nextVideoAfter(video)?.let { next ->
@@ -243,10 +235,6 @@ fun V111SmartTubeShell(
             onBack()
         }
     }
-
-    val smartTubeContentState = v111RememberLazyListState(
-        "smarttube-content:" + selectedSection.name
-    )
 
     Column(Modifier.fillMaxSize()) {
         Surface(
@@ -425,7 +413,7 @@ fun V111SmartTubeShell(
                     }
                 } else {
                     LazyColumn(
-                        state = smartTubeMainListState,
+                        state = smartTubeContentState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             start = if (isTv) 24.dp else 12.dp,
@@ -473,7 +461,7 @@ fun V111SmartTubeShell(
 
     if (searchDialog) {
         if (legacyFireTvKeyboard) {
-            V110TvKeyboardDialog(
+            V111TvKeyboardDialog(
                 title = "SmartTube durchsuchen",
                 initialValue = query,
                 accent = accent,
@@ -895,7 +883,7 @@ private fun V111SmartTubeVideoCard(
 
 
 @Composable
-internal fun V110TvKeyboardDialog(
+internal fun V111TvKeyboardDialog(
     title: String,
     initialValue: String,
     accent: Color,
@@ -1003,7 +991,7 @@ internal fun V110TvKeyboardDialog(
 }
 
 
-internal fun v110NeedsLegacyFireTvKeyboard(): Boolean =
+internal fun v111NeedsLegacyFireTvKeyboard(): Boolean =
     Build.MANUFACTURER.equals("Amazon", ignoreCase = true) &&
         Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1
 
