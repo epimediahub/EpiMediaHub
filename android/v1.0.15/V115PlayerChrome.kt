@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+
 package de.epimediahub.app.ui
 
 import android.view.KeyEvent
