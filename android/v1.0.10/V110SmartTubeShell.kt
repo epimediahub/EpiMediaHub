@@ -1,5 +1,6 @@
 package de.epimediahub.app.ui
 
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -42,6 +43,9 @@ fun V110SmartTubeShell(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val legacyFireTvKeyboard = remember {
+        v110NeedsLegacyFireTvKeyboard()
+    }
     val ui by vm.ui.collectAsState()
     val smartTubeBackgroundRes = vm.themeRepo().backgroundRes(ui.themeId)
     val smartTubeMotifRes = vm.themeRepo().homeMotifRes(ui.themeId).takeIf { it != 0 }
@@ -359,7 +363,7 @@ fun V110SmartTubeShell(
     }
 
     if (searchDialog) {
-        if (isTv) {
+        if (legacyFireTvKeyboard) {
             V110TvKeyboardDialog(
                 title = "SmartTube durchsuchen",
                 initialValue = query,
@@ -840,3 +844,8 @@ internal fun V110TvKeyboardDialog(
         }
     )
 }
+
+
+internal fun v110NeedsLegacyFireTvKeyboard(): Boolean =
+    Build.MANUFACTURER.equals("Amazon", ignoreCase = true) &&
+        Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1
