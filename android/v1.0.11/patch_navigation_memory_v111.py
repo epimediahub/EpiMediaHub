@@ -27,6 +27,15 @@ def replace_function(path: Path, signature: str, replacement: str):
     start, end = function_span(text, signature)
     path.write_text(text[:start] + replacement + text[end:])
 
+def ensure_import(path: Path, line: str):
+    text = path.read_text()
+    if line in text:
+        return
+    anchor = "package de.epimediahub.app.ui\n\n"
+    if anchor not in text:
+        raise SystemExit(f"package import anchor missing in {path}")
+    path.write_text(text.replace(anchor, anchor + line + "\n", 1))
+
 home = java / "ui/V083Home.kt"
 hs = home.read_text()
 hs = hs.replace('    val firstFocus = remember { FocusRequester() }\n', '')
@@ -355,6 +364,194 @@ replace_function(
 }'''
 )
 
+# ---------------------------------------------------------------------------
+# Settings and playlists: preserve the focused row when returning from nested
+# screens such as Designs, Dashboard, Add Playlist, etc.
+# ---------------------------------------------------------------------------
+legacy_screens = java / "ui/Screens.kt"
+for imp in (
+    "import androidx.compose.foundation.lazy.rememberLazyListState",
+    "import androidx.compose.ui.focus.FocusRequester",
+    "import androidx.compose.ui.focus.focusRequester",
+    "import androidx.compose.ui.focus.onFocusChanged",
+    "import kotlinx.coroutines.delay",
+):
+    ensure_import(legacy_screens, imp)
+
+replace_function(
+    legacy_screens,
+    "fun SettingsScreen(",
+    r'''fun SettingsScreen(vm: MainViewModel, accent: Color) {
+    val u by vm.ui.collectAsState()
+    val memoryKey = "settings"
+    val state = rememberLazyListState()
+    val requesters = remember { List(5) { FocusRequester() } }
+    val remembered = V111MenuMemory.index(memoryKey).coerceIn(0, 4)
+    BackHandler { vm.back() }
+
+    LaunchedEffect(Unit) {
+        state.scrollToItem(remembered)
+        delay(70L)
+        runCatching { requesters[remembered].requestFocus() }
+    }
+
+    fun rememberedModifier(index: Int): Modifier =
+        Modifier
+            .then(if (index == remembered) Modifier.focusRequester(requesters[index]) else Modifier)
+            .onFocusChanged {
+                if (it.isFocused) V111MenuMemory.remember(memoryKey, index, index.toString())
+            }
+
+    Column(Modifier.fillMaxSize()) {
+        EpiTopBar("EINSTELLUNGEN", R.drawable.brand_header, { vm.back() })
+        LazyColumn(
+            state = state,
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                FocusCard(
+                    "Skin / Design",
+                    u.themeCatalog?.themes?.get(u.themeId)?.label.orEmpty(),
+                    R.drawable.icon_settings,
+                    accent = accent,
+                    modifier = rememberedModifier(0),
+                    onClick = { vm.navigate(Screen.Themes) }
+                )
+            }
+            item {
+                FocusCard(
+                    "Playlists verwalten",
+                    u.playlists.size.toString() + " gespeichert",
+                    R.drawable.icon_playlist,
+                    accent = accent,
+                    modifier = rememberedModifier(1),
+                    onClick = { vm.navigate(Screen.Playlists) }
+                )
+            }
+            item {
+                FocusCard(
+                    "Gerät & Dashboard",
+                    if (u.webAdminRunning) "Aktiv · " + u.webAdminUrl else "Kopplung · Websetup · Fernverwaltung",
+                    R.drawable.icon_playlist,
+                    accent = accent,
+                    modifier = rememberedModifier(2),
+                    onClick = { vm.navigate(Screen.WebAdmin) }
+                )
+            }
+            item {
+                FocusCard(
+                    "Bevorzugte Audiosprache",
+                    lang(u.preferredAudioLanguage),
+                    R.drawable.icon_settings,
+                    accent = accent,
+                    modifier = rememberedModifier(3),
+                    onClick = { vm.setAudioLanguage(nextAudio(u.preferredAudioLanguage)) }
+                )
+            }
+            item {
+                FocusCard(
+                    "Bevorzugte Untertitelsprache",
+                    lang(u.preferredSubtitleLanguage),
+                    R.drawable.icon_settings,
+                    accent = accent,
+                    modifier = rememberedModifier(4),
+                    onClick = { vm.setSubtitleLanguage(nextSub(u.preferredSubtitleLanguage)) }
+                )
+            }
+            item {
+                GlassPanel(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(20.dp)) {
+                        Text("Android v1.0.11", fontWeight = FontWeight.Bold)
+                        Text(
+                            "SmartTube · Fokus-Wiederherstellung · Dashboard",
+                            color = Color.White.copy(.62f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}'''
+)
+
+replace_function(
+    legacy_screens,
+    "fun PlaylistsScreen(",
+    r'''fun PlaylistsScreen(vm: MainViewModel, accent: Color) {
+    val u by vm.ui.collectAsState()
+    val memoryKey = "playlists"
+    val state = rememberLazyListState()
+    val remembered = V111MenuMemory.index(memoryKey)
+    val focusRequester = remember { FocusRequester() }
+    BackHandler { vm.back() }
+
+    LaunchedEffect(u.playlists.size) {
+        if (u.playlists.isNotEmpty()) {
+            val index = remembered.coerceIn(0, u.playlists.lastIndex)
+            state.scrollToItem(index)
+            delay(70L)
+            runCatching { focusRequester.requestFocus() }
+        }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        EpiTopBar(
+            "PLAYLISTS",
+            R.drawable.brand_header,
+            { vm.back() },
+            actions = {
+                TextButton(onClick = { vm.navigate(Screen.AddPlaylist) }) {
+                    Text("+ Hinzufügen", color = accent)
+                }
+            }
+        )
+        LazyColumn(
+            state = state,
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            itemsIndexed(u.playlists, key = { _, it -> it.id }) { index, playlist ->
+                GlassPanel(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(playlist.name, fontWeight = FontWeight.Bold)
+                            Text(playlist.type.name, color = Color.White.copy(.6f))
+                        }
+                        Button(
+                            onClick = {
+                                V111MenuMemory.remember(memoryKey, index, playlist.id)
+                                vm.selectPlaylist(playlist.id)
+                            },
+                            modifier = Modifier
+                                .then(
+                                    if (index == remembered) Modifier.focusRequester(focusRequester)
+                                    else Modifier
+                                )
+                                .onFocusChanged {
+                                    if (it.isFocused) {
+                                        V111MenuMemory.remember(memoryKey, index, playlist.id)
+                                    }
+                                },
+                            colors = ButtonDefaults.buttonColors(containerColor = accent),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text(if (playlist.id == u.active?.id) "Aktiv" else "Wählen")
+                        }
+                        TextButton(onClick = { vm.removePlaylist(playlist.id) }) {
+                            Text("Löschen", color = Color(0xFFFF8585))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}'''
+)
+
 themes = java / "ui/V079Themes.kt"
 ts = themes.read_text()
 ts = ts.replace(
@@ -397,6 +594,8 @@ checks = [
     (screens, 'itemsIndexed(u.searchResults'),
     (screens, 'itemsIndexed(filtered'),
     (themes, 'V111MenuMemory.id("theme-categories")'),
+    (legacy_screens, 'val memoryKey = "settings"'),
+    (legacy_screens, 'val memoryKey = "playlists"'),
 ]
 for path, marker in checks:
     if marker not in path.read_text():
