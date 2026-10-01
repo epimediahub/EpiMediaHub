@@ -14,6 +14,7 @@ on:
       - 'server/epimediahub_provisioning/tests/test_skip_markers.py'
       - 'server/epimediahub_provisioning/deploy/fix_skip_analysis_boundaries.sh'
       - 'server/epimediahub_provisioning/tests/test_skip_analysis*.py'
+      - 'server/epimediahub_provisioning/tests/test_skip_installer*.py'
       - 'server/epimediahub_provisioning/deploy/inspect_skip_references.py'
       - '.github/workflows/raspberry-v082-reference-validate.yml'
 
@@ -52,3 +53,18 @@ jobs:
           if [ -f server/epimediahub_provisioning/deploy/install_skip_automation.sh ]; then
             bash -n server/epimediahub_provisioning/deploy/install_skip_automation.sh
           fi
+      - name: Verify installer success, preflight, active worker and rollback
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_installer*.py' -v
+      - name: Inspect public timing database availability
+        run: |
+          PYTHONPATH=server/epimediahub_provisioning python - <<'PY'
+          from skip_automation import fetch_json, parse_online
+          try:
+              data = fetch_json('https://api.theintrodb.org/v3/media?tmdb_id=8358&season=2&episode=13&duration_ms=2619053')
+              segments = parse_online(data,2619053)
+              print('LIVE_DATABASE_LOOKUP=' + ('segments_available' if segments else 'no_segments'))
+              print('LIVE_DATABASE_RESPONSE_FIELDS=' + ','.join(sorted(data)))
+              print('LIVE_DATABASE_SEGMENTS=' + str(segments))
+          except (ValueError,OSError,TypeError):
+              print('LIVE_DATABASE_LOOKUP=unavailable_from_ci')
+          PY
