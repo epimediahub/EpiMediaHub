@@ -40,6 +40,7 @@ def migrate(con):
     );
     CREATE INDEX IF NOT EXISTS idx_skip_asset ON skip_records(asset_key,duration_ms,status);
     CREATE INDEX IF NOT EXISTS idx_skip_source ON skip_records(source_key,status);
+    CREATE INDEX IF NOT EXISTS idx_skip_dashboard ON skip_records(status,source_key,season,episode);
     CREATE TABLE IF NOT EXISTS skip_identities(
       source_key TEXT PRIMARY KEY, imdb_id TEXT NOT NULL DEFAULT '', tmdb_id INTEGER NOT NULL DEFAULT 0,
       title TEXT NOT NULL, year TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
@@ -146,6 +147,67 @@ def parse_time(value):
     return round(sum(float(p) * 60 ** i for i, p in enumerate(reversed(parts))) * 1000)
 
 
+def page_number(value, default=1):
+    return int(value) if re.fullmatch(r"[1-9]\d{0,6}", str(value)) else default
+
+
+def media_groups(rows):
+    """Group exact source identities, with numeric season/episode ordering."""
+    groups = {}
+    for raw in rows:
+        row = dict(raw)
+        key = row["source_key"]
+        group = groups.setdefault(key, dict(source_key=key, title=row["title"], year=row.get("year", ""),
+                                          media_type=row.get("media_type", "episode"), seasons={}, count=0))
+        group["count"] += 1
+        season = group["seasons"].setdefault(row["season"], dict(season=row["season"], episodes={}))
+        episode = season["episodes"].setdefault(row["episode"], dict(episode=row["episode"], rows=[]))
+        episode["rows"].append(row)
+    result = sorted(groups.values(), key=lambda g: (g["title"].casefold(), g["year"], g["source_key"]))
+    for group in result:
+        group["seasons"] = sorted(group["seasons"].values(), key=lambda s: s["season"])
+        for season in group["seasons"]:
+            season["episodes"] = sorted(season["episodes"].values(), key=lambda e: e["episode"])
+    return result
+
+
+def marker_browser(con, state, source_key="", season=None, page=1, episode_page=1):
+    """Page series first; load marker forms only for the selected season."""
+    total = con.execute("SELECT COUNT(*) FROM (SELECT source_key FROM skip_records WHERE status=? GROUP BY source_key)", (state,)).fetchone()[0]
+    pages = max(1, (total + 19) // 20)
+    page = min(page_number(page), pages)
+    summary = """SELECT source_key,MIN(title) title,MIN(year) year,MIN(media_type) media_type,
+      COUNT(*) count,COUNT(DISTINCT CAST(season AS TEXT)||':'||CAST(episode AS TEXT)) episode_count
+      FROM skip_records WHERE status=?"""
+    groups = [dict(row) for row in con.execute(summary + " GROUP BY source_key ORDER BY LOWER(MIN(title)),MIN(year),source_key LIMIT 20 OFFSET ?", (state, (page - 1) * 20))]
+    selected = con.execute(summary + " AND source_key=? GROUP BY source_key", (state, source_key)).fetchone() if KEY.fullmatch(source_key) else None
+    if selected and not any(g["source_key"] == source_key for g in groups):
+        groups.insert(0, dict(selected))
+    episode_page = page_number(episode_page)
+    for group in groups:
+        group.update(selected=bool(selected and group["source_key"] == source_key), seasons=[], movie_rows=[])
+        if not group["selected"]:
+            continue
+        if group["media_type"] == "movie":
+            group["movie_pages"] = max(1, (group["count"] + 49) // 50)
+            episode_page = min(episode_page, group["movie_pages"])
+            group["movie_rows"] = con.execute("SELECT * FROM skip_records WHERE status=? AND source_key=? ORDER BY id DESC LIMIT 50 OFFSET ?", (state, source_key, (episode_page - 1) * 50)).fetchall()
+            continue
+        seasons = con.execute("SELECT season,COUNT(*) count,COUNT(DISTINCT episode) episode_count FROM skip_records WHERE status=? AND source_key=? GROUP BY season ORDER BY season", (state, source_key)).fetchall()
+        for raw in seasons:
+            item = dict(raw, selected=raw["season"] == season, episodes=[], pages=max(1, (raw["episode_count"] + 24) // 25))
+            if item["selected"]:
+                episode_page = min(episode_page, item["pages"])
+                numbers = [row[0] for row in con.execute("SELECT episode FROM skip_records WHERE status=? AND source_key=? AND season=? GROUP BY episode ORDER BY episode LIMIT 25 OFFSET ?", (state, source_key, season, (episode_page - 1) * 25))]
+                if numbers:
+                    placeholders = ",".join("?" for _ in numbers)
+                    records = con.execute("SELECT * FROM skip_records WHERE status=? AND source_key=? AND season=? AND episode IN (" + placeholders + ") ORDER BY episode,CASE segment_type WHEN 'intro' THEN 0 WHEN 'recap' THEN 1 ELSE 2 END,id DESC", (state, source_key, season, *numbers)).fetchall()
+                    item["episodes"] = media_groups(records)[0]["seasons"][0]["episodes"]
+            group["seasons"].append(item)
+    return dict(groups=groups, total=total, pages=pages, page=page, episode_page=episode_page,
+                source_key=source_key if selected else "", season=season)
+
+
 def install(app, db):
     from app import digest, web_auth
     from skip_analysis import register_asset, authorized_playlist, source_account
@@ -250,15 +312,29 @@ def install(app, db):
         if state not in ("pending", "approved", "rejected", "superseded"):
             state = "pending"
         with db() as con:
-            rows = con.execute("SELECT * FROM skip_records WHERE status=? ORDER BY created_at DESC,id DESC LIMIT 100", (state,)).fetchall()
+            raw_season = request.args.get("season", "")
+            season = int(raw_season) if re.fullmatch(r"\d{1,4}", raw_season) and int(raw_season) <= 1000 else None
+            browser = marker_browser(con, state, request.args.get("series", ""), season,
+                                     request.args.get("page", "1"), request.args.get("episode_page", "1"))
             sources = con.execute("SELECT p.id,p.name,c.name customer_name,COALESCE(s.enabled,0) enabled,COALESCE(a.enabled,0) automatic,COALESCE(a.online_enabled,0) online_enabled FROM customer_playlists p JOIN customers c ON c.id=p.customer_id LEFT JOIN skip_analysis_sources s ON s.playlist_id=p.id LEFT JOIN skip_auto_settings a ON a.playlist_id=p.id ORDER BY c.name,p.name LIMIT 200").fetchall()
-            jobs = con.execute("SELECT j.*,a.title,a.season,a.episode FROM skip_jobs j JOIN skip_assets a ON a.asset_key=j.asset_key ORDER BY j.id DESC LIMIT 20").fetchall()
-            online_status = con.execute("SELECT o.detail,a.title,a.season,a.episode FROM skip_auto_online o JOIN skip_assets a ON a.asset_key=o.asset_key ORDER BY o.checked_at DESC LIMIT 10").fetchall()
+            jobs = con.execute("SELECT j.*,a.title,a.year,a.source_key,a.media_type,a.season,a.episode FROM skip_jobs j JOIN skip_assets a ON a.asset_key=j.asset_key ORDER BY j.id DESC LIMIT 20").fetchall()
+            online_status = con.execute("SELECT o.detail,a.title,a.year,a.source_key,a.media_type,a.season,a.episode FROM skip_auto_online o JOIN skip_assets a ON a.asset_key=o.asset_key ORDER BY o.checked_at DESC LIMIT 10").fetchall()
             tmdb_ready = bool(con.execute("SELECT 1 FROM skip_auto_metadata_config WHERE name='tmdb_api_key'").fetchone() or os.environ.get("EPIMEDIAHUB_TMDB_API_KEY"))
             from skip_catalogue import dashboard as catalogue_dashboard, daily_limit
             catalogues = catalogue_dashboard(con)
             audio_limit = daily_limit(con)
-        return render_template("skip_markers.html", rows=rows, sources=sources, jobs=jobs, online_status=online_status, tmdb_ready=tmdb_ready, catalogues=catalogues, audio_limit=audio_limit, state=state, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", ""))
+        selected_episode = page_number(request.args.get("episode", ""), 0)
+        return render_template("skip_markers.html", browser=browser, sources=sources, job_groups=media_groups(jobs), online_groups=media_groups(online_status), tmdb_ready=tmdb_ready, catalogues=catalogues, audio_limit=audio_limit, state=state, selected_episode=selected_episode, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", ""))
+
+    def return_to_marker(row, notice):
+        state = request.form.get("return_state", "pending")
+        if state not in ("pending", "approved", "rejected", "superseded"):
+            state = "pending"
+        return redirect(url_for("v082_skip_dashboard", state=state, series=row["source_key"],
+                                season=row["season"], episode=row["episode"],
+                                page=page_number(request.form.get("return_page", "1")),
+                                episode_page=page_number(request.form.get("return_episode_page", "1")),
+                                _anchor="episode-" + str(row["episode"]), notice=notice))
 
     @app.post("/admin/skip/<int:record_id>/review")
     def v082_skip_review(record_id):
@@ -291,7 +367,7 @@ def install(app, db):
                 con.execute("INSERT OR REPLACE INTO skip_auto_blocks VALUES(?,?,?,?)", (row["asset_key"], row["segment_type"], row["duration_ms"], now()))
             else:
                 con.execute("DELETE FROM skip_auto_blocks WHERE asset_key=? AND kind=? AND ABS(duration_ms-?)<=2000", (row["asset_key"], row["segment_type"], row["duration_ms"]))
-        return redirect(url_for("v082_skip_dashboard", notice="Zeitmarke freigegeben" if decision == "approve" else "Vorschlag abgelehnt"))
+        return return_to_marker(row, "Zeitmarke freigegeben" if decision == "approve" else "Vorschlag abgelehnt")
 
     @app.post("/admin/skip/<int:record_id>/identity")
     def v082_skip_identity(record_id):
@@ -310,7 +386,7 @@ def install(app, db):
             con.execute("INSERT INTO skip_identities VALUES(?,?,?,?,?,?) ON CONFLICT(source_key) DO UPDATE SET imdb_id=excluded.imdb_id,tmdb_id=excluded.tmdb_id,title=excluded.title,year=excluded.year,updated_at=excluded.updated_at", (row["source_key"], imdb, int(tmdb), row["title"], row["year"], now()))
             con.execute("DELETE FROM skip_auto_online WHERE asset_key IN (SELECT asset_key FROM skip_assets WHERE source_key=?)", (row["source_key"],))
             con.execute("UPDATE skip_jobs SET status='queued',attempts=0,updated_at=? WHERE asset_key IN (SELECT asset_key FROM skip_assets WHERE source_key=?) AND status IN ('no_reference','no_match','review','failed')", (now(), row["source_key"]))
-        return redirect(url_for("v082_skip_dashboard", notice="Titelzuordnung gespeichert"))
+        return return_to_marker(row, "Titelzuordnung gespeichert")
 
     @app.post("/admin/skip/analysis/<int:playlist_id>")
     def v082_skip_analysis_source(playlist_id):
