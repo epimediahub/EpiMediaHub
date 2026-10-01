@@ -8,6 +8,7 @@ import json
 import re
 import sqlite3
 import time
+from datetime import datetime
 from pathlib import Path
 
 from skip_analysis import (configured_source, source_account, source_url, provider_proxy,
@@ -59,7 +60,27 @@ def busy_check(db, playlists):
 
 def store_fingerprint(con, record, words, step):
     # The inner music excerpt helps avoid dialogue outside the title sequence.
-    con.execute("INSERT OR REPLACE INTO skip_fingerprints VALUES(?,?,?,?,?,?)", (record["id"], json.dumps(words), step, 2000, record["end_ms"] - record["start_ms"], now()))
+    # A review may change the marker while the provider is being decoded.
+    # Never attach audio from that older marker version to the corrected one.
+    con.execute("""INSERT OR REPLACE INTO skip_fingerprints
+      SELECT ?,?,?,?,?,? FROM skip_records WHERE id=? AND status='approved'
+      AND disabled=0 AND start_ms=? AND end_ms=? AND reviewed_at IS ?""",
+      (record["id"], json.dumps(words), step, 2000,
+       record["end_ms"] - record["start_ms"], now(), record["id"],
+       record["start_ms"], record["end_ms"], record["reviewed_at"]))
+
+
+def reusable_fingerprint(stored, record):
+    if stored is None:
+        return False
+    try:
+        learned = datetime.fromisoformat(stored["created_at"].replace("Z", "+00:00"))
+        reviewed = datetime.fromisoformat(record["reviewed_at"].replace("Z", "+00:00"))
+        return (stored["offset_ms"] == 2000
+                and stored["length_ms"] == record["end_ms"] - record["start_ms"]
+                and learned >= reviewed)
+    except (AttributeError, ValueError, TypeError):
+        return False
 
 
 def reference_detail(con, asset):
@@ -120,7 +141,7 @@ def analyze(db, job):
         with db() as con:
             stored = con.execute("SELECT * FROM skip_fingerprints WHERE record_id=?", (record["id"],)).fetchone()
             reference_asset = con.execute("SELECT * FROM skip_assets WHERE asset_key=?", (record["asset_key"],)).fetchone()
-        if stored is None:
+        if not reusable_fingerprint(stored, record):
             with provider_proxy(source_url(reference_playlist, reference_asset), busy) as source:
                 measured, _ = probe(source, busy)
                 if abs(measured - record["duration_ms"]) > 2000:
@@ -136,8 +157,15 @@ def analyze(db, job):
         if match is None:
             continue
         offset, confidence = match
-        start = offset - 2000 + 1000
-        end = offset - 2000 + record["end_ms"] - record["start_ms"] - 1000
+        # The matched excerpt begins two seconds inside the approved intro.
+        # Project its exact reviewed boundaries; do not crop another second.
+        start = offset - 2000
+        end = start + record["end_ms"] - record["start_ms"]
+        # Allow only grid rounding at the beginning/end of the actual file.
+        if -target_step / 2 <= start < 0:
+            start = 0
+        if duration < end <= duration + target_step / 2:
+            end = duration
         if valid_range("intro", start, end, duration):
             with db() as con:
                 add_record(con, data, "intro", start, end, False, source="audio", confidence=confidence)
