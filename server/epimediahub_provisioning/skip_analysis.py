@@ -2,7 +2,7 @@
 
 The API accepts numeric catalogue IDs, never arbitrary URLs. The worker resolves
 credentials from the existing customer configuration and keeps them off subprocess
-arguments/logs. FFmpeg reads through a pinned-IP, same-host, byte-limited proxy.
+arguments/logs. FFmpeg reads through a pinned-IP, redirect-aware, byte-limited proxy.
 All results are pending proposals; no inferred boundary is published automatically.
 """
 from __future__ import annotations
