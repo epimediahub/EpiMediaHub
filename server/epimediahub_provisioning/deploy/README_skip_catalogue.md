@@ -1,4 +1,4 @@
-# Gesamtkatalog und nächtliche Ergänzung für Raspberry 0.8.2
+# Serienübersicht, Gesamtkatalog und nächtliche Ergänzung für Raspberry 0.8.2
 
 Der vorhandene Worker erfasst den vollständigen Serienbestand der aktivierten
 XTREAM-Playlists, auch ohne vorheriges Abspielen. Neue oder vom Anbieter als
@@ -12,7 +12,7 @@ Voraussetzung ist der laufende Raspberry-Server 0.8.2 mit Audioanalyse und
 Staffelautomatik für die gewünschten Playlists. Android 1.0.16 bleibt kompatibel.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/264ade7244b474667906632ee70ebd644028f8c7/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/005d084dce5b6fcf280b1cddd4b2fc5c68aa163b/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
 sudo bash /var/tmp/epimediahub-skip-catalogue.sh --start-catalogue
 ```
 
@@ -21,7 +21,7 @@ mit erlaubter Audioanalyse und aktivem Kunden. Ohne Schalter werden die Dateien
 installiert, ohne die Katalogprüfung neu einzuschalten. TMDB-Schlüssel,
 Anbieterkonfiguration, Geräte und menschliche Zeitmarken bleiben erhalten.
 
-Das Skript lädt zwölf Dateien aus einem festen Commit und prüft SHA256,
+Das Skript lädt dreizehn Dateien aus einem festen Commit und prüft SHA256,
 Syntax sowie die tatsächlichen Richtlinien-, API- und Audiotests vor Änderungen.
 Es verwendet den bestehenden Worker-Lock, sichert Code und SQLite-Datenbank
 und stellt bei einem fehlgeschlagenen Neustart den vorherigen Code sowie nur
@@ -62,6 +62,20 @@ die selbst geänderten Katalogeinstellungen wieder her.
 
 ## Dashboard
 
+Die Zeitmarken sind nach Serie → Staffel → Folge gegliedert. Die Titelübersicht
+zeigt höchstens 20 Serien pro Seite; die Auswahl einer Staffel lädt höchstens
+25 Folgen pro Seite mit sämtlichen zugehörigen Zeitmarken. Weitere Seiten
+machen auch Einträge jenseits der bisherigen Grenze von 100 Markern erreichbar.
+Staffeln und Folgen werden numerisch sortiert. Gleichnamige Serien mit
+unterschiedlichen Quelldateizuordnungen bleiben getrennt. Filme zeigen ihre
+Zeitmarken direkt, ohne künstliche Staffeln.
+
+Die Ansichten „Zur Prüfung“, „Freigegeben“, „Abgelehnt“ und „Ersetzt“ sowie
+„Letzte Analysen“ und „Letzte Online-Abfragen“ verwenden die Gruppierung.
+Beim Bearbeiten bleibt der gewählte Filter erhalten; weiterhin darin sichtbare
+Zeitmarken werden mit geöffneter Serie, Staffel und Folge wieder angezeigt.
+Nach einer Freigabe verschwindet der Eintrag aus „Zur Prüfung“ wie bisher.
+
 Unter /admin/skip steht „Gesamtkatalog & Nachtprüfung“. Dort lassen sich alle
 aktivierten Automatik-Playlists einplanen und das globale Tageslimit einstellen.
 Pro Playlist werden Katalogfortschritt, erfasste/offene/bearbeitete Folgen,
@@ -77,6 +91,22 @@ Kriterien für unabhängige Belege, exakte Datei/Laufzeit, menschliche Korrektur
 und Ablehnungen gelten unverändert. Online-Daten und wiederkehrender Ton ohne
 ausreichende Belege ergeben weiterhin Vorschläge zur Prüfung.
 
+## Tageslimit und App-Performance
+
+96 ist ein Tagesbudget, keine Anzahl gleichzeitig laufender Analysen. Ein
+höheres Limit startet weiterhin höchstens eine Audioanalyse pro Worker-Aufruf.
+Die Berechnung erfolgt auf dem Raspberry; sie erhöht die Rechenlast der
+Android-App nicht direkt. Die bereitgestellte systemd-Unit begrenzt den Worker
+auf 256 MiB RAM und CPUQuota=50%, also die Hälfte eines einzelnen CPU-Kerns.
+Ein höheres Budget kann die gesamte Laufzeit und den Datenverkehr erhöhen.
+Bei ausgelasteter gemeinsamer Internetverbindung, Raspberry-Ressourcen oder
+Anbieter-Verbindungslimits können trotzdem Auswirkungen auf Wiedergabe oder
+Antwortzeiten entstehen. Die tatsächlich schaffbare Anzahl hängt vom Gerät
+und Anbieter ab und wurde auf dem jeweiligen Raspberry nicht gemessen.
+
+Die Analyse wartet bei gemeldeter Wiedergabe desselben Anbieterkontos.
+Wiedergaben außerhalb der EpiMediaHub-App kann diese Meldung nicht erfassen.
+
 ## Validierung
 
 32 zusätzliche SQLite-/API-Tests decken ungespielte Serien, mehrere Staffeln,
@@ -88,4 +118,9 @@ Neun isolierte Installationstests prüfen Erfolg, bestehende Marker/Schlüssel,
 inaktive Timer, beschädigte Downloads, Vorprüfungsfehler, laufende Worker und
 Wiederherstellung von Code, Einstellungen, Termin und Budget. Die echten
 Audio- und API-Prüfungen laufen zusätzlich mit den vorhandenen Backendtests
-in .github/workflows/raspberry-v082-catalogue-validate.yml.
+in .github/workflows/raspberry-v082-dashboard-validate.yml.
+
+Acht weitere SQLite-/HTML-/API-Tests prüfen die Serien- und Folgenpagination,
+numerische Reihenfolge, Gruppierung aller Abschnitte derselben Folge,
+gleichnamige Quellen, Filter, erhaltenen Bearbeitungskontext, gruppierte
+Analyseergebnisse, HTML-Escaping und die Darstellung von Filmen.
