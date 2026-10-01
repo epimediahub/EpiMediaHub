@@ -48,3 +48,27 @@ und 21 zusätzliche Weiterleitungs-/Referenzprüfungen ohne ausgelassene Tests.
 Die Referenztests prüfen den Submit ohne vorherigen Lookup, die erneute Abfrage
 eines bereits freigegebenen Markers, die automatische Wiederaufnahme einer
 wartenden Folge und die weiterhin erforderliche Freigabe des Audiovorschlags.
+
+## Fehlende Audiotreffer eingrenzen
+
+diagnose_skip_analysis.py verwendet den installierten Analysedienst in einer
+temporären Datenbankkopie. Es zeigt registrierte Referenzen, erwartete und
+gemessene Laufzeiten, Fingerabdrucklängen und die Gründe für eine Ablehnung:
+zu wenig unterschiedliche Audiomerkmale, geringe Bitübereinstimmung oder mehrere
+ähnlich gute Positionen. Der angezeigte Prozentwert beschreibt den Anteil
+übereinstimmender Fingerabdruckbits.
+
+Die Option --fresh-reference berechnet den Referenzfingerabdruck für die
+Diagnose neu. Dabei wird ausschließlich der Fingerabdruckcache der temporären
+Datenbankkopie geleert. Der reguläre Dienst, seine gespeicherten Fingerabdrücke,
+Zeitmarken und Freigaben werden durch die Diagnose nicht verändert.
+
+Die Diagnose respektiert die bestehende Worker-Sperre und prüft aktive
+Wiedergaben anhand der echten Datenbank. Anbieterzugriffe laufen über den
+installierten begrenzten Proxy. Die zusätzliche Prüfung der Trefferwerte ist
+auf zwölf Millionen Vergleichsschritte und zehn Sekunden begrenzt. Ausgegeben
+werden ausschließlich zusammengefasste Werte und feste Fehlerkategorien.
+
+Zwölf Diagnoseprüfungen bestanden lokal. Der GitHub-Lauf für
+f611b7b15163b1669074ab31b8a3b5f0111de14c bestand zudem die vollständigen
+Dashboard-, Marker-, Audio-, Weiterleitungs- und Referenzprüfungen.
