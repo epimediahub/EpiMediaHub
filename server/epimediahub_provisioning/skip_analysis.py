@@ -102,6 +102,12 @@ def register_asset(con, raw, data, device):
       playlist_id=excluded.playlist_id,source_key=excluded.source_key,duration_ms=excluded.duration_ms,updated_at=excluded.updated_at""",
       (data["asset_key"], data["source_key"], playlist_id, stream, extension, data["media_type"], data["duration_ms"], data["season"], data["episode"], data["title"], data["year"], now()))
     con.execute("INSERT OR IGNORE INTO skip_jobs(asset_key,status,created_at,updated_at) VALUES(?,'queued',?,?)", (data["asset_key"], now(), now()))
+    con.execute("DELETE FROM skip_auto_assets WHERE asset_key=?", (data["asset_key"],))
+    if data.get("imdb_id") or data.get("tmdb_id"):
+        # Client metadata can seed a pending online suggestion; it cannot by
+        # itself establish verified series identity for automatic publication.
+        con.execute("INSERT OR IGNORE INTO skip_auto_identities VALUES(?,?,?,?,?)",
+                    (data["source_key"], data.get("imdb_id", ""), data.get("tmdb_id", 0), "client_id_hint", now()))
     # A marker can be approved before audio analysis is enabled or its first
     # lookup succeeds. Registering that file later makes the existing reference
     # usable; wake waiting episodes without requiring another marker approval.
@@ -333,10 +339,12 @@ def chapter_candidates(chapters, duration):
     return result
 
 
-def fingerprint(source, start_ms, length_ms, busy=lambda: False):
+def fingerprint(source, start_ms, length_ms, busy=lambda: False, *, require_complete=False, with_coverage=False):
     if not 15_000 <= length_ms <= 600_000 or start_ms < 0:
         raise ValueError("fingerprint_window")
     pcm = run(["ffmpeg", "-nostdin", "-v", "error", "-threads", "1", *input_options(source), "-ss", str(start_ms / 1000), "-i", source, "-t", str(length_ms / 1000), "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "11025", "-f", "s16le", "pipe:1"], busy=busy)
+    if require_complete and len(pcm) / (2 * 11025) * 1000 < length_ms - 250:
+        raise ValueError("fingerprint_incomplete")
     library = ctypes.util.find_library("chromaprint")
     if not library:
         raise ValueError("chromaprint_unavailable")
@@ -366,7 +374,8 @@ def fingerprint(source, start_ms, length_ms, busy=lambda: False):
         if not lib.chromaprint_get_raw_fingerprint(ctx, ctypes.byref(pointer), ctypes.byref(count)) or not 0 < count.value <= 10_000:
             raise ValueError("fingerprint_failed")
         step = lib.chromaprint_get_item_duration(ctx) * 1000.0 / lib.chromaprint_get_sample_rate(ctx)
-        return [pointer[i] for i in range(count.value)], step
+        result = [pointer[i] for i in range(count.value)], step
+        return (*result, len(pcm) / (2 * 11025) * 1000) if with_coverage else result
     finally:
         if pointer:
             lib.chromaprint_dealloc(pointer)
