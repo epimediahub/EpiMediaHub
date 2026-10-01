@@ -365,7 +365,7 @@ class CatalogueApiTests(AutomationFixture, unittest.TestCase):
             return "Fixture dashboard"
         @site.get("/health", endpoint="health")
         def health():
-            return {"status": "ok", "api_version": "0.8.2"}
+            return site.response_class(json.dumps({"status": "ok", "api_version": "0.8.2"}), mimetype="application/json")
         backend = types.ModuleType("app")
         backend.digest = lambda value: value
         backend.web_auth = lambda: None
