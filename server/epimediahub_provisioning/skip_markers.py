@@ -275,6 +275,7 @@ def install(app, db):
             if decision == "approve":
                 con.execute("UPDATE skip_records SET status='superseded',reviewed_at=? WHERE id<>? AND asset_key=? AND segment_type=? AND ABS(duration_ms-?)<=2000 AND status='approved'", (now(), record_id, row["asset_key"], row["segment_type"], row["duration_ms"]))
                 con.execute("UPDATE skip_jobs SET status='queued',attempts=0,updated_at=? WHERE asset_key IN (SELECT asset_key FROM skip_assets WHERE source_key=?) AND status IN ('no_reference','no_match','done','review')", (now(), row["source_key"]))
+            con.execute("DELETE FROM skip_fingerprints WHERE record_id=?", (record_id,))
             con.execute("UPDATE skip_records SET status=?,start_ms=?,end_ms=?,disabled=?,reviewed_at=? WHERE id=?", ("approved" if decision == "approve" else "rejected", start, end, int(off), now(), record_id))
         return redirect(url_for("v082_skip_dashboard", notice="Zeitmarke freigegeben" if decision == "approve" else "Vorschlag abgelehnt"))
 
