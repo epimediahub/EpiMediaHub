@@ -396,8 +396,13 @@ class RealAutomationTests(AutomationFixture, unittest.TestCase):
 class AutomationApiTests(AutomationFixture, unittest.TestCase):
     def setUp(self):
         super().setUp()
-        site = REAL_FLASK("automatic-policy-fixture")
+        site = REAL_FLASK("automatic-policy-fixture", template_folder=str(Path(__file__).resolve().parents[1] / 'templates'))
         site.secret_key = "fixture-session-only"
+        with self.db() as con:
+            con.execute("ALTER TABLE customers ADD COLUMN name TEXT NOT NULL DEFAULT 'Fixture customer'")
+        @site.get("/dashboard", endpoint="dashboard")
+        def dashboard():
+            return "Fixture dashboard"
         @site.get("/health", endpoint="health")
         def health():
             return {"status": "ok", "api_version": "0.8.2"}
@@ -451,6 +456,17 @@ class AutomationApiTests(AutomationFixture, unittest.TestCase):
         self.assertNotIn(key, response.headers["Location"])
         with self.db() as con:
             self.assertEqual(con.execute("SELECT value FROM skip_auto_metadata_config").fetchone()[0], key)
+
+    def test_dashboard_renders_automatic_settings_without_exposing_api_key(self):
+        key = '0123456789abcdef' * 2
+        with self.db() as con:
+            con.execute("INSERT INTO skip_auto_metadata_config VALUES('tmdb_api_key',?,?)", (key, now()))
+        response = self.client.get('/admin/skip')
+        self.assertEqual(response.status_code,200)
+        html=response.get_data(as_text=True)
+        self.assertIn('Automatik speichern',html)
+        self.assertIn('TMDB-Suche: eingerichtet',html)
+        self.assertNotIn(key,html)
 
 
 if __name__ == "__main__":
