@@ -387,4 +387,14 @@ def matching_offset(reference, target, step_ms):
     score, best = min(candidates)
     if any(abs(offset - best) * step_ms > 2000 and distance <= score + .025 for distance, offset in candidates):
         return None
-    return round(best * step_ms), 1.0 - score
+    # The fingerprint grid is about 124 ms wide. Refine an already accepted,
+    # unique peak between its neighbours without changing the match threshold.
+    fraction = 0.0
+    if score > 0 and 0 < best < len(target) - len(reference):
+        left, right = [sum((a ^ b).bit_count() for a, b in
+                          zip(reference, target[offset:offset + len(reference)]))
+                       / (32 * len(reference)) for offset in (best - 1, best + 1)]
+        curvature = left - 2 * score + right
+        if curvature > 0:
+            fraction = max(-.5, min(.5, .5 * (left - right) / curvature))
+    return round((best + fraction) * step_ms), 1.0 - score
