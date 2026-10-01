@@ -1,12 +1,14 @@
 """Reviewed skip markers bound to one provider file and its measured runtime.
 
-Device proposals are private pending records. Only an authenticated administrator
-can publish them to other devices. No provider URL or password is accepted here.
+Device proposals are private pending records. An authenticated administrator can
+enable bounded automatic publishing with independent evidence for each file.
+No provider URL or password is accepted here.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import secrets
 import time
@@ -69,6 +71,8 @@ def migrate(con):
       length_ms INTEGER NOT NULL, created_at TEXT NOT NULL
     );
     """)
+    from skip_automation import migrate as migrate_automation
+    migrate_automation(con)
 
 
 def integer(body, key, low, high, default=None):
@@ -247,9 +251,11 @@ def install(app, db):
             state = "pending"
         with db() as con:
             rows = con.execute("SELECT * FROM skip_records WHERE status=? ORDER BY created_at DESC,id DESC LIMIT 100", (state,)).fetchall()
-            sources = con.execute("SELECT p.id,p.name,c.name customer_name,COALESCE(s.enabled,0) enabled FROM customer_playlists p JOIN customers c ON c.id=p.customer_id LEFT JOIN skip_analysis_sources s ON s.playlist_id=p.id ORDER BY c.name,p.name LIMIT 200").fetchall()
+            sources = con.execute("SELECT p.id,p.name,c.name customer_name,COALESCE(s.enabled,0) enabled,COALESCE(a.enabled,0) automatic,COALESCE(a.online_enabled,0) online_enabled FROM customer_playlists p JOIN customers c ON c.id=p.customer_id LEFT JOIN skip_analysis_sources s ON s.playlist_id=p.id LEFT JOIN skip_auto_settings a ON a.playlist_id=p.id ORDER BY c.name,p.name LIMIT 200").fetchall()
             jobs = con.execute("SELECT j.*,a.title,a.season,a.episode FROM skip_jobs j JOIN skip_assets a ON a.asset_key=j.asset_key ORDER BY j.id DESC LIMIT 20").fetchall()
-        return render_template("skip_markers.html", rows=rows, sources=sources, jobs=jobs, state=state, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", ""))
+            online_status = con.execute("SELECT o.detail,a.title,a.season,a.episode FROM skip_auto_online o JOIN skip_assets a ON a.asset_key=o.asset_key ORDER BY o.checked_at DESC LIMIT 10").fetchall()
+            tmdb_ready = bool(con.execute("SELECT 1 FROM skip_auto_metadata_config WHERE name='tmdb_api_key'").fetchone() or os.environ.get("EPIMEDIAHUB_TMDB_API_KEY"))
+        return render_template("skip_markers.html", rows=rows, sources=sources, jobs=jobs, online_status=online_status, tmdb_ready=tmdb_ready, state=state, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", ""))
 
     @app.post("/admin/skip/<int:record_id>/review")
     def v082_skip_review(record_id):
@@ -277,6 +283,11 @@ def install(app, db):
                 con.execute("UPDATE skip_jobs SET status='queued',attempts=0,updated_at=? WHERE asset_key IN (SELECT asset_key FROM skip_assets WHERE source_key=?) AND status IN ('no_reference','no_match','done','review')", (now(), row["source_key"]))
             con.execute("DELETE FROM skip_fingerprints WHERE record_id=?", (record_id,))
             con.execute("UPDATE skip_records SET status=?,start_ms=?,end_ms=?,disabled=?,reviewed_at=? WHERE id=?", ("approved" if decision == "approve" else "rejected", start, end, int(off), now(), record_id))
+            con.execute("UPDATE skip_auto_evidence SET human_review=1 WHERE record_id=?", (record_id,))
+            if decision == "reject" or off:
+                con.execute("INSERT OR REPLACE INTO skip_auto_blocks VALUES(?,?,?,?)", (row["asset_key"], row["segment_type"], row["duration_ms"], now()))
+            else:
+                con.execute("DELETE FROM skip_auto_blocks WHERE asset_key=? AND kind=? AND ABS(duration_ms-?)<=2000", (row["asset_key"], row["segment_type"], row["duration_ms"]))
         return redirect(url_for("v082_skip_dashboard", notice="Zeitmarke freigegeben" if decision == "approve" else "Vorschlag abgelehnt"))
 
     @app.post("/admin/skip/<int:record_id>/identity")
@@ -294,6 +305,8 @@ def install(app, db):
             if row is None:
                 abort(404)
             con.execute("INSERT INTO skip_identities VALUES(?,?,?,?,?,?) ON CONFLICT(source_key) DO UPDATE SET imdb_id=excluded.imdb_id,tmdb_id=excluded.tmdb_id,title=excluded.title,year=excluded.year,updated_at=excluded.updated_at", (row["source_key"], imdb, int(tmdb), row["title"], row["year"], now()))
+            con.execute("DELETE FROM skip_auto_online WHERE asset_key IN (SELECT asset_key FROM skip_assets WHERE source_key=?)", (row["source_key"],))
+            con.execute("UPDATE skip_jobs SET status='queued',attempts=0,updated_at=? WHERE asset_key IN (SELECT asset_key FROM skip_assets WHERE source_key=?) AND status IN ('no_reference','no_match','review','failed')", (now(), row["source_key"]))
         return redirect(url_for("v082_skip_dashboard", notice="Titelzuordnung gespeichert"))
 
     @app.post("/admin/skip/analysis/<int:playlist_id>")
@@ -318,11 +331,51 @@ def install(app, db):
                 con.execute("UPDATE skip_jobs SET status='queued',attempts=0,updated_at=? WHERE asset_key IN (SELECT asset_key FROM skip_assets WHERE playlist_id=?) AND status IN ('disabled','failed','unmatched','no_match','no_reference')", (now(), playlist_id))
         return redirect(url_for("v082_skip_dashboard", notice="Audioanalyse aktiviert" if enabled else "Audioanalyse ausgeschaltet"))
 
+    @app.post("/admin/skip/automatic/<int:playlist_id>")
+    def v082_skip_automatic_source(playlist_id):
+        guard = web_auth()
+        if guard:
+            return guard
+        csrf()
+        automatic = request.form.get("enabled") == "1"
+        online = request.form.get("online") == "1"
+        with db() as con:
+            playlist = con.execute("SELECT p.* FROM customer_playlists p JOIN customers c ON c.id=p.customer_id AND c.enabled=1 WHERE p.id=?", (playlist_id,)).fetchone()
+            source = con.execute("SELECT enabled FROM skip_analysis_sources WHERE playlist_id=?", (playlist_id,)).fetchone()
+            if playlist is None:
+                abort(404)
+            if automatic and (not source or not source[0]):
+                return redirect(url_for("v082_skip_dashboard", notice="Zuerst die erlaubte Audioanalyse für diese Playlist aktivieren"))
+            con.execute("INSERT OR REPLACE INTO skip_auto_settings VALUES(?,?,?,?)", (playlist_id, int(automatic), int(online), now()))
+            if automatic:
+                con.execute("UPDATE skip_jobs SET status='queued',attempts=0,updated_at=? WHERE asset_key IN (SELECT asset_key FROM skip_assets WHERE playlist_id=?) AND status IN ('disabled','failed','unmatched','no_match','no_reference','review','done')", (now(), playlist_id))
+                con.execute("DELETE FROM skip_auto_series WHERE playlist_id=?", (playlist_id,))
+        return redirect(url_for("v082_skip_dashboard", notice="Staffelautomatik aktiviert" if automatic else "Staffelautomatik ausgeschaltet"))
+
+    @app.post("/admin/skip/tmdb")
+    def v082_skip_tmdb_config():
+        guard = web_auth()
+        if guard:
+            return guard
+        csrf()
+        token = request.form.get("api_key", "").strip()
+        remove = request.form.get("remove") == "1"
+        if not remove and not re.fullmatch(r"[a-fA-F0-9]{32}", token):
+            return redirect(url_for("v082_skip_dashboard", notice="Bitte einen gültigen TMDB-API-Schlüssel (v3) eintragen"))
+        with db() as con:
+            if remove:
+                con.execute("DELETE FROM skip_auto_metadata_config WHERE name='tmdb_api_key'")
+            else:
+                con.execute("INSERT OR REPLACE INTO skip_auto_metadata_config VALUES('tmdb_api_key',?,?)", (token, now()))
+                con.execute("DELETE FROM skip_auto_online")
+                con.execute("UPDATE skip_jobs SET status='queued',attempts=0,updated_at=? WHERE status IN ('no_reference','no_match','review','failed') AND asset_key IN (SELECT a.asset_key FROM skip_assets a JOIN skip_auto_settings s ON s.playlist_id=a.playlist_id AND s.enabled=1 AND s.online_enabled=1)", (now(),))
+        return redirect(url_for("v082_skip_dashboard", notice="Schlüssel entfernt" if remove else "Schlüssel für die Seriennamenssuche gespeichert"))
+
     previous_health = app.view_functions["health"]
     def health():
         response = previous_health()
         data = response.get_json()
         data["api_version"] = "0.8.2"
-        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True}
+        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True}
         return jsonify(data)
     app.view_functions["health"] = health
