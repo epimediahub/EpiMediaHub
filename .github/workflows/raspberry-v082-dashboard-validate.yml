@@ -1,0 +1,58 @@
+name: Validate Raspberry grouped series dashboard
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [raspberry-v0.8.2-series-dashboard]
+    paths:
+      - 'server/epimediahub_provisioning/skip_analysis*.py'
+      - 'server/epimediahub_provisioning/skip_markers.py'
+      - 'server/epimediahub_provisioning/skip_automation.py'
+      - 'server/epimediahub_provisioning/skip_catalogue.py'
+      - 'server/epimediahub_provisioning/templates/skip_markers.html'
+      - 'server/epimediahub_provisioning/deploy/install_skip_catalogue.sh'
+      - 'server/epimediahub_provisioning/deploy/diagnose_skip_analysis.py'
+      - 'server/epimediahub_provisioning/tests/test_skip_markers.py'
+      - 'server/epimediahub_provisioning/deploy/fix_skip_analysis_boundaries.sh'
+      - 'server/epimediahub_provisioning/tests/test_skip_analysis*.py'
+      - 'server/epimediahub_provisioning/tests/test_skip_installer*.py'
+      - 'server/epimediahub_provisioning/deploy/inspect_skip_references.py'
+      - '.github/workflows/raspberry-v082-dashboard-validate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install backend and audio dependencies
+        run: |
+          python -m pip install -r server/epimediahub_provisioning/requirements.txt
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libchromaprint1
+      - name: Check Python syntax
+        run: python -m compileall -q server/epimediahub_provisioning
+      - name: Verify existing dashboard and device behavior
+        env:
+          EPIMEDIAHUB_EXPECTED_API_VERSION: '0.8.2'
+        run: python server/epimediahub_provisioning/tests/smoke_v080.py
+      - name: Verify marker API and real audio matching
+        run: python server/epimediahub_provisioning/tests/smoke_v082.py
+      - name: Verify grouped navigation, automatic publishing and provider safeguards
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_analysis*.py' -v
+      - name: Check Raspberry installer syntax
+        run: |
+          if [ -f server/epimediahub_provisioning/deploy/fix_skip_analysis_boundaries.sh ]; then
+            bash -n server/epimediahub_provisioning/deploy/fix_skip_analysis_boundaries.sh
+          fi
+          if [ -f server/epimediahub_provisioning/deploy/install_skip_catalogue.sh ]; then
+            bash -n server/epimediahub_provisioning/deploy/install_skip_catalogue.sh
+          fi
+      - name: Verify installer success, preflight, active worker and rollback
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_installer_catalogue.py' -v
