@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import sys
 import time
+import types
 import unittest
 from unittest import mock
 
@@ -17,7 +18,7 @@ REAL_FLASK = automation_tests.REAL_FLASK
 import skip_automation as auto
 import skip_catalogue as catalogue
 from skip_analysis_worker import busy_check, process_one
-from skip_markers import now, migrate
+from skip_markers import now, migrate, install
 
 START = int(datetime.fromisoformat("2026-10-01T22:50:00+02:00").timestamp())
 
@@ -353,7 +354,26 @@ class GuardAndBudgetTests(CatalogueFixture, unittest.TestCase):
 
 @unittest.skipUnless(REAL_FLASK, "Full Flask API dependencies required")
 class CatalogueApiTests(AutomationFixture, unittest.TestCase):
-    setUp = automation_tests.AutomationApiTests.setUp
+    def setUp(self):
+        super().setUp()
+        site = REAL_FLASK("catalogue-policy-fixture", template_folder=str(Path(__file__).resolve().parents[1] / "templates"))
+        site.secret_key = "fixture-session-only"
+        with self.db() as con:
+            con.execute("ALTER TABLE customers ADD COLUMN name TEXT NOT NULL DEFAULT 'Fixture customer'")
+        @site.get("/dashboard", endpoint="dashboard")
+        def dashboard():
+            return "Fixture dashboard"
+        @site.get("/health", endpoint="health")
+        def health():
+            return {"status": "ok", "api_version": "0.8.2"}
+        backend = types.ModuleType("app")
+        backend.digest = lambda value: value
+        backend.web_auth = lambda: None
+        with mock.patch.dict(sys.modules, {"app": backend}):
+            install(site, self.db)
+        self.client = site.test_client()
+        with self.client.session_transaction() as session:
+            session["skip_csrf"] = "fixture-csrf"
 
     def test_full_start_requires_csrf_and_only_activates_existing_audio_automatic_sources(self):
         self.assertEqual(self.client.post("/admin/skip/catalogue", data={"daily_limit": "96"}).status_code, 403)
