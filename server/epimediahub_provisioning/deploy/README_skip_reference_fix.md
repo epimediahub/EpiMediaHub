@@ -72,3 +72,30 @@ werden ausschließlich zusammengefasste Werte und feste Fehlerkategorien.
 Zwölf Diagnoseprüfungen bestanden lokal. Der GitHub-Lauf für
 f611b7b15163b1669074ab31b8a3b5f0111de14c bestand zudem die vollständigen
 Dashboard-, Marker-, Audio-, Weiterleitungs- und Referenzprüfungen.
+
+## Einen bestätigten Diagnosetreffer regulär erneut analysieren
+
+retry_skip_analysis.py plant mit --job-id genau einen vorhandenen Auftrag erneut
+ein. Mit --fresh-reference werden nur die abgeleiteten Fingerabdrücke der bis zu
+drei passenden, freigegebenen Referenzen zur Neuberechnung entfernt. Zeitmarken
+und Freigaben bleiben erhalten; Serienzuordnung, Staffel, Dateilaufzeit und
+aktivierte Quellen werden vor der Änderung geprüft. Die Änderung erfolgt in
+einer SQLite-Transaktion und unter derselben Sperre wie der Analysedienst.
+Laufende oder schon abgeschlossene Aufträge werden nicht zurückgesetzt.
+
+Danach übernimmt epimediahub-skip-analysis.service die Analyse mit seinen
+bestehenden Prüfungen für aktive Wiedergaben, Anbieterzugriffe und Tageslimit.
+Ein Audiotreffer wird als Vorschlag zur manuellen Prüfung gespeichert. Der
+Diagnosebefehl selbst übernimmt weiterhin keine Vorschläge in die echte Datenbank.
+
+Beispiel nach einem passenden Diagnosetreffer für Auftrag 1:
+
+```bash
+sudo /opt/epimediahub/provisioning/.venv/bin/python /var/tmp/epimediahub-skip-retry.py --job-id 1 --fresh-reference &&
+sudo systemctl --no-block start epimediahub-skip-analysis.service
+```
+
+Die drei Retry-Prüfungen kontrollieren die Eingrenzung auf Auftrag und
+Referenzcache, unveränderte Zeitmarken und Freigaben, die Blockierung bei
+deaktivierter Quelle oder aktivem Worker sowie das Speichern eines ausstehenden
+Audiovorschlags durch den regulären Dienst.
