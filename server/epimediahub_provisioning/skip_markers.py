@@ -255,7 +255,10 @@ def install(app, db):
             jobs = con.execute("SELECT j.*,a.title,a.season,a.episode FROM skip_jobs j JOIN skip_assets a ON a.asset_key=j.asset_key ORDER BY j.id DESC LIMIT 20").fetchall()
             online_status = con.execute("SELECT o.detail,a.title,a.season,a.episode FROM skip_auto_online o JOIN skip_assets a ON a.asset_key=o.asset_key ORDER BY o.checked_at DESC LIMIT 10").fetchall()
             tmdb_ready = bool(con.execute("SELECT 1 FROM skip_auto_metadata_config WHERE name='tmdb_api_key'").fetchone() or os.environ.get("EPIMEDIAHUB_TMDB_API_KEY"))
-        return render_template("skip_markers.html", rows=rows, sources=sources, jobs=jobs, online_status=online_status, tmdb_ready=tmdb_ready, state=state, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", ""))
+            from skip_catalogue import dashboard as catalogue_dashboard, daily_limit
+            catalogues = catalogue_dashboard(con)
+            audio_limit = daily_limit(con)
+        return render_template("skip_markers.html", rows=rows, sources=sources, jobs=jobs, online_status=online_status, tmdb_ready=tmdb_ready, catalogues=catalogues, audio_limit=audio_limit, state=state, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", ""))
 
     @app.post("/admin/skip/<int:record_id>/review")
     def v082_skip_review(record_id):
@@ -352,6 +355,44 @@ def install(app, db):
                 con.execute("DELETE FROM skip_auto_series WHERE playlist_id=?", (playlist_id,))
         return redirect(url_for("v082_skip_dashboard", notice="Staffelautomatik aktiviert" if automatic else "Staffelautomatik ausgeschaltet"))
 
+    @app.post("/admin/skip/catalogue")
+    def v082_skip_catalogue():
+        guard = web_auth()
+        if guard:
+            return guard
+        csrf()
+        from skip_catalogue import start, DEFAULT_DAILY_LIMIT
+        raw_limit = request.form.get("daily_limit", str(DEFAULT_DAILY_LIMIT))
+        if not re.fullmatch(r"\d{1,3}", raw_limit) or not 1 <= int(raw_limit) <= 500:
+            abort(400)
+        count = 0
+        with db() as con:
+            playlists = con.execute("SELECT playlist_id FROM skip_auto_settings WHERE enabled=1").fetchall()
+            for playlist in playlists:
+                count += int(start(con, playlist[0]))
+            if count:
+                con.execute("INSERT OR REPLACE INTO skip_catalogue_config VALUES('daily_limit',?,?)", (int(raw_limit), now()))
+        notice = ("Gesamtkatalog eingeplant; danach täglich ab 03:00 Uhr neue und geänderte Folgen prüfen"
+                  if count else "Zuerst Audioanalyse und Staffelautomatik für eine Playlist aktivieren")
+        return redirect(url_for("v082_skip_dashboard", notice=notice))
+
+    @app.post("/admin/skip/catalogue/<int:playlist_id>")
+    def v082_skip_catalogue_source(playlist_id):
+        guard = web_auth()
+        if guard:
+            return guard
+        csrf()
+        from skip_catalogue import start
+        with db() as con:
+            if not con.execute("SELECT 1 FROM customer_playlists WHERE id=?", (playlist_id,)).fetchone():
+                abort(404)
+            if request.form.get("enabled") == "1":
+                if not start(con, playlist_id):
+                    return redirect(url_for("v082_skip_dashboard", notice="Zuerst Audioanalyse und Staffelautomatik aktivieren"))
+            else:
+                con.execute("UPDATE skip_catalogue_settings SET enabled=0,updated_at=? WHERE playlist_id=?", (now(), playlist_id))
+        return redirect(url_for("v082_skip_dashboard", notice="Katalogprüfung aktiviert" if request.form.get("enabled") == "1" else "Weitere Katalogprüfungen ausgeschaltet; eingeplante Folgen bleiben in der Analysewarteschlange"))
+
     @app.post("/admin/skip/tmdb")
     def v082_skip_tmdb_config():
         guard = web_auth()
@@ -376,6 +417,6 @@ def install(app, db):
         response = previous_health()
         data = response.get_json()
         data["api_version"] = "0.8.2"
-        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True}
+        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True}
         return jsonify(data)
     app.view_functions["health"] = health
