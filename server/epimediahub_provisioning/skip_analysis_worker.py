@@ -30,6 +30,7 @@ def failure_detail(error):
         "duration_unknown": "Laufzeit der Videodatei kann nicht ermittelt werden",
         "chromaprint_unavailable": "Audio-Fingerabdruckbibliothek fehlt",
         "fingerprint_failed": "Audio-Fingerabdruck kann nicht berechnet werden",
+        "fingerprint_incomplete": "Audioabschnitt konnte innerhalb der Anbieter- und Datenlimits nicht vollständig gelesen werden",
         "analysis_limit": "Zeit- oder Ausgabelimit der Audioanalyse erreicht",
         "analysis_failed": "Videodatei oder Audiospur kann nicht ausgewertet werden",
     }
@@ -98,6 +99,12 @@ def reference_detail(con, asset):
 
 
 def analyze(db, job):
+    from skip_automation import enabled, analyze as automatic_analyze
+    with db() as con:
+        automatic_asset = con.execute("SELECT playlist_id,media_type FROM skip_assets WHERE asset_key=?", (job["asset_key"],)).fetchone()
+        automatic = automatic_asset and automatic_asset["media_type"] == "episode" and enabled(con, automatic_asset["playlist_id"])
+    if automatic:
+        return automatic_analyze(db, job, busy_check)
     with db() as con:
         asset = con.execute("SELECT * FROM skip_assets WHERE asset_key=?", (job["asset_key"],)).fetchone()
         playlist = con.execute("SELECT p.* FROM customer_playlists p JOIN skip_analysis_sources s ON s.playlist_id=p.id WHERE p.id=? AND s.enabled=1", (asset["playlist_id"],)).fetchone() if asset else None
@@ -177,8 +184,15 @@ def process_one(db):
     with db() as con:
         # Limit aggregate traffic and processing on a Raspberry, irrespective of clients.
         count = con.execute("SELECT COUNT(*) FROM skip_jobs WHERE status NOT IN ('queued','disabled') AND substr(updated_at,1,10)=substr(?,1,10)", (now(),)).fetchone()[0]
-        if count >= 24:
+        day = now()[:10]
+        con.execute("INSERT OR IGNORE INTO skip_analysis_budget VALUES(?,?)", (day, count))
+        con.execute("UPDATE skip_analysis_budget SET count=MAX(count,?) WHERE day=?", (count, day))
+        budget = con.execute("SELECT count FROM skip_analysis_budget WHERE day=?", (day,)).fetchone()[0]
+        if budget >= 24:
             return "daily_limit"
+    from skip_automation import discover_one
+    discover_one(db, busy_check)
+    with db() as con:
         con.execute("UPDATE skip_jobs SET status='queued' WHERE status='running' AND updated_at<?", (time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 1800)),))
         job = con.execute("SELECT * FROM skip_jobs WHERE status='queued' AND attempts<3 ORDER BY updated_at,id LIMIT 1").fetchone()
         if job is None:
@@ -195,6 +209,9 @@ def process_one(db):
         status, detail = "failed", "Analyse nicht möglich; eigene Zeitmarken bleiben nutzbar"
     with db() as con:
         con.execute("UPDATE skip_jobs SET status=?,detail=?,attempts=attempts+?,updated_at=? WHERE id=?", (status, detail, 0 if status == "queued" else 1, now(), job["id"]))
+        if status not in ('queued', 'disabled'):
+            con.execute("INSERT INTO skip_analysis_budget VALUES(?,1) ON CONFLICT(day) DO UPDATE SET count=count+1", (day,))
+        con.execute("DELETE FROM skip_analysis_budget WHERE day<?", (time.strftime("%Y-%m-%d", time.gmtime(time.time() - 31 * 86400)),))
     return status
 
 
