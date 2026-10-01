@@ -240,8 +240,8 @@ class SkipMarkersTest(unittest.TestCase):
                 proposal = con.execute("SELECT * FROM skip_records WHERE asset_key=? AND source='audio'", (files[1]["asset_key"],)).fetchone()
             self.assertIsNotNone(proposal)
             self.assertEqual(proposal["status"], "pending")
-            self.assertGreaterEqual(proposal["start_ms"], 29_000)
-            self.assertLessEqual(proposal["end_ms"], 57_000)
+            self.assertLessEqual(abs(proposal["start_ms"] - 29_000), 150)
+            self.assertLessEqual(abs(proposal["end_ms"] - 57_000), 150)
             self.assertGreaterEqual(proposal["confidence"], .9)
             self.assertEqual(self.lookup(files[1]).get_json()["segments"], [])
             self.review(proposal["id"])
@@ -252,3 +252,4 @@ class SkipMarkersTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
