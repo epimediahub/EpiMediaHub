@@ -19,7 +19,7 @@ fi
 app_dir=/opt/epimediahub/provisioning
 python_bin="$app_dir/.venv/bin/python"
 env_file=/etc/epimediahub/provisioning.env
-source_ref=d753c08335cb486477cfabe73e500dcad4186013
+source_ref=6ca1b8baac57486b13b6f2c200224176b9330a16
 source_base="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$source_ref/server/epimediahub_provisioning"
 task_dir="$(mktemp -d -p /var/tmp epimediahub-skip-catalogue.XXXXXX)"
 backup_dir="/var/backups/epimediahub/skip-catalogue-$(date +%Y%m%d-%H%M%S)"
@@ -146,7 +146,7 @@ eca801f9d2d59f7de21f45951edaef5315109a4e0a98131458f98a3c4131f19b  $task_dir/skip
 9d0efdaaa5b8a45774bff956418212f1aaddeb30e83d2ae0dc9c1e3716a7497e  $task_dir/tests/test_skip_analysis_references.py
 2a76f04522b10001e4ff5c0704c41ec596e09ebe47550f541d1a18062c7f52e3  $task_dir/tests/test_skip_analysis_boundaries.py
 12bd27da28132bf014e71a0165da0d415c9532042062b9e93a4999b4d5db94eb  $task_dir/tests/test_skip_analysis_automation.py
-277879182fe6f664d4e3a4791a56eaa4669013ffd03a78c233b4bd0c6c730a85  $task_dir/tests/test_skip_analysis_catalogue.py
+5aa828bf9708b236da7d3494bc350ceec26db07e0d009eaee97591404b5cf909  $task_dir/tests/test_skip_analysis_catalogue.py
 df57e84d73475ee3ae5dff1183e3d821655f8d805af67bd6fb34369c08cbc87d  $task_dir/deploy/inspect_skip_references.py
 EOF
 "$python_bin" -m compileall -q "$task_dir"
