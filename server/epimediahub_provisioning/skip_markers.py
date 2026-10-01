@@ -188,6 +188,7 @@ def install(app, db):
             if not rate(con, row, "submit", 30):
                 return jsonify(error="rate_limited"), 429
             saved = add_record(con, data, kind, start, end, off, row)
+            register_asset(con, raw, data, row)
             return jsonify(id=saved["id"], status=saved["status"]), 200
 
     @app.post("/v1/device/skip/lookup")
