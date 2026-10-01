@@ -231,6 +231,10 @@ def diagnose(app_dir, db_path, season=None, episode=None, job_id=None, fresh_ref
                 if time.monotonic() - started > 15:
                     raise DiagnosticFailure("database_snapshot_timeout")
             source.backup(snapshot, pages=128, progress=progress, sleep=.05)
+        # Diagnose the direct reviewed-reference comparison only. No catalogue
+        # expansion, online lookup or automatic publishing in this RAM copy.
+        if snapshot.execute("SELECT 1 FROM sqlite_master WHERE name='skip_auto_settings'").fetchone():
+            snapshot.execute("UPDATE skip_auto_settings SET enabled=0")
 
         @contextmanager
         def test_db():
