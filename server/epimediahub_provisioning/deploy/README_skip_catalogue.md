@@ -12,7 +12,7 @@ Voraussetzung ist der laufende Raspberry-Server 0.8.2 mit Audioanalyse und
 Staffelautomatik für die gewünschten Playlists. Android 1.0.16 bleibt kompatibel.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/23c72bf90607a4d3dec9bca6badb2723d1e9d2d6/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/264ade7244b474667906632ee70ebd644028f8c7/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
 sudo bash /var/tmp/epimediahub-skip-catalogue.sh --start-catalogue
 ```
 
