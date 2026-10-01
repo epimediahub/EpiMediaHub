@@ -102,6 +102,21 @@ def register_asset(con, raw, data, device):
       playlist_id=excluded.playlist_id,source_key=excluded.source_key,duration_ms=excluded.duration_ms,updated_at=excluded.updated_at""",
       (data["asset_key"], data["source_key"], playlist_id, stream, extension, data["media_type"], data["duration_ms"], data["season"], data["episode"], data["title"], data["year"], now()))
     con.execute("INSERT OR IGNORE INTO skip_jobs(asset_key,status,created_at,updated_at) VALUES(?,'queued',?,?)", (data["asset_key"], now(), now()))
+    # A marker can be approved before audio analysis is enabled or its first
+    # lookup succeeds. Registering that file later makes the existing reference
+    # usable; wake waiting episodes without requiring another marker approval.
+    reference = con.execute("""SELECT 1 FROM skip_records
+      WHERE asset_key=? AND source_key=? AND season=? AND segment_type='intro'
+      AND status='approved' AND disabled=0 AND end_ms-start_ms BETWEEN 19000 AND 300000
+      AND ABS(duration_ms-?)<=2000 LIMIT 1""",
+      (data["asset_key"], data["source_key"], data["season"], data["duration_ms"])).fetchone()
+    if reference:
+        con.execute("""UPDATE skip_jobs SET status='queued',attempts=0,detail='',updated_at=?
+          WHERE status='no_reference' AND asset_key IN (
+            SELECT a.asset_key FROM skip_assets a
+            JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id AND s.enabled=1
+            WHERE a.source_key=? AND a.season=?)""",
+          (now(), data["source_key"], data["season"]))
     return True
 
 

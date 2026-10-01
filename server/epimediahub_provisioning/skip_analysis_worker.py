@@ -62,6 +62,20 @@ def store_fingerprint(con, record, words, step):
     con.execute("INSERT OR REPLACE INTO skip_fingerprints VALUES(?,?,?,?,?,?)", (record["id"], json.dumps(words), step, 2000, record["end_ms"] - record["start_ms"], now()))
 
 
+def reference_detail(con, asset):
+    missing = con.execute("""SELECT r.season,r.episode FROM skip_records r
+      LEFT JOIN skip_assets a ON a.asset_key=r.asset_key
+      WHERE r.source_key=? AND r.season=? AND r.segment_type='intro'
+      AND r.status='approved' AND r.disabled=0 AND a.asset_key IS NULL
+      AND r.end_ms-r.start_ms BETWEEN 19000 AND 300000
+      ORDER BY r.reviewed_at DESC,r.id DESC LIMIT 1""",
+      (asset["source_key"], asset["season"])).fetchone()
+    if missing:
+        return (f"Freigegebenes Intro vorhanden; Referenzfolge S{missing['season']} "
+                f"E{missing['episode']} in der App einmal öffnen und wieder beenden")
+    return "Zuerst ein Intro dieser Staffel markieren und freigeben"
+
+
 def analyze(db, job):
     with db() as con:
         asset = con.execute("SELECT * FROM skip_assets WHERE asset_key=?", (job["asset_key"],)).fetchone()
@@ -96,7 +110,9 @@ def analyze(db, job):
             return "done", "Geprüftes Intro als Referenz gelernt"
         other = [row for row in templates if row["asset_key"] != asset["asset_key"]]
         if not other or duration < 19_000:
-            return "review" if proposals else "no_reference", "Kapitelvorschläge zur Prüfung verfügbar" if proposals else "Zuerst ein Intro dieser Staffel markieren und freigeben"
+            with db() as con:
+                detail = reference_detail(con, asset)
+            return "review" if proposals else "no_reference", "Kapitelvorschläge zur Prüfung verfügbar" if proposals else detail
         target, target_step = fingerprint(source, 0, min(600_000, duration), busy)
     for record, reference_playlist in zip(templates, template_playlists):
         if record["asset_key"] == asset["asset_key"]:
