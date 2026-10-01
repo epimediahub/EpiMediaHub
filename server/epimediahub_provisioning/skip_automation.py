@@ -61,6 +61,8 @@ def migrate(con):
       CREATE TABLE IF NOT EXISTS skip_auto_metadata_config(
         name TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at TEXT NOT NULL);
     """)
+    from skip_catalogue import migrate as catalogue_migrate
+    catalogue_migrate(con)
 
 
 def enabled(con, playlist_id, online=False):
@@ -104,10 +106,10 @@ def number(value, low=1, high=10**12 - 1):
     return result if low <= result <= high else None
 
 
-def provider_api(playlist, action, busy, **params):
+def provider_api(playlist, action, busy, *, _limit=8_000_000, **params):
     cfg = configured_source(playlist)
     query = dict(username=cfg["xtream_username"], password=cfg["xtream_password"], action=action, **params)
-    return fetch_json(cfg["xtream_server"].rstrip("/") + "/player_api.php?" + urllib.parse.urlencode(query), busy, 8_000_000)
+    return fetch_json(cfg["xtream_server"].rstrip("/") + "/player_api.php?" + urllib.parse.urlencode(query), busy, _limit)
 
 
 def series_key(playlist, asset, series_id):
@@ -150,6 +152,7 @@ def discover_one(db, busy_factory):
           LEFT JOIN skip_auto_assets d ON d.asset_key=a.asset_key
           LEFT JOIN skip_auto_series z ON z.source_key=a.source_key AND z.playlist_id=a.playlist_id AND z.season=a.season
           WHERE a.media_type='episode' AND d.asset_key IS NULL
+          AND NOT EXISTS(SELECT 1 FROM skip_catalogue_settings cs WHERE cs.playlist_id=a.playlist_id AND cs.enabled=1)
           AND COALESCE(z.checked_at,0)<? ORDER BY COALESCE(z.checked_at,0),a.updated_at DESC LIMIT 1""",
           (int(time.time()) - 86400,)).fetchone()
         if not anchor:
