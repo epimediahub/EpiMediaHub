@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import re
 import sqlite3
 import time
 from pathlib import Path
@@ -12,6 +13,29 @@ from pathlib import Path
 from skip_analysis import (configured_source, source_account, source_url, provider_proxy,
                            probe, fingerprint, matching_offset, chapter_candidates)
 from skip_markers import add_record, now, valid_range
+
+
+def failure_detail(error):
+    code = str(error)
+    reasons = {
+        "unsafe_source": "Anbieterziel oder Weiterleitung ist keine erlaubte öffentliche HTTP-Quelle",
+        "redirect_limit": "Anbieter leitet zu oft weiter (höchstens drei Schritte erlaubt)",
+        "redirect_downgrade": "Anbieter leitet von HTTPS auf unverschlüsseltes HTTP weiter",
+        "provider_timeout": "Anbieter antwortet beim Dateizugriff nicht rechtzeitig",
+        "provider_dns": "Streaming-Host kann nicht aufgelöst werden",
+        "provider_tls": "TLS-Verbindung zum Streaming-Host scheitert",
+        "provider_connection": "Verbindung zum Streaming-Host scheitert",
+        "analysis_input_limit": "Datenlimit für die Dateianalyse erreicht",
+        "duration_unknown": "Laufzeit der Videodatei kann nicht ermittelt werden",
+        "chromaprint_unavailable": "Audio-Fingerabdruckbibliothek fehlt",
+        "fingerprint_failed": "Audio-Fingerabdruck kann nicht berechnet werden",
+        "analysis_limit": "Zeit- oder Ausgabelimit der Audioanalyse erreicht",
+        "analysis_failed": "Videodatei oder Audiospur kann nicht ausgewertet werden",
+    }
+    match = re.fullmatch(r"provider_http_([1-5][0-9]{2})", code)
+    reason = ("Anbieter meldet HTTP " + match.group(1)) if match else reasons.get(code)
+    return ((reason + "; eigene Zeitmarken bleiben nutzbar") if reason
+            else "Analyse nicht möglich; eigene Zeitmarken bleiben nutzbar")
 
 
 def busy_check(db, playlists):
@@ -122,7 +146,7 @@ def process_one(db):
         if str(error) == "analysis_deferred":
             status, detail = "queued", "Wartet, bis die Wiedergabe beendet ist"
         else:
-            status, detail = "failed", "Analyse nicht möglich; eigene Zeitmarken bleiben nutzbar"
+            status, detail = "failed", failure_detail(error)
     except (OSError, KeyError, TypeError, json.JSONDecodeError, sqlite3.Error, OverflowError):
         status, detail = "failed", "Analyse nicht möglich; eigene Zeitmarken bleiben nutzbar"
     with db() as con:
