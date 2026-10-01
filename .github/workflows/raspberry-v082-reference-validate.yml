@@ -1,12 +1,16 @@
-name: Validate Raspberry audio boundary accuracy
+name: Validate Raspberry season automation and online candidates
 
 on:
   workflow_dispatch:
   push:
-    branches: [raspberry-v0.8.2-analysis-boundary-fix]
+    branches: [raspberry-v0.8.2-analysis-automation]
     paths:
       - 'server/epimediahub_provisioning/skip_analysis*.py'
       - 'server/epimediahub_provisioning/skip_markers.py'
+      - 'server/epimediahub_provisioning/skip_automation.py'
+      - 'server/epimediahub_provisioning/templates/skip_markers.html'
+      - 'server/epimediahub_provisioning/deploy/install_skip_automation.sh'
+      - 'server/epimediahub_provisioning/deploy/diagnose_skip_analysis.py'
       - 'server/epimediahub_provisioning/tests/test_skip_markers.py'
       - 'server/epimediahub_provisioning/deploy/fix_skip_analysis_boundaries.sh'
       - 'server/epimediahub_provisioning/tests/test_skip_analysis*.py'
@@ -38,10 +42,13 @@ jobs:
         run: python server/epimediahub_provisioning/tests/smoke_v080.py
       - name: Verify marker API and real audio matching
         run: python server/epimediahub_provisioning/tests/smoke_v082.py
-      - name: Verify reference caching, precise audio alignment and provider safeguards
+      - name: Verify automatic publishing, online data, reference caching and provider safeguards
         run: python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_analysis*.py' -v
       - name: Check Raspberry installer syntax
         run: |
           if [ -f server/epimediahub_provisioning/deploy/fix_skip_analysis_boundaries.sh ]; then
             bash -n server/epimediahub_provisioning/deploy/fix_skip_analysis_boundaries.sh
+          fi
+          if [ -f server/epimediahub_provisioning/deploy/install_skip_automation.sh ]; then
+            bash -n server/epimediahub_provisioning/deploy/install_skip_automation.sh
           fi
