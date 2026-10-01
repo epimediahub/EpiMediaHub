@@ -2,7 +2,7 @@
 
 The API accepts numeric catalogue IDs, never arbitrary URLs. The worker resolves
 credentials from the existing customer configuration and keeps them off subprocess
-arguments/logs. FFmpeg reads through a pinned-IP, same-host, byte-limited proxy.
+arguments/logs. FFmpeg reads through a pinned-IP, redirect-aware, byte-limited proxy.
 All results are pending proposals; no inferred boundary is published automatically.
 """
 from __future__ import annotations
@@ -29,6 +29,7 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MAX_INPUT_BYTES = 128 * 1024 * 1024
+MAX_PROVIDER_REDIRECTS = 3
 CHAPTER_NAMES = {
     "intro": "intro", "opening": "intro", "opening credits": "intro", "title sequence": "intro", "vorspann": "intro", "titelsequenz": "intro",
     "recap": "recap", "previously on": "recap", "rückblick": "recap", "zusammenfassung": "recap",
@@ -106,13 +107,72 @@ def register_asset(con, raw, data, device):
 
 def public_address(url, host):
     uri = urllib.parse.urlsplit(url)
-    if uri.scheme not in ("https", "http") or uri.hostname != host or uri.username or uri.password or uri.fragment:
+    if (len(url) > 8192 or uri.scheme not in ("https", "http") or not uri.hostname
+            or uri.hostname != host or uri.username or uri.password or uri.fragment):
         raise ValueError("unsafe_source")
     port = uri.port or (443 if uri.scheme == "https" else 80)
     addresses = sorted({item[4][0] for item in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)})
-    if not addresses or any(not ipaddress.ip_address(address).is_global for address in addresses):
+    if not addresses or any(not ipaddress.ip_address(address).is_global
+                            or ipaddress.ip_address(address).is_multicast
+                            for address in addresses):
         raise ValueError("unsafe_source")
     return uri, addresses[0]
+
+
+class ProviderRedirect(urllib.request.HTTPRedirectHandler):
+    """Follow only a bounded provider response chain, revalidating every hop."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target, _ = public_address(newurl, urllib.parse.urlsplit(newurl).hostname)
+        if urllib.parse.urlsplit(req.full_url).scheme == "https" and target.scheme != "https":
+            raise ValueError("redirect_downgrade")
+        if req.get_method() not in ("GET", "HEAD"):
+            raise ValueError("unsafe_source")
+        # Never copy credentials, cookies, an old Host or Referer to another host.
+        allowed = {"user-agent", "accept-encoding", "range"}
+        forwarded = {key: value for key, value in req.header_items()
+                     if key.lower() in allowed}
+        return urllib.request.Request(newurl, headers=forwarded,
+                                      method=req.get_method())
+
+    def http_error_302(self, req, fp, code, msg, headers):
+        location = headers.get("Location") or headers.get("URI")
+        if not location:
+            return None
+        count = getattr(req, "_epimediahub_redirects", 0)
+        if count >= MAX_PROVIDER_REDIRECTS:
+            fp.close()
+            raise ValueError("redirect_limit")
+        if any(ord(character) < 32 for character in location):
+            fp.close()
+            raise ValueError("unsafe_source")
+        try:
+            newurl = urllib.parse.urljoin(req.full_url, location.strip().replace(" ", "%20"))
+            redirected = self.redirect_request(req, fp, code, msg, headers, newurl)
+        finally:
+            # urllib's default drains the entire redirect body with fp.read().
+            # Closing it keeps large/unbounded redirect bodies outside the decoder.
+            fp.close()
+        redirected._epimediahub_redirects = count + 1
+        return self.parent.open(redirected, timeout=req.timeout)
+
+    http_error_301 = http_error_303 = http_error_307 = http_error_308 = http_error_302
+
+
+def provider_failure(error):
+    """Fixed, credential-free categories for failures hidden behind the proxy."""
+    if isinstance(error, ValueError) and str(error) in (
+            "unsafe_source", "redirect_limit", "redirect_downgrade"):
+        return str(error)
+    if isinstance(error, urllib.error.HTTPError) and 100 <= error.code <= 599:
+        return "provider_http_" + str(error.code)
+    reason = error.reason if isinstance(error, urllib.error.URLError) else error
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return "provider_timeout"
+    if isinstance(reason, socket.gaierror):
+        return "provider_dns"
+    if isinstance(reason, ssl.SSLError):
+        return "provider_tls"
+    return "provider_connection"
 
 
 def pinned_connection(cls, host, ip, **kwargs):
@@ -126,25 +186,21 @@ def provider_proxy(url, busy=lambda: False):
     host = urllib.parse.urlsplit(url).hostname
     public_address(url, host)
     budget = [MAX_INPUT_BYTES]
+    failure = [None]
     lock = threading.Lock()
     token = "/" + secrets.token_urlsafe(24)
 
-    class Redirect(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, req, fp, code, msg, headers, newurl):
-            public_address(newurl, host)
-            return super().redirect_request(req, fp, code, msg, headers, newurl)
-
     class HTTP(urllib.request.HTTPHandler):
         def http_open(self, req):
-            _, address = public_address(req.full_url, host)
+            _, address = public_address(req.full_url, urllib.parse.urlsplit(req.full_url).hostname)
             return self.do_open(lambda original, **kw: pinned_connection(http.client.HTTPConnection, original, address, **kw), req)
 
     class HTTPS(urllib.request.HTTPSHandler):
         def https_open(self, req):
-            _, address = public_address(req.full_url, host)
+            _, address = public_address(req.full_url, urllib.parse.urlsplit(req.full_url).hostname)
             return self.do_open(lambda original, **kw: pinned_connection(http.client.HTTPSConnection, original, address, **kw), req, context=ssl.create_default_context())
 
-    opener = urllib.request.build_opener(HTTP(), HTTPS(), Redirect(), urllib.request.ProxyHandler({}))
+    opener = urllib.request.build_opener(HTTP(), HTTPS(), ProviderRedirect(), urllib.request.ProxyHandler({}))
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -180,6 +236,7 @@ def provider_proxy(url, busy=lambda: False):
                     while not busy():
                         with lock:
                             if budget[0] <= 0:
+                                failure[0] = "analysis_input_limit"
                                 break
                             amount = min(65_536, budget[0])
                             budget[0] -= amount
@@ -187,7 +244,10 @@ def provider_proxy(url, busy=lambda: False):
                         if not chunk:
                             break
                         self.wfile.write(chunk)
-            except Exception:
+            except Exception as error:
+                # Client cancellation is not an upstream provider failure.
+                if not isinstance(error, (BrokenPipeError, ConnectionResetError)):
+                    failure[0] = provider_failure(error)
                 if not sent:
                     self.send_error(502)
             self.close_connection = True
@@ -196,7 +256,12 @@ def provider_proxy(url, busy=lambda: False):
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
     try:
-        yield f"http://127.0.0.1:{server.server_port}{token}"
+        try:
+            yield f"http://127.0.0.1:{server.server_port}{token}"
+        except ValueError as error:
+            if str(error) == "analysis_failed" and failure[0]:
+                raise ValueError(failure[0]) from None
+            raise
     finally:
         server.shutdown(); server.server_close(); thread.join(timeout=2)
 
