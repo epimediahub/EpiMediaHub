@@ -248,10 +248,11 @@ def discover_one(db, busy_factory):
           JOIN customer_playlists p ON p.id=a.playlist_id
           JOIN customers c ON c.id=p.customer_id AND c.enabled=1
           LEFT JOIN skip_auto_assets d ON d.asset_key=a.asset_key
+          LEFT JOIN skip_language_priority l ON l.asset_key=a.asset_key
           LEFT JOIN skip_auto_series z ON z.source_key=a.source_key AND z.playlist_id=a.playlist_id AND z.season=a.season
           WHERE a.media_type='episode' AND d.asset_key IS NULL
           AND NOT EXISTS(SELECT 1 FROM skip_catalogue_settings cs WHERE cs.playlist_id=a.playlist_id AND cs.enabled=1)
-          AND COALESCE(z.checked_at,0)<? ORDER BY COALESCE(z.checked_at,0),a.updated_at DESC LIMIT 1""",
+          AND COALESCE(z.checked_at,0)<? ORDER BY COALESCE(l.priority,1),COALESCE(z.checked_at,0),a.updated_at DESC LIMIT 1""",
           (int(time.time()) - 86400,)).fetchone()
         if not anchor:
             return "idle"
@@ -298,6 +299,12 @@ def discover_one(db, busy_factory):
             return "disabled"
         con.execute("INSERT OR REPLACE INTO skip_auto_series VALUES(?,?,?,?,?,?)",
                     (anchor["source_key"], playlist["id"], anchor["season"], series_id, int(time.time()), detail))
+        from skip_catalogue import language_priority, set_asset_language
+        if entries:
+            prior = con.execute('SELECT priority FROM skip_language_priority WHERE asset_key=?', (anchor['asset_key'],)).fetchone()
+            metadata = info.get('info') if isinstance(info.get('info'), dict) else {}
+            rank = language_priority(metadata, fallback=prior[0] if prior else language_priority({'name': anchor['title']}))
+            set_asset_language(con, anchor['asset_key'], rank)
         # Prioritise the next episodes, then the earlier ones, without requeueing completed work.
         for episode in sorted(entries, key=lambda x: (x["episode"] <= anchor["episode"], x["episode"])):
             data = dict(anchor) | episode
@@ -310,6 +317,7 @@ def discover_one(db, busy_factory):
                          "episode", 0, anchor["season"], episode["episode"], anchor["title"], anchor["year"], now()))
             con.execute("INSERT INTO skip_auto_assets VALUES(?,?)", (key, now()))
             con.execute("INSERT INTO skip_jobs(asset_key,status,created_at,updated_at) VALUES(?,'queued',?,?)", (key, now(), now()))
+            set_asset_language(con, key, rank)
     return "discovered" if entries else "unmapped"
 
 
@@ -452,8 +460,10 @@ def refresh_online_one(db, busy_factory):
           JOIN customers c ON c.id=p.customer_id AND c.enabled=1
           JOIN skip_jobs j ON j.asset_key=a.asset_key AND j.status NOT IN ('queued','running','disabled')
           LEFT JOIN skip_auto_online_cooldown l ON l.service=r.service
+          LEFT JOIN skip_language_priority lang ON lang.asset_key=a.asset_key
           WHERE r.retry_at<=? AND COALESCE(l.retry_at,0)<=? AND a.duration_ms>=5000
-          ORDER BY r.retry_at,a.asset_key LIMIT 1""", (stamp, stamp)).fetchone()
+          ORDER BY CASE WHEN a.media_type='episode' THEN COALESCE(lang.priority,1) ELSE 1 END,
+          r.retry_at,a.asset_key LIMIT 1""", (stamp, stamp)).fetchone()
         if not asset:
             return 'idle'
         playlist = con.execute('SELECT * FROM customer_playlists WHERE id=?', (asset['playlist_id'],)).fetchone()

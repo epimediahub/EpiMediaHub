@@ -179,7 +179,7 @@ def analyze(db, job):
 
 
 def process_one(db):
-    from skip_catalogue import advance as catalogue_advance, daily_limit
+    from skip_catalogue import advance as catalogue_advance, daily_limit, preferred_inventory_pending
     # Inventory must keep progressing even after today's audio quota is used.
     catalogue_advance(db, busy_check)
     from skip_automation import refresh_online_one
@@ -198,11 +198,17 @@ def process_one(db):
     with db() as con:
         con.execute("UPDATE skip_jobs SET status='queued' WHERE status='running' AND updated_at<?", (time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 1800)),))
         job = con.execute("""SELECT j.* FROM skip_jobs j
+          JOIN skip_assets a ON a.asset_key=j.asset_key
+          LEFT JOIN skip_language_priority l ON l.asset_key=j.asset_key
           LEFT JOIN skip_catalogue_priority p ON p.asset_key=j.asset_key
           WHERE j.status='queued' AND j.attempts<3
-          ORDER BY COALESCE(p.priority,1),j.updated_at,j.id LIMIT 1""").fetchone()
+          ORDER BY CASE WHEN a.media_type='episode' THEN COALESCE(l.priority,1) ELSE 1 END,
+          COALESCE(p.priority,1),j.updated_at,j.id LIMIT 1""").fetchone()
         if job is None:
             return online_status if online_status == 'online_checked' else "idle"
+        language = con.execute("SELECT priority FROM skip_language_priority WHERE asset_key=?", (job['asset_key'],)).fetchone()
+        if (not language or language[0] != 0) and preferred_inventory_pending(con):
+            return 'catalogue_pending'
         con.execute("UPDATE skip_jobs SET status='running',updated_at=? WHERE id=?", (now(), job["id"]))
     try:
         status, detail = analyze(db, job)
