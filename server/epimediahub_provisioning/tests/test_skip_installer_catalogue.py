@@ -63,7 +63,7 @@ mode=os.environ.get('FIXTURE_MODE','success')
 if '127.0.0.1' in url:
     new='skip_nightly_catalogue' in Path(os.environ['FIXTURE_APP'],'skip_markers.py').read_text()
     healthy=new and mode!='bad-health'
-    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy,'skip_language_priority':healthy,'skip_bulk_review':healthy and mode!='missing-bulk-review'}}
+    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy,'skip_language_priority':healthy,'skip_bulk_review':healthy and mode!='missing-bulk-review','skip_network_address_fallback':healthy and mode!='missing-network-fallback'}}
     output.write_text(json.dumps(body))
 else:
     assert '/'+os.environ['FIXTURE_REF']+'/' in url
@@ -228,6 +228,12 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON'],*sys.argv[1:
             self.assertFalse(con.execute('SELECT 1 FROM skip_catalogue_runs').fetchone())
             self.assertFalse(con.execute('SELECT 1 FROM skip_catalogue_config').fetchone())
             self.assertEqual(con.execute("SELECT value FROM skip_auto_metadata_config WHERE name='tmdb_api_key'").fetchone()[0],'a'*32)
+        self.assertTrue(json.loads(self.state.read_text())['timer'])
+
+    def test_missing_network_fallback_restores_code_and_preserves_markers(self):
+        result = self.launch('missing-network-fallback', enable=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.unchanged()
         self.assertTrue(json.loads(self.state.read_text())['timer'])
 
     def test_bad_health_preserves_previous_run_schedule_and_budget(self):

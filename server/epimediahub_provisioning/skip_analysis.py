@@ -13,6 +13,7 @@ import email.utils
 import hashlib
 import http.client
 import ipaddress
+import itertools
 import json
 import os
 import re
@@ -134,12 +135,17 @@ def public_address(url, host):
             or uri.hostname != host or uri.username or uri.password or uri.fragment):
         raise ValueError("unsafe_source")
     port = uri.port or (443 if uri.scheme == "https" else 80)
-    addresses = sorted({item[4][0] for item in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)})
+    addresses = {item[4][0] for item in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)}
     if not addresses or any(not ipaddress.ip_address(address).is_global
                             or ipaddress.ip_address(address).is_multicast
                             for address in addresses):
         raise ValueError("unsafe_source")
-    return uri, addresses[0]
+    # Keep every validated address pinned. IPv4 works on Raspberry networks
+    # without an IPv6 route; another address can still serve a failed CDN node.
+    ipv4 = sorted(address for address in addresses if ipaddress.ip_address(address).version == 4)
+    ipv6 = sorted(address for address in addresses if ipaddress.ip_address(address).version == 6)
+    return uri, tuple(address for pair in itertools.zip_longest(ipv4, ipv6)
+                      for address in pair if address is not None)
 
 
 class ProviderRedirect(urllib.request.HTTPRedirectHandler):
@@ -225,9 +231,31 @@ def provider_retry_after(error):
     return max(intervals, default=0)
 
 
-def pinned_connection(cls, host, ip, **kwargs):
+def pinned_connection(cls, host, addresses, **kwargs):
     connection = cls(host, **kwargs)
-    connection._create_connection = lambda address, timeout=None, source_address=None: socket.create_connection((ip, address[1]), timeout, source_address)
+    addresses = (addresses,) if isinstance(addresses, str) else tuple(addresses)
+
+    def connect(address, timeout=None, source_address=None):
+        # One shared connect budget, rather than five seconds for each DNS
+        # answer. Never resolve the hostname again after the public-IP check.
+        budget = 5.0 if timeout is None or timeout is socket._GLOBAL_DEFAULT_TIMEOUT else min(float(timeout), 5.0)
+        deadline = time.monotonic() + budget
+        last_error = None
+        for ip in addresses:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("provider connect deadline exceeded") from None
+            # Reserve time for an alternative after a silent TCP timeout.
+            attempt_timeout = min(remaining, budget / 2) if len(addresses) > 1 else remaining
+            try:
+                return socket.create_connection((ip, address[1]), attempt_timeout, source_address)
+            except OSError as error:
+                last_error = error
+        if last_error is not None:
+            raise last_error
+        raise OSError("provider has no validated address")
+
+    connection._create_connection = connect
     return connection
 
 
