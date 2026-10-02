@@ -12,7 +12,7 @@ Voraussetzung ist der laufende Raspberry-Server 0.8.2 mit Audioanalyse und
 Staffelautomatik für die gewünschten Playlists. Android 1.0.16 bleibt kompatibel.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/cfc403b54d35b3f851c9af165a556de0b547d708/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/24ba8b4fab1d3f14fc2f6c59570a0f2730d47dd0/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
 sudo bash /var/tmp/epimediahub-skip-catalogue.sh --wait-worker
 ```
 
@@ -50,6 +50,15 @@ Die ursprüngliche HTTP-Antwort bleibt jetzt auch hinter dem lokalen Relay erhal
   haben getrennte Meldungen. URLs, Schlüssel und Antworttexte werden nicht ausgegeben.
 - Abfragelimits pausieren den gesamten betroffenen Dienst. Die gemeldete Wartezeit
   wird bis zu 24 Stunden berücksichtigt; ohne Wartezeit gilt bei HTTP 429 eine Stunde.
+
+Bei einem Verbindungsfehler versucht der Netzwerkzugriff weitere validierte
+öffentliche IP-Adressen desselben Hosts. IPv4 wird zuerst verwendet, IPv6 bleibt
+als Alternative und für reine IPv6-Ziele unterstützt. Alle Verbindungsversuche
+teilen sich ein Zeitbudget von höchstens fünf Sekunden; für weitere Adressen
+bleibt auch nach einem TCP-Timeout Zeit. Hostname, TLS-Prüfung und die Ablehnung
+privater oder gemischter DNS-Antworten bleiben erhalten. Das gilt für TMDB,
+TheIntroDB und Anbieterabrufe. Fehler anderer Art werden weiterhin getrennt
+angezeigt; der Code kann eine vollständig fehlende Internetroute nicht ersetzen.
 
 Alte Einträge mit der pauschalen Meldung „Online-Datenbank derzeit nicht erreichbar“
 werden einmal erneut zur Prüfung vorgemerkt. Der Worker prüft im Leerlauf höchstens
@@ -278,8 +287,17 @@ Seiten, Spezialfolgen, getrennte Quellen und Dateifassungen, Duplikate,
 Widersprüche, bestehende Entscheidungen, Sitzungsprüfung, erneute Klicks und
 atomare Wiederherstellung bei Fehlern. Der Installer prüft außerdem, dass der
 neu gestartete Server die Sammelfreigabe unterstützt.
-Der vollständige Prüflauf umfasst 215 Tests ohne übersprungene Tests sowie den
+Der vollständige Prüflauf umfasst 225 Tests ohne übersprungene Tests sowie den
 bestehenden Dashboard-/Geräte-Smoke-Test.
 
-Validierter Installer-Commit: `cfc403b54d35b3f851c9af165a556de0b547d708`.
-[GitHub-Actions-Prüflauf](https://github.com/epimediahub/EpiMediaHub/actions/runs/36991521155).
+Validierter Installer-Commit: `24ba8b4fab1d3f14fc2f6c59570a0f2730d47dd0`.
+[GitHub-Actions-Prüflauf](https://github.com/epimediahub/EpiMediaHub/actions/runs/37028975894).
+
+Neun Netzwerkprüfungen decken DNS-Adressen mit IPv4 und IPv6, nicht erreichbare
+CDN-Adressen, TCP-Timeouts, das gemeinsame Zeitbudget, unveränderte TLS-Hostnamen
+und einen echten JSON-Abruf nach einem simulierten Verbindungsausfall ab. Der
+gleiche JSON-Test reproduziert mit dem alten Code `provider_connection`, obwohl
+eine zweite Adresse erreichbar ist. Ein zusätzlicher Installer-Test prüft die
+Wiederherstellung, wenn der neu gestartete Dienst die Netzwerkfunktion nicht
+meldet. Die Ursache eines konkreten Live-Fehlers auf dem Raspberry wird dadurch
+nicht aus dem Screenshot allein bewiesen.
