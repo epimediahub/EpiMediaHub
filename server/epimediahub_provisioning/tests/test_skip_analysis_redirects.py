@@ -4,6 +4,7 @@ from __future__ import annotations
 import array
 import contextlib
 import ctypes.util
+import errno
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
@@ -186,7 +187,8 @@ class ProviderRedirectTest(unittest.TestCase):
     def test_private_multicast_mixed_dns_and_credentials_are_rejected(self):
         for addresses in (["127.0.0.1"], ["10.0.0.1"], ["169.254.169.254"],
                           ["100.64.0.1"], ["224.0.0.1"], ["::1"],
-                          ["93.184.216.34", "192.168.1.1"]):
+                          ["93.184.216.34", "192.168.1.1"],
+                          ["93.184.216.34", "fd00::1"]):
             with self.subTest(addresses=addresses):
                 answer = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "",
                            (ip, 443)) for ip in addresses]
@@ -247,6 +249,139 @@ class ProviderRedirectTest(unittest.TestCase):
 
 
 class PinnedConnectionTest(unittest.TestCase):
+    def test_public_dns_keeps_all_validated_addresses_and_prefers_ipv4(self):
+        answer = [(socket.AF_INET6, socket.SOCK_STREAM, socket.IPPROTO_TCP, "",
+                   ("2001:4860:4860::8888", 443, 0, 0)),
+                  (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "",
+                   ("3.4.5.6", 443)),
+                  (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "",
+                   ("3.4.5.7", 443))]
+        with mock.patch.object(analysis.socket, "getaddrinfo", return_value=answer):
+            _, addresses = analysis.public_address("https://cdn.test/file", "cdn.test")
+        self.assertEqual(addresses, ("3.4.5.6", "2001:4860:4860::8888", "3.4.5.7"))
+
+    def test_failed_cdn_address_uses_the_next_pinned_address(self):
+        connection = analysis.pinned_connection(http.client.HTTPSConnection, "cdn.test",
+                                                ("93.184.216.34", "93.184.216.35"))
+        good_socket = mock.Mock()
+        with mock.patch.object(analysis.socket, "create_connection", side_effect=[
+                ConnectionRefusedError(errno.ECONNREFUSED, "unavailable CDN node"), good_socket]) as connect:
+            self.assertIs(connection._create_connection(("cdn.test", 443), 5), good_socket)
+        self.assertEqual([c.args[0] for c in connect.call_args_list],
+                         [("93.184.216.34", 443), ("93.184.216.35", 443)])
+        self.assertEqual(connection.host, "cdn.test")
+        self.assertTrue(connection._context.check_hostname)
+
+    def test_missing_ipv6_route_can_fall_back_to_ipv4(self):
+        connection = analysis.pinned_connection(http.client.HTTPConnection, "cdn.test",
+                                                ("2001:4860:4860::8888", "93.184.216.34"))
+        good_socket = mock.Mock()
+        with mock.patch.object(analysis.socket, "create_connection", side_effect=[
+                OSError(errno.ENETUNREACH, "no IPv6 route"), good_socket]) as connect:
+            self.assertIs(connection._create_connection(("cdn.test", 80), 5), good_socket)
+        self.assertEqual(connect.call_args_list[-1].args[0], ("93.184.216.34", 80))
+
+    def test_ipv6_only_public_source_remains_supported(self):
+        answer = [(socket.AF_INET6, socket.SOCK_STREAM, socket.IPPROTO_TCP, "",
+                   ("2001:4860:4860::8888", 443, 0, 0))]
+        with mock.patch.object(analysis.socket, "getaddrinfo", return_value=answer):
+            _, addresses = analysis.public_address("https://cdn.test/file", "cdn.test")
+        connection = analysis.pinned_connection(http.client.HTTPSConnection, "cdn.test", addresses)
+        with mock.patch.object(analysis.socket, "create_connection") as connect:
+            connection._create_connection(("cdn.test", 443), 5)
+        self.assertEqual(connect.call_args.args[0], ("2001:4860:4860::8888", 443))
+
+    def test_alternative_connections_share_one_deadline_and_source_binding(self):
+        connection = analysis.pinned_connection(http.client.HTTPConnection, "cdn.test",
+                                                ("93.184.216.34", "93.184.216.35"))
+        good_socket = mock.Mock()
+        with mock.patch.object(analysis.time, "monotonic", side_effect=[100, 100, 103]), \
+                mock.patch.object(analysis.socket, "create_connection", side_effect=[
+                    ConnectionRefusedError(), good_socket]) as connect:
+            self.assertIs(connection._create_connection(("cdn.test", 80), 5, ("0.0.0.0", 0)), good_socket)
+        self.assertEqual([c.args[1] for c in connect.call_args_list], [2.5, 2])
+        self.assertEqual(connect.call_args.args[2], ("0.0.0.0", 0))
+
+    def test_a_tcp_timeout_leaves_time_for_the_next_address(self):
+        connection = analysis.pinned_connection(http.client.HTTPConnection, "cdn.test",
+                                                ("93.184.216.34", "93.184.216.35"))
+        good_socket = mock.Mock()
+        with mock.patch.object(analysis.time, "monotonic", side_effect=[100, 100, 102.5]), \
+                mock.patch.object(analysis.socket, "create_connection", side_effect=[
+                    TimeoutError(), good_socket]) as connect:
+            self.assertIs(connection._create_connection(("cdn.test", 80), 5), good_socket)
+        self.assertEqual([c.args[1] for c in connect.call_args_list], [2.5, 2.5])
+
+    def test_expired_deadline_does_not_start_another_connection(self):
+        connection = analysis.pinned_connection(http.client.HTTPConnection, "cdn.test",
+                                                ("93.184.216.34", "93.184.216.35"))
+        with mock.patch.object(analysis.time, "monotonic", side_effect=[100, 100, 105]), \
+                mock.patch.object(analysis.socket, "create_connection", side_effect=TimeoutError()) as connect:
+            with self.assertRaises(TimeoutError):
+                connection._create_connection(("cdn.test", 80), 5)
+        self.assertEqual(connect.call_count, 1)
+
+    def test_exhausted_pinned_addresses_do_not_resolve_the_host_again(self):
+        connection = analysis.pinned_connection(http.client.HTTPConnection, "cdn.test",
+                                                ("93.184.216.34", "93.184.216.35"))
+        error = OSError(errno.ENETUNREACH, "no route")
+        with mock.patch.object(analysis.socket, "create_connection", side_effect=error) as connect, \
+                mock.patch.object(analysis.socket, "getaddrinfo") as resolve:
+            with self.assertRaises(OSError) as caught:
+                connection._create_connection(("cdn.test", 80), 5)
+        self.assertIs(caught.exception, error)
+        self.assertEqual(connect.call_count, 2)
+        resolve.assert_not_called()
+
+    def test_real_json_request_succeeds_when_the_first_cdn_address_is_unreachable(self):
+        requests = []
+        body = b'{"type":"tv","tmdb_id":8358}'
+
+        class Provider(BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def do_GET(self):
+                requests.append(self.headers["Host"])
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        real_dns, real_connect = socket.getaddrinfo, socket.create_connection
+        attempts = []
+
+        def dns(host, port, *args, **kwargs):
+            if host == "cdn.test":
+                return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (ip, port))
+                        for ip in ("93.184.216.34", "93.184.216.35")]
+            return real_dns(host, port, *args, **kwargs)
+
+        def connect(target, timeout=None, source_address=None):
+            if target[0] == "93.184.216.34":
+                attempts.append(target[0])
+                raise OSError(errno.ENETUNREACH, "unreachable CDN address")
+            if target[0] == "93.184.216.35":
+                attempts.append(target[0])
+                target = ("127.0.0.1", server.server_port)
+            return real_connect(target, timeout, source_address)
+
+        try:
+            with mock.patch.object(analysis.socket, "getaddrinfo", side_effect=dns), \
+                    mock.patch.object(analysis.socket, "create_connection", side_effect=connect):
+                with analysis.provider_proxy(f"http://cdn.test:{server.server_port}/json") as source:
+                    client = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                    with client.open(source, timeout=5) as response:
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(response.read(), body)
+            self.assertEqual(attempts, ["93.184.216.34", "93.184.216.35"])
+            self.assertEqual(requests, [f"cdn.test:{server.server_port}"])
+        finally:
+            server.shutdown(); server.server_close(); thread.join(timeout=2)
+
     def test_connection_uses_validated_ip_and_keeps_tls_hostname(self):
         connection = analysis.pinned_connection(
             http.client.HTTPSConnection, "cdn.test", "93.184.216.35",
