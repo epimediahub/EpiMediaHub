@@ -175,7 +175,7 @@ class SkipMarkersTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_time("01:90")
 
-    def test_real_audio_pipeline_finds_shifted_intro_and_keeps_it_pending(self):
+    def test_real_audio_pipeline_finds_shifted_intro_and_publishes_it_automatically(self):
         import array, ctypes.util, io, math, random, shutil, threading, urllib.parse, wave
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
         if not shutil.which("ffmpeg") or not ctypes.util.find_library("chromaprint"):
@@ -235,15 +235,15 @@ class SkipMarkersTest(unittest.TestCase):
                 return urllib.parse.urlsplit(url), "127.0.0.1"
             with patch("skip_analysis.public_address", side_effect=local_address):
                 self.assertEqual(process_one(db), "done")
-                self.assertEqual(process_one(db), "review")
+                self.assertEqual(process_one(db), "done")
             with db() as con:
                 proposal = con.execute("SELECT * FROM skip_records WHERE asset_key=? AND source='audio'", (files[1]["asset_key"],)).fetchone()
             self.assertIsNotNone(proposal)
-            self.assertEqual(proposal["status"], "pending")
+            self.assertEqual(proposal["status"], "approved")
             self.assertLessEqual(abs(proposal["start_ms"] - 29_000), 150)
             self.assertLessEqual(abs(proposal["end_ms"] - 57_000), 150)
             self.assertGreaterEqual(proposal["confidence"], .9)
-            self.assertEqual(self.lookup(files[1]).get_json()["segments"], [])
+            self.assertEqual(len(self.lookup(files[1]).get_json()["segments"]), 1)
             self.review(proposal["id"])
             self.assertEqual(len(self.lookup(files[1]).get_json()["segments"]), 1)
         finally:
@@ -252,4 +252,3 @@ class SkipMarkersTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

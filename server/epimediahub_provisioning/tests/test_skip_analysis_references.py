@@ -51,6 +51,9 @@ class ReferenceFixture:
             migrate(con)
             con.executemany("INSERT INTO skip_analysis_sources VALUES(?,?,?)",
                             [(1, 1, now()), (2, 1, now()), (3, 0, now())])
+            # Existing tests exercise the optional manual-review policy.
+            # Automatic acceptance has separate integration coverage.
+            con.executemany('INSERT INTO skip_release_settings VALUES(?,0,?)', [(1,now()),(2,now())])
         self.device = dict(id=1, customer_id=1)
         self.seed = self.descriptor("81", 12)
         self.target = self.descriptor("82", 13)

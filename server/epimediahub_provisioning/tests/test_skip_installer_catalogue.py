@@ -63,7 +63,7 @@ mode=os.environ.get('FIXTURE_MODE','success')
 if '127.0.0.1' in url:
     new='skip_nightly_catalogue' in Path(os.environ['FIXTURE_APP'],'skip_markers.py').read_text()
     healthy=new and mode!='bad-health'
-    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy,'skip_language_priority':healthy,'skip_bulk_review':healthy and mode!='missing-bulk-review','skip_network_address_fallback':healthy and mode!='missing-network-fallback'}}
+    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy,'skip_language_priority':healthy,'skip_bulk_review':healthy and mode!='missing-bulk-review','skip_network_address_fallback':healthy and mode!='missing-network-fallback','skip_automatic_acceptance':healthy and mode!='missing-automatic-acceptance','skip_series_progress':healthy and mode!='missing-series-progress'}}
     output.write_text(json.dumps(body))
 else:
     assert '/'+os.environ['FIXTURE_REF']+'/' in url
@@ -158,6 +158,9 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON'],*sys.argv[1:
             self.assertEqual((self.appdir / name).read_text(), content)
         self.assertFalse((self.appdir / 'skip_automation.py').exists())
         self.assertFalse((self.appdir / 'skip_catalogue.py').exists())
+        self.assertFalse((self.appdir / 'skip_release.py').exists())
+        self.assertFalse((self.appdir / 'skip_progress.py').exists())
+        self.assertFalse((self.appdir / 'templates/skip_progress.html').exists())
         with self.db() as con:
             marker = con.execute('SELECT * FROM skip_records').fetchone()
             self.assertEqual((marker['status'],marker['start_ms'],marker['end_ms']), ('approved',283043,309573))
@@ -199,6 +202,22 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON'],*sys.argv[1:
             self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE asset_key=? AND status='approved'",(self.target['asset_key'],)).fetchone()[0],0)
             self.assertEqual(con.execute('SELECT status FROM skip_jobs').fetchone()[0],'queued')
 
+    def test_update_accepts_old_pending_markers_by_default_and_keeps_human_markers_and_budget(self):
+        from skip_markers import add_record
+        from skip_release import POLICY
+        with self.db() as con:
+            record=add_record(con,self.target,'intro',48000,74530,False,source='audio',confidence=.81)
+            record_id=record['id']
+            con.execute('DELETE FROM skip_release_settings')
+            con.execute('DELETE FROM skip_auto_maintenance WHERE name=?',(POLICY,))
+            con.execute('INSERT INTO skip_analysis_budget VALUES(?,50)',(__import__('skip_markers').now()[:10],))
+        result=self.launch()
+        self.assertEqual(result.returncode,0,result.stderr)
+        with self.db() as con:
+            self.assertEqual(con.execute('SELECT status FROM skip_records WHERE id=?',(record_id,)).fetchone()[0],'approved')
+            self.assertEqual(con.execute("SELECT status,start_ms,end_ms FROM skip_records WHERE source='device'").fetchone()[:],('approved',283043,309573))
+            self.assertEqual(con.execute('SELECT count FROM skip_analysis_budget').fetchone()[0],50)
+
     def test_explicit_activation_starts_previously_inactive_timer(self):
         self.state.write_text(json.dumps({'timer':False,'events':[]}))
         result=self.launch()
@@ -235,6 +254,14 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON'],*sys.argv[1:
         self.assertNotEqual(result.returncode, 0)
         self.unchanged()
         self.assertTrue(json.loads(self.state.read_text())['timer'])
+
+    def test_missing_automatic_acceptance_or_progress_rolls_back_all_new_files(self):
+        for mode in ('missing-automatic-acceptance','missing-series-progress'):
+            with self.subTest(mode=mode):
+                result=self.launch(mode,enable=False)
+                self.assertNotEqual(result.returncode,0)
+                self.unchanged()
+                self.assertTrue(json.loads(self.state.read_text())['timer'])
 
     def test_bad_health_preserves_previous_run_schedule_and_budget(self):
         with self.db() as con:

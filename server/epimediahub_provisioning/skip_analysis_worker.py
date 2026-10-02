@@ -220,6 +220,10 @@ def process_one(db):
     except (OSError, KeyError, TypeError, json.JSONDecodeError, sqlite3.Error, OverflowError):
         status, detail = "failed", "Analyse nicht möglich; eigene Zeitmarken bleiben nutzbar"
     with db() as con:
+        from skip_release import accept_pending
+        accepted = accept_pending(con, asset_key=job['asset_key'])
+        if accepted and status == 'review':
+            status, detail = 'done', f'{accepted} erkannte Abschnitt(e) automatisch freigegeben; Zeiten später korrigierbar'
         con.execute("UPDATE skip_jobs SET status=?,detail=?,attempts=attempts+?,updated_at=? WHERE id=?", (status, detail, 0 if status == "queued" else 1, now(), job["id"]))
         if status not in ('queued', 'disabled'):
             con.execute("INSERT INTO skip_analysis_budget VALUES(?,1) ON CONFLICT(day) DO UPDATE SET count=count+1", (day,))

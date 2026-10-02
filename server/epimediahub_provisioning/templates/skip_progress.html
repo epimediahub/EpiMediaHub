@@ -1,0 +1,23 @@
+<section class="card" id="series-progress" style="margin:20px 0" aria-label="Analysefortschritt aller erfassten Serien">
+<h2>Serienfortschritt</h2>
+<p>{{ progress.totals.series }} erfasste Serien · {{ progress.totals.completed }} Analysen abgeschlossen · {{ progress.totals.with_intro }} Serien mit Intros · {{ progress.totals.missing_intro }} Serien mit fehlenden Intros</p>
+<p>Heute analysiert: {{ progress.used_today }} / {{ audio_limit }} Folgen. {% if progress.used_today>=audio_limit %}Tageslimit erreicht; weitere Audioanalysen laufen morgen weiter.{% endif %}</p>
+{% if progress.inventory_pending %}<p>Für {{ progress.inventory_pending }} Serien werden die Folgenlisten noch erfasst oder erneut abgefragt. Die Übersicht wächst mit dem Katalog.</p>{% endif %}
+<form class="tools" method="get" action="{{ url_for('v082_skip_dashboard') }}#series-progress">
+<input type="hidden" name="state" value="{{ state }}">
+<label>Serie oder Playlist suchen<input name="progress_search" value="{{ progress.search }}" maxlength="120"></label>
+<label>Ansicht<select name="progress_filter">{% for value,label in [('all','Alle Serien'),('completed','Analyse abgeschlossen'),('with_intro','Mit erkannten Intros'),('missing_intro','Intros fehlen'),('open','Analyse noch offen')] %}<option value="{{ value }}" {% if progress.selected==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+<button type="submit">Übersicht filtern</button></form>
+<div class="cards">{% for item in progress.rows %}<article class="card marker-card">
+<h3 style="margin:0">{{ item.title }}{% if item.year %} ({{ item.year }}){% endif %}</h3>
+<p>{{ item.customer_name }} · {{ item.playlist_name }} · <strong>{{ item.status }}</strong></p>
+<label style="display:block">Analysiert: {{ item.analyzed }} / {{ item.files }} Videofassungen ({{ item.percent }} %)<progress style="display:block;width:100%;margin-top:8px" value="{{ item.analyzed }}" max="{{ item.files }}">{{ item.percent }} %</progress></label>
+<p><strong>Intro vorhanden: {{ item.intros }} / {{ item.files }}</strong> · {{ item.episodes }} Folgen{% if item.files!=item.episodes %} mit mehreren Videofassungen{% endif %}</p>
+<p>Noch zu analysieren: {{ item.waiting }} · Analysiert ohne nutzbares Intro: {{ item.not_found }}{% if item.disabled %} (davon {{ item.disabled }} bewusst deaktiviert){% endif %}{% if item.pending %} · {{ item.pending }} Intro-Freigaben offen{% endif %}{% if item.failed %} · {{ item.failed }} Zugriffs-/Dateifehler{% endif %}{% if item.no_reference %} · {{ item.no_reference }} warten auf Referenz{% endif %}</p>
+{% if item.inventory_pending %}<p>Folgenliste wird noch abgeglichen; die Gesamtzahl kann sich ändern.</p>{% endif %}
+<a class="button" href="{{ url_for('v082_skip_dashboard',state='approved',series=item.source_key) }}#series-{{ item.source_key }}">Intros ansehen & korrigieren</a>
+{% if item.pending %}<a class="button" href="{{ url_for('v082_skip_dashboard',state='pending',series=item.source_key) }}#series-{{ item.source_key }}">Offene Vorschläge</a>{% endif %}
+</article>{% else %}<p>Keine Serien in dieser Ansicht. Der erste Katalogdurchlauf ergänzt Serien und Folgen automatisch.</p>{% endfor %}</div>
+{% if progress.pages>1 %}<nav class="tools pagination" aria-label="Fortschrittsseiten">{% if progress.page>1 %}<a class="button" href="{{ url_for('v082_skip_dashboard',state=state,progress_filter=progress.selected,progress_search=progress.search,progress_page=progress.page-1) }}#series-progress">Vorherige Serien</a>{% endif %}<span>{{ progress.total }} Serien · Seite {{ progress.page }} / {{ progress.pages }}</span>{% if progress.page<progress.pages %}<a class="button" href="{{ url_for('v082_skip_dashboard',state=state,progress_filter=progress.selected,progress_search=progress.search,progress_page=progress.page+1) }}#series-progress">Weitere Serien</a>{% endif %}</nav>{% endif %}
+<p>„Analyse abgeschlossen“ beschreibt den erfassten Bestand. Ein fehlendes Intro wird getrennt angezeigt; es wird keine Zeitmarke erfunden.</p>
+</section>
