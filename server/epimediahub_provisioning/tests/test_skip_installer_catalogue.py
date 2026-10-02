@@ -61,7 +61,8 @@ args=sys.argv[1:]; output=Path(args[args.index('-o')+1]); url=next(x for x in ar
 mode=os.environ.get('FIXTURE_MODE','success')
 if '127.0.0.1' in url:
     new='skip_nightly_catalogue' in Path(os.environ['FIXTURE_APP'],'skip_markers.py').read_text()
-    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':new and mode!='bad-health'}}
+    healthy=new and mode!='bad-health'
+    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy}}
     output.write_text(json.dumps(body))
 else:
     assert '/'+os.environ['FIXTURE_REF']+'/' in url
@@ -131,6 +132,22 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON'],*sys.argv[1:
         self.assertFalse(json.loads(self.state.read_text())['timer'])
         with self.db() as con:
             self.assertEqual(con.execute('SELECT enabled,updated_at FROM skip_catalogue_settings WHERE playlist_id=1').fetchone()[:], (0,'previous-choice'))
+
+    def test_success_consolidates_old_duplicates_and_requeues_high_scores_without_approving_them(self):
+        from skip_markers import add_record
+        from skip_automation import POLICY_VERSION
+        with self.db() as con:
+            for shift in (0,125,250,375):
+                add_record(con,self.target,'intro',48000+shift,74530+shift,False,source='audio',confidence=.937)
+            con.execute('DELETE FROM skip_auto_maintenance WHERE name=?',(POLICY_VERSION,))
+            con.execute("UPDATE skip_jobs SET status='review'")
+        result=self.launch()
+        self.assertEqual(result.returncode,0,result.stderr)
+        with self.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE asset_key=? AND status='pending'",(self.target['asset_key'],)).fetchone()[0],1)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE asset_key=? AND status='superseded'",(self.target['asset_key'],)).fetchone()[0],3)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE asset_key=? AND status='approved'",(self.target['asset_key'],)).fetchone()[0],0)
+            self.assertEqual(con.execute('SELECT status FROM skip_jobs').fetchone()[0],'queued')
 
     def test_explicit_activation_starts_previously_inactive_timer(self):
         self.state.write_text(json.dumps({'timer':False,'events':[]}))
