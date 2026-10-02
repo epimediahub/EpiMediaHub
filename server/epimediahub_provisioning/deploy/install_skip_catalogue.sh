@@ -22,7 +22,7 @@ done
 app_dir=/opt/epimediahub/provisioning
 python_bin="$app_dir/.venv/bin/python"
 env_file=/etc/epimediahub/provisioning.env
-source_ref=e5a06e9a57e42d82d78b11ef345db0846406c041
+source_ref=990533bf76b727ccc9ff6706909adad6e53dbcac
 source_base="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$source_ref/server/epimediahub_provisioning"
 task_dir="$(mktemp -d -p /var/tmp epimediahub-skip-catalogue.XXXXXX)"
 backup_dir="/var/backups/epimediahub/skip-catalogue-$(date +%Y%m%d-%H%M%S)"
@@ -151,7 +151,7 @@ PY
 test -f "$data_dir/provisioning.db"
 
 mkdir -p "$task_dir/tests" "$task_dir/deploy" "$task_dir/templates"
-downloads=("${files[@]}" tests/test_skip_analysis_redirects.py tests/test_skip_analysis_references.py tests/test_skip_analysis_boundaries.py tests/test_skip_analysis_automation.py tests/test_skip_analysis_catalogue.py tests/test_skip_analysis_dashboard.py tests/test_skip_analysis_dedup.py tests/test_skip_analysis_online_errors.py tests/test_skip_analysis_languages.py tests/test_skip_analysis_bulk_review.py tests/test_skip_analysis_acceptance.py tests/test_skip_analysis_database.py deploy/inspect_skip_references.py)
+downloads=("${files[@]}" tests/test_skip_analysis_redirects.py tests/test_skip_analysis_references.py tests/test_skip_analysis_boundaries.py tests/test_skip_analysis_automation.py tests/test_skip_analysis_catalogue.py tests/test_skip_analysis_dashboard.py tests/test_skip_analysis_dedup.py tests/test_skip_analysis_online_errors.py tests/test_skip_analysis_languages.py tests/test_skip_analysis_bulk_review.py tests/test_skip_analysis_acceptance.py tests/test_skip_analysis_database.py tests/test_skip_analysis_progress_cache.py deploy/inspect_skip_references.py)
 for file in "${downloads[@]}"; do
   curl -fsSL --connect-timeout 10 --max-time 60 "$source_base/$file" -o "$task_dir/$file"
 done
@@ -159,15 +159,15 @@ sha256sum -c <<EOF
 363a597d0661a6f9c586af0e63e6e44a7bb19f8590e89d1b5bf42a0f0a4a8c66  $task_dir/app.py
 0738a33d7ae3a279f41772e7e75d2e18020c36d9a7fb723f4ee378dd02547fbb  $task_dir/skip_database.py
 8ded57ab108a2ca06ad03ecabd09ee1435eb96ad7da2b3977657f5a8229241c1  $task_dir/skip_analysis.py
-6ace71db454b5163ff4465738d7e40da15c8f42abc3a1e4fcf8d8d091ffa9649  $task_dir/skip_analysis_worker.py
-a4557bc3de0c99349f74107985153063f2cf4a5978f9faf4aeebc9f68b74c76e  $task_dir/skip_markers.py
+d9ee08f4a6076d9145bbf6bd920396c53858a0880be86c463ade86d21bf523eb  $task_dir/skip_analysis_worker.py
+607411a372b9f60a49c774bd0e2fb8066a548430986fbe613e54ca9c411d8ac3  $task_dir/skip_markers.py
 6a1ad00ed784297ba5384cb9f7459fffd8a4f75914cb437b4d89d4a541887423  $task_dir/skip_automation.py
 b8c285243b76f1f80c3067f9f19ae67a6d2844bee013580d333d69a88e62d97d  $task_dir/skip_catalogue.py
 fbfac69bebb78d4589e5f91fecf792be87c1e62f9125067ff9627b94620b98f7  $task_dir/skip_release.py
-812babb6ce49a9f7e932ec608235700d7ac12f7da010efb02df490817016f627  $task_dir/skip_progress.py
+3d25c4d494c60058bc9595020e15aeb4927408a436e48859c04d29e956e9cd74  $task_dir/skip_progress.py
 d17de554f916ed4fb0386e0c70fbf2c908736e5e71adf85a16bd192d20f8afc0  $task_dir/templates/skip_markers.html
-860019fe2005b89904b68b4a1f40b4bd0c37d6938b193ae9eb70144fb33e419e  $task_dir/templates/skip_progress.html
-278e1475b838bdd151dd4fd6edd3fa76c9c19081f7aed12d09449c62592a3666  $task_dir/deploy/check_skip_dashboard.py
+cf24e43da12b7c3054fc377526f7f47a2251cc87875fb96dfce0d86e479cd633  $task_dir/templates/skip_progress.html
+8752d9ab417096558097a694e3aacca05e494db2bfde669273927838ac835ac4  $task_dir/deploy/check_skip_dashboard.py
 c058c9f1b6702f99406ca15b2160f46ff1b80ec9235860445fe062f98b2ab788  $task_dir/tests/test_skip_analysis_redirects.py
 c5df274c8af85035b7a8dcafa7033b5d1623c720d798d9c9602d1455bc31b917  $task_dir/tests/test_skip_analysis_references.py
 2a76f04522b10001e4ff5c0704c41ec596e09ebe47550f541d1a18062c7f52e3  $task_dir/tests/test_skip_analysis_boundaries.py
@@ -180,6 +180,7 @@ e65184b85ee5de3d58b0835e054973c6f1c8c496dc3ade7426fc570c748e7b08  $task_dir/test
 97eafdf485e43b01a3e70d2ad025e210c84dc363146684c7014edd9ff52d8e9e  $task_dir/tests/test_skip_analysis_bulk_review.py
 f78aa936690e9afb51b037ae609718d285659d2288e833ac7ea5fd1779e21372  $task_dir/tests/test_skip_analysis_acceptance.py
 18c8ac007ae2f4ccac0758602b9ead7d6a58034847069cb211b4115d29b3c515  $task_dir/tests/test_skip_analysis_database.py
+b5b977915c0ed241562c28210b7b0fd99e63d554bd75f5608ad26af23ff26794  $task_dir/tests/test_skip_analysis_progress_cache.py
 df57e84d73475ee3ae5dff1183e3d821655f8d805af67bd6fb34369c08cbc87d  $task_dir/deploy/inspect_skip_references.py
 EOF
 "$python_bin" -m compileall -q "$task_dir"
@@ -236,6 +237,7 @@ PYTHONPATH="$app_dir" "$python_bin" - "$data_dir/provisioning.db" "$repair_datab
 import sys
 from skip_database import connect, enable_wal
 from skip_markers import migrate, now
+from skip_progress import populate
 with connect(sys.argv[1]) as con:
     enable_wal(con)
     migrate(con)
@@ -243,6 +245,8 @@ with connect(sys.argv[1]) as con:
         # Services are stopped and the exclusive worker lock is held. Resume
         # interrupted jobs without charging another attempt or resetting quota.
         con.execute("UPDATE skip_jobs SET status='queued',detail='Nach Datenbankreparatur erneut eingeplant',updated_at=? WHERE status='running'",(now(),))
+    print('Serienfortschritt einmalig vorbereiten ...', flush=True)
+    populate(con)
 PY
 if [ "$start_catalogue" -eq 1 ]; then
   settings_changed=1
@@ -265,7 +269,7 @@ finally:
     con.close()
 PY
 fi
-PYTHONPATH="$app_dir" "$python_bin" "$app_dir/deploy/check_skip_dashboard.py" "$data_dir/provisioning.db" "$app_dir/templates"
+PYTHONPATH="$app_dir" "$python_bin" "$app_dir/deploy/check_skip_dashboard.py" "$data_dir/provisioning.db" "$app_dir/templates" | tee "$task_dir/dashboard_check.log"
 systemctl restart epimediahub-provisioning.service
 healthy=0
 for attempt in $(seq 1 20); do
@@ -280,7 +284,7 @@ test "$healthy" -eq 1
 import json, sys
 with open(sys.argv[1]) as source:
     data = json.load(source)
-if data.get('api_version') != '0.8.2' or data.get('status') != 'ok' or not all(data.get('features',{}).get(name) is True for name in ('skip_nightly_catalogue','skip_high_audio_approval','skip_proposal_dedup','skip_online_error_details','skip_language_priority','skip_bulk_review','skip_network_address_fallback','skip_automatic_acceptance','skip_series_progress','skip_database_concurrency')):
+if data.get('api_version') != '0.8.2' or data.get('status') != 'ok' or not all(data.get('features',{}).get(name) is True for name in ('skip_nightly_catalogue','skip_high_audio_approval','skip_proposal_dedup','skip_online_error_details','skip_language_priority','skip_bulk_review','skip_network_address_fallback','skip_automatic_acceptance','skip_series_progress','skip_database_concurrency','skip_progress_cache')):
     raise SystemExit('Der aktualisierte Server meldet keinen gültigen Analyse-Status.')
 PY
 if [ "$timer_was_active" -eq 1 ] || [ "$start_catalogue" -eq 1 ]; then
@@ -305,4 +309,6 @@ echo 'Eigene Korrekturen im Player oder Dashboard haben Vorrang.'
 echo 'Bisherige unklare Online-Fehler werden im Leerlauf erneut geprüft, ohne erneute Audioanalyse.'
 echo 'Deutsch und Italienisch werden gemeinsam bevorzugt, danach die übrigen Serien.'
 echo 'Bestehende Warteschlangen erhalten einmalig eine neue Sprachzuordnung aus Anbieterkategorien.'
+echo 'Serienfortschritt wird gespeichert und nur für geänderte Serien neu berechnet.'
 echo 'Im Dashboard zeigt Serienfortschritt abgeschlossene Analysen, vorhandene und fehlende Intros.'
+tail -n 3 "$task_dir/dashboard_check.log"

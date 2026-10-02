@@ -71,7 +71,7 @@ if '127.0.0.1' in url:
     new='skip_nightly_catalogue' in Path(os.environ['FIXTURE_APP'],'skip_markers.py').read_text()
     if mode=='unavailable-health' and not new: raise SystemExit(22)
     healthy=new and mode!='bad-health'
-    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy,'skip_language_priority':healthy,'skip_bulk_review':healthy and mode!='missing-bulk-review','skip_network_address_fallback':healthy and mode!='missing-network-fallback','skip_automatic_acceptance':healthy and mode!='missing-automatic-acceptance','skip_series_progress':healthy and mode!='missing-series-progress','skip_database_concurrency':healthy and mode!='missing-database-concurrency'}}
+    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy,'skip_language_priority':healthy,'skip_bulk_review':healthy and mode!='missing-bulk-review','skip_network_address_fallback':healthy and mode!='missing-network-fallback','skip_automatic_acceptance':healthy and mode!='missing-automatic-acceptance','skip_series_progress':healthy and mode!='missing-series-progress','skip_database_concurrency':healthy and mode!='missing-database-concurrency','skip_progress_cache':healthy and mode!='missing-progress-cache'}}
     output.write_text(json.dumps(body))
 else:
     assert '/'+os.environ['FIXTURE_REF']+'/' in url
@@ -395,6 +395,22 @@ with Path(sys.argv[1]).open('a') as lock:
         state=json.loads(self.state.read_text())
         self.assertTrue(state['timer'])
         self.assertIn(['restart','epimediahub-provisioning.service'],state['events'])
+
+    def test_installer_prepares_series_cache_before_serving_requests(self):
+        result=self.launch(enable=False)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('Serienfortschritt einmalig vorbereiten',result.stdout)
+        self.assertIn('Intro-Maske rendern:',result.stdout)
+        with self.db() as con:
+            self.assertEqual(con.execute('SELECT COUNT(*) FROM skip_progress_dirty').fetchone()[0],0)
+            self.assertEqual(con.execute('SELECT files,no_reference FROM skip_progress_series').fetchone()[:],(1,1))
+            self.assertEqual(con.execute('SELECT status,attempts FROM skip_jobs').fetchone()[:],('no_reference',2))
+
+    def test_missing_progress_cache_feature_restores_code_and_preserves_markers(self):
+        result=self.launch('missing-progress-cache',enable=False)
+        self.assertNotEqual(result.returncode,0)
+        self.unchanged()
+        self.assertTrue(json.loads(self.state.read_text())['timer'])
 
 
 if __name__=='__main__':
