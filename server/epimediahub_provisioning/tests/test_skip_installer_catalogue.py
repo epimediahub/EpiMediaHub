@@ -71,7 +71,7 @@ if '127.0.0.1' in url:
     new='skip_nightly_catalogue' in Path(os.environ['FIXTURE_APP'],'skip_markers.py').read_text()
     if mode=='unavailable-health' and not new: raise SystemExit(22)
     healthy=new and mode!='bad-health'
-    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy,'skip_language_priority':healthy,'skip_bulk_review':healthy and mode!='missing-bulk-review','skip_network_address_fallback':healthy and mode!='missing-network-fallback','skip_automatic_acceptance':healthy and mode!='missing-automatic-acceptance','skip_series_progress':healthy and mode!='missing-series-progress','skip_database_concurrency':healthy and mode!='missing-database-concurrency','skip_progress_cache':healthy and mode!='missing-progress-cache'}}
+    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy,'skip_language_priority':healthy,'skip_bulk_review':healthy and mode!='missing-bulk-review','skip_network_address_fallback':healthy and mode!='missing-network-fallback','skip_automatic_acceptance':healthy and mode!='missing-automatic-acceptance','skip_series_progress':healthy and mode!='missing-series-progress','skip_database_concurrency':healthy and mode!='missing-database-concurrency','skip_progress_cache':healthy and mode!='missing-progress-cache','skip_detector_v2':healthy and mode!='missing-v2'}}
     output.write_text(json.dumps(body))
 else:
     assert '/'+os.environ['FIXTURE_REF']+'/' in url
@@ -171,6 +171,7 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON'],*sys.argv[1:
         for name, content in self.originals.items():
             self.assertEqual((self.appdir / name).read_text(), content)
         self.assertFalse((self.appdir / 'skip_automation.py').exists())
+        self.assertFalse((self.appdir / 'skip_detector_v2.py').exists())
         self.assertFalse((self.appdir / 'skip_catalogue.py').exists())
         self.assertFalse((self.appdir / 'skip_release.py').exists())
         self.assertFalse((self.appdir / 'skip_progress.py').exists())
@@ -411,6 +412,19 @@ with Path(sys.argv[1]).open('a') as lock:
         self.assertNotEqual(result.returncode,0)
         self.unchanged()
         self.assertTrue(json.loads(self.state.read_text())['timer'])
+
+    def test_missing_v2_feature_rolls_back_integrated_module_and_keeps_markers(self):
+        result=self.launch('missing-v2',enable=False)
+        self.assertNotEqual(result.returncode,0)
+        self.unchanged()
+
+    def test_failed_v2_update_restores_previously_installed_standalone_detector(self):
+        path=self.appdir / 'skip_detector_v2.py'
+        path.write_text('OLD_DETECTOR = True\n')
+        result=self.launch('bad-health',enable=False)
+        self.assertNotEqual(result.returncode,0)
+        self.assertEqual(path.read_text(),'OLD_DETECTOR = True\n')
+        self.assertEqual((self.appdir/'skip_analysis_worker.py').read_text(),self.originals['skip_analysis_worker.py'])
 
 
 if __name__=='__main__':

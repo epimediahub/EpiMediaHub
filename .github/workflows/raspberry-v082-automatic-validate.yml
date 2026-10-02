@@ -1,9 +1,9 @@
-name: Validate Raspberry automatic acceptance and series progress
+name: Validate Raspberry detection V2, automatic acceptance and series progress
 
 on:
   workflow_dispatch:
   push:
-    branches: [raspberry-v0.8.2-auto-progress]
+    branches: [raspberry-v0.8.2-auto-progress, raspberry-v0.8.2-skip-v2]
     paths:
       - 'server/epimediahub_provisioning/app.py'
       - 'server/epimediahub_provisioning/skip*.py'
@@ -40,6 +40,8 @@ jobs:
           sudo apt-get install -y ffmpeg libchromaprint1
       - name: Check Python syntax
         run: python -m compileall -q server/epimediahub_provisioning
+      - name: Check integrated detector self-test
+        run: python server/epimediahub_provisioning/skip_detector_v2.py
       - name: Verify existing dashboard and device behavior
         env:
           EPIMEDIAHUB_EXPECTED_API_VERSION: '0.8.2'
