@@ -6,6 +6,7 @@ take precedence, and machine approvals cannot become independent human evidence.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from math import ceil
 import hashlib
 import json
 import os
@@ -24,6 +25,9 @@ WINDOW_MS = 600_000
 AUTO_CONFIDENCE = .92
 BOUNDARY_TOLERANCE = 500
 MAX_SEASON_EPISODES = 200
+PROPOSAL_SOURCES = ('audio', 'chapter', 'theintrodb', 'audio_repetition')
+PROPOSAL_RANK = {'audio': 4, 'chapter': 3, 'theintrodb': 2, 'audio_repetition': 1}
+POLICY_VERSION = 'high_audio_v2'
 
 
 def migrate(con):
@@ -60,9 +64,12 @@ def migrate(con):
       CREATE TABLE IF NOT EXISTS skip_analysis_budget(day TEXT PRIMARY KEY,count INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS skip_auto_metadata_config(
         name TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS skip_auto_maintenance(
+        name TEXT PRIMARY KEY,completed_at TEXT NOT NULL);
     """)
     from skip_catalogue import migrate as catalogue_migrate
     catalogue_migrate(con)
+    maintain_proposals(con)
 
 
 def enabled(con, playlist_id, online=False):
@@ -327,10 +334,108 @@ def online_segments(db, asset, busy):
 
 def protected(con, asset, kind):
     return bool(con.execute("""SELECT 1 FROM skip_records WHERE asset_key=? AND segment_type=?
-      AND ABS(duration_ms-?)<=2000 AND (status IN ('approved','rejected') OR (source='device' AND status='pending')) LIMIT 1""",
+      AND ABS(duration_ms-?)<=2000 AND (status IN ('approved','rejected') OR (status='pending' AND
+        (source='device' OR EXISTS(SELECT 1 FROM skip_auto_evidence e WHERE e.record_id=skip_records.id AND e.human_review=1)))) LIMIT 1""",
       (asset["asset_key"], kind, asset["duration_ms"])).fetchone()
       or con.execute("SELECT 1 FROM skip_auto_blocks WHERE asset_key=? AND kind=? AND ABS(duration_ms-?)<=2000 LIMIT 1",
                      (asset["asset_key"], kind, asset["duration_ms"])).fetchone())
+
+
+def pending_proposals(con, asset, kind):
+    return con.execute("""SELECT r.* FROM skip_records r
+      LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
+      WHERE r.asset_key=? AND r.source_key=? AND r.media_type=? AND r.season=? AND r.episode=?
+      AND r.duration_ms=? AND r.segment_type=? AND r.status='pending' AND r.disabled=0
+      AND r.source IN ('audio','chapter','theintrodb','audio_repetition')
+      AND COALESCE(e.human_review,0)=0""",
+      (*(asset[key] for key in ('asset_key','source_key','media_type','season','episode','duration_ms')), kind)).fetchall()
+
+
+def proposal_rank(row):
+    return (PROPOSAL_RANK[row['source']], row['confidence'], -row['id'])
+
+
+def same_boundaries(first, second):
+    return (abs(first['start_ms'] - second['start_ms']) <= BOUNDARY_TOLERANCE
+            and abs(first['end_ms'] - second['end_ms']) <= BOUNDARY_TOLERANCE)
+
+
+def retire_proposals(con, asset, kind, keep=None):
+    """Archive generated alternatives after a decision, preserving human records."""
+    con.execute("""UPDATE skip_records SET status='superseded' WHERE asset_key=? AND source_key=?
+      AND media_type=? AND season=? AND episode=? AND ABS(duration_ms-?)<=2000 AND segment_type=?
+      AND status='pending' AND source IN ('audio','chapter','theintrodb','audio_repetition')
+      AND id<>? AND NOT EXISTS(SELECT 1 FROM skip_auto_evidence e WHERE e.record_id=skip_records.id AND e.human_review=1)""",
+      (*(asset[key] for key in ('asset_key','source_key','media_type','season','episode','duration_ms')), kind, keep or -1))
+
+
+def consolidate_proposals(con, asset, kind):
+    """Collapse nearby machine proposals; retain materially conflicting boundaries."""
+    keepers = []
+    for row in sorted(pending_proposals(con, asset, kind), key=proposal_rank, reverse=True):
+        if any(same_boundaries(row, kept) for kept in keepers):
+            con.execute("UPDATE skip_records SET status='superseded' WHERE id=? AND status='pending'", (row['id'],))
+        else:
+            keepers.append(row)
+    return keepers
+
+
+def store_proposal(con, asset, kind, start, end, source, confidence=0, evidence=None):
+    """Keep the strongest matching proposal, independent of the reference count."""
+    asset = dict(asset)
+    if protected(con, asset, kind):
+        return None
+    candidate = {'start_ms': start, 'end_ms': end}
+    matches = [row for row in pending_proposals(con, asset, kind) if same_boundaries(row, candidate)]
+    update_evidence = True
+    if matches:
+        saved = max(matches, key=proposal_rank)
+        update_evidence = (PROPOSAL_RANK[source], confidence) >= proposal_rank(saved)[:2]
+        if update_evidence:
+            con.execute("UPDATE skip_records SET start_ms=?,end_ms=?,source=?,confidence=? WHERE id=? AND status='pending'",
+                        (start, end, source, confidence, saved['id']))
+    else:
+        saved = add_record(con, dict(asset, imdb_id=asset.get('imdb_id',''), tmdb_id=asset.get('tmdb_id',0)),
+                           kind, start, end, False, source=source, confidence=confidence)
+        # A prior machine alternative may have been archived before a fresh retry.
+        con.execute("""UPDATE skip_records SET status='pending',confidence=? WHERE id=? AND status IN ('pending','superseded')
+          AND source IN ('audio','chapter','theintrodb','audio_repetition')
+          AND NOT EXISTS(SELECT 1 FROM skip_auto_evidence e WHERE e.record_id=skip_records.id AND e.human_review=1)""",
+          (confidence, saved['id']))
+    if evidence and update_evidence:
+        con.execute("""INSERT OR REPLACE INTO skip_auto_evidence SELECT ?,?,0 FROM skip_records
+          WHERE id=? AND status='pending'""", (saved['id'], json.dumps(evidence), saved['id']))
+    keepers = consolidate_proposals(con, asset, kind)
+    return next((row for row in keepers if same_boundaries(row, candidate)), None)
+
+
+def maintain_proposals(con):
+    """One-time cleanup and fresh analysis of existing high-score proposals."""
+    if con.execute("SELECT 1 FROM skip_auto_maintenance WHERE name=?", (POLICY_VERSION,)).fetchone():
+        return
+    groups = con.execute("""SELECT DISTINCT asset_key,source_key,media_type,season,episode,duration_ms,segment_type
+      FROM skip_records WHERE status='pending' AND source IN ('audio','chapter','theintrodb','audio_repetition')""").fetchall()
+    for row in groups:
+        if protected(con, row, row['segment_type']):
+            retire_proposals(con, row, row['segment_type'])
+        else:
+            consolidate_proposals(con, row, row['segment_type'])
+    # Old scores alone are not enough: the normal worker verifies current files,
+    # unique position and both boundaries before publishing. Keep the daily ledger.
+    if con.execute('SELECT 1 FROM skip_auto_settings WHERE enabled=1 LIMIT 1').fetchone():
+        con.execute("""UPDATE skip_jobs SET status='queued',attempts=0,
+          detail='Hohe Audiotreffer werden mit der neuen Freigaberegel erneut geprüft',updated_at=?
+          WHERE status IN ('review','no_match','done') AND asset_key IN (
+            SELECT a.asset_key FROM skip_assets a
+            JOIN skip_auto_settings x ON x.playlist_id=a.playlist_id AND x.enabled=1
+            JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id AND s.enabled=1
+            JOIN customer_playlists p ON p.id=a.playlist_id
+            JOIN customers c ON c.id=p.customer_id AND c.enabled=1
+            JOIN skip_records r ON r.asset_key=a.asset_key AND r.source_key=a.source_key
+              AND r.season=a.season AND r.episode=a.episode AND ABS(r.duration_ms-a.duration_ms)<=2000
+            WHERE a.media_type='episode' AND r.media_type=a.media_type
+              AND r.status='pending' AND r.source='audio' AND r.confidence>=?)""", (now(), AUTO_CONFIDENCE))
+    con.execute("INSERT INTO skip_auto_maintenance VALUES(?,?)", (POLICY_VERSION, now()))
 
 
 def reference_rows(con, asset, kind):
@@ -339,7 +444,7 @@ def reference_rows(con, asset, kind):
       JOIN customer_playlists p ON p.id=a.playlist_id JOIN customers c ON c.id=p.customer_id AND c.enabled=1
       LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
       WHERE r.source_key=? AND r.season=? AND r.segment_type=? AND r.status='approved' AND r.disabled=0
-      AND (e.record_id IS NULL OR e.human_review=1) AND r.asset_key<>?
+      AND ((e.record_id IS NULL AND r.source<>'auto_audio') OR e.human_review=1) AND r.asset_key<>?
       AND a.source_key=r.source_key AND a.season=r.season AND a.episode=r.episode AND a.media_type='episode'
       AND r.end_ms-r.start_ms BETWEEN 19000 AND 300000 AND ABS(a.duration_ms-r.duration_ms)<=2000
       ORDER BY r.reviewed_at DESC,r.id DESC LIMIT 4""",
@@ -347,34 +452,50 @@ def reference_rows(con, asset, kind):
 
 
 def consensus(votes, online, duration, kind):
-    """Require independent episodes and agreeing full boundaries, not just similarity."""
-    good = [v for v in votes if v["confidence"] >= AUTO_CONFIDENCE and valid_range(kind, v["start"], v["end"], duration)]
+    """One reviewed reference suffices for a strong, unique full-boundary match."""
+    good = [v for v in votes if v["confidence"] >= AUTO_CONFIDENCE and v.get('boundaries_confirmed') is True
+            and valid_range(kind, v["start"], v["end"], duration)]
     if not good:
         return None
     # A disagreement between any strong references requires human inspection.
     if max(v["start"] for v in good) - min(v["start"] for v in good) > BOUNDARY_TOLERANCE or max(v["end"] for v in good) - min(v["end"] for v in good) > BOUNDARY_TOLERANCE:
         return None
-    independent = {v["asset_key"] for v in good}
-    distinct_episodes = {v["episode"] for v in good}
     external = [x for x in online if x["kind"] == kind and x.get("identity_verified") is True
                 and abs(x["start"] - good[0]["start"]) <= BOUNDARY_TOLERANCE
                 and abs(x["end"] - good[0]["end"]) <= BOUNDARY_TOLERANCE]
-    if len(independent) < 2 or len(distinct_episodes) < 2:
-        if not external:
-            return None
     start = round(sum(v["start"] for v in good) / len(good))
     end = round(sum(v["end"] for v in good) / len(good))
     # Avoid projecting credit music over a possible post-credit scene.
     if kind == "outro" and duration - end > 1000:
         return None
-    return dict(start=start, end=end, confidence=min(v["confidence"] for v in good), votes=good, online=external)
+    return dict(start=start, end=end, confidence=min(v["confidence"] for v in good), votes=good,
+                online=external, policy=POLICY_VERSION)
+
+
+def matching_boundaries(reference, target, step, offset):
+    """Check both ends around the unique full match, allowing repeated short motifs."""
+    cut = max(40, len(reference) // 3)
+    radius = ceil(BOUNDARY_TOLERANCE / step)
+    anchor = round(offset / step)
+    for part, relative in ((reference[:cut], 0), (reference[-cut:], len(reference) - cut)):
+        predicted = anchor + relative
+        begin = max(0, predicted - radius)
+        finish = min(len(target), predicted + radius + len(part))
+        match = matching_offset(part, target[begin:finish], step)
+        if not match or abs(begin * step + match[0] - offset - relative * step) > BOUNDARY_TOLERANCE:
+            return False
+    return True
 
 
 def publish(con, asset, kind, evidence):
+    if (not evidence or evidence.get('policy') != POLICY_VERSION
+            or evidence['confidence'] < AUTO_CONFIDENCE or not evidence['votes']
+            or not valid_range(kind, evidence['start'], evidence['end'], asset['duration_ms'])):
+        return False
     if not enabled(con, asset["playlist_id"]) or protected(con, asset, kind):
         return False
     current = con.execute("SELECT * FROM skip_assets WHERE asset_key=?", (asset["asset_key"],)).fetchone()
-    if (not current or any(current[key] != asset[key] for key in ("source_key", "season", "episode", "playlist_id"))
+    if (not current or any(current[key] != asset[key] for key in ("source_key", "media_type", "season", "episode", "playlist_id"))
             or abs(current["duration_ms"] - asset["duration_ms"]) > 2000):
         return False
     if evidence["online"]:
@@ -382,16 +503,19 @@ def publish(con, asset, kind, evidence):
         if (not enabled(con, asset["playlist_id"], online=True) or not cache
                 or cache["duration_ms"] != asset["duration_ms"]
                 or any(x not in json.loads(cache["segments_json"]) for x in evidence["online"])):
-            return False
+            # Online corroboration is optional for a strong reviewed audio match.
+            evidence = dict(evidence, online=[])
     for vote in evidence["votes"]:
         row = con.execute("""SELECT r.*,a.duration_ms asset_duration,a.source_key asset_source,a.season asset_season,
           a.episode asset_episode,s.enabled,c.enabled customer_enabled FROM skip_records r
           JOIN skip_assets a ON a.asset_key=r.asset_key JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id
           JOIN customer_playlists p ON p.id=a.playlist_id JOIN customers c ON c.id=p.customer_id
           LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
-          WHERE r.id=? AND (e.record_id IS NULL OR e.human_review=1)""", (vote["record_id"],)).fetchone()
+          WHERE r.id=? AND ((e.record_id IS NULL AND r.source<>'auto_audio') OR e.human_review=1)""", (vote["record_id"],)).fetchone()
         if (not row or row["status"] != "approved" or row["disabled"] or not row["enabled"] or not row["customer_enabled"]
                 or row["source_key"] != asset["source_key"] or row["season"] != asset["season"] or row["segment_type"] != kind
+                or row['asset_key'] != vote['asset_key'] or row['asset_key'] == asset['asset_key'] or row['episode'] != vote['episode']
+                or vote.get('boundaries_confirmed') is not True or vote['confidence'] < AUTO_CONFIDENCE
                 or row["asset_source"] != row["source_key"] or row["asset_season"] != row["season"] or row["asset_episode"] != row["episode"]
                 or row["reviewed_at"] != vote["reviewed_at"]
                 or row["start_ms"] != vote["ref_start"] or row["end_ms"] != vote["ref_end"]
@@ -405,8 +529,7 @@ def publish(con, asset, kind, evidence):
         return False
     con.execute("INSERT OR REPLACE INTO skip_auto_evidence VALUES(?,?,0)", (saved["id"], json.dumps(evidence)))
     con.execute("UPDATE skip_records SET status='approved',reviewed_at=? WHERE id=? AND status='pending'", (now(), saved["id"]))
-    con.execute("UPDATE skip_records SET status='superseded' WHERE asset_key=? AND segment_type=? AND status='pending' AND source<>'device' AND id<>?",
-                (asset["asset_key"], kind, saved["id"]))
+    retire_proposals(con, asset, kind, saved['id'])
     return True
 
 
@@ -482,10 +605,9 @@ def bootstrap(con, asset, kind):
             or (kind == "intro" and start > min(WINDOW_MS, duration * .4))
             or (kind == "outro" and (start < duration * .65 or end < duration - 15_000))):
         return False
-    saved = add_record(con, dict(asset, imdb_id="", tmdb_id=0), kind, start, end, False, source="audio_repetition", confidence=min(x[3] for x in spans))
-    con.execute("INSERT OR IGNORE INTO skip_auto_evidence VALUES(?,?,0)",
-                (saved["id"], json.dumps({"method": "three_episode_repetition", "episodes": [asset["episode"]] + [x[0]["episode"] for x in matches]})))
-    return True  # Repeated music alone cannot establish precise semantic boundaries.
+    saved = store_proposal(con, asset, kind, start, end, 'audio_repetition', min(x[3] for x in spans),
+                           {"method": "three_episode_repetition", "episodes": [asset["episode"]] + [x[0]["episode"] for x in matches]})
+    return bool(saved)  # Repeated music alone cannot establish precise semantic boundaries.
 
 
 def save_window(con, asset, kind, words, step, offset, length):
@@ -521,16 +643,12 @@ def analyze(db, job, busy_factory):
         asset["duration_ms"] = duration
         with db() as con:
             for kind, start, end in chapter_candidates(chapters, duration):
-                if not protected(con, asset, kind):
-                    add_record(con, dict(asset, imdb_id="", tmdb_id=0), kind, start, end, False, source="chapter")
-                    proposals += 1
+                proposals += bool(store_proposal(con, asset, kind, start, end, 'chapter'))
     online = online_segments(db, asset, busy)
     with db() as con:
         for candidate in online:
-            if not protected(con, asset, candidate["kind"]):
-                saved = add_record(con, dict(asset, imdb_id="", tmdb_id=0), candidate["kind"], candidate["start"], candidate["end"], False, source="theintrodb", confidence=0)
-                con.execute("INSERT OR IGNORE INTO skip_auto_evidence VALUES(?,?,0)", (saved["id"], json.dumps({"method": "online_suggestion"})))
-                proposals += 1
+            proposals += bool(store_proposal(con, asset, candidate['kind'], candidate['start'], candidate['end'],
+                                             'theintrodb', evidence={'method':'online_suggestion'}))
     last_error = None
     if duration >= 19_000:
         for kind in ("intro", "outro"):
@@ -590,18 +708,15 @@ def analyze(db, job, busy_factory):
                 continue
             # Confirm the first and last musical portions independently so a
             # coincidental central match cannot authorize a complete segment.
-            cut = max(40, len(words) // 3)
-            first, last = matching_offset(words[:cut], target, step), matching_offset(words[-cut:], target, step)
-            boundaries = (first and last and abs(first[0] - offset) <= BOUNDARY_TOLERANCE
-                          and abs(last[0] - offset - (len(words) - cut) * step) <= BOUNDARY_TOLERANCE)
+            boundaries = matching_boundaries(words, target, step, offset)
             vote = dict(start=start, end=end, confidence=confidence if boundaries else 0,
+                        boundaries_confirmed=bool(boundaries),
                         asset_key=record["asset_key"], episode=record["episode"], record_id=record["id"],
                         reviewed_at=record["reviewed_at"], ref_start=record["start_ms"], ref_end=record["end_ms"])
             votes.append(vote)
             with db() as con:
-                if not protected(con, asset, kind):
-                    add_record(con, dict(asset, imdb_id="", tmdb_id=0), kind, start, end, False, source="audio", confidence=confidence)
-                    proposals += 1
+                proposals += bool(store_proposal(con, asset, kind, start, end, 'audio', confidence,
+                                                 {'method':'reviewed_audio_match','vote':vote}))
         decision = consensus(votes, online, duration, kind)
         with db() as con:
             if decision and publish(con, asset, kind, decision):
@@ -609,7 +724,7 @@ def analyze(db, job, busy_factory):
             elif not votes and bootstrap(con, asset, kind):
                 proposals += 1
     if approvals:
-        return "done", f"{approvals} Abschnitt(e) anhand unabhängiger Belege automatisch freigegeben"
+        return "done", f"{approvals} Abschnitt(e) mit hohem, eindeutigem Audiotreffer automatisch freigegeben"
     if proposals:
         return "review", "Vorschläge vorhanden; Zeitgrenzen im Dashboard prüfen"
     if not windows and last_error:

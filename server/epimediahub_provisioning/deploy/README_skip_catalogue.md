@@ -1,4 +1,4 @@
-# Serienübersicht, Gesamtkatalog und nächtliche Ergänzung für Raspberry 0.8.2
+# Serienübersicht, Gesamtkatalog und automatische Freigaben für Raspberry 0.8.2
 
 Der vorhandene Worker erfasst den vollständigen Serienbestand der aktivierten
 XTREAM-Playlists, auch ohne vorheriges Abspielen. Neue oder vom Anbieter als
@@ -12,16 +12,18 @@ Voraussetzung ist der laufende Raspberry-Server 0.8.2 mit Audioanalyse und
 Staffelautomatik für die gewünschten Playlists. Android 1.0.16 bleibt kompatibel.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/005d084dce5b6fcf280b1cddd4b2fc5c68aa163b/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
-sudo bash /var/tmp/epimediahub-skip-catalogue.sh --start-catalogue
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/e36ba84084a17a3ab45296e436d04ba5a7ad8918/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+sudo bash /var/tmp/epimediahub-skip-catalogue.sh
 ```
 
+Der Aufruf aktualisiert den vorhandenen Dienst und erhält Katalogeinstellungen,
+Nachttermine und das Tagesbudget. Um zusätzlich die erstmalige Bestandsaufnahme
+zu starten, kann `--start-catalogue` an den Bash-Aufruf angehängt werden.
 Der Schalter startet ausschließlich bereits aktivierte Automatik-Playlists
-mit erlaubter Audioanalyse und aktivem Kunden. Ohne Schalter werden die Dateien
-installiert, ohne die Katalogprüfung neu einzuschalten. TMDB-Schlüssel,
+mit erlaubter Audioanalyse und aktivem Kunden. TMDB-Schlüssel,
 Anbieterkonfiguration, Geräte und menschliche Zeitmarken bleiben erhalten.
 
-Das Skript lädt dreizehn Dateien aus einem festen Commit und prüft SHA256,
+Das Skript lädt vierzehn Dateien aus einem festen Commit und prüft SHA256,
 Syntax sowie die tatsächlichen Richtlinien-, API- und Audiotests vor Änderungen.
 Es verwendet den bestehenden Worker-Lock, sichert Code und SQLite-Datenbank
 und stellt bei einem fehlgeschlagenen Neustart den vorherigen Code sowie nur
@@ -91,6 +93,38 @@ Kriterien für unabhängige Belege, exakte Datei/Laufzeit, menschliche Korrektur
 und Ablehnungen gelten unverändert. Online-Daten und wiederkehrender Ton ohne
 ausreichende Belege ergeben weiterhin Vorschläge zur Prüfung.
 
+## Doppelte Vorschläge und hohe Audiotreffer
+
+Für dieselbe Datei, Laufzeit und Abschnittsart werden maschinelle Vorschläge
+mit höchstens 500 ms Abweichung an beiden Grenzen zusammengeführt. Der stärkste
+Audiovorschlag bleibt als stabiler Eintrag erhalten, auch wenn mehrere
+Referenzfolgen denselben Abschnitt erkennen. Materiell widersprüchliche
+Grenzen bleiben getrennt. Unterschiedliche Dateien und Laufzeiten werden
+nicht zusammengelegt; mehrere Fassungen derselben Folge sind gekennzeichnet.
+
+Eine geprüfte Referenz derselben Serie und Staffel genügt jetzt für die
+automatische Freigabe ab 92 % Audioähnlichkeit. Der vollständige Fingerabdruck
+muss an einer eindeutigen Position passen. Beginn und Ende des musikalischen
+Ausschnitts werden rund um diese Position separat abgeglichen; kurze Motive
+an anderen Stellen verhindern dadurch keine sonst eindeutige Freigabe.
+Mehrere starke Referenzen dürfen einander nicht um mehr als 500 ms widersprechen.
+Online-Zeiten können zusätzliche Belege liefern, sind dafür aber nicht nötig.
+Für den Abspann bleibt die Kontrolle möglicher Szenen nach dem Abspann erhalten:
+Die automatisch freigegebene Grenze muss bis auf eine Sekunde ans Dateiende reichen.
+
+Aktuelle Datei, gemessene Laufzeit, unveränderte Referenz, Kunden- und
+Playlistfreigabe werden vor der Veröffentlichung erneut geprüft. Eigene
+Korrekturen, Ablehnungen und noch ungeprüfte eigene Marken haben Vorrang.
+Maschinelle Freigaben werden erst nach tatsächlicher menschlicher Prüfung als
+neue Referenz zugelassen; die Automatik bestätigt sich nicht selbst.
+
+Beim Update werden vorhandene Doppelvorschläge einmalig nach „Ersetzt“
+archiviert. Hohe, noch offene Audiovorschläge aktivierter Automatik-Playlists
+werden zur erneuten normalen Analyse eingeplant. Gespeicherte Prozentwerte
+allein werden nicht zur Freigabe benutzt. Tagesbudget und Wiedergabevorrang
+bleiben wirksam. Auch eine menschliche Entscheidung oder automatische Freigabe
+archiviert die übrigen maschinellen Vorschläge desselben Abschnitts.
+
 ## Tageslimit und App-Performance
 
 96 ist ein Tagesbudget, keine Anzahl gleichzeitig laufender Analysen. Ein
@@ -114,13 +148,19 @@ nächtliche Neuzugänge, unveränderte Dateien, fehlende/stale Zeitstempel,
 Neustarts, doppelte Nummerierung, unsichere Dateiformate, Wiedergabevorrang,
 konkurrierendes Ausschalten, Tagesbudget und Zeitumstellung ab.
 
-Neun isolierte Installationstests prüfen Erfolg, bestehende Marker/Schlüssel,
+Zehn isolierte Installationstests prüfen Erfolg, bestehende Marker/Schlüssel,
 inaktive Timer, beschädigte Downloads, Vorprüfungsfehler, laufende Worker und
 Wiederherstellung von Code, Einstellungen, Termin und Budget. Die echten
 Audio- und API-Prüfungen laufen zusätzlich mit den vorhandenen Backendtests
-in .github/workflows/raspberry-v082-dashboard-validate.yml.
+in .github/workflows/raspberry-v082-high-audio-validate.yml.
 
-Acht weitere SQLite-/HTML-/API-Tests prüfen die Serien- und Folgenpagination,
+Neun weitere SQLite-/HTML-/API-Tests prüfen die Serien- und Folgenpagination,
 numerische Reihenfolge, Gruppierung aller Abschnitte derselben Folge,
 gleichnamige Quellen, Filter, erhaltenen Bearbeitungskontext, gruppierte
 Analyseergebnisse, HTML-Escaping und die Darstellung von Filmen.
+
+Zwölf zusätzliche SQLite-Tests prüfen die Konsolidierung, Erhaltung menschlicher
+Entscheidungen, einmalige Nachprüfung vorhandener hoher Treffer, deaktivierte
+Playlists, Tagesbudget und das Verbot maschineller Selbstbestätigung. Die
+Audio-/API-Tests prüfen außerdem die Freigabe mit einer Referenz, unbestätigte
+Grenzen, wiederkehrende kurze Motive und die Archivierung nach manueller Prüfung.

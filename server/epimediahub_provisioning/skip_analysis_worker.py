@@ -99,7 +99,7 @@ def reference_detail(con, asset):
 
 
 def analyze(db, job):
-    from skip_automation import enabled, analyze as automatic_analyze
+    from skip_automation import enabled, store_proposal, analyze as automatic_analyze
     with db() as con:
         automatic_asset = con.execute("SELECT playlist_id,media_type FROM skip_assets WHERE asset_key=?", (job["asset_key"],)).fetchone()
         automatic = automatic_asset and automatic_asset["media_type"] == "episode" and enabled(con, automatic_asset["playlist_id"])
@@ -127,8 +127,7 @@ def analyze(db, job):
             return "unmatched", "Videolaufzeit stimmt nicht mit der gemeldeten Folge überein"
         with db() as con:
             for kind, start, end in chapter_candidates(chapters, duration):
-                add_record(con, data, kind, start, end, False, source="chapter")
-                proposals += 1
+                proposals += bool(store_proposal(con, data, kind, start, end, 'chapter'))
         own = [row for row in templates if row["asset_key"] == asset["asset_key"]]
         if own:
             for record in own:
@@ -175,8 +174,7 @@ def analyze(db, job):
             end = duration
         if valid_range("intro", start, end, duration):
             with db() as con:
-                add_record(con, data, "intro", start, end, False, source="audio", confidence=confidence)
-            proposals += 1
+                proposals += bool(store_proposal(con, data, 'intro', start, end, 'audio', confidence))
     return ("review", "Vorschläge im Dashboard prüfen") if proposals else ("no_match", "Kein ausreichend eindeutiges Intro erkannt")
 
 

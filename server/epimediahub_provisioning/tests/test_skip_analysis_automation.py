@@ -39,6 +39,7 @@ class AutomationFixture(ReferenceFixture):
         with self.db() as con:
             row = con.execute("SELECT * FROM skip_records WHERE id=?", (record_id,)).fetchone()
         return dict(start=48000, end=74530, confidence=.95, asset_key=data["asset_key"],
+                    boundaries_confirmed=True,
                     episode=episode, record_id=record_id, reviewed_at=row["reviewed_at"],
                     ref_start=row["start_ms"], ref_end=row["end_ms"])
 
@@ -191,6 +192,7 @@ class OnlineTests(AutomationFixture, unittest.TestCase):
             ids = auto.identity(con, self.target)
         self.assertFalse(ids["verified"])
         one = self.voted(12, "81")
+        one['confidence'] = .91
         candidate = dict(kind="intro", start=48000, end=74530, identity_verified=False)
         self.assertIsNone(auto.consensus([one], [candidate], data["duration_ms"], "intro"))
 
@@ -200,8 +202,13 @@ class PublicationTests(AutomationFixture, unittest.TestCase):
         super().setUp()
         self.registered(self.target)
 
-    def test_single_high_score_remains_pending(self):
-        self.assertIsNone(auto.consensus([self.voted(12, "81")], [], self.target["duration_ms"], "intro"))
+    def test_single_high_score_with_confirmed_boundaries_is_approved(self):
+        vote = self.voted(12, '81') | {'confidence': .937}
+        decision = auto.consensus([vote], [], self.target['duration_ms'], 'intro')
+        with self.db() as con:
+            self.assertTrue(auto.publish(con, self.target, 'intro', decision))
+            row = con.execute("SELECT * FROM skip_records WHERE source='auto_audio'").fetchone()
+            self.assertEqual((row['status'], row['confidence']), ('approved', .937))
 
     def test_two_independent_reviewed_files_publish_exact_target_only(self):
         votes = [self.voted(12, "81"), self.voted(11, "83")]
@@ -212,23 +219,22 @@ class PublicationTests(AutomationFixture, unittest.TestCase):
             self.assertEqual((row["status"], row["asset_key"], row["start_ms"], row["end_ms"]), ("approved", self.target["asset_key"], 48000, 74530))
             self.assertEqual(len(auto.reference_rows(con, self.seed, "intro")), 1)  # Machine result excluded.
 
-    def test_duplicate_episode_weak_match_or_disagreement_cannot_autoapprove(self):
+    def test_weak_unconfirmed_or_disagreeing_boundaries_cannot_autoapprove(self):
         first, second = self.voted(12, "81"), self.voted(11, "83")
-        cases = [[first, second | {"episode": 12}], [first, second | {"asset_key": first["asset_key"]}],
-                 [first, second | {"confidence": .91}], [first, second | {"start": 49000}],
+        cases = [[first | {'confidence': .919}], [first | {'boundaries_confirmed': False}],
+                 [first, second | {"start": 49000}],
                  [first, second | {"end": 75530}]]
         for votes in cases:
             self.assertIsNone(auto.consensus(votes, [], self.target["duration_ms"], "intro"))
 
-    def test_one_review_and_verified_online_times_require_current_cache(self):
+    def test_optional_online_times_do_not_block_a_verified_audio_match(self):
         one = self.voted(12, "81")
         online = dict(kind="intro", start=48000, end=74530, identity_verified=True, source="theintrodb")
         decision = auto.consensus([one], [online], self.target["duration_ms"], "intro")
         with self.db() as con:
-            self.assertFalse(auto.publish(con, self.target, "intro", decision))
-            con.execute("UPDATE skip_auto_settings SET online_enabled=1")
-            con.execute("INSERT INTO skip_auto_online VALUES(?,?,?,?,?)", (self.target["asset_key"], self.target["duration_ms"], json.dumps([online]), 'fixture', int(time.time())))
             self.assertTrue(auto.publish(con, self.target, "intro", decision))
+            saved = con.execute("SELECT evidence_json FROM skip_auto_evidence").fetchone()
+            self.assertEqual(json.loads(saved[0])['online'], [])
 
     def test_correction_rejection_disabled_or_changed_file_during_decode_wins(self):
         votes = [self.voted(12, "81"), self.voted(11, "83")]
@@ -281,13 +287,36 @@ class WorkerTests(AutomationFixture, unittest.TestCase):
              mock.patch.object(auto, "fingerprint", side_effect=audio):
             return auto.analyze(self.db, self.job(), busy_check)
 
-    def test_worker_publishes_corroborated_match_and_keeps_single_pending(self):
+    def test_worker_publishes_one_strong_reviewed_reference_without_online_times(self):
         audio = self.setup_audio(two=False)
-        self.assertEqual(self.analyze(audio)[0], "review")
-        with self.db() as con:
-            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE asset_key=? AND status='approved'", (self.target["asset_key"],)).fetchone()[0], 0)
-        self.voted(11, "83")
         self.assertEqual(self.analyze(audio)[0], "done")
+        with self.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE asset_key=? AND status='approved'", (self.target["asset_key"],)).fetchone()[0], 1)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE asset_key=? AND status='pending'", (self.target["asset_key"],)).fetchone()[0], 0)
+
+    def test_high_central_match_with_unconfirmed_boundary_stays_pending(self):
+        audio = self.setup_audio(two=False)
+        from skip_analysis import matching_offset as compare
+        def matching(words, target, step):
+            return compare(words, target, step) if len(words) > 100 else None
+        with mock.patch.object(auto, 'matching_offset', side_effect=matching):
+            self.assertEqual(self.analyze(audio)[0], 'review')
+        with self.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE asset_key=? AND status='approved'", (self.target['asset_key'],)).fetchone()[0], 0)
+
+    def test_short_repeated_motif_does_not_block_the_unique_complete_intro(self):
+        audio=self.setup_audio(two=False)
+        def repeated(source,start,length,busy,**options):
+            result=audio(source,start,length,busy,**options)
+            if start==0 and options.get('with_coverage'):
+                words,step,coverage=result
+                # Repeat only the opening motif elsewhere, while the complete
+                # reviewed sequence still occurs exactly once.
+                words=words+[0]*100+words[400:453]+[0]*100
+                self.assertIsNone(auto.matching_offset(words[400:453],words,step))
+                return words,step,coverage
+            return result
+        self.assertEqual(self.analyze(repeated)[0],'done')
 
     def test_reported_runtime_mismatch_never_decodes_or_publishes(self):
         audio = self.setup_audio()
@@ -436,6 +465,18 @@ class AutomationApiTests(AutomationFixture, unittest.TestCase):
         with self.db() as con:
             self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_auto_blocks").fetchone()[0], 0)
             self.assertEqual(con.execute("SELECT human_review FROM skip_auto_evidence WHERE record_id=?", (record,)).fetchone()[0], 1)
+
+    def test_human_review_archives_generated_alternatives_for_same_file_only(self):
+        self.registered(self.target)
+        with self.db() as con:
+            chosen = add_record(con, self.target, 'intro', 48000, 74530, False, source='audio')['id']
+            other = add_record(con, self.target, 'intro', 48200, 74730, False, source='audio')['id']
+            manual = add_record(con, self.target, 'intro', 49000, 75530, False, self.device)['id']
+        response = self.client.post(f'/admin/skip/{chosen}/review', data={'csrf':'fixture-csrf', 'decision':'approve'})
+        self.assertEqual(response.status_code, 302)
+        with self.db() as con:
+            statuses = {row['id']:row['status'] for row in con.execute('SELECT id,status FROM skip_records')}
+            self.assertEqual((statuses[chosen], statuses[other], statuses[manual]), ('approved','superseded','pending'))
 
     def test_automatic_approval_is_returned_to_existing_player_api(self):
         self.registered(self.target)

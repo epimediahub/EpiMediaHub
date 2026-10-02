@@ -168,6 +168,12 @@ def media_groups(rows):
         group["seasons"] = sorted(group["seasons"].values(), key=lambda s: s["season"])
         for season in group["seasons"]:
             season["episodes"] = sorted(season["episodes"].values(), key=lambda e: e["episode"])
+            for episode in season['episodes']:
+                versions = list(dict.fromkeys((row.get('asset_key'), row.get('duration_ms')) for row in episode['rows']))
+                episode['version_count'] = len(versions)
+                for row in episode['rows']:
+                    row['version_count'] = len(versions)
+                    row['version_number'] = versions.index((row.get('asset_key'),row.get('duration_ms'))) + 1
     return result
 
 
@@ -363,6 +369,8 @@ def install(app, db):
             con.execute("DELETE FROM skip_fingerprints WHERE record_id=?", (record_id,))
             con.execute("UPDATE skip_records SET status=?,start_ms=?,end_ms=?,disabled=?,reviewed_at=? WHERE id=?", ("approved" if decision == "approve" else "rejected", start, end, int(off), now(), record_id))
             con.execute("UPDATE skip_auto_evidence SET human_review=1 WHERE record_id=?", (record_id,))
+            from skip_automation import retire_proposals
+            retire_proposals(con, row, row['segment_type'], record_id)
             if decision == "reject" or off:
                 con.execute("INSERT OR REPLACE INTO skip_auto_blocks VALUES(?,?,?,?)", (row["asset_key"], row["segment_type"], row["duration_ms"], now()))
             else:
@@ -493,6 +501,6 @@ def install(app, db):
         response = previous_health()
         data = response.get_json()
         data["api_version"] = "0.8.2"
-        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True}
+        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True, "skip_high_audio_approval": True, "skip_proposal_dedup": True}
         return jsonify(data)
     app.view_functions["health"] = health
