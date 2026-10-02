@@ -13,7 +13,7 @@ class V118NamesTest {
         assertEquals("Il sospetto", V118Names.display("Il sospetto ITA ENG BluRay DTS-HD 7.1.mp4"))
     }
     @Test fun realTitleWordsAndNumbersArePreserved() {
-        for (title in listOf("It", "It Takes Two", "Deutschland 83", "Web of Lies", "Engrenages", "The End", "Episode 5 1", "Il sospetto", "À bientôt")) assertEquals(title, V118Names.display(title))
+        for (title in listOf("It", "It Takes Two", "Who Is It", "Deutschland 83", "Web of Lies", "The Web", "Engrenages", "The End", "Episode 5 1", "Il sospetto", "À bientôt")) assertEquals(title, V118Names.display(title))
     }
     @Test fun episodeNumbersAreRemovedOnlyWhenTheyMatchTheCurrentEpisode() {
         assertEquals("Il sospetto", V118Names.episode("Lie To Me S02E18 - Il sospetto", "Lie to Me", 2, 18))

@@ -6,9 +6,9 @@ internal object V118Names {
     private val technicalSuffix = Regex(
         """(?i)(?:\s+|[._|:/\[\](){}–-]+)(?:""" +
             """(?:2160|1080|720|576|480)[pi]|4k|uhd|fhd|hd|sd|hdr10\+?|hdr|10bit|8bit|""" +
-            """web(?:[ ._-]?(?:dl|rip|mux|hd))?|bluray|blu[ ._-]?ray|b[dr]rip|dvdrip|hdtv|h[de]vc|[xh][ ._-]?26[45]|av1|""" +
+            """web[ ._-]?(?:dl|rip|mux|hd)|(?-i:WEB)|bluray|blu[ ._-]?ray|b[dr]rip|dvdrip|hdtv|h[de]vc|[xh][ ._-]?26[45]|av1|""" +
             """(?:ddp?|dd\+|eac3|ac3|aac|dts(?:[ ._-]?hd)?|truehd|atmos)(?:[ ._-]?[257][ ._-]?[01])?|""" +
-            """(?:ita|it|eng|en|ger|deu|de|multi|dual)(?:[ ._-](?:ita|it|eng|en|ger|deu|de))*""" +
+            """(?:ita|it|eng|en|ger|deu|de)(?:[ ._-](?:ita|it|eng|en|ger|deu|de))+|ita|eng|ger|deu|multi|dual|(?-i:IT|EN|DE)""" +
             """)[\s\])}]*$"""
     )
     private val trailingDivider = Regex("""[\s|:–-]+$""")
