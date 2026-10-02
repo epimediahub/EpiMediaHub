@@ -15,10 +15,11 @@ import time
 import unicodedata
 import urllib.parse
 import urllib.request
+import urllib.error
 
 from skip_analysis import (configured_source, source_url, provider_asset_key,
                            provider_proxy, probe, fingerprint, matching_offset,
-                           chapter_candidates)
+                           chapter_candidates, provider_failure)
 from skip_markers import add_record, now, valid_range
 
 WINDOW_MS = 600_000
@@ -28,6 +29,8 @@ MAX_SEASON_EPISODES = 200
 PROPOSAL_SOURCES = ('audio', 'chapter', 'theintrodb', 'audio_repetition')
 PROPOSAL_RANK = {'audio': 4, 'chapter': 3, 'theintrodb': 2, 'audio_repetition': 1}
 POLICY_VERSION = 'high_audio_v2'
+LEGACY_ONLINE_ERROR = 'Online-Datenbank derzeit nicht erreichbar; Audioanalyse bleibt nutzbar'
+ONLINE_RECHECK_LIMIT = 96
 
 
 def migrate(con):
@@ -61,6 +64,13 @@ def migrate(con):
       CREATE TABLE IF NOT EXISTS skip_auto_online(
         asset_key TEXT PRIMARY KEY REFERENCES skip_assets(asset_key) ON DELETE CASCADE,
         duration_ms INTEGER NOT NULL,segments_json TEXT NOT NULL,detail TEXT NOT NULL,checked_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS skip_auto_online_retry(
+        asset_key TEXT PRIMARY KEY REFERENCES skip_assets(asset_key) ON DELETE CASCADE,
+        service TEXT NOT NULL,error_code TEXT NOT NULL,retry_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS skip_auto_online_cooldown(
+        service TEXT PRIMARY KEY,error_code TEXT NOT NULL,retry_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS skip_auto_online_budget(day TEXT PRIMARY KEY,count INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS skip_auto_online_retry_due ON skip_auto_online_retry(retry_at,asset_key);
       CREATE TABLE IF NOT EXISTS skip_analysis_budget(day TEXT PRIMARY KEY,count INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS skip_auto_metadata_config(
         name TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at TEXT NOT NULL);
@@ -70,6 +80,12 @@ def migrate(con):
     from skip_catalogue import migrate as catalogue_migrate
     catalogue_migrate(con)
     maintain_proposals(con)
+    # The old message discarded the actual cause. Recheck those entries using
+    # metadata only; keep every marker, audio job and daily audio budget intact.
+    con.execute("""INSERT OR IGNORE INTO skip_auto_online_retry
+      SELECT asset_key,'','legacy_error',0 FROM skip_auto_online WHERE detail=?""", (LEGACY_ONLINE_ERROR,))
+    con.execute("UPDATE skip_auto_online SET detail=? WHERE detail=?",
+                ('Online-Abfrage wird erneut geprüft; Audioanalyse bleibt nutzbar', LEGACY_ONLINE_ERROR))
 
 
 def enabled(con, playlist_id, online=False):
@@ -104,6 +120,81 @@ def fetch_json(url, busy=lambda: False, limit=1_000_000):
                 if size > limit:
                     raise ValueError("metadata_limit")
     return json.loads(b"".join(chunks))
+
+
+class OnlineFailure(ValueError):
+    def __init__(self, service, code, retry_at=0):
+        super().__init__(code)
+        self.service, self.code, self.retry_at = service, code, retry_at
+
+
+def online_failure_code(error):
+    text = str(error)
+    if re.fullmatch(r'provider_http_[1-5][0-9]{2}', text):
+        return text
+    if text in ('provider_dns', 'provider_tls', 'provider_timeout', 'provider_connection',
+                'unsafe_source', 'redirect_limit', 'redirect_downgrade', 'metadata_limit'):
+        return text
+    if isinstance(error, urllib.error.HTTPError):
+        return 'provider_http_' + str(error.code) if 100 <= error.code <= 599 else 'request_failed'
+    if isinstance(error, (TimeoutError, urllib.error.URLError, OSError)):
+        return provider_failure(error)
+    return 'invalid_response'
+
+
+def external_json(db, url, busy, service):
+    """Apply service-wide pauses without exposing URLs, keys or response bodies."""
+    if busy():
+        raise ValueError('analysis_deferred')
+    with db() as con:
+        cooldown = con.execute('SELECT * FROM skip_auto_online_cooldown WHERE service=?', (service,)).fetchone()
+    if cooldown and cooldown['retry_at'] > time.time():
+        raise OnlineFailure(service, cooldown['error_code'], cooldown['retry_at'])
+    try:
+        body = fetch_json(url, busy)
+        if not isinstance(body, dict):
+            raise ValueError('invalid_response')
+        return body
+    except (ValueError, OSError) as error:
+        if str(error) == 'analysis_deferred' or busy():
+            raise ValueError('analysis_deferred') from None
+        code = online_failure_code(error)
+        status = int(code.removeprefix('provider_http_')) if code.startswith('provider_http_') else 0
+        # A missing record or an invalid mapping is not a service outage.
+        if status == 404 or 400 <= status < 500 and status not in (401, 403, 408, 429):
+            raise OnlineFailure(service, code) from None
+        delay = (getattr(error, 'retry_after', 0) or 3600) if status == 429 else (86400 if status in (401, 403) else 300)
+        retry_at = int(time.time()) + max(30, min(int(delay), 86400))
+        with db() as con:
+            con.execute('INSERT OR REPLACE INTO skip_auto_online_cooldown VALUES(?,?,?)',
+                        (service, code, retry_at))
+        raise OnlineFailure(service, code, retry_at) from None
+
+
+def online_failure_detail(error):
+    service = 'TMDB' if error.service == 'tmdb' else 'Online-Zeitdatenbank'
+    code = error.code
+    if code == 'provider_http_404':
+        detail = ('TMDB kennt diese Serien-/Folgenzuordnung nicht; Titel und Folgennummer prüfen'
+                  if error.service == 'tmdb' else 'Keine Online-Zeitmarken für diese Folge vorhanden')
+    elif code == 'provider_http_429':
+        detail = service + ': Abfragelimit erreicht; erneuter Versuch nach der Wartezeit'
+    elif code in ('provider_http_401', 'provider_http_403'):
+        detail = ('TMDB-Schlüssel wird nicht akzeptiert (HTTP 401); Schlüssel prüfen'
+                  if error.service == 'tmdb' and code == 'provider_http_401'
+                  else f'{service} verweigert den Zugriff (HTTP {code[-3:]})')
+    elif code in ('provider_http_400', 'provider_http_422'):
+        detail = f'{service}: Abfrage abgewiesen (HTTP {code[-3:]}); Serien-/Folgenzuordnung prüfen'
+    elif code.startswith('provider_http_'):
+        detail = f'{service}: Server antwortet mit HTTP {code[-3:]}; erneuter Versuch folgt'
+    else:
+        reason = {'provider_dns': 'DNS-Fehler', 'provider_tls': 'TLS-Fehler',
+                  'provider_timeout': 'Zeitüberschreitung', 'provider_connection': 'Verbindungsfehler',
+                  'invalid_response': 'ungültige Antwort', 'metadata_limit': 'Antwort zu groß oder zu langsam',
+                  'unsafe_source': 'Zieladresse nicht zulässig', 'redirect_limit': 'zu viele Weiterleitungen',
+                  'redirect_downgrade': 'unsichere Weiterleitung'}.get(code, 'Abruf fehlgeschlagen')
+        detail = f'{service}: {reason}; erneuter Versuch folgt'
+    return detail + '; Audioanalyse bleibt nutzbar'
 
 
 def number(value, low=1, high=10**12 - 1):
@@ -254,7 +345,7 @@ def resolve_identity(db, asset, busy):
     if not token:
         return None
     def api(path, **params):
-        return fetch_json("https://api.themoviedb.org/3/" + path + "?" + urllib.parse.urlencode(dict(api_key=token, language="de-DE", **params)), busy)
+        return external_json(db, "https://api.themoviedb.org/3/" + path + "?" + urllib.parse.urlencode(dict(api_key=token, language="de-DE", **params)), busy, 'tmdb')
     search_title = clean_title(asset["title"])
     if not search_title:
         return None
@@ -307,29 +398,84 @@ def online_segments(db, asset, busy):
         if not enabled(con, asset["playlist_id"], online=True):
             return []
         cache = con.execute("SELECT * FROM skip_auto_online WHERE asset_key=?", (asset["asset_key"],)).fetchone()
-        if cache and cache["duration_ms"] == asset["duration_ms"] and cache["checked_at"] > time.time() - 86400:
-            return json.loads(cache["segments_json"])
+        retry = con.execute('SELECT retry_at FROM skip_auto_online_retry WHERE asset_key=?', (asset['asset_key'],)).fetchone()
+        if cache and cache["duration_ms"] == asset["duration_ms"] and cache['detail'] != LEGACY_ONLINE_ERROR:
+            fresh = retry['retry_at'] > time.time() if retry else cache['checked_at'] > time.time() - 86400
+            if fresh:
+                return json.loads(cache["segments_json"])
     segments, detail = [], "Keine eindeutige Titelkennung für die Online-Abfrage"
+    failure = None
     try:
         ids = resolve_identity(db, asset, busy)
         if ids:
             query = {"tmdb_id": ids["tmdb_id"]} if ids.get("tmdb_id") else {"imdb_id": ids["imdb_id"]}
             query.update(season=asset["season"], episode=asset["episode"], duration_ms=asset["duration_ms"])
-            body = fetch_json("https://api.theintrodb.org/v3/media?" + urllib.parse.urlencode(query), busy)
+            body = external_json(db, "https://api.theintrodb.org/v3/media?" + urllib.parse.urlencode(query), busy, 'theintrodb')
             # Reject a conflicting canonical series ID instead of accepting a provider fallback.
             if not ids.get("tmdb_id") or body.get("tmdb_id") == ids["tmdb_id"]:
                 segments = [x | {"identity_verified": ids["verified"]} for x in parse_online(body, asset["duration_ms"])]
             detail = "Online-Zeiten verfügbar" if segments else "Keine passenden Online-Zeiten vorhanden"
+    except OnlineFailure as error:
+        failure, detail = error, online_failure_detail(error)
     except ValueError as error:
         if str(error) == "analysis_deferred":
             raise
-        detail = "Online-Datenbank derzeit nicht erreichbar; Audioanalyse bleibt nutzbar"
+        failure = OnlineFailure('tmdb', online_failure_code(error), int(time.time()) + 3600)
+        detail = online_failure_detail(failure)
     except (OSError, TypeError, AttributeError, KeyError, json.JSONDecodeError):
-        detail = "Online-Datenbank derzeit nicht erreichbar; Audioanalyse bleibt nutzbar"
+        failure = OnlineFailure('tmdb', 'invalid_response', int(time.time()) + 3600)
+        detail = online_failure_detail(failure)
     with db() as con:
+        if not enabled(con, asset['playlist_id'], online=True):
+            return []
         con.execute("INSERT OR REPLACE INTO skip_auto_online VALUES(?,?,?,?,?)",
                     (asset["asset_key"], asset["duration_ms"], json.dumps(segments), detail, int(time.time())))
+        con.execute('DELETE FROM skip_auto_online_retry WHERE asset_key=?', (asset['asset_key'],))
+        if failure and failure.retry_at:
+            con.execute('INSERT INTO skip_auto_online_retry VALUES(?,?,?,?)',
+                        (asset['asset_key'], failure.service, failure.code, failure.retry_at))
     return segments
+
+
+def refresh_online_one(db, busy_factory):
+    """Retry one due metadata request per idle tick, without fetching any video."""
+    stamp, day = int(time.time()), now()[:10]
+    with db() as con:
+        budget = con.execute('SELECT count FROM skip_auto_online_budget WHERE day=?', (day,)).fetchone()
+        if budget and budget[0] >= ONLINE_RECHECK_LIMIT:
+            return 'daily_limit'
+        asset = con.execute("""SELECT a.* FROM skip_auto_online_retry r
+          JOIN skip_assets a ON a.asset_key=r.asset_key
+          JOIN skip_auto_settings s ON s.playlist_id=a.playlist_id AND s.enabled=1 AND s.online_enabled=1
+          JOIN skip_analysis_sources x ON x.playlist_id=a.playlist_id AND x.enabled=1
+          JOIN customer_playlists p ON p.id=a.playlist_id
+          JOIN customers c ON c.id=p.customer_id AND c.enabled=1
+          JOIN skip_jobs j ON j.asset_key=a.asset_key AND j.status NOT IN ('queued','running','disabled')
+          LEFT JOIN skip_auto_online_cooldown l ON l.service=r.service
+          WHERE r.retry_at<=? AND COALESCE(l.retry_at,0)<=? AND a.duration_ms>=5000
+          ORDER BY r.retry_at,a.asset_key LIMIT 1""", (stamp, stamp)).fetchone()
+        if not asset:
+            return 'idle'
+        playlist = con.execute('SELECT * FROM customer_playlists WHERE id=?', (asset['playlist_id'],)).fetchone()
+    busy = busy_factory(db, [playlist])
+    if busy():
+        return 'queued'
+    try:
+        candidates = online_segments(db, asset, busy)
+    except ValueError as error:
+        if str(error) == 'analysis_deferred':
+            return 'queued'
+        raise
+    with db() as con:
+        current = con.execute('SELECT * FROM skip_assets WHERE asset_key=?', (asset['asset_key'],)).fetchone()
+        if current and dict(current) == dict(asset) and enabled(con, asset['playlist_id'], online=True):
+            for candidate in candidates:
+                store_proposal(con, asset, candidate['kind'], candidate['start'], candidate['end'],
+                               'theintrodb', evidence={'method': 'online_suggestion'})
+        con.execute('INSERT INTO skip_auto_online_budget VALUES(?,1) ON CONFLICT(day) DO UPDATE SET count=count+1', (day,))
+        con.execute('DELETE FROM skip_auto_online_budget WHERE day<?',
+                    (time.strftime('%Y-%m-%d', time.gmtime(time.time() - 31 * 86400)),))
+    return 'online_checked'
 
 
 def protected(con, asset, kind):

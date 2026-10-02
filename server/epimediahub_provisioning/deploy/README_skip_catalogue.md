@@ -12,7 +12,7 @@ Voraussetzung ist der laufende Raspberry-Server 0.8.2 mit Audioanalyse und
 Staffelautomatik für die gewünschten Playlists. Android 1.0.16 bleibt kompatibel.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/e36ba84084a17a3ab45296e436d04ba5a7ad8918/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/8cdd673c1057847b6cc555666653cf08bce2215b/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
 sudo bash /var/tmp/epimediahub-skip-catalogue.sh
 ```
 
@@ -23,11 +23,37 @@ Der Schalter startet ausschließlich bereits aktivierte Automatik-Playlists
 mit erlaubter Audioanalyse und aktivem Kunden. TMDB-Schlüssel,
 Anbieterkonfiguration, Geräte und menschliche Zeitmarken bleiben erhalten.
 
-Das Skript lädt vierzehn Dateien aus einem festen Commit und prüft SHA256,
+Das Skript lädt fünfzehn Dateien aus einem festen Commit und prüft SHA256,
 Syntax sowie die tatsächlichen Richtlinien-, API- und Audiotests vor Änderungen.
 Es verwendet den bestehenden Worker-Lock, sichert Code und SQLite-Datenbank
 und stellt bei einem fehlgeschlagenen Neustart den vorherigen Code sowie nur
 die selbst geänderten Katalogeinstellungen wieder her.
+
+## Online-Abfragen und Fehlermeldungen
+
+TMDB ordnet Serientitel zu Kennungen zu. Die Zeitmarken selbst kommen von
+TheIntroDB; ein TMDB-Schlüssel ist kein Schlüssel für diese Zeitdatenbank.
+Die ursprüngliche HTTP-Antwort bleibt jetzt auch hinter dem lokalen Relay erhalten.
+
+- TheIntroDB HTTP 404 bedeutet fehlende Online-Zeitmarken für die Folge.
+  Das Ergebnis wird einen Tag zwischengespeichert und erzeugt keine Fehlerwiederholung.
+- TMDB HTTP 404 bezeichnet eine nicht vorhandene Serien-/Folgenzuordnung;
+  Titel, Staffel und Folgennummer sollten überprüft werden.
+- TMDB HTTP 401 zeigt einen nicht akzeptierten Schlüssel an. Beim Speichern
+  eines neuen Schlüssels wird nur die TMDB-Zugriffspause aufgehoben.
+- HTTP 403, Abfragelimits (HTTP 429), Server-, DNS-, TLS- und Zeitüberschreitungsfehler
+  haben getrennte Meldungen. URLs, Schlüssel und Antworttexte werden nicht ausgegeben.
+- Abfragelimits pausieren den gesamten betroffenen Dienst. Die gemeldete Wartezeit
+  wird bis zu 24 Stunden berücksichtigt; ohne Wartezeit gilt bei HTTP 429 eine Stunde.
+
+Alte Einträge mit der pauschalen Meldung „Online-Datenbank derzeit nicht erreichbar“
+werden einmal erneut zur Prüfung vorgemerkt. Der Worker prüft im Leerlauf höchstens
+eine solche Folge je Aufruf und höchstens 96 Folgen pro UTC-Tag. Auch vorübergehende
+Fehler werden nach ihrer Wartezeit erneut geprüft. Diese Nachprüfungen rufen nur
+Metadaten ab, laden keine Videodatei und wiederholen keine Audioanalyse. Sie laufen
+auch nach Ausschöpfen des Audiolimits, erhalten dessen Zähler und alle Audiojobs.
+Gemeldete Wiedergabe, ausgeschaltete Analyse sowie menschliche Entscheidungen
+bleiben vorrangig. Gefundene Online-Zeiten erzeugen Vorschläge zur Prüfung.
 
 ## Ablauf
 
@@ -148,11 +174,11 @@ nächtliche Neuzugänge, unveränderte Dateien, fehlende/stale Zeitstempel,
 Neustarts, doppelte Nummerierung, unsichere Dateiformate, Wiedergabevorrang,
 konkurrierendes Ausschalten, Tagesbudget und Zeitumstellung ab.
 
-Zehn isolierte Installationstests prüfen Erfolg, bestehende Marker/Schlüssel,
+Elf isolierte Installationstests prüfen Erfolg, bestehende Marker/Schlüssel,
 inaktive Timer, beschädigte Downloads, Vorprüfungsfehler, laufende Worker und
 Wiederherstellung von Code, Einstellungen, Termin und Budget. Die echten
 Audio- und API-Prüfungen laufen zusätzlich mit den vorhandenen Backendtests
-in .github/workflows/raspberry-v082-high-audio-validate.yml.
+in .github/workflows/raspberry-v082-online-status-validate.yml.
 
 Neun weitere SQLite-/HTML-/API-Tests prüfen die Serien- und Folgenpagination,
 numerische Reihenfolge, Gruppierung aller Abschnitte derselben Folge,
@@ -164,3 +190,10 @@ Entscheidungen, einmalige Nachprüfung vorhandener hoher Treffer, deaktivierte
 Playlists, Tagesbudget und das Verbot maschineller Selbstbestätigung. Die
 Audio-/API-Tests prüfen außerdem die Freigabe mit einer Referenz, unbestätigte
 Grenzen, wiederkehrende kurze Motive und die Archivierung nach manueller Prüfung.
+
+16 weitere HTTP-/SQLite-Tests prüfen originale HTTP-Statuscodes hinter dem Relay,
+fehlende Zeitmarken, TMDB-Zuordnung, ungültige Schlüssel, dienstweite Zugriffspausen,
+Tageslimits, Retry-After, sichere Meldungen, Wiedergabevorrang und Nachprüfungen ohne
+Videodownload. Der Installer prüft zusätzlich die Vormerkung alter Online-Fehler.
+Der vollständige CI-Lauf umfasst 174 Tests ohne übersprungene Tests sowie den
+bestehenden Dashboard-/Geräte-Smoke-Test.

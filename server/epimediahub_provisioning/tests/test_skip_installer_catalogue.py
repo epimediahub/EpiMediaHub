@@ -62,7 +62,7 @@ mode=os.environ.get('FIXTURE_MODE','success')
 if '127.0.0.1' in url:
     new='skip_nightly_catalogue' in Path(os.environ['FIXTURE_APP'],'skip_markers.py').read_text()
     healthy=new and mode!='bad-health'
-    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy}}
+    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy}}
     output.write_text(json.dumps(body))
 else:
     assert '/'+os.environ['FIXTURE_REF']+'/' in url
@@ -154,6 +154,18 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON'],*sys.argv[1:
         result=self.launch()
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertTrue(json.loads(self.state.read_text())['timer'])
+
+    def test_legacy_online_error_is_scheduled_without_resetting_audio_job(self):
+        from skip_automation import LEGACY_ONLINE_ERROR
+        with self.db() as con:
+            con.execute('INSERT INTO skip_auto_online VALUES(?,?,?,?,?)',
+                        (self.target['asset_key'],self.target['duration_ms'],'[]',LEGACY_ONLINE_ERROR,123))
+        result=self.launch()
+        self.assertEqual(result.returncode,0,result.stderr)
+        with self.db() as con:
+            self.assertEqual(con.execute('SELECT status,attempts,detail FROM skip_jobs').fetchone()[:],('no_reference',2,'previous'))
+            self.assertEqual(con.execute('SELECT error_code,retry_at FROM skip_auto_online_retry').fetchone()[:],('legacy_error',0))
+            self.assertIn('erneut geprüft',con.execute('SELECT detail FROM skip_auto_online').fetchone()[0])
 
     def test_bad_health_restores_code_settings_and_original_timer_without_losing_markers(self):
         result=self.launch('bad-health')

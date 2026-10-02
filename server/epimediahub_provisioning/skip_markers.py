@@ -488,11 +488,13 @@ def install(app, db):
         if not remove and not re.fullmatch(r"[a-fA-F0-9]{32}", token):
             return redirect(url_for("v082_skip_dashboard", notice="Bitte einen gültigen TMDB-API-Schlüssel (v3) eintragen"))
         with db() as con:
+            con.execute("DELETE FROM skip_auto_online_cooldown WHERE service='tmdb'")
             if remove:
                 con.execute("DELETE FROM skip_auto_metadata_config WHERE name='tmdb_api_key'")
             else:
                 con.execute("INSERT OR REPLACE INTO skip_auto_metadata_config VALUES('tmdb_api_key',?,?)", (token, now()))
                 con.execute("DELETE FROM skip_auto_online")
+                con.execute("DELETE FROM skip_auto_online_retry")
                 con.execute("UPDATE skip_jobs SET status='queued',attempts=0,updated_at=? WHERE status IN ('no_reference','no_match','review','failed') AND asset_key IN (SELECT a.asset_key FROM skip_assets a JOIN skip_auto_settings s ON s.playlist_id=a.playlist_id AND s.enabled=1 AND s.online_enabled=1)", (now(),))
         return redirect(url_for("v082_skip_dashboard", notice="Schlüssel entfernt" if remove else "Schlüssel für die Seriennamenssuche gespeichert"))
 
@@ -501,6 +503,6 @@ def install(app, db):
         response = previous_health()
         data = response.get_json()
         data["api_version"] = "0.8.2"
-        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True, "skip_high_audio_approval": True, "skip_proposal_dedup": True}
+        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True, "skip_high_audio_approval": True, "skip_proposal_dedup": True, "skip_online_error_details": True}
         return jsonify(data)
     app.view_functions["health"] = health

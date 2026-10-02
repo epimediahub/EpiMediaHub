@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
+import email.utils
 import hashlib
 import http.client
 import ipaddress
@@ -27,6 +28,7 @@ import urllib.parse
 import urllib.request
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from math import ceil
 
 MAX_INPUT_BYTES = 128 * 1024 * 1024
 MAX_PROVIDER_REDIRECTS = 3
@@ -196,6 +198,33 @@ def provider_failure(error):
     return "provider_connection"
 
 
+class ProviderFailure(ValueError):
+    """Credential-free transport result, including a bounded retry interval."""
+    def __init__(self, code, retry_after=0):
+        super().__init__(code)
+        self.retry_after = retry_after
+
+
+def provider_retry_after(error):
+    if not isinstance(error, urllib.error.HTTPError):
+        return 0
+    intervals = []
+    for name in ("Retry-After", "X-UsageLimit-Reset", "X-RateLimit-Reset"):
+        value = error.headers.get(name, "") if error.headers else ""
+        try:
+            seconds = int(value)
+        except (TypeError, ValueError):
+            if name != "Retry-After":
+                continue
+            try:
+                seconds = ceil(email.utils.parsedate_to_datetime(value).timestamp() - time.time())
+            except (TypeError, ValueError, OverflowError, AttributeError):
+                continue
+        if seconds > 0:
+            intervals.append(min(seconds, 86400))
+    return max(intervals, default=0)
+
+
 def pinned_connection(cls, host, ip, **kwargs):
     connection = cls(host, **kwargs)
     connection._create_connection = lambda address, timeout=None, source_address=None: socket.create_connection((ip, address[1]), timeout, source_address)
@@ -208,6 +237,7 @@ def provider_proxy(url, busy=lambda: False):
     public_address(url, host)
     budget = [MAX_INPUT_BYTES]
     failure = [None]
+    retry_after = [0]
     lock = threading.Lock()
     token = "/" + secrets.token_urlsafe(24)
 
@@ -269,6 +299,9 @@ def provider_proxy(url, busy=lambda: False):
                 # Client cancellation is not an upstream provider failure.
                 if not isinstance(error, (BrokenPipeError, ConnectionResetError)):
                     failure[0] = provider_failure(error)
+                    retry_after[0] = provider_retry_after(error)
+                if isinstance(error, urllib.error.HTTPError):
+                    error.close()
                 if not sent:
                     self.send_error(502)
             self.close_connection = True
@@ -279,9 +312,11 @@ def provider_proxy(url, busy=lambda: False):
     try:
         try:
             yield f"http://127.0.0.1:{server.server_port}{token}"
-        except ValueError as error:
-            if str(error) == "analysis_failed" and failure[0]:
-                raise ValueError(failure[0]) from None
+        except (ValueError, urllib.error.HTTPError) as error:
+            if isinstance(error, urllib.error.HTTPError):
+                error.close()
+            if (str(error) == "analysis_failed" or isinstance(error, urllib.error.HTTPError)) and failure[0]:
+                raise ProviderFailure(failure[0], retry_after[0]) from None
             raise
     finally:
         server.shutdown(); server.server_close(); thread.join(timeout=2)
