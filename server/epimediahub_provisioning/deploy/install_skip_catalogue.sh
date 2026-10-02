@@ -19,7 +19,7 @@ fi
 app_dir=/opt/epimediahub/provisioning
 python_bin="$app_dir/.venv/bin/python"
 env_file=/etc/epimediahub/provisioning.env
-source_ref=b500a6915645f2258f9990d99a66c034300b57c4
+source_ref=5903150c81ad8639936e62e90f1dea1ddc7da190
 source_base="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$source_ref/server/epimediahub_provisioning"
 task_dir="$(mktemp -d -p /var/tmp epimediahub-skip-catalogue.XXXXXX)"
 backup_dir="/var/backups/epimediahub/skip-catalogue-$(date +%Y%m%d-%H%M%S)"
@@ -139,13 +139,13 @@ sha256sum -c <<EOF
 52d225550fc86c2f2a6a907c9ad0a6223d855a3df5196b63c3f77dbba618d80b  $task_dir/skip_analysis.py
 26b3fc16c8be9ab66bedb0b3e1f90d9a07e33a91b4de783ceb503cfb75ef78ee  $task_dir/skip_analysis_worker.py
 31897b211930341c79fa5cd7edc1578d1822aa710c5d8a53a3e780d0289bc313  $task_dir/skip_markers.py
-3f11bbbcc2e6a32cc5f370f9fbdaf2c59d75efb982ea4162158eac548dd8d16c  $task_dir/skip_automation.py
+806569a6ced3ac2ea2cb709e75d6f84a3cbc746871f264f283ef076a7bc407c7  $task_dir/skip_automation.py
 eca801f9d2d59f7de21f45951edaef5315109a4e0a98131458f98a3c4131f19b  $task_dir/skip_catalogue.py
 196e9d32d316bc344c3b9870a01daa13ad244b3b8e98f53bfa6e6a7bc554122e  $task_dir/templates/skip_markers.html
 4b4c2faff24503cc3e37740ea232a3279480fe7957b432ed091d1a02a494cf51  $task_dir/tests/test_skip_analysis_redirects.py
 9d0efdaaa5b8a45774bff956418212f1aaddeb30e83d2ae0dc9c1e3716a7497e  $task_dir/tests/test_skip_analysis_references.py
 2a76f04522b10001e4ff5c0704c41ec596e09ebe47550f541d1a18062c7f52e3  $task_dir/tests/test_skip_analysis_boundaries.py
-0f895a5ef4fd474a8a975f42161893c877fd92217d4bf32ee0e0b1e2a5242bc3  $task_dir/tests/test_skip_analysis_automation.py
+548254deefdc06da34066b7ac0f56a3c98a52c24d9fc41f8b0a8df8e272f5907  $task_dir/tests/test_skip_analysis_automation.py
 f4ab53ef457ab6a79414bbd54c135a42a4d70ec485e59afa4a612df621e1e60b  $task_dir/tests/test_skip_analysis_catalogue.py
 07cd572fefdd61bebec2eda9209005917bfbc0c7117411b42f102e8b6ae110e0  $task_dir/tests/test_skip_analysis_dashboard.py
 e65184b85ee5de3d58b0835e054973c6f1c8c496dc3ade7426fc570c748e7b08  $task_dir/tests/test_skip_analysis_dedup.py
