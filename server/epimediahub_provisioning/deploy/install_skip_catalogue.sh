@@ -20,7 +20,7 @@ done
 app_dir=/opt/epimediahub/provisioning
 python_bin="$app_dir/.venv/bin/python"
 env_file=/etc/epimediahub/provisioning.env
-source_ref=77956f425111a24e0b47da1ca98c8d7202740587
+source_ref=eb2318c979b7403d1adf5b269cc00dc22a091101
 source_base="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$source_ref/server/epimediahub_provisioning"
 task_dir="$(mktemp -d -p /var/tmp epimediahub-skip-catalogue.XXXXXX)"
 backup_dir="/var/backups/epimediahub/skip-catalogue-$(date +%Y%m%d-%H%M%S)"
@@ -137,13 +137,13 @@ for file in "${downloads[@]}"; do
   curl -fsSL --connect-timeout 10 --max-time 60 "$source_base/$file" -o "$task_dir/$file"
 done
 sha256sum -c <<EOF
-aba69c070d586af1d641859bd4fa8d54ca1e7648b229ffcf807e69f6e1c57a33  $task_dir/skip_analysis.py
+8ded57ab108a2ca06ad03ecabd09ee1435eb96ad7da2b3977657f5a8229241c1  $task_dir/skip_analysis.py
 6c4ef57cec2a8b46a835da57f71e6241fecf4e5a3f2de210e2c852361d40f9e8  $task_dir/skip_analysis_worker.py
-4cf8c95dd2352908461f59f0a81ddaa00e2660b67acf381d5013df38f1425770  $task_dir/skip_markers.py
+43a398b11c9bce7f1844ae55b524767251bb542d7a16675fc9e14277c823d6fe  $task_dir/skip_markers.py
 6379c6f42c3eb52c13ee70dae4bb88476037ba2350bf964a2467317c2f87056f  $task_dir/skip_automation.py
 eb3349381aa10894ffac50ba7af27ad27f112ca1800fabcf3776ffd9556b5a60  $task_dir/skip_catalogue.py
 462e99ca72e5ed4af04542c42a858664321fbfe0ba7bba2c8ad8537915601b03  $task_dir/templates/skip_markers.html
-4b4c2faff24503cc3e37740ea232a3279480fe7957b432ed091d1a02a494cf51  $task_dir/tests/test_skip_analysis_redirects.py
+c058c9f1b6702f99406ca15b2160f46ff1b80ec9235860445fe062f98b2ab788  $task_dir/tests/test_skip_analysis_redirects.py
 9d0efdaaa5b8a45774bff956418212f1aaddeb30e83d2ae0dc9c1e3716a7497e  $task_dir/tests/test_skip_analysis_references.py
 2a76f04522b10001e4ff5c0704c41ec596e09ebe47550f541d1a18062c7f52e3  $task_dir/tests/test_skip_analysis_boundaries.py
 03a3211aac1c6fb753144c663e9793b76ace5944003bc65973981d58679383aa  $task_dir/tests/test_skip_analysis_automation.py
@@ -230,7 +230,7 @@ test "$healthy" -eq 1
 import json, sys
 with open(sys.argv[1]) as source:
     data = json.load(source)
-if data.get('api_version') != '0.8.2' or data.get('status') != 'ok' or not all(data.get('features',{}).get(name) is True for name in ('skip_nightly_catalogue','skip_high_audio_approval','skip_proposal_dedup','skip_online_error_details','skip_language_priority','skip_bulk_review')):
+if data.get('api_version') != '0.8.2' or data.get('status') != 'ok' or not all(data.get('features',{}).get(name) is True for name in ('skip_nightly_catalogue','skip_high_audio_approval','skip_proposal_dedup','skip_online_error_details','skip_language_priority','skip_bulk_review','skip_network_address_fallback')):
     raise SystemExit('Der aktualisierte Server meldet keinen gültigen Analyse-Status.')
 PY
 if [ "$timer_was_active" -eq 1 ] || [ "$start_catalogue" -eq 1 ]; then
@@ -240,6 +240,7 @@ services_stopped=0
 code_changed=0
 settings_changed=0
 echo 'Raspberry 0.8.2: Online-Abfragen unterscheiden fehlende Zeitmarken, Zugriffsfehler und Abfragelimits.'
+echo 'Netzwerkzugriff versucht alternative öffentliche IPv4-/IPv6-Adressen bei Verbindungsausfällen.'
 echo "Backup: $backup_dir"
 if [ "$start_catalogue" -eq 1 ]; then
   echo 'Erster Katalogdurchlauf für bereits aktivierte Automatik-Playlists eingeplant.'
