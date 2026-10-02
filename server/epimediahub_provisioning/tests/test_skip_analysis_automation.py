@@ -490,6 +490,9 @@ class AutomationApiTests(AutomationFixture, unittest.TestCase):
 
     def test_tmdb_setup_requires_csrf_and_never_echoes_key(self):
         key = "a" * 32
+        with self.db() as con:
+            con.execute("INSERT INTO skip_auto_online_cooldown VALUES('tmdb','provider_http_401',?)", (int(time.time())+86400,))
+            con.execute("INSERT INTO skip_auto_online_cooldown VALUES('theintrodb','provider_http_429',?)", (int(time.time())+43200,))
         self.assertEqual(self.client.post("/admin/skip/tmdb", data={"api_key": key}).status_code, 403)
         response = self.client.post("/admin/skip/tmdb", data={"csrf": "fixture-csrf", "api_key": key})
         self.assertEqual(response.status_code, 302)
@@ -497,6 +500,8 @@ class AutomationApiTests(AutomationFixture, unittest.TestCase):
         self.assertNotIn(key, response.headers["Location"])
         with self.db() as con:
             self.assertEqual(con.execute("SELECT value FROM skip_auto_metadata_config").fetchone()[0], key)
+            self.assertIsNone(con.execute("SELECT 1 FROM skip_auto_online_cooldown WHERE service='tmdb'").fetchone())
+            self.assertIsNotNone(con.execute("SELECT 1 FROM skip_auto_online_cooldown WHERE service='theintrodb'").fetchone())
 
     def test_dashboard_renders_automatic_settings_without_exposing_api_key(self):
         key = '0123456789abcdef' * 2
