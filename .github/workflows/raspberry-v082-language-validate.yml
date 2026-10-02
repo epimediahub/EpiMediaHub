@@ -1,4 +1,4 @@
-name: Validate Raspberry DE/IT analysis priority and provider category labels
+name: Validate Raspberry DE/IT priority and series/season bulk reviews
 
 on:
   workflow_dispatch:
@@ -44,7 +44,7 @@ jobs:
         run: python server/epimediahub_provisioning/tests/smoke_v080.py
       - name: Verify marker API and real audio matching
         run: python server/epimediahub_provisioning/tests/smoke_v082.py
-      - name: Verify DE/IT queue priority, category labels, migrations and existing audio policies
+      - name: Verify DE/IT priority, bulk reviews, migrations and existing audio policies
         run: python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_analysis*.py' -v
       - name: Check Raspberry installer syntax
         run: |
