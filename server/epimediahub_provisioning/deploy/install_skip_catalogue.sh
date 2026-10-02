@@ -19,7 +19,7 @@ fi
 app_dir=/opt/epimediahub/provisioning
 python_bin="$app_dir/.venv/bin/python"
 env_file=/etc/epimediahub/provisioning.env
-source_ref=516d0d379b65d939dfd0236cb00d78dec2fc7f96
+source_ref=b500a6915645f2258f9990d99a66c034300b57c4
 source_base="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$source_ref/server/epimediahub_provisioning"
 task_dir="$(mktemp -d -p /var/tmp epimediahub-skip-catalogue.XXXXXX)"
 backup_dir="/var/backups/epimediahub/skip-catalogue-$(date +%Y%m%d-%H%M%S)"
@@ -131,27 +131,28 @@ PY
 test -f "$data_dir/provisioning.db"
 
 mkdir -p "$task_dir/tests" "$task_dir/deploy" "$task_dir/templates"
-downloads=("${files[@]}" tests/test_skip_analysis_redirects.py tests/test_skip_analysis_references.py tests/test_skip_analysis_boundaries.py tests/test_skip_analysis_automation.py tests/test_skip_analysis_catalogue.py tests/test_skip_analysis_dashboard.py deploy/inspect_skip_references.py)
+downloads=("${files[@]}" tests/test_skip_analysis_redirects.py tests/test_skip_analysis_references.py tests/test_skip_analysis_boundaries.py tests/test_skip_analysis_automation.py tests/test_skip_analysis_catalogue.py tests/test_skip_analysis_dashboard.py tests/test_skip_analysis_dedup.py deploy/inspect_skip_references.py)
 for file in "${downloads[@]}"; do
   curl -fsSL --connect-timeout 10 --max-time 60 "$source_base/$file" -o "$task_dir/$file"
 done
 sha256sum -c <<EOF
 52d225550fc86c2f2a6a907c9ad0a6223d855a3df5196b63c3f77dbba618d80b  $task_dir/skip_analysis.py
-6472d20c9dfa119e0f9f016792ad773c75cfae282dea30e0c214fcb8c77652b3  $task_dir/skip_analysis_worker.py
-1e93aceda4937a81685dd597a7ece649b469bd7a2598626a19523eb1b1e63f0a  $task_dir/skip_markers.py
-0ce6804e9d9596f2331090354e9170d749c283f72ee8142aed79db987289cfbe  $task_dir/skip_automation.py
+26b3fc16c8be9ab66bedb0b3e1f90d9a07e33a91b4de783ceb503cfb75ef78ee  $task_dir/skip_analysis_worker.py
+31897b211930341c79fa5cd7edc1578d1822aa710c5d8a53a3e780d0289bc313  $task_dir/skip_markers.py
+3f11bbbcc2e6a32cc5f370f9fbdaf2c59d75efb982ea4162158eac548dd8d16c  $task_dir/skip_automation.py
 eca801f9d2d59f7de21f45951edaef5315109a4e0a98131458f98a3c4131f19b  $task_dir/skip_catalogue.py
-ae7443a9a634d41807e9c0d91c27a1e7feccef9fb22cc449b1454c237a34c1d5  $task_dir/templates/skip_markers.html
+196e9d32d316bc344c3b9870a01daa13ad244b3b8e98f53bfa6e6a7bc554122e  $task_dir/templates/skip_markers.html
 4b4c2faff24503cc3e37740ea232a3279480fe7957b432ed091d1a02a494cf51  $task_dir/tests/test_skip_analysis_redirects.py
 9d0efdaaa5b8a45774bff956418212f1aaddeb30e83d2ae0dc9c1e3716a7497e  $task_dir/tests/test_skip_analysis_references.py
 2a76f04522b10001e4ff5c0704c41ec596e09ebe47550f541d1a18062c7f52e3  $task_dir/tests/test_skip_analysis_boundaries.py
-12bd27da28132bf014e71a0165da0d415c9532042062b9e93a4999b4d5db94eb  $task_dir/tests/test_skip_analysis_automation.py
+0f895a5ef4fd474a8a975f42161893c877fd92217d4bf32ee0e0b1e2a5242bc3  $task_dir/tests/test_skip_analysis_automation.py
 f4ab53ef457ab6a79414bbd54c135a42a4d70ec485e59afa4a612df621e1e60b  $task_dir/tests/test_skip_analysis_catalogue.py
-695345dcd5a1b4f96fd4f5066925d8247434c8ad2f0413cde31b4e90fb44594e  $task_dir/tests/test_skip_analysis_dashboard.py
+07cd572fefdd61bebec2eda9209005917bfbc0c7117411b42f102e8b6ae110e0  $task_dir/tests/test_skip_analysis_dashboard.py
+e65184b85ee5de3d58b0835e054973c6f1c8c496dc3ade7426fc570c748e7b08  $task_dir/tests/test_skip_analysis_dedup.py
 df57e84d73475ee3ae5dff1183e3d821655f8d805af67bd6fb34369c08cbc87d  $task_dir/deploy/inspect_skip_references.py
 EOF
 "$python_bin" -m compileall -q "$task_dir"
-echo 'Serienübersicht, Gesamtkatalog, Nachtplanung und Audioanalyse prüfen ...'
+echo 'Doppelte Vorschläge, automatische Freigaben, Serienübersicht und Audioanalyse prüfen ...'
 PYTHONPATH="$task_dir:$app_dir" "$python_bin" -m unittest discover -s "$task_dir/tests" -p 'test_skip_analysis*.py' -q
 
 exec 9>>"$data_dir/skip-analysis.lock"
@@ -220,8 +221,8 @@ test "$healthy" -eq 1
 import json, sys
 with open(sys.argv[1]) as source:
     data = json.load(source)
-if data.get('api_version') != '0.8.2' or data.get('status') != 'ok' or data.get('features',{}).get('skip_nightly_catalogue') is not True:
-    raise SystemExit('Der aktualisierte Server meldet keinen gültigen Katalog-Status.')
+if data.get('api_version') != '0.8.2' or data.get('status') != 'ok' or not all(data.get('features',{}).get(name) is True for name in ('skip_nightly_catalogue','skip_high_audio_approval','skip_proposal_dedup')):
+    raise SystemExit('Der aktualisierte Server meldet keinen gültigen Analyse-Status.')
 PY
 if [ "$timer_was_active" -eq 1 ] || [ "$start_catalogue" -eq 1 ]; then
   systemctl start epimediahub-skip-analysis.timer
@@ -229,7 +230,7 @@ fi
 services_stopped=0
 code_changed=0
 settings_changed=0
-echo 'Raspberry 0.8.2: Serienübersicht, Gesamtkatalog und Nachtprüfung installiert.'
+echo 'Raspberry 0.8.2: Doppelte Vorschläge zusammengeführt und hohe Audiotreffer automatisch freigeben.'
 echo "Backup: $backup_dir"
 if [ "$start_catalogue" -eq 1 ]; then
   echo 'Erster Katalogdurchlauf für bereits aktivierte Automatik-Playlists eingeplant.'
@@ -237,4 +238,5 @@ fi
 echo 'Danach täglich ab 03:00 Uhr deutscher Zeit neue und geänderte Folgen prüfen.'
 echo 'TMDB-Schlüssel und geprüfte Marker bleiben erhalten.'
 echo 'Zeitmarken im Dashboard nach Serie, Staffel und Folge öffnen.'
+echo 'Vorhandene hohe Audiotreffer werden in aktivierten Automatik-Playlists erneut geprüft.'
 echo 'Fortschritt und Tageslimit im Dashboard unter Gesamtkatalog & Nachtprüfung prüfen.'
