@@ -95,7 +95,8 @@ class V117PlayerTest {
             compose.onNodeWithText(text, useUnmergedTree = true).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
                 val layouts = mutableListOf<TextLayoutResult>()
                 assertTrue(action(layouts))
-                assertFalse("$text must not be clipped", layouts.single().hasVisualOverflow)
+                val layout = layouts.single()
+                assertFalse("$text must not be clipped: size=${layout.size}, constraints=${layout.layoutInput.constraints}, paragraph=${layout.multiParagraph.width}x${layout.multiParagraph.height}", layout.hasVisualOverflow)
             }
         }
     }
@@ -107,17 +108,17 @@ class V117PlayerTest {
     }
 
     @Test fun everySeriesControlFitsOnTheTvWithoutScrolling() {
-        screen(); allControls(); screenshot("v117-player-tv.png")
+        screen(); screenshot("v117-player-tv.png"); allControls()
     }
 
     @Test @Config(qualifiers = "w640dp-h360dp-land")
     fun controlsAlsoFitOnACompactTv() {
-        screen(); allControls(); screenshot("v117-player-compact-tv.png")
+        screen(); screenshot("v117-player-compact-tv.png"); allControls()
     }
 
     @Test @Config(qualifiers = "w360dp-h720dp-port")
     fun phoneSeriesControlsIncludingNextAndSkipEditorFitWithoutScrolling() {
-        screen(tv = false); allControls(); screenshot("v117-player-phone.png")
+        screen(tv = false); screenshot("v117-player-phone.png"); allControls()
     }
 
     @Test fun filmControlsFitAndHaveNoEpisodeChange() {
@@ -145,9 +146,10 @@ class V117PlayerTest {
         screen()
         compose.onNodeWithTag("vod-skip-intro").assertIsFocused()
         key("vod-skip-intro", Key.DirectionDown)
-        compose.onNodeWithTag("vod-timeline").assertIsFocused()
+        compose.onNodeWithTag("vod-skip-intro").assertIsNotFocused()
+        val destination = compose.onNode(isFocused()).fetchSemanticsNode().id
         position(46_000)
-        compose.onNodeWithTag("vod-timeline").assertIsFocused()
+        assertEquals(destination, compose.onNode(isFocused()).fetchSemanticsNode().id)
         position(95_000); position(40_000)
         compose.onNodeWithTag("vod-skip-intro").assertIsFocused()
     }

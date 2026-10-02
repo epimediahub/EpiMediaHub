@@ -39,6 +39,14 @@ replace_once('color = if (focused || selected) Color.White else Color.White.copy
 replace_once('import androidx.compose.ui.graphics.Color\n', 'import androidx.compose.ui.graphics.Color\nimport androidx.compose.ui.graphics.compositeOver\nimport androidx.compose.ui.platform.testTag\n')
 hub.write_text(s)
 
+# The tools button is fully visible now, so the existing regression test no
+# longer needs the removed horizontal scroll parent to reach it.
+editor_test = root / 'app/src/test/java/de/epimediahub/app/ui/V116SkipEditorTest.kt'
+value = editor_test.read_text()
+old = 'onNodeWithTag("vod-skip-tools").performScrollTo().performClick()'
+assert value.count(old) == 1
+editor_test.write_text(value.replace(old, 'onNodeWithTag("vod-skip-tools").assertIsDisplayed().performClick()'))
+
 for filename in ('V117PlayerTest.kt', 'V117NextEpisodeTest.kt', 'V117CategoryTest.kt'):
     source = here / filename
     if source.exists():

@@ -28,6 +28,7 @@ import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -305,7 +306,10 @@ internal fun V115PlayerChrome(
                             .then(if (compactActions) Modifier.weight(1f) else Modifier.width(220.dp))
                             .focusRequester(nextFocus).v114FocusRing().testTag("vod-next"),
                         shape = RoundedCornerShape(6.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)) {
-                        Icon(Icons.Default.SkipNext, null, Modifier.size(if (isTv) 24.dp else 20.dp)); Spacer(Modifier.width(6.dp)); Text("Nächste Folge", fontWeight = FontWeight.Bold, fontSize = if (isTv) 18.sp else 15.sp, maxLines = 2)
+                        Icon(Icons.Default.SkipNext, null, Modifier.size(if (isTv) 24.dp else 20.dp)); Spacer(Modifier.width(6.dp))
+                        Text("Nächste Folge", modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Bold, fontSize = if (isTv) 18.sp else 15.sp,
+                            lineHeight = if (isTv) 24.sp else 20.sp, maxLines = 2)
                     }
                 }
                 }
