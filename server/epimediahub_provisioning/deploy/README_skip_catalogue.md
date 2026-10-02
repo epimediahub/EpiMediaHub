@@ -12,8 +12,8 @@ Voraussetzung ist der laufende Raspberry-Server 0.8.2 mit Audioanalyse und
 Staffelautomatik für die gewünschten Playlists. Android 1.0.16 bleibt kompatibel.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/8cdd673c1057847b6cc555666653cf08bce2215b/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
-sudo bash /var/tmp/epimediahub-skip-catalogue.sh
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/6275aa1fb67a7f47aa3c0fe1c727e01a7d5065f0/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+sudo bash /var/tmp/epimediahub-skip-catalogue.sh --wait-worker
 ```
 
 Der Aufruf aktualisiert den vorhandenen Dienst und erhält Katalogeinstellungen,
@@ -23,7 +23,12 @@ Der Schalter startet ausschließlich bereits aktivierte Automatik-Playlists
 mit erlaubter Audioanalyse und aktivem Kunden. TMDB-Schlüssel,
 Anbieterkonfiguration, Geräte und menschliche Zeitmarken bleiben erhalten.
 
-Das Skript lädt fünfzehn Dateien aus einem festen Commit und prüft SHA256,
+`--wait-worker` wartet bei einer laufenden Analyse bis zu 15 Minuten auf den
+vorhandenen Worker-Lock, ohne den Durchlauf abzubrechen. Der Timer muss dafür
+nicht manuell gestoppt werden. Ohne diese Option endet der Installer bei einem
+belegten Lock weiterhin vor Änderungen. Beide Optionen sind kombinierbar.
+
+Das Skript lädt sechzehn Dateien aus einem festen Commit und prüft SHA256,
 Syntax sowie die tatsächlichen Richtlinien-, API- und Audiotests vor Änderungen.
 Es verwendet den bestehenden Worker-Lock, sichert Code und SQLite-Datenbank
 und stellt bei einem fehlgeschlagenen Neustart den vorherigen Code sowie nur
@@ -57,6 +62,43 @@ bleiben vorrangig. Gefundene Online-Zeiten erzeugen Vorschläge zur Prüfung.
 
 ## Ablauf
 
+### Deutsch und Italienisch bevorzugen
+
+Deutsch und Italienisch haben gemeinsam dieselbe erste Priorität. Danach
+folgen alle anderen Serien und Serien ohne eindeutige Sprachangaben. Innerhalb
+jeder Sprachgruppe behalten neue oder geänderte Folgen Vorrang vor dem alten
+Bestand. Diese Reihenfolge gilt für die Katalogaufnahme, die Audio-Warteschlange,
+die Staffelautomatik und fällige Online-Nachprüfungen. Noch nicht aufgenommene,
+bekannt bevorzugte Serien werden vor älteren Jobs der zweiten Gruppe erfasst.
+
+Der Raspberry ruft die Kategorien seiner aktivierten Anbieter-Playlists ab und
+ordnet sie über `category_id` beziehungsweise `category_ids` den Serien zu.
+Beispiele sind `de Serien`, `deutsche Seiten`, `DE: Netflix Serien`,
+`IT: Netflix Serie` und `SERIE TV ITALIA`. Eindeutige Serientags wie `[DE]`,
+`[GER]`, `[IT]` oder `[ITA]` sowie deklarierte Audiosprachen werden ebenfalls
+berücksichtigt. Eine ausdrücklich andere angebotene Audiosprache hat Vorrang
+vor Länderkennzeichnungen. Deutsch synchronisierte Serien können somit
+bevorzugt werden, auch wenn das Original aus einem anderen Land stammt.
+
+TMDBs `original_language` und das Produktionsland werden nicht zur Bestimmung
+der angebotenen Sprache verwendet. Normale Serientitel wie `It`, `It Takes Two`
+oder `Deutschland 83` ergeben alleine keine bevorzugte Einstufung. Die
+Kategoriephrase `Series de España` wird nicht wegen des Worts `de` als Deutsch
+eingestuft. Fehlende oder widersprüchliche Kategorien verhindern keine normale
+Analyse; die Sprache wird nicht durch zusätzliches Herunterladen oder erneutes
+Analysieren des Tons ermittelt.
+
+Beim Upgrade werden bestehende Kataloge einmalig anhand ihrer behaltenen
+Sprachtags eingestuft. Beim nächsten Leerlauf werden zusätzlich Kategorien und
+Serienlisten als Metadaten neu abgefragt, damit vorhandene Warteschlangen die
+aktuelle Zuordnung erhalten. Dabei bleiben Katalogcursor, Generationsnummer,
+Nachttermin, Tagesbudget, bereits erledigte Audiojobs und menschliche Zeitmarken
+erhalten. Ein fehlgeschlagener Metadatenabruf wird frühestens nach einer Stunde
+wiederholt. Anschließend werden die Kategorien bei den regulären Nachtlisten
+erneut berücksichtigt.
+
+### Bestandsaufnahme und Nachtlauf
+
 - Der erste Lauf nimmt alle eindeutig strukturierten Serien, Staffeln und
   Folgen auf. Der Cursor und bereits erledigte Jobs bleiben bei Neustarts erhalten.
 - Danach wird ein neuer Katalogabgleich täglich ab 03:00 Uhr Europe/Berlin
@@ -70,14 +112,17 @@ bleiben vorrangig. Gefundene Online-Zeiten erzeugen Vorschläge zur Prüfung.
   Folge erst durch diese zusätzliche Kontrolle gefunden werden.
 - Ein nächtlicher Lauf setzt einen noch laufenden Katalogdurchlauf nicht zurück.
   Ein großer oder langsamer Katalog wird in weiteren Worker-Aufrufen fortgesetzt.
-- Es werden höchstens acht Metadatenschritte pro Aufruf ausgeführt; nach
+- Es werden höchstens acht Metadatenschritte pro Aufruf ausgeführt. Eine
+  Serienliste kann eine zusätzliche Kategorienabfrage benötigen, also höchstens
+  sechzehn Anbieterabfragen pro Aufruf; nach
   30 Sekunden beginnt kein weiterer Schritt. Jeder Abruf hat eigene Transport-
   und Größenlimits. Pro Katalog sind 20.000 Serien, pro Serie 10.000 Folgen
   und pro Staffel 200 Folgen zulässig.
 - Alle Abrufe bleiben seriell und pausieren bei gemeldeter Wiedergabe desselben
   Anbieterkontos. Öffentliche Ziele, Weiterleitungen, Laufzeiten und
   Dateizuordnung werden wie bisher geprüft.
-- Neu eingeplante Folgen aus Nachtläufen haben Vorrang vor dem alten Bestand.
+- Innerhalb jeder Sprachgruppe haben neu eingeplante Folgen aus Nachtläufen
+  Vorrang vor dem alten Bestand.
   Der Gesamtdurchlauf nutzt standardmäßig höchstens 96 Audioprüfungen pro UTC-Tag;
   das Dashboard erlaubt ein globales Limit von 1 bis 500. Bestehende Installationen
   ohne eingeschalteten Gesamtkatalog behalten 24 Prüfungen pro Tag.
@@ -174,11 +219,11 @@ nächtliche Neuzugänge, unveränderte Dateien, fehlende/stale Zeitstempel,
 Neustarts, doppelte Nummerierung, unsichere Dateiformate, Wiedergabevorrang,
 konkurrierendes Ausschalten, Tagesbudget und Zeitumstellung ab.
 
-Elf isolierte Installationstests prüfen Erfolg, bestehende Marker/Schlüssel,
+Vierzehn isolierte Installationstests prüfen Erfolg, bestehende Marker/Schlüssel,
 inaktive Timer, beschädigte Downloads, Vorprüfungsfehler, laufende Worker und
 Wiederherstellung von Code, Einstellungen, Termin und Budget. Die echten
 Audio- und API-Prüfungen laufen zusätzlich mit den vorhandenen Backendtests
-in .github/workflows/raspberry-v082-online-status-validate.yml.
+in .github/workflows/raspberry-v082-language-validate.yml.
 
 Neun weitere SQLite-/HTML-/API-Tests prüfen die Serien- und Folgenpagination,
 numerische Reihenfolge, Gruppierung aller Abschnitte derselben Folge,
@@ -195,5 +240,15 @@ Grenzen, wiederkehrende kurze Motive und die Archivierung nach manueller Prüfun
 fehlende Zeitmarken, TMDB-Zuordnung, ungültige Schlüssel, dienstweite Zugriffspausen,
 Tageslimits, Retry-After, sichere Meldungen, Wiedergabevorrang und Nachprüfungen ohne
 Videodownload. Der Installer prüft zusätzlich die Vormerkung alter Online-Fehler.
-Der vollständige CI-Lauf umfasst 174 Tests ohne übersprungene Tests sowie den
+20 weitere SQLite-/API-Tests prüfen beide bevorzugten Sprachen, die vom Nutzer
+genannten Kategorien, eine ausdrücklich andere Audiosprache, unbekannte
+Sprachen, Metadatenaktualisierungen ohne erneute Audioanalyse, bestehende
+Warteschlangen, mehrere Playlists, den einmaligen Kategorienabgleich und die
+Erhaltung von Cursor, Nachttermin, Budget und menschlichen Entscheidungen.
+Der Installer prüft zusätzlich die Migration der Sprachzuordnung und das
+optionale Warten auf einen laufenden Worker einschließlich eines Zeitlimits.
+Der vollständige Prüflauf umfasst 197 Tests ohne übersprungene Tests sowie den
 bestehenden Dashboard-/Geräte-Smoke-Test.
+
+Validierter Installer-Commit: `6275aa1fb67a7f47aa3c0fe1c727e01a7d5065f0`.
+[Erfolgreicher GitHub-Actions-Lauf](https://github.com/epimediahub/EpiMediaHub/actions/runs/36989162495).
