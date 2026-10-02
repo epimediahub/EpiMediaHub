@@ -12,7 +12,7 @@ Voraussetzung ist der laufende Raspberry-Server 0.8.2 mit Audioanalyse und
 Staffelautomatik für die gewünschten Playlists. Android 1.0.16 und 1.0.17 bleiben kompatibel.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/c3cc1687dc26f0af00ad789d2aa41b9731dbcd0e/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/2ee92e9dbe4bb593242b0b4dc22c69efb20d966d/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
 sudo bash /var/tmp/epimediahub-skip-catalogue.sh --wait-worker --start-catalogue
 ```
 
@@ -29,11 +29,46 @@ vorhandenen Worker-Lock, ohne den Durchlauf abzubrechen. Der Timer muss dafür
 nicht manuell gestoppt werden. Ohne diese Option endet der Installer bei einem
 belegten Lock weiterhin vor Änderungen. Beide Optionen sind kombinierbar.
 
-Das Skript lädt 21 Dateien aus einem festen Commit und prüft SHA256,
+Das Skript lädt 25 Dateien aus einem festen Commit und prüft SHA256,
 Syntax sowie die tatsächlichen Richtlinien-, API- und Audiotests vor Änderungen.
 Es verwendet den bestehenden Worker-Lock, sichert Code und SQLite-Datenbank
 und stellt bei einem fehlgeschlagenen Neustart den vorherigen Code sowie nur
-die selbst geänderten Katalogeinstellungen wieder her.
+die selbst geänderten Katalogeinstellungen wieder her. Vor dem Neustart wird die
+Intro-Maske mit einer schreibgeschützten Kopie des vorhandenen Datenbestands
+vollständig gerendert; ein erfolgreicher Health-Aufruf allein reicht nicht aus.
+
+## Reparatur bei „database is locked“
+
+Wenn die Intro-Maske einen internen Serverfehler zeigt und das Protokoll
+`sqlite3.OperationalError: database is locked` meldet:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/2ee92e9dbe4bb593242b0b4dc22c69efb20d966d/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+sudo bash /var/tmp/epimediahub-skip-catalogue.sh --repair-database --start-catalogue
+```
+
+Der Reparaturmodus funktioniert auch bei einem nicht antwortenden Health-Endpunkt,
+sofern die vorhandene Intro-API lokal als 0.8.2 erkennbar ist. Downloads,
+Prüfsummen und Tests laufen vor Änderungen. Anschließend hält der Installer
+Analyse und Webdienst geordnet an, erwirbt den Worker-Lock und sichert den
+Datenbestand. Abgebrochene laufende Jobs werden ohne zusätzlichen Versuch oder
+Rücksetzen des Tagesbudgets erneut eingeplant. Der Webdienst und ein zuvor
+aktiver Analyse-Timer starten danach wieder; `--start-catalogue` aktiviert den
+Timer auch dann, wenn er zuvor inaktiv war.
+
+SQLite verwendet anschließend WAL. Leser der Übersicht verhindern damit keine
+Schreib-Commits der Wiedergabemeldungen. Alle Web- und Worker-Verbindungen werden
+beim Verlassen ihres Kontexts zuverlässig geschlossen, auch nach Fehlern. Ein
+zusätzlicher Index findet Katalogeinträge anhand der konkreten Datei; vorher
+wurde für jede Folge erneut die Playlist durchsucht. Bei 6.001 Folgen reduzierte
+sich diese Abfrage im lokalen Vergleich von 1,867 auf 0,018 Sekunden. Die Laufzeit
+auf dem jeweiligen Raspberry wurde nicht gemessen.
+
+Der Worker erwirbt seinen Lock bereits vor dem Import der Anwendung, sodass
+auch die dabei ausgeführten Migrationen gegen parallele Worker und Installation
+geschützt sind. Korrekturen, Kunden, Geräte, Anbieterzugänge, TMDB-Schlüssel und
+bereits gespeicherte Marken bleiben erhalten. Die Sicherung ersetzt niemals
+pauschal die aktive Datenbank.
 
 ## Online-Abfragen und Fehlermeldungen
 
@@ -261,17 +296,23 @@ Wiedergaben außerhalb der EpiMediaHub-App kann diese Meldung nicht erfassen.
 
 ## Validierung
 
-Der vollständige Prüflauf umfasst 244 Tests ohne übersprungene Tests:
-212 Richtlinien-, Katalog-, HTTP-, Sprach-, Freigabe- und Fortschrittstests,
+Der vollständige Prüflauf umfasst 259 Tests ohne übersprungene Tests:
+221 Richtlinien-, Katalog-, HTTP-, Sprach-, Freigabe- und Fortschrittstests,
 14 Marker-/API-Tests einschließlich echter FFmpeg-/Chromaprint-Erkennung sowie
-18 Installer-Tests. Zusätzlich läuft der bestehende Dashboard-/Geräte-Smoke-Test.
+24 Installer-Tests. Zusätzlich läuft der bestehende Dashboard-/Geräte-Smoke-Test.
 Die neuen Fälle prüfen die automatische Übernahme bestehender Vorschläge,
 Referenzen ohne menschliche Erstfreigabe, Korrekturen im Player, geschützte
 Ablehnungen, die Sammelfreigabe bei abweichenden Zeiten, vollständige Serienseiten,
 fehlende Intros trotz abgeschlossener Analyse und Wiederherstellung des Codes
-bei fehlenden neuen Health-Funktionen.
+bei fehlenden neuen Health-Funktionen. Neue Regressionen prüfen echte parallele
+Wiedergabemeldungen und Dashboard-Aufrufe bei einer offenen Lesetransaktion,
+6.001 Folgen mit begrenztem SQLite-Rechenaufwand, geschlossene Verbindungen nach
+Commit/Rollback, einen gesperrten Worker vor dem Anwendungsimport und die
+Reparatur bei aktiver Schreibsperre beziehungsweise ausgefallenem Health-Endpunkt.
+Ein Fehler beim tatsächlichen Rendern der Intro-Maske löst ebenfalls die
+Wiederherstellung aus.
 
-Quellcommit: `e3ac43966f62f7099700b331f09f08b2d074b342`.
-Validierter Installer-Commit: `c3cc1687dc26f0af00ad789d2aa41b9731dbcd0e`.
-[GitHub-Actions-Prüflauf](https://github.com/epimediahub/EpiMediaHub/actions/runs/37033339307).
+Quellcommit: `e5a06e9a57e42d82d78b11ef345db0846406c041`.
+Validierter Installer-Commit: `2ee92e9dbe4bb593242b0b4dc22c69efb20d966d`.
+[GitHub-Actions-Prüflauf](https://github.com/epimediahub/EpiMediaHub/actions/runs/37038350280).
 Workflow: `.github/workflows/raspberry-v082-automatic-validate.yml`.
