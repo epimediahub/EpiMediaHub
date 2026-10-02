@@ -182,6 +182,8 @@ def process_one(db):
     from skip_catalogue import advance as catalogue_advance, daily_limit
     # Inventory must keep progressing even after today's audio quota is used.
     catalogue_advance(db, busy_check)
+    from skip_automation import refresh_online_one
+    online_status = refresh_online_one(db, busy_check)
     with db() as con:
         # Limit aggregate traffic and processing on a Raspberry, irrespective of clients.
         count = con.execute("SELECT COUNT(*) FROM skip_jobs WHERE status NOT IN ('queued','disabled') AND substr(updated_at,1,10)=substr(?,1,10)", (now(),)).fetchone()[0]
@@ -200,7 +202,7 @@ def process_one(db):
           WHERE j.status='queued' AND j.attempts<3
           ORDER BY COALESCE(p.priority,1),j.updated_at,j.id LIMIT 1""").fetchone()
         if job is None:
-            return "idle"
+            return online_status if online_status == 'online_checked' else "idle"
         con.execute("UPDATE skip_jobs SET status='running',updated_at=? WHERE id=?", (now(), job["id"]))
     try:
         status, detail = analyze(db, job)
