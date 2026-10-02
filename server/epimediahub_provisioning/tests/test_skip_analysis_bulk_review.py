@@ -12,8 +12,7 @@ import skip_markers as markers
 from skip_markers import add_record, install, now
 
 
-@unittest.skipUnless(automation_tests.REAL_FLASK, 'Flask required for bulk review API')
-class BulkReviewTests(DashboardFixture, unittest.TestCase):
+class BulkReviewFixture(DashboardFixture):
     def setUp(self):
         super().setUp()
         from flask import redirect
@@ -61,6 +60,9 @@ class BulkReviewTests(DashboardFixture, unittest.TestCase):
             con.execute('INSERT OR IGNORE INTO skip_auto_evidence VALUES(?,?,0)', (row['id'], '{}'))
         return row['id']
 
+
+@unittest.skipUnless(automation_tests.REAL_FLASK, 'Flask required for bulk review API')
+class BulkReviewTests(BulkReviewFixture, unittest.TestCase):
     def test_series_approval_includes_other_seasons_all_pages_and_all_segment_types(self):
         ids = []
         for episode in range(1, 31):
@@ -96,19 +98,19 @@ class BulkReviewTests(DashboardFixture, unittest.TestCase):
         self.assertEqual(values.count('approved'), 1)
         self.assertEqual(values.count('superseded'), 3)
 
-    def test_conflicting_times_stay_pending_but_other_episodes_are_approved(self):
+    def test_conflicting_times_choose_a_winner_and_do_not_leave_review_stuck(self):
         first = self.alternative()
         second = self.alternative(start=60000, end=90000)
         other = self.mark(1002, 2)
         notice = self.notice(self.approve())
-        self.assertIn('2 widersprüchliche Vorschläge bleiben zur Einzelprüfung', notice)
-        self.assertEqual(self.statuses(), {first: 'pending', second: 'pending', other: 'approved'})
+        self.assertIn('1 abweichende Varianten automatisch ausgewählt', notice)
+        self.assertEqual(self.statuses(), {first: 'superseded', second: 'approved', other: 'approved'})
 
-    def test_conflicting_disable_marker_and_ordinary_marker_stay_pending(self):
+    def test_conflicting_disable_marker_selects_the_latest_equally_ranked_choice(self):
         first = self.alternative()
         second = self.alternative(start=0, end=0, disabled=True)
         self.notice(self.approve())
-        self.assertEqual(self.statuses(), {first: 'pending', second: 'pending'})
+        self.assertEqual(self.statuses(), {first: 'superseded', second: 'approved'})
 
     def test_existing_approvals_rejections_and_blocks_are_preserved(self):
         for stream, status in ((1001, 'approved'), (1002, 'rejected')):
@@ -122,7 +124,8 @@ class BulkReviewTests(DashboardFixture, unittest.TestCase):
             con.execute('INSERT INTO skip_auto_blocks VALUES(?,?,?,?)', (row['asset_key'], 'intro', row['duration_ms'], 'previous-block'))
             before = [row[:] for row in con.execute("SELECT * FROM skip_records WHERE status IN ('approved','rejected')")]
         notice = self.notice(self.approve())
-        self.assertIn('3 Vorschläge mit bestehender Entscheidung unverändert', notice)
+        self.assertIn('3 alte Vorschläge erledigt; bestehende Entscheidungen beibehalten', notice)
+        self.assertNotIn('pending',self.statuses().values())
         with self.db() as con:
             self.assertEqual([row[:] for row in con.execute("SELECT * FROM skip_records WHERE status IN ('approved','rejected')")], before)
             self.assertEqual(con.execute('SELECT updated_at FROM skip_auto_blocks').fetchone()[0], 'previous-block')
@@ -131,7 +134,7 @@ class BulkReviewTests(DashboardFixture, unittest.TestCase):
         first = self.alternative()
         other = self.alternative(source_key='c' * 64, start=60000, end=90000)
         self.notice(self.approve())
-        self.assertEqual(self.statuses(), {first: 'pending', other: 'pending'})
+        self.assertEqual(self.statuses(), {first: 'approved', other: 'pending'})
 
     def test_invalid_time_ranges_are_not_approved(self):
         record = self.mark(1001, 1)
@@ -224,7 +227,8 @@ class BulkReviewTests(DashboardFixture, unittest.TestCase):
         query = parse_qs(urlsplit(response.headers['Location']).query)
         self.assertEqual((query['series'], query['season'], query['page'], query['episode_page']),
                          ([self.seed['source_key']], ['2'], ['2'], ['3']))
-        self.assertEqual(urlsplit(response.headers['Location']).fragment, 'season-2')
+        self.assertEqual(query['state'], ['approved'])
+        self.assertEqual(urlsplit(response.headers['Location']).fragment, 'review-result')
 
 
 if __name__ == '__main__':

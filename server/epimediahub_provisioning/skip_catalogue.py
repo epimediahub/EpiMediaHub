@@ -216,6 +216,8 @@ def migrate(con):
         series_id TEXT NOT NULL,asset_key TEXT NOT NULL REFERENCES skip_assets(asset_key) ON DELETE CASCADE,
         signature TEXT NOT NULL,seen_generation INTEGER NOT NULL,
         PRIMARY KEY(playlist_id,series_id,asset_key));
+      CREATE INDEX IF NOT EXISTS idx_skip_catalogue_episode_asset
+        ON skip_catalogue_episodes(asset_key,playlist_id,series_id);
       CREATE TABLE IF NOT EXISTS skip_catalogue_priority(
         asset_key TEXT PRIMARY KEY REFERENCES skip_assets(asset_key) ON DELETE CASCADE,
         priority INTEGER NOT NULL);

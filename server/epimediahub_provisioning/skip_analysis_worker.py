@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import os
 import re
 import sqlite3
 import time
@@ -220,6 +221,10 @@ def process_one(db):
     except (OSError, KeyError, TypeError, json.JSONDecodeError, sqlite3.Error, OverflowError):
         status, detail = "failed", "Analyse nicht möglich; eigene Zeitmarken bleiben nutzbar"
     with db() as con:
+        from skip_release import accept_pending
+        accepted = accept_pending(con, asset_key=job['asset_key'])
+        if accepted and status == 'review':
+            status, detail = 'done', f'{accepted} erkannte Abschnitt(e) automatisch freigegeben; Zeiten später korrigierbar'
         con.execute("UPDATE skip_jobs SET status=?,detail=?,attempts=attempts+?,updated_at=? WHERE id=?", (status, detail, 0 if status == "queued" else 1, now(), job["id"]))
         if status not in ('queued', 'disabled'):
             con.execute("INSERT INTO skip_analysis_budget VALUES(?,1) ON CONFLICT(day) DO UPDATE SET count=count+1", (day,))
@@ -232,11 +237,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true", help="Process at most one bounded job")
     parser.parse_args()
-    from app import BASE_DIR, db
-    from wsgi import app
-    with (Path(BASE_DIR) / "skip-analysis.lock").open("w") as lock:
+    data_dir = Path(os.environ.get("EPIMEDIAHUB_DATA_DIR", "/var/lib/epimediahub"))
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with (data_dir / "skip-analysis.lock").open("a") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise SystemExit(0)
+        # Importing the application runs schema migrations. Those writes must
+        # also be protected against another worker or an ongoing installation.
+        from app import db
+        from wsgi import app
+        from skip_progress import refresh as refresh_progress
+        with db() as con:
+            refresh_progress(con, budget=.5)
         print("skip_analysis_status=" + process_one(db))

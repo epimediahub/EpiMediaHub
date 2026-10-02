@@ -74,6 +74,8 @@ def migrate(con):
     """)
     from skip_automation import migrate as migrate_automation
     migrate_automation(con)
+    from skip_progress import migrate as migrate_progress
+    migrate_progress(con)
 
 
 def integer(body, key, low, high, default=None):
@@ -221,7 +223,7 @@ def wake_reference_jobs(con, source_key, season=None):
     if season is not None:
         sql += " AND season=?"
         params.append(season)
-    sql += ") AND status IN ('no_reference','no_match','done','review')"
+    sql += ") AND status IN ('no_reference','no_match','review')"
     con.execute(sql, params)
 
 
@@ -235,6 +237,7 @@ def review_record(con, row, decision, start, end, disabled, wake=True):
         if wake:
             wake_reference_jobs(con, row['source_key'])
     con.execute('DELETE FROM skip_fingerprints WHERE record_id=?', (record_id,))
+    con.execute('DELETE FROM skip_auto_reference_checks WHERE record_id=?', (record_id,))
     con.execute('UPDATE skip_records SET status=?,start_ms=?,end_ms=?,disabled=?,reviewed_at=? WHERE id=?',
                 ('approved' if decision == 'approve' else 'rejected', start, end, int(disabled), now(), record_id))
     con.execute('UPDATE skip_auto_evidence SET human_review=1 WHERE record_id=?', (record_id,))
@@ -250,62 +253,8 @@ def review_record(con, row, decision, start, end, disabled, wake=True):
 
 def approve_pending_scope(con, source_key, season=None):
     """Approve the whole selected series/season, with one effective marker per file/section."""
-    from itertools import groupby
-    from skip_automation import PROPOSAL_RANK, BOUNDARY_TOLERANCE
-    sql = """SELECT r.*,COALESCE(e.human_review,0) human_review FROM skip_records r
-      LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
-      WHERE r.status='pending' AND r.media_type='episode' AND r.source_key=?"""
-    params = [source_key]
-    if season is not None:
-        sql += ' AND r.season=?'
-        params.append(season)
-    sql += ' ORDER BY r.asset_key,r.segment_type,r.duration_ms,r.id'
-    rows = con.execute(sql, params).fetchall()
-    result = dict(approved=0, duplicates=0, conflicts=0, protected=0, invalid=0)
-    approved_seasons = set()
-    for _, versions in groupby(rows, key=lambda row: (row['asset_key'], row['segment_type'])):
-        batches = []
-        for row in versions:
-            if not batches or row['duration_ms'] - batches[-1][-1]['duration_ms'] > 2000:
-                batches.append([])
-            batches[-1].append(row)
-        for batch in batches:
-            first = batch[0]
-            # A previous correction/rejection for this file has precedence over
-            # a broad approval, including decisions in another source identity.
-            decided = con.execute("""SELECT 1 FROM skip_records WHERE asset_key=? AND segment_type=?
-              AND duration_ms BETWEEN ? AND ? AND status IN ('approved','rejected') LIMIT 1""",
-              (first['asset_key'], first['segment_type'], batch[0]['duration_ms'] - 2000, batch[-1]['duration_ms'] + 2000)).fetchone()
-            blocked = con.execute('SELECT 1 FROM skip_auto_blocks WHERE asset_key=? AND kind=? AND duration_ms BETWEEN ? AND ? LIMIT 1',
-                                  (first['asset_key'], first['segment_type'], batch[0]['duration_ms'] - 2000, batch[-1]['duration_ms'] + 2000)).fetchone()
-            if decided or blocked:
-                result['protected'] += len(batch)
-                continue
-            if any(not valid_range(row['segment_type'], row['start_ms'], row['end_ms'], row['duration_ms'], bool(row['disabled']))
-                   for row in batch):
-                result['invalid'] += len(batch)
-                continue
-            alternatives = con.execute("""SELECT id FROM skip_records WHERE status='pending'
-              AND asset_key=? AND segment_type=? AND duration_ms BETWEEN ? AND ?""",
-              (first['asset_key'], first['segment_type'], batch[0]['duration_ms'] - 2000, batch[-1]['duration_ms'] + 2000)).fetchall()
-            if (len(alternatives) != len(batch)
-                    or batch[-1]['duration_ms'] - batch[0]['duration_ms'] > 2000
-                    or len({(row['season'], row['episode'], row['disabled']) for row in batch}) != 1
-                    or max(row['start_ms'] for row in batch) - min(row['start_ms'] for row in batch) > BOUNDARY_TOLERANCE
-                    or max(row['end_ms'] for row in batch) - min(row['end_ms'] for row in batch) > BOUNDARY_TOLERANCE):
-                result['conflicts'] += len(batch)
-                continue
-            chosen = max(batch, key=lambda row: (row['human_review'] or row['source'] == 'device',
-                                                PROPOSAL_RANK.get(row['source'], 0), row['confidence'], -row['id']))
-            review_record(con, chosen, 'approve', chosen['start_ms'], chosen['end_ms'], bool(chosen['disabled']), wake=False)
-            con.executemany("UPDATE skip_records SET status='superseded',reviewed_at=? WHERE id=? AND status='pending'",
-                            [(now(), row['id']) for row in batch if row['id'] != chosen['id']])
-            result['approved'] += 1
-            result['duplicates'] += len(batch) - 1
-            approved_seasons.add(chosen['season'])
-    for approved_season in approved_seasons:
-        wake_reference_jobs(con, source_key, approved_season)
-    return result
+    from skip_release import approve_scope
+    return approve_scope(con, source_key, season)
 
 
 def install(app, db):
@@ -353,8 +302,15 @@ def install(app, db):
             row = device(con)
             if not rate(con, row, "submit", 30):
                 return jsonify(error="rate_limited"), 429
+            registered = register_asset(con, raw, data, row)
             saved = add_record(con, data, kind, start, end, off, row)
-            register_asset(con, raw, data, row)
+            from skip_release import enabled as release_enabled
+            asset = con.execute('SELECT * FROM skip_assets WHERE asset_key=?', (data['asset_key'],)).fetchone() if registered else None
+            if (asset and release_enabled(con, asset['playlist_id']) and saved['status'] == 'pending'
+                    and all(asset[key] == data[key] for key in ('source_key','media_type','season','episode','duration_ms'))):
+                record = con.execute('SELECT * FROM skip_records WHERE id=?', (saved['id'],)).fetchone()
+                review_record(con, record, 'approve', start, end, off)
+                saved = dict(id=saved['id'], status='approved')
             return jsonify(id=saved["id"], status=saved["status"]), 200
 
     @app.post("/v1/device/skip/lookup")
@@ -416,15 +372,17 @@ def install(app, db):
             season = int(raw_season) if re.fullmatch(r"\d{1,4}", raw_season) and int(raw_season) <= 1000 else None
             browser = marker_browser(con, state, request.args.get("series", ""), season,
                                      request.args.get("page", "1"), request.args.get("episode_page", "1"))
-            sources = con.execute("SELECT p.id,p.name,c.name customer_name,COALESCE(s.enabled,0) enabled,COALESCE(a.enabled,0) automatic,COALESCE(a.online_enabled,0) online_enabled FROM customer_playlists p JOIN customers c ON c.id=p.customer_id LEFT JOIN skip_analysis_sources s ON s.playlist_id=p.id LEFT JOIN skip_auto_settings a ON a.playlist_id=p.id ORDER BY c.name,p.name LIMIT 200").fetchall()
+            sources = con.execute("SELECT p.id,p.name,c.name customer_name,COALESCE(s.enabled,0) enabled,COALESCE(a.enabled,0) automatic,COALESCE(a.online_enabled,0) online_enabled,COALESCE(r.enabled,1) auto_accept FROM customer_playlists p JOIN customers c ON c.id=p.customer_id LEFT JOIN skip_analysis_sources s ON s.playlist_id=p.id LEFT JOIN skip_auto_settings a ON a.playlist_id=p.id LEFT JOIN skip_release_settings r ON r.playlist_id=p.id ORDER BY c.name,p.name LIMIT 200").fetchall()
             jobs = con.execute("SELECT j.*,a.title,a.year,a.source_key,a.media_type,a.season,a.episode FROM skip_jobs j JOIN skip_assets a ON a.asset_key=j.asset_key ORDER BY j.id DESC LIMIT 20").fetchall()
             online_status = con.execute("SELECT o.detail,a.title,a.year,a.source_key,a.media_type,a.season,a.episode FROM skip_auto_online o JOIN skip_assets a ON a.asset_key=o.asset_key ORDER BY o.checked_at DESC LIMIT 10").fetchall()
             tmdb_ready = bool(con.execute("SELECT 1 FROM skip_auto_metadata_config WHERE name='tmdb_api_key'").fetchone() or os.environ.get("EPIMEDIAHUB_TMDB_API_KEY"))
             from skip_catalogue import dashboard as catalogue_dashboard, daily_limit
             catalogues = catalogue_dashboard(con)
             audio_limit = daily_limit(con)
+            from skip_progress import overview
+            progress = overview(con, request.args.get('progress_filter','all'), request.args.get('progress_search',''), request.args.get('progress_page','1'), preferred_source=browser['source_key'])
         selected_episode = page_number(request.args.get("episode", ""), 0)
-        return render_template("skip_markers.html", browser=browser, sources=sources, job_groups=media_groups(jobs), online_groups=media_groups(online_status), tmdb_ready=tmdb_ready, catalogues=catalogues, audio_limit=audio_limit, state=state, selected_episode=selected_episode, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", ""))
+        return render_template("skip_markers.html", browser=browser, sources=sources, job_groups=media_groups(jobs), online_groups=media_groups(online_status), tmdb_ready=tmdb_ready, catalogues=catalogues, audio_limit=audio_limit, progress=progress, state=state, selected_episode=selected_episode, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", ""))
 
     def return_to_marker(row, notice):
         state = request.form.get("return_state", "pending")
@@ -483,15 +441,15 @@ def install(app, db):
             counts = approve_pending_scope(con, source_key, season)
         notice = f"{counts['approved']} Zeitmarken freigegeben"
         for key, label in (('duplicates', 'doppelte Vorschläge zusammengeführt'),
-                           ('conflicts', 'widersprüchliche Vorschläge bleiben zur Einzelprüfung'),
-                           ('protected', 'Vorschläge mit bestehender Entscheidung unverändert'),
+                           ('conflicts', 'abweichende Varianten automatisch ausgewählt'),
+                           ('protected', 'alte Vorschläge erledigt; bestehende Entscheidungen beibehalten'),
                            ('invalid', 'ungültige Vorschläge bleiben zur Einzelprüfung')):
             if counts[key]:
                 notice += f" · {counts[key]} {label}"
-        return redirect(url_for('v082_skip_dashboard', state='pending', series=source_key, season=season,
+        return redirect(url_for('v082_skip_dashboard', state='approved' if counts['approved'] else 'pending', series=source_key, season=season,
                                 page=page_number(request.form.get('return_page', '1')),
                                 episode_page=page_number(request.form.get('return_episode_page', '1')),
-                                _anchor='season-' + str(season) if season is not None else 'series-' + source_key,
+                                _anchor='review-result',
                                 notice=notice))
 
     @app.post("/admin/skip/<int:record_id>/identity")
@@ -543,6 +501,7 @@ def install(app, db):
         csrf()
         automatic = request.form.get("enabled") == "1"
         online = request.form.get("online") == "1"
+        auto_accept = request.form.get('auto_accept') == '1'
         with db() as con:
             playlist = con.execute("SELECT p.* FROM customer_playlists p JOIN customers c ON c.id=p.customer_id AND c.enabled=1 WHERE p.id=?", (playlist_id,)).fetchone()
             source = con.execute("SELECT enabled FROM skip_analysis_sources WHERE playlist_id=?", (playlist_id,)).fetchone()
@@ -550,11 +509,16 @@ def install(app, db):
                 abort(404)
             if automatic and (not source or not source[0]):
                 return redirect(url_for("v082_skip_dashboard", notice="Zuerst die erlaubte Audioanalyse für diese Playlist aktivieren"))
+            previous = con.execute('SELECT enabled FROM skip_auto_settings WHERE playlist_id=?', (playlist_id,)).fetchone()
             con.execute("INSERT OR REPLACE INTO skip_auto_settings VALUES(?,?,?,?)", (playlist_id, int(automatic), int(online), now()))
-            if automatic:
+            con.execute('INSERT OR REPLACE INTO skip_release_settings VALUES(?,?,?)', (playlist_id, int(auto_accept), now()))
+            if auto_accept:
+                from skip_release import accept_pending
+                accept_pending(con, playlist_id=playlist_id)
+            if automatic and (not previous or not previous[0]):
                 con.execute("UPDATE skip_jobs SET status='queued',attempts=0,updated_at=? WHERE asset_key IN (SELECT asset_key FROM skip_assets WHERE playlist_id=?) AND status IN ('disabled','failed','unmatched','no_match','no_reference','review','done')", (now(), playlist_id))
                 con.execute("DELETE FROM skip_auto_series WHERE playlist_id=?", (playlist_id,))
-        return redirect(url_for("v082_skip_dashboard", notice="Staffelautomatik aktiviert" if automatic else "Staffelautomatik ausgeschaltet"))
+        return redirect(url_for("v082_skip_dashboard", notice=('Automatik gespeichert · Erkannte Zeitmarken werden automatisch freigegeben' if auto_accept else 'Automatik gespeichert · Neue Vorschläge werden manuell geprüft')))
 
     @app.post("/admin/skip/catalogue")
     def v082_skip_catalogue():
@@ -620,6 +584,6 @@ def install(app, db):
         response = previous_health()
         data = response.get_json()
         data["api_version"] = "0.8.2"
-        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True, "skip_high_audio_approval": True, "skip_proposal_dedup": True, "skip_online_error_details": True, "skip_language_priority": True, "skip_bulk_review": True, "skip_network_address_fallback": True}
+        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True, "skip_high_audio_approval": True, "skip_proposal_dedup": True, "skip_online_error_details": True, "skip_language_priority": True, "skip_bulk_review": True, "skip_network_address_fallback": True, "skip_automatic_acceptance": True, "skip_series_progress": True, "skip_database_concurrency": True, "skip_progress_cache": True}
         return jsonify(data)
     app.view_functions["health"] = health

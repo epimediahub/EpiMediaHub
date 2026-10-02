@@ -80,6 +80,8 @@ def migrate(con):
     from skip_catalogue import migrate as catalogue_migrate
     catalogue_migrate(con)
     maintain_proposals(con)
+    from skip_release import migrate as release_migrate
+    release_migrate(con)
     # The old message discarded the actual cause. Recheck those entries using
     # metadata only; keep every marker, audio job and daily audio budget intact.
     con.execute("""INSERT OR IGNORE INTO skip_auto_online_retry
@@ -482,6 +484,8 @@ def refresh_online_one(db, busy_factory):
             for candidate in candidates:
                 store_proposal(con, asset, candidate['kind'], candidate['start'], candidate['end'],
                                'theintrodb', evidence={'method': 'online_suggestion'})
+            from skip_release import accept_pending
+            accept_pending(con, asset_key=asset['asset_key'])
         con.execute('INSERT INTO skip_auto_online_budget VALUES(?,1) ON CONFLICT(day) DO UPDATE SET count=count+1', (day,))
         con.execute('DELETE FROM skip_auto_online_budget WHERE day<?',
                     (time.strftime('%Y-%m-%d', time.gmtime(time.time() - 31 * 86400)),))
@@ -595,16 +599,20 @@ def maintain_proposals(con):
 
 
 def reference_rows(con, asset, kind):
+    from skip_release import enabled as release_enabled
     return con.execute("""SELECT r.*,a.playlist_id FROM skip_records r JOIN skip_assets a ON a.asset_key=r.asset_key
       JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id AND s.enabled=1
       JOIN customer_playlists p ON p.id=a.playlist_id JOIN customers c ON c.id=p.customer_id AND c.enabled=1
       LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
       WHERE r.source_key=? AND r.season=? AND r.segment_type=? AND r.status='approved' AND r.disabled=0
-      AND ((e.record_id IS NULL AND r.source<>'auto_audio') OR e.human_review=1) AND r.asset_key<>?
+      AND ((e.record_id IS NULL AND r.source<>'auto_audio') OR e.human_review=1
+           OR (?=1 AND r.source IN ('chapter','theintrodb','audio_repetition')
+               AND json_valid(e.evidence_json) AND json_extract(e.evidence_json,'$.automatic_acceptance')=1))
+      AND r.asset_key<>?
       AND a.source_key=r.source_key AND a.season=r.season AND a.episode=r.episode AND a.media_type='episode'
       AND r.end_ms-r.start_ms BETWEEN 19000 AND 300000 AND ABS(a.duration_ms-r.duration_ms)<=2000
-      ORDER BY r.reviewed_at DESC,r.id DESC LIMIT 4""",
-      (asset["source_key"], asset["season"], kind, asset["asset_key"])).fetchall()
+      ORDER BY COALESCE(e.human_review,0) DESC,r.reviewed_at DESC,r.id DESC LIMIT 4""",
+      (asset["source_key"], asset["season"], kind, int(release_enabled(con, asset['playlist_id'])), asset["asset_key"])).fetchall()
 
 
 def consensus(votes, online, duration, kind):
@@ -774,7 +782,7 @@ def save_window(con, asset, kind, words, step, offset, length):
 
 
 def analyze(db, job, busy_factory):
-    from skip_analysis_worker import store_fingerprint
+    from skip_analysis_worker import store_fingerprint, reusable_fingerprint
     with db() as con:
         asset = con.execute("SELECT * FROM skip_assets WHERE asset_key=?", (job["asset_key"],)).fetchone()
         if not asset or not enabled(con, asset["playlist_id"]):
@@ -832,14 +840,24 @@ def analyze(db, job, busy_factory):
         for record in refs[kind]:
             with db() as con:
                 reference_asset = con.execute("SELECT * FROM skip_assets WHERE asset_key=?", (record["asset_key"],)).fetchone()
-            # Revalidate reference duration and complete audio, including old
-            # caches produced before truncation checks were available.
+            # Reuse only a recently validated, complete fingerprint of this
+            # exact reviewed marker. Older/unvalidated caches are read again.
+            with db() as con:
+                stored = con.execute('SELECT * FROM skip_fingerprints WHERE record_id=?', (record['id'],)).fetchone()
+                checked = con.execute('SELECT * FROM skip_auto_reference_checks WHERE record_id=?', (record['id'],)).fetchone()
+            reusable = (reference_asset and abs(reference_asset['duration_ms']-record['duration_ms'])<=2000
+                        and reusable_fingerprint(stored, record) and checked
+                        and checked['fingerprint_created_at']==stored['created_at']
+                        and int(time.time())-checked['checked_at']<3600)
             try:
-                with provider_proxy(source_url(playlists[record["playlist_id"]], reference_asset), busy) as source:
-                    measured, _ = probe(source, busy)
-                    if abs(measured - record["duration_ms"]) > 2000:
-                        continue
-                    words, step = fingerprint(source, record["start_ms"] + 2000, record["end_ms"] - record["start_ms"] - 4000, busy, require_complete=True)
+                if reusable:
+                    words, step = json.loads(stored['words_json']), stored['step_ms']
+                else:
+                    with provider_proxy(source_url(playlists[record["playlist_id"]], reference_asset), busy) as source:
+                        measured, _ = probe(source, busy)
+                        if abs(measured - record["duration_ms"]) > 2000:
+                            continue
+                        words, step = fingerprint(source, record["start_ms"] + 2000, record["end_ms"] - record["start_ms"] - 4000, busy, require_complete=True)
             except ValueError as error:
                 if str(error) == "analysis_deferred":
                     raise
@@ -848,8 +866,12 @@ def analyze(db, job, busy_factory):
             except OSError:
                 last_error = ValueError("analysis_failed")
                 continue
-            with db() as con:
-                store_fingerprint(con, record, words, step)
+            if not reusable:
+                with db() as con:
+                    store_fingerprint(con, record, words, step)
+                    con.execute('''INSERT OR REPLACE INTO skip_auto_reference_checks
+                      SELECT record_id,created_at,? FROM skip_fingerprints WHERE record_id=?
+                      AND words_json=? AND step_ms=?''', (int(time.time()), record['id'], json.dumps(words), step))
             match = matching_offset(words, target, step) if abs(step - target_step) <= .001 else None
             if not match:
                 continue
@@ -879,8 +901,11 @@ def analyze(db, job, busy_factory):
                 approvals += 1
             elif not votes and bootstrap(con, asset, kind):
                 proposals += 1
+    with db() as con:
+        from skip_release import accept_pending
+        approvals += accept_pending(con, asset_key=asset['asset_key'])
     if approvals:
-        return "done", f"{approvals} Abschnitt(e) mit hohem, eindeutigem Audiotreffer automatisch freigegeben"
+        return "done", f"{approvals} erkannte Abschnitt(e) automatisch freigegeben; Zeiten später korrigierbar"
     if proposals:
         return "review", "Vorschläge vorhanden; Zeitgrenzen im Dashboard prüfen"
     if not windows and last_error:

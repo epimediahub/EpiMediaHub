@@ -14,6 +14,8 @@ from pathlib import Path
 import qrcode
 from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
 
+from skip_database import connect, enable_wal
+
 from receiver_sync import (
     build_device_config,
     create_sync_bootstrap,
@@ -82,14 +84,12 @@ def qr_data_uri(value):
 
 def db():
     BASE_DIR.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(DB_PATH)
-    con.row_factory = sqlite3.Row
-    con.execute("PRAGMA foreign_keys=ON")
-    return con
+    return connect(DB_PATH)
 
 
 def init_db():
     with db() as con:
+        enable_wal(con)
         con.executescript(
             """
             CREATE TABLE IF NOT EXISTS customers(

@@ -1,4 +1,4 @@
-# Sprachpriorität, Serien-/Staffelfreigabe und Gesamtkatalog für Raspberry 0.8.2
+# Automatische Zeitmarken und Serienfortschritt für Raspberry 0.8.2
 
 Der vorhandene Worker erfasst den vollständigen Serienbestand der aktivierten
 XTREAM-Playlists, auch ohne vorheriges Abspielen. Neue oder vom Anbieter als
@@ -9,16 +9,17 @@ erneut eingeplant. Ein Katalogfund allein gibt keine Zeitmarke frei.
 ## Installation
 
 Voraussetzung ist der laufende Raspberry-Server 0.8.2 mit Audioanalyse und
-Staffelautomatik für die gewünschten Playlists. Android 1.0.16 bleibt kompatibel.
+Staffelautomatik für die gewünschten Playlists. Android 1.0.16 und 1.0.17 bleiben kompatibel.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/24ba8b4fab1d3f14fc2f6c59570a0f2730d47dd0/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
-sudo bash /var/tmp/epimediahub-skip-catalogue.sh --wait-worker
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/dcb0254c5daac9c0392c58e0e214309018e03c37/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+sudo bash /var/tmp/epimediahub-skip-catalogue.sh --wait-worker --start-catalogue
 ```
 
-Der Aufruf aktualisiert den vorhandenen Dienst und erhält Katalogeinstellungen,
-Nachttermine und das Tagesbudget. Um zusätzlich die erstmalige Bestandsaufnahme
-zu starten, kann `--start-catalogue` an den Bash-Aufruf angehängt werden.
+Der Aufruf aktualisiert den vorhandenen Dienst und startet beziehungsweise setzt
+die Bestandsaufnahme fort. Nachttermine, bestehende Cursor und das Tagesbudget
+bleiben erhalten. Ohne `--start-catalogue` werden die Katalogeinstellungen
+unverändert gelassen.
 Der Schalter startet ausschließlich bereits aktivierte Automatik-Playlists
 mit erlaubter Audioanalyse und aktivem Kunden. TMDB-Schlüssel,
 Anbieterkonfiguration, Geräte und menschliche Zeitmarken bleiben erhalten.
@@ -28,11 +29,49 @@ vorhandenen Worker-Lock, ohne den Durchlauf abzubrechen. Der Timer muss dafür
 nicht manuell gestoppt werden. Ohne diese Option endet der Installer bei einem
 belegten Lock weiterhin vor Änderungen. Beide Optionen sind kombinierbar.
 
-Das Skript lädt siebzehn Dateien aus einem festen Commit und prüft SHA256,
+Das Skript lädt 26 Dateien aus einem festen Commit und prüft SHA256,
 Syntax sowie die tatsächlichen Richtlinien-, API- und Audiotests vor Änderungen.
 Es verwendet den bestehenden Worker-Lock, sichert Code und SQLite-Datenbank
 und stellt bei einem fehlgeschlagenen Neustart den vorherigen Code sowie nur
-die selbst geänderten Katalogeinstellungen wieder her.
+die selbst geänderten Katalogeinstellungen wieder her. Vor dem Neustart wird die
+Serienstatistik einmalig vorbereitet und die Intro-Maske mit einer
+schreibgeschützten Kopie des vorhandenen Datenbestands vollständig gerendert;
+ein erfolgreicher Health-Aufruf allein reicht nicht aus. Am Ende zeigt der
+Installer getrennte Zeiten für Datenbankkopie, Aktualisierung geänderter Serien
+und Rendern der Intro-Maske.
+
+## Reparatur bei „database is locked“
+
+Wenn die Intro-Maske einen internen Serverfehler zeigt und das Protokoll
+`sqlite3.OperationalError: database is locked` meldet:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/dcb0254c5daac9c0392c58e0e214309018e03c37/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+sudo bash /var/tmp/epimediahub-skip-catalogue.sh --repair-database --start-catalogue
+```
+
+Der Reparaturmodus funktioniert auch bei einem nicht antwortenden Health-Endpunkt,
+sofern die vorhandene Intro-API lokal als 0.8.2 erkennbar ist. Downloads,
+Prüfsummen und Tests laufen vor Änderungen. Anschließend hält der Installer
+Analyse und Webdienst geordnet an, erwirbt den Worker-Lock und sichert den
+Datenbestand. Abgebrochene laufende Jobs werden ohne zusätzlichen Versuch oder
+Rücksetzen des Tagesbudgets erneut eingeplant. Der Webdienst und ein zuvor
+aktiver Analyse-Timer starten danach wieder; `--start-catalogue` aktiviert den
+Timer auch dann, wenn er zuvor inaktiv war.
+
+SQLite verwendet anschließend WAL. Leser der Übersicht verhindern damit keine
+Schreib-Commits der Wiedergabemeldungen. Alle Web- und Worker-Verbindungen werden
+beim Verlassen ihres Kontexts zuverlässig geschlossen, auch nach Fehlern. Ein
+zusätzlicher Index findet Katalogeinträge anhand der konkreten Datei; vorher
+wurde für jede Folge erneut die Playlist durchsucht. Bei 6.001 Folgen reduzierte
+sich diese Abfrage im lokalen Vergleich von 1,867 auf 0,018 Sekunden. Die Laufzeit
+auf dem jeweiligen Raspberry wurde nicht gemessen.
+
+Der Worker erwirbt seinen Lock bereits vor dem Import der Anwendung, sodass
+auch die dabei ausgeführten Migrationen gegen parallele Worker und Installation
+geschützt sind. Korrekturen, Kunden, Geräte, Anbieterzugänge, TMDB-Schlüssel und
+bereits gespeicherte Marken bleiben erhalten. Die Sicherung ersetzt niemals
+pauschal die aktive Datenbank.
 
 ## Online-Abfragen und Fehlermeldungen
 
@@ -67,7 +106,7 @@ Fehler werden nach ihrer Wartezeit erneut geprüft. Diese Nachprüfungen rufen n
 Metadaten ab, laden keine Videodatei und wiederholen keine Audioanalyse. Sie laufen
 auch nach Ausschöpfen des Audiolimits, erhalten dessen Zähler und alle Audiojobs.
 Gemeldete Wiedergabe, ausgeschaltete Analyse sowie menschliche Entscheidungen
-bleiben vorrangig. Gefundene Online-Zeiten erzeugen Vorschläge zur Prüfung.
+bleiben vorrangig. Gefundene Online-Zeiten werden im automatischen Modus direkt freigegeben.
 
 ## Ablauf
 
@@ -144,6 +183,55 @@ erneut berücksichtigt.
 
 ## Dashboard
 
+„Serienfortschritt“ zeigt alle erfassten Serien, unabhängig von den letzten
+Analyseprotokollen. Pro Serie stehen analysierte Videofassungen, vorhandene
+Intros, offene Folgen, Zugriffsfehler und fehlende Referenzen. Die Fortschrittszahl
+beschreibt die Analyse; „100 % analysiert“ bedeutet nicht automatisch „alle Intros
+gefunden“. Bereits analysierte Folgen ohne nutzbares Intro stehen separat.
+
+Filter zeigen abgeschlossene Analysen, Serien mit Intros, Serien mit fehlenden
+Intros und noch offene Analysen. Die Suche durchsucht Titel und Playlistnamen.
+20 Serien pro Seite machen den ganzen erfassten Bestand zugänglich. Getrennte
+Quellen bleiben getrennt, und mehrere Fassungen einer Folge werden mitgezählt.
+Noch nicht vollständig erfasste Folgenlisten und das verbrauchte Tagesbudget
+werden angezeigt. Während der Bestandsaufnahme wächst die Übersicht.
+
+Die Fortschrittszahlen werden je Serie gespeichert. Ein Seitenwechsel oder
+Filter liest diese Statistik, statt sämtliche Folgen und Intro-Marken erneut
+zu durchsuchen. Änderungen an Dateien, Analysejobs, Marken und Katalogständen
+markieren nur die betroffenen Serien zur Neuberechnung. Das gilt auch für
+Änderungen aus einem anderen Web- oder Worker-Prozess. Kunden- und Playlistnamen,
+Analyseeinstellungen sowie Tagesbudget werden weiterhin aktuell gelesen.
+
+Dashboard und Worker aktualisieren jeweils eine begrenzte Zahl geänderter
+Serien. Bei einem größeren Rückstand zeigt die Übersicht die noch zu
+aktualisierende Zahl an. Die gerade ausgewählte Serie wird bevorzugt, damit
+Freigaben und Korrekturen beim anschließenden Öffnen sichtbar werden. Eine
+während der Berechnung geänderte Serie bleibt zur erneuten Aktualisierung
+vorgemerkt; auch zwischenzeitliches Aktualisieren und erneutes Ändern können
+keine veralteten Zahlen veröffentlichen. Bestehende Bestände werden bei der
+Installation vor dem Neustart vollständig vorbereitet.
+
+Im lokalen Vergleich mit 60.001 Dateien, 180.001 freigegebenen Intro-Marken und
+2.001 Seriengruppen sank die Fortschrittsberechnung von 0,616 auf 0,0127 Sekunden
+(rund 48-mal schneller). Die einmalige Vorbereitung brauchte 0,288 Sekunden.
+Dies sind Messungen derselben lokalen Testdatenbank, keine Laufzeitgarantie für
+einen Raspberry oder für das gesamte Dashboard. Die übrigen Dashboard-Abfragen
+und die Datenbankkopie werden durch diesen Vergleich nicht gemessen.
+
+Zur Messung mit dem vorhandenen Raspberry-Datenbestand:
+
+```sh
+sudo bash -c 'time timeout 60s /opt/epimediahub/provisioning/.venv/bin/python /opt/epimediahub/provisioning/deploy/check_skip_dashboard.py /var/lib/epimediahub/provisioning.db /opt/epimediahub/provisioning/templates'
+```
+
+Die drei ausgegebenen Phasenzeiten trennen Kopieren, Statistikaktualisierung
+und Rendern. Der Prüfer verändert weder die aktive Datenbank noch
+Authentifizierung oder Dienstkonfiguration. Eventuell noch offene Statistik
+wird ausschließlich in seiner privaten Datenbankkopie vorbereitet. Die
+Passworteingabe für `sudo` liegt außerhalb der hier gemessenen Laufzeit.
+
+
 Die Zeitmarken sind nach Serie → Staffel → Folge gegliedert. Die Titelübersicht
 zeigt höchstens 20 Serien pro Seite; die Auswahl einer Staffel lädt höchstens
 25 Folgen pro Seite mit sämtlichen zugehörigen Zeitmarken. Weitere Seiten
@@ -168,15 +256,18 @@ die Serienfreigabe umfasst sämtliche Staffeln einschließlich Spezialfolgen.
 Intro, Rückblick und Abspann werden zusammen geprüft. Gleichnamige Serien
 mit anderer Quellenzuordnung werden nicht mit freigegeben.
 
-Die Aktion entspricht einer menschlichen Freigabe. Sie gilt nur für zu diesem
-Zeitpunkt offene Vorschläge und schaltet keine zukünftigen Freigaben ein.
-Nahezu gleiche Vorschläge derselben Datei, Laufzeit und Abschnittsart werden
-zu einer wirksamen Zeitmarke zusammengeführt. Widersprüchliche Grenzen,
-abweichende Folgenzuordnungen und Vorschläge zu bereits freigegebenen oder
-abgelehnten Abschnitten bleiben unverändert zur Einzelprüfung. Unterschiedliche
-Dateifassungen können jeweils eine eigene Freigabe erhalten. Danach zeigt
-das Dashboard die Anzahl freigegebener Marken, zusammengeführter Duplikate
-und zurückgelassener Vorschläge.
+Die Aktion entspricht einer menschlichen Freigabe der aktuellen Auswahl.
+Pro Datei, Laufzeit und Abschnittsart wird die stärkste gültige Variante gewählt;
+auch abweichende Zeiten werden aufgelöst. Andere Vorschläge werden nach „Ersetzt“
+archiviert. Bereits bestehende menschliche Korrekturen und Ablehnungen haben
+Vorrang; veraltete offene Alternativen werden dabei ebenfalls erledigt. Eine
+ausdrückliche offene Player-Korrektur kann eine vorherige maschinelle Freigabe
+ersetzen. Unterschiedliche Videofassungen behalten eigene Zeitmarken.
+
+Das Ergebnis zeigt die Zahl freigegebener und zusammengeführter Marken sowie
+erhaltene Entscheidungen. Nach einer Freigabe öffnet sich „Freigegeben“ und die
+Erfolgsmeldung steht direkt im sichtbaren Bereich. Ungültige Zeitbereiche werden
+nicht veröffentlicht. Ein Klick schaltet die zukünftige Automatik nicht um.
 
 Die gesamte Auswahl wird in einer Datenbanktransaktion verarbeitet. Ein
 Fehler führt daher nicht zu einer teilweisen Freigabe. Ein erneuter Klick
@@ -194,42 +285,36 @@ die eigentliche Audioanalyse haben getrennte Fortschrittszahlen.
 eingeplante Folgen bleiben in der Analysewarteschlange; „Analyse ausschalten“
 stoppt die Verarbeitung der betreffenden Playlist.
 
-Vorschläge und Freigaben bleiben in den bestehenden Ansichten. Die bisherigen
-Kriterien für unabhängige Belege, exakte Datei/Laufzeit, menschliche Korrekturen
-und Ablehnungen gelten unverändert. Online-Daten und wiederkehrender Ton ohne
-ausreichende Belege ergeben weiterhin Vorschläge zur Prüfung.
+## Automatische Freigabe und spätere Korrekturen
 
-## Doppelte Vorschläge und hohe Audiotreffer
+Die automatische Übernahme ist standardmäßig für aktive Analyse-Playlists
+aktiviert. Erkannte Zeitmarken aus Audioanalyse, Videokapiteln, TheIntroDB und
+wiederkehrendem Ton werden ohne weitere Bestätigung freigegeben. Beim ersten
+Update werden auch vorhandene maschinelle Vorschläge übernommen. Die Zeiten
+müssen gültig sein und zur registrierten Datei, Laufzeit, Staffel und Folge passen.
+Eine fehlende Zeitmarke wird nicht durch eine erfundene Standardzeit ersetzt.
 
-Für dieselbe Datei, Laufzeit und Abschnittsart werden maschinelle Vorschläge
-mit höchstens 500 ms Abweichung an beiden Grenzen zusammengeführt. Der stärkste
-Audiovorschlag bleibt als stabiler Eintrag erhalten, auch wenn mehrere
-Referenzfolgen denselben Abschnitt erkennen. Materiell widersprüchliche
-Grenzen bleiben getrennt. Unterschiedliche Dateien und Laufzeiten werden
-nicht zusammengelegt; mehrere Fassungen derselben Folge sind gekennzeichnet.
+Unter „Audioanalyse pro Playlist“ kann „Erkannte Zeitmarken automatisch freigeben“
+ausgeschaltet werden. Dann bleiben neue Vorschläge zur Prüfung und die bisherige
+strenge Regel für hohe, eindeutige Audiotreffer bleibt verfügbar. Das Speichern
+unveränderter Automatik-Einstellungen plant erledigte Folgen nicht erneut ein.
 
-Eine geprüfte Referenz derselben Serie und Staffel genügt jetzt für die
-automatische Freigabe ab 92 % Audioähnlichkeit. Der vollständige Fingerabdruck
-muss an einer eindeutigen Position passen. Beginn und Ende des musikalischen
-Ausschnitts werden rund um diese Position separat abgeglichen; kurze Motive
-an anderen Stellen verhindern dadurch keine sonst eindeutige Freigabe.
-Mehrere starke Referenzen dürfen einander nicht um mehr als 500 ms widersprechen.
-Online-Zeiten können zusätzliche Belege liefern, sind dafür aber nicht nötig.
-Für den Abspann bleibt die Kontrolle möglicher Szenen nach dem Abspann erhalten:
-Die automatisch freigegebene Grenze muss bis auf eine Sekunde ans Dateiende reichen.
+Im automatischen Modus werden Player-Korrekturen einer zugeordneten, aktiven
+Playlist direkt freigegeben. Änderungen, Ablehnungen und deaktivierte Abschnitte
+bleiben gegenüber der Erkennung vorrangig. Noch offene eigene Vorschläge werden
+nicht von maschinellen Ergebnissen verdrängt. „Freigegeben“ im Dashboard erlaubt
+weiterhin das Ändern oder Zurückziehen einer Zeitmarke. Ergebnisse aus einer
+während der Analyse korrigierten Referenz werden verworfen.
 
-Aktuelle Datei, gemessene Laufzeit, unveränderte Referenz, Kunden- und
-Playlistfreigabe werden vor der Veröffentlichung erneut geprüft. Eigene
-Korrekturen, Ablehnungen und noch ungeprüfte eigene Marken haben Vorrang.
-Maschinelle Freigaben werden erst nach tatsächlicher menschlicher Prüfung als
-neue Referenz zugelassen; die Automatik bestätigt sich nicht selbst.
-
-Beim Update werden vorhandene Doppelvorschläge einmalig nach „Ersetzt“
-archiviert. Hohe, noch offene Audiovorschläge aktivierter Automatik-Playlists
-werden zur erneuten normalen Analyse eingeplant. Gespeicherte Prozentwerte
-allein werden nicht zur Freigabe benutzt. Tagesbudget und Wiedergabevorrang
-bleiben wirksam. Auch eine menschliche Entscheidung oder automatische Freigabe
-archiviert die übrigen maschinellen Vorschläge desselben Abschnitts.
+Für die erste Referenz ist keine menschliche Bestätigung erforderlich:
+Videokapitel, Online-Zeiten und wiederkehrender Ton aus mindestens drei Folgen
+können den Einstieg liefern. Rein übertragene Audio-Zeiten werden nicht als neue
+unabhängige Referenz weitergereicht. Die Quelle bleibt an die konkrete Datei
+gebunden. Nur vollständig gelesene und kürzlich geprüfte Audio-Fingerabdrücke
+werden bis zu einer Stunde wiederverwendet. Korrekturen löschen diesen Cache.
+Ältere oder ungeprüfte Fingerabdrücke werden erneut an der Datei kontrolliert.
+Erledigte Folgen werden durch eine Freigabe nicht erneut eingeplant; wartende
+Folgen derselben Staffel können die neue Referenz anschließend verwenden.
 
 ## Tageslimit und App-Performance
 
@@ -249,55 +334,32 @@ Wiedergaben außerhalb der EpiMediaHub-App kann diese Meldung nicht erfassen.
 
 ## Validierung
 
-32 zusätzliche SQLite-/API-Tests decken ungespielte Serien, mehrere Staffeln,
-nächtliche Neuzugänge, unveränderte Dateien, fehlende/stale Zeitstempel,
-Neustarts, doppelte Nummerierung, unsichere Dateiformate, Wiedergabevorrang,
-konkurrierendes Ausschalten, Tagesbudget und Zeitumstellung ab.
+Der vollständige Prüflauf umfasst 273 Tests ohne übersprungene Tests:
+233 Richtlinien-, Katalog-, HTTP-, Sprach-, Freigabe- und Fortschrittstests,
+14 Marker-/API-Tests einschließlich echter FFmpeg-/Chromaprint-Erkennung sowie
+26 Installer-Tests. Zusätzlich läuft der bestehende Dashboard-/Geräte-Smoke-Test.
+Die neuen Fälle prüfen die automatische Übernahme bestehender Vorschläge,
+Referenzen ohne menschliche Erstfreigabe, Korrekturen im Player, geschützte
+Ablehnungen, die Sammelfreigabe bei abweichenden Zeiten, vollständige Serienseiten,
+fehlende Intros trotz abgeschlossener Analyse und Wiederherstellung des Codes
+bei fehlenden neuen Health-Funktionen. Neue Regressionen prüfen echte parallele
+Wiedergabemeldungen und Dashboard-Aufrufe bei einer offenen Lesetransaktion,
+6.001 Folgen mit begrenztem SQLite-Rechenaufwand, geschlossene Verbindungen nach
+Commit/Rollback, einen gesperrten Worker vor dem Anwendungsimport und die
+Reparatur bei aktiver Schreibsperre beziehungsweise ausgefallenem Health-Endpunkt.
+Ein Fehler beim tatsächlichen Rendern der Intro-Maske löst ebenfalls die
+Wiederherstellung aus.
 
-Fünfzehn isolierte Installationstests prüfen Erfolg, bestehende Marker/Schlüssel,
-inaktive Timer, beschädigte Downloads, Vorprüfungsfehler, laufende Worker und
-Wiederherstellung von Code, Einstellungen, Termin und Budget. Die echten
-Audio- und API-Prüfungen laufen zusätzlich mit den vorhandenen Backendtests
-in .github/workflows/raspberry-v082-language-validate.yml.
+Zwölf zusätzliche Fortschrittstests prüfen gespeicherte Seiten ohne Zugriff auf
+den Folgen-/Markenbestand, Statuswechsel, Freigaben, Korrekturen, Laufzeit- und
+Quellenänderungen, unveränderte Player-Registrierung, Katalogänderungen,
+Playlistlöschung, begrenzte Aktualisierung, gleichzeitige Änderungen einschließlich
+zwischenzeitlicher Bereinigung sowie die getrennten Prüferzeiten ohne Änderungen
+an der aktiven Datenbank. Zwei weitere Installer-Tests prüfen die vollständig
+vorbereitete Statistik vor dem Neustart und Wiederherstellung bei fehlendem
+Health-Merkmal `skip_progress_cache`.
 
-Neun weitere SQLite-/HTML-/API-Tests prüfen die Serien- und Folgenpagination,
-numerische Reihenfolge, Gruppierung aller Abschnitte derselben Folge,
-gleichnamige Quellen, Filter, erhaltenen Bearbeitungskontext, gruppierte
-Analyseergebnisse, HTML-Escaping und die Darstellung von Filmen.
-
-Zwölf zusätzliche SQLite-Tests prüfen die Konsolidierung, Erhaltung menschlicher
-Entscheidungen, einmalige Nachprüfung vorhandener hoher Treffer, deaktivierte
-Playlists, Tagesbudget und das Verbot maschineller Selbstbestätigung. Die
-Audio-/API-Tests prüfen außerdem die Freigabe mit einer Referenz, unbestätigte
-Grenzen, wiederkehrende kurze Motive und die Archivierung nach manueller Prüfung.
-
-16 weitere HTTP-/SQLite-Tests prüfen originale HTTP-Statuscodes hinter dem Relay,
-fehlende Zeitmarken, TMDB-Zuordnung, ungültige Schlüssel, dienstweite Zugriffspausen,
-Tageslimits, Retry-After, sichere Meldungen, Wiedergabevorrang und Nachprüfungen ohne
-Videodownload. Der Installer prüft zusätzlich die Vormerkung alter Online-Fehler.
-20 weitere SQLite-/API-Tests prüfen beide bevorzugten Sprachen, die vom Nutzer
-genannten Kategorien, eine ausdrücklich andere Audiosprache, unbekannte
-Sprachen, Metadatenaktualisierungen ohne erneute Audioanalyse, bestehende
-Warteschlangen, mehrere Playlists, den einmaligen Kategorienabgleich und die
-Erhaltung von Cursor, Nachttermin, Budget und menschlichen Entscheidungen.
-Der Installer prüft zusätzlich die Migration der Sprachzuordnung und das
-optionale Warten auf einen laufenden Worker einschließlich eines Zeitlimits.
-17 zusätzliche SQLite-/HTML-/API-Tests prüfen Serien-/Staffelfreigaben über alle
-Seiten, Spezialfolgen, getrennte Quellen und Dateifassungen, Duplikate,
-Widersprüche, bestehende Entscheidungen, Sitzungsprüfung, erneute Klicks und
-atomare Wiederherstellung bei Fehlern. Der Installer prüft außerdem, dass der
-neu gestartete Server die Sammelfreigabe unterstützt.
-Der vollständige Prüflauf umfasst 225 Tests ohne übersprungene Tests sowie den
-bestehenden Dashboard-/Geräte-Smoke-Test.
-
-Validierter Installer-Commit: `24ba8b4fab1d3f14fc2f6c59570a0f2730d47dd0`.
-[GitHub-Actions-Prüflauf](https://github.com/epimediahub/EpiMediaHub/actions/runs/37028975894).
-
-Neun Netzwerkprüfungen decken DNS-Adressen mit IPv4 und IPv6, nicht erreichbare
-CDN-Adressen, TCP-Timeouts, das gemeinsame Zeitbudget, unveränderte TLS-Hostnamen
-und einen echten JSON-Abruf nach einem simulierten Verbindungsausfall ab. Der
-gleiche JSON-Test reproduziert mit dem alten Code `provider_connection`, obwohl
-eine zweite Adresse erreichbar ist. Ein zusätzlicher Installer-Test prüft die
-Wiederherstellung, wenn der neu gestartete Dienst die Netzwerkfunktion nicht
-meldet. Die Ursache eines konkreten Live-Fehlers auf dem Raspberry wird dadurch
-nicht aus dem Screenshot allein bewiesen.
+Quellcommit: `990533bf76b727ccc9ff6706909adad6e53dbcac`.
+Validierter Installer-Commit: `dcb0254c5daac9c0392c58e0e214309018e03c37`.
+[GitHub-Actions-Prüflauf](https://github.com/epimediahub/EpiMediaHub/actions/runs/37045686053).
+Workflow: `.github/workflows/raspberry-v082-automatic-validate.yml`.
