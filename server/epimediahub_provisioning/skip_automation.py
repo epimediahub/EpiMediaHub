@@ -6,6 +6,7 @@ take precedence, and machine approvals cannot become independent human evidence.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from math import ceil
 import hashlib
 import json
 import os
@@ -471,6 +472,21 @@ def consensus(votes, online, duration, kind):
                 online=external, policy=POLICY_VERSION)
 
 
+def matching_boundaries(reference, target, step, offset):
+    """Check both ends around the unique full match, allowing repeated short motifs."""
+    cut = max(40, len(reference) // 3)
+    radius = ceil(BOUNDARY_TOLERANCE / step)
+    anchor = round(offset / step)
+    for part, relative in ((reference[:cut], 0), (reference[-cut:], len(reference) - cut)):
+        predicted = anchor + relative
+        begin = max(0, predicted - radius)
+        finish = min(len(target), predicted + radius + len(part))
+        match = matching_offset(part, target[begin:finish], step)
+        if not match or abs(begin * step + match[0] - offset - relative * step) > BOUNDARY_TOLERANCE:
+            return False
+    return True
+
+
 def publish(con, asset, kind, evidence):
     if (not evidence or evidence.get('policy') != POLICY_VERSION
             or evidence['confidence'] < AUTO_CONFIDENCE or not evidence['votes']
@@ -692,10 +708,7 @@ def analyze(db, job, busy_factory):
                 continue
             # Confirm the first and last musical portions independently so a
             # coincidental central match cannot authorize a complete segment.
-            cut = max(40, len(words) // 3)
-            first, last = matching_offset(words[:cut], target, step), matching_offset(words[-cut:], target, step)
-            boundaries = (first and last and abs(first[0] - offset) <= BOUNDARY_TOLERANCE
-                          and abs(last[0] - offset - (len(words) - cut) * step) <= BOUNDARY_TOLERANCE)
+            boundaries = matching_boundaries(words, target, step, offset)
             vote = dict(start=start, end=end, confidence=confidence if boundaries else 0,
                         boundaries_confirmed=bool(boundaries),
                         asset_key=record["asset_key"], episode=record["episode"], record_id=record["id"],
