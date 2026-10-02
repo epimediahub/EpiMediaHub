@@ -10,6 +10,7 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+import time
 import types
 from unittest import mock
 
@@ -20,11 +21,21 @@ def check(database, templates):
     from flask import Flask, jsonify
     import skip_markers
 
+    timings = {}
     with tempfile.TemporaryDirectory(prefix="epimediahub-dashboard-check-") as directory:
         snapshot = Path(directory) / "dashboard.db"
+        started = time.monotonic()
         with contextlib.closing(sqlite3.connect(Path(database).resolve().as_uri() + "?mode=ro", uri=True)) as source:
             with contextlib.closing(sqlite3.connect(snapshot)) as target:
                 source.backup(target)
+                timings['snapshot'] = time.monotonic() - started
+                # All cache updates happen only inside this private snapshot.
+                # The live database is opened read-only and remains untouched.
+                target.row_factory = sqlite3.Row
+                from skip_progress import populate
+                started = time.monotonic()
+                populate(target)
+                timings['progress'] = time.monotonic() - started
 
         @contextlib.contextmanager
         def db():
@@ -45,14 +56,20 @@ def check(database, templates):
         backend.web_auth = lambda: None
         with mock.patch.dict(sys.modules, {"app": backend}), mock.patch.object(skip_markers, "migrate"):
             skip_markers.install(site, db)
+        started = time.monotonic()
         response = site.test_client().get("/admin/skip")
+        timings['render'] = time.monotonic() - started
         if response.status_code != 200 or "Serienfortschritt" not in response.get_data(as_text=True):
             raise RuntimeError("Intro dashboard did not render")
+    return timings
 
 
 if __name__ == "__main__":
     try:
-        check(sys.argv[1], sys.argv[2])
+        timings = check(sys.argv[1], sys.argv[2])
     except Exception as error:
         raise SystemExit("Intro-Dashboard konnte mit dem vorhandenen Datenbestand nicht geladen werden (" + type(error).__name__ + ").") from None
     print("Intro-Dashboard mit vorhandenem Datenbestand erfolgreich geladen.")
+    print(f"Datenbankkopie: {timings['snapshot']:.3f} s")
+    print(f"Geänderte Serien aktualisieren: {timings['progress']:.3f} s")
+    print(f"Intro-Maske rendern: {timings['render']:.3f} s")

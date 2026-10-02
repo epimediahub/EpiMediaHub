@@ -1,5 +1,6 @@
 <section class="card" id="series-progress" style="margin:20px 0" aria-label="Analysefortschritt aller erfassten Serien">
 <h2>Serienfortschritt</h2>
+{% if progress.updating %}<p>Der Fortschritt für {{ progress.updating }} geänderte Serien wird gerade aktualisiert. Die Übersicht wird laufend ergänzt.</p>{% endif %}
 <p>{{ progress.totals.series }} erfasste Serien · {{ progress.totals.completed }} Analysen abgeschlossen · {{ progress.totals.with_intro }} Serien mit Intros · {{ progress.totals.missing_intro }} Serien mit fehlenden Intros</p>
 <p>Heute analysiert: {{ progress.used_today }} / {{ audio_limit }} Folgen. {% if progress.used_today>=audio_limit %}Tageslimit erreicht; weitere Audioanalysen laufen morgen weiter.{% endif %}</p>
 {% if progress.inventory_pending %}<p>Für {{ progress.inventory_pending }} Serien werden die Folgenlisten noch erfasst oder erneut abgefragt. Die Übersicht wächst mit dem Katalog.</p>{% endif %}

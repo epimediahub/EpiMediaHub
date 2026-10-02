@@ -248,4 +248,7 @@ if __name__ == "__main__":
         # also be protected against another worker or an ongoing installation.
         from app import db
         from wsgi import app
+        from skip_progress import refresh as refresh_progress
+        with db() as con:
+            refresh_progress(con, budget=.5)
         print("skip_analysis_status=" + process_one(db))

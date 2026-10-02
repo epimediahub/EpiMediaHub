@@ -74,6 +74,8 @@ def migrate(con):
     """)
     from skip_automation import migrate as migrate_automation
     migrate_automation(con)
+    from skip_progress import migrate as migrate_progress
+    migrate_progress(con)
 
 
 def integer(body, key, low, high, default=None):
@@ -378,7 +380,7 @@ def install(app, db):
             catalogues = catalogue_dashboard(con)
             audio_limit = daily_limit(con)
             from skip_progress import overview
-            progress = overview(con, request.args.get('progress_filter','all'), request.args.get('progress_search',''), request.args.get('progress_page','1'))
+            progress = overview(con, request.args.get('progress_filter','all'), request.args.get('progress_search',''), request.args.get('progress_page','1'), preferred_source=browser['source_key'])
         selected_episode = page_number(request.args.get("episode", ""), 0)
         return render_template("skip_markers.html", browser=browser, sources=sources, job_groups=media_groups(jobs), online_groups=media_groups(online_status), tmdb_ready=tmdb_ready, catalogues=catalogues, audio_limit=audio_limit, progress=progress, state=state, selected_episode=selected_episode, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", ""))
 
@@ -582,6 +584,6 @@ def install(app, db):
         response = previous_health()
         data = response.get_json()
         data["api_version"] = "0.8.2"
-        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True, "skip_high_audio_approval": True, "skip_proposal_dedup": True, "skip_online_error_details": True, "skip_language_priority": True, "skip_bulk_review": True, "skip_network_address_fallback": True, "skip_automatic_acceptance": True, "skip_series_progress": True, "skip_database_concurrency": True}
+        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True, "skip_high_audio_approval": True, "skip_proposal_dedup": True, "skip_online_error_details": True, "skip_language_priority": True, "skip_bulk_review": True, "skip_network_address_fallback": True, "skip_automatic_acceptance": True, "skip_series_progress": True, "skip_database_concurrency": True, "skip_progress_cache": True}
         return jsonify(data)
     app.view_functions["health"] = health
