@@ -1,4 +1,4 @@
-# Serienübersicht, Gesamtkatalog und automatische Freigaben für Raspberry 0.8.2
+# Sprachpriorität, Serien-/Staffelfreigabe und Gesamtkatalog für Raspberry 0.8.2
 
 Der vorhandene Worker erfasst den vollständigen Serienbestand der aktivierten
 XTREAM-Playlists, auch ohne vorheriges Abspielen. Neue oder vom Anbieter als
@@ -12,7 +12,7 @@ Voraussetzung ist der laufende Raspberry-Server 0.8.2 mit Audioanalyse und
 Staffelautomatik für die gewünschten Playlists. Android 1.0.16 bleibt kompatibel.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/6275aa1fb67a7f47aa3c0fe1c727e01a7d5065f0/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/cfc403b54d35b3f851c9af165a556de0b547d708/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
 sudo bash /var/tmp/epimediahub-skip-catalogue.sh --wait-worker
 ```
 
@@ -28,7 +28,7 @@ vorhandenen Worker-Lock, ohne den Durchlauf abzubrechen. Der Timer muss dafür
 nicht manuell gestoppt werden. Ohne diese Option endet der Installer bei einem
 belegten Lock weiterhin vor Änderungen. Beide Optionen sind kombinierbar.
 
-Das Skript lädt sechzehn Dateien aus einem festen Commit und prüft SHA256,
+Das Skript lädt siebzehn Dateien aus einem festen Commit und prüft SHA256,
 Syntax sowie die tatsächlichen Richtlinien-, API- und Audiotests vor Änderungen.
 Es verwendet den bestehenden Worker-Lock, sichert Code und SQLite-Datenbank
 und stellt bei einem fehlgeschlagenen Neustart den vorherigen Code sowie nur
@@ -149,6 +149,32 @@ Beim Bearbeiten bleibt der gewählte Filter erhalten; weiterhin darin sichtbare
 Zeitmarken werden mit geöffneter Serie, Staffel und Folge wieder angezeigt.
 Nach einer Freigabe verschwindet der Eintrag aus „Zur Prüfung“ wie bisher.
 
+### Alle Vorschläge einer Serie oder Staffel freigeben
+
+In „Zur Prüfung“ enthält eine geöffnete Serie den Button „Alle Vorschläge
+dieser Serie freigeben“. Jede geöffnete Staffel hat zusätzlich „Alle Vorschläge
+dieser Staffel freigeben“. Die Zahl am Button zählt alle offenen Zeitmarken
+im gewählten Bereich. Beide Buttons erfassen auch Folgen auf weiteren Seiten;
+die Serienfreigabe umfasst sämtliche Staffeln einschließlich Spezialfolgen.
+Intro, Rückblick und Abspann werden zusammen geprüft. Gleichnamige Serien
+mit anderer Quellenzuordnung werden nicht mit freigegeben.
+
+Die Aktion entspricht einer menschlichen Freigabe. Sie gilt nur für zu diesem
+Zeitpunkt offene Vorschläge und schaltet keine zukünftigen Freigaben ein.
+Nahezu gleiche Vorschläge derselben Datei, Laufzeit und Abschnittsart werden
+zu einer wirksamen Zeitmarke zusammengeführt. Widersprüchliche Grenzen,
+abweichende Folgenzuordnungen und Vorschläge zu bereits freigegebenen oder
+abgelehnten Abschnitten bleiben unverändert zur Einzelprüfung. Unterschiedliche
+Dateifassungen können jeweils eine eigene Freigabe erhalten. Danach zeigt
+das Dashboard die Anzahl freigegebener Marken, zusammengeführter Duplikate
+und zurückgelassener Vorschläge.
+
+Die gesamte Auswahl wird in einer Datenbanktransaktion verarbeitet. Ein
+Fehler führt daher nicht zu einer teilweisen Freigabe. Ein erneuter Klick
+auf eine bereits verarbeitete Auswahl ändert bestehende Entscheidungen nicht.
+Der Button verwendet dieselbe Admin-Anmeldung und denselben Sitzungsschutz
+wie eine Einzelprüfung.
+
 Unter /admin/skip steht „Gesamtkatalog & Nachtprüfung“. Dort lassen sich alle
 aktivierten Automatik-Playlists einplanen und das globale Tageslimit einstellen.
 Pro Playlist werden Katalogfortschritt, erfasste/offene/bearbeitete Folgen,
@@ -219,7 +245,7 @@ nächtliche Neuzugänge, unveränderte Dateien, fehlende/stale Zeitstempel,
 Neustarts, doppelte Nummerierung, unsichere Dateiformate, Wiedergabevorrang,
 konkurrierendes Ausschalten, Tagesbudget und Zeitumstellung ab.
 
-Vierzehn isolierte Installationstests prüfen Erfolg, bestehende Marker/Schlüssel,
+Fünfzehn isolierte Installationstests prüfen Erfolg, bestehende Marker/Schlüssel,
 inaktive Timer, beschädigte Downloads, Vorprüfungsfehler, laufende Worker und
 Wiederherstellung von Code, Einstellungen, Termin und Budget. Die echten
 Audio- und API-Prüfungen laufen zusätzlich mit den vorhandenen Backendtests
@@ -247,8 +273,13 @@ Warteschlangen, mehrere Playlists, den einmaligen Kategorienabgleich und die
 Erhaltung von Cursor, Nachttermin, Budget und menschlichen Entscheidungen.
 Der Installer prüft zusätzlich die Migration der Sprachzuordnung und das
 optionale Warten auf einen laufenden Worker einschließlich eines Zeitlimits.
-Der vollständige Prüflauf umfasst 197 Tests ohne übersprungene Tests sowie den
+17 zusätzliche SQLite-/HTML-/API-Tests prüfen Serien-/Staffelfreigaben über alle
+Seiten, Spezialfolgen, getrennte Quellen und Dateifassungen, Duplikate,
+Widersprüche, bestehende Entscheidungen, Sitzungsprüfung, erneute Klicks und
+atomare Wiederherstellung bei Fehlern. Der Installer prüft außerdem, dass der
+neu gestartete Server die Sammelfreigabe unterstützt.
+Der vollständige Prüflauf umfasst 215 Tests ohne übersprungene Tests sowie den
 bestehenden Dashboard-/Geräte-Smoke-Test.
 
-Validierter Installer-Commit: `6275aa1fb67a7f47aa3c0fe1c727e01a7d5065f0`.
-[Erfolgreicher GitHub-Actions-Lauf](https://github.com/epimediahub/EpiMediaHub/actions/runs/36989162495).
+Validierter Installer-Commit: `cfc403b54d35b3f851c9af165a556de0b547d708`.
+[GitHub-Actions-Prüflauf](https://github.com/epimediahub/EpiMediaHub/actions/runs/36991521155).
