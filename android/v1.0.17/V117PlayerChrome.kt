@@ -318,17 +318,22 @@ internal fun V115PlayerChrome(
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
                         modifier = Modifier.weight(1f).heightIn(min = 54.dp).focusRequester(audioFocus).v114FocusRing().testTag("vod-audio")) {
                         Icon(Icons.Default.Subtitles, null, tint = Color.White, modifier = Modifier.size(if (isTv) 24.dp else 20.dp)); Spacer(Modifier.width(6.dp))
-                        Text("Audio & Untertitel", color = Color.White, fontSize = if (isTv) 18.sp else 14.sp, maxLines = 2)
+                        Text("Audio & Untertitel", modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
+                            color = Color.White, fontSize = if (isTv) 18.sp else 14.sp, maxLines = 2)
                     }
                     if (skipTools != null) TextButton(onClick = { restore = "skip"; touch(cancelAutomaticNext = true); dialog = "skip" },
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
                         modifier = Modifier.weight(1f).heightIn(min = 54.dp).focusRequester(skipFocus).v114FocusRing().testTag("vod-skip-tools")) {
-                        Icon(Icons.Default.Edit, null, tint = Color.White, modifier = Modifier.size(if (isTv) 24.dp else 20.dp)); Spacer(Modifier.width(6.dp)); Text("Intro & Abspann", color = Color.White, fontSize = if (isTv) 18.sp else 14.sp, maxLines = 2)
+                        Icon(Icons.Default.Edit, null, tint = Color.White, modifier = Modifier.size(if (isTv) 24.dp else 20.dp)); Spacer(Modifier.width(6.dp))
+                        Text("Intro & Abspann", modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
+                            color = Color.White, fontSize = if (isTv) 18.sp else 14.sp, maxLines = 2)
                     }
                     if (ordered.isNotEmpty()) TextButton(onClick = { restore = "episodes"; touch(cancelAutomaticNext = true); dialog = "episodes" },
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
                         modifier = Modifier.weight(1f).heightIn(min = 54.dp).focusRequester(episodesFocus).v114FocusRing().testTag("vod-episodes")) {
-                        Icon(Icons.Default.VideoLibrary, null, tint = Color.White, modifier = Modifier.size(if (isTv) 24.dp else 20.dp)); Spacer(Modifier.width(6.dp)); Text("Folgen", color = Color.White, fontSize = if (isTv) 18.sp else 14.sp, maxLines = 2)
+                        Icon(Icons.Default.VideoLibrary, null, tint = Color.White, modifier = Modifier.size(if (isTv) 24.dp else 20.dp)); Spacer(Modifier.width(6.dp))
+                        Text("Folgen", modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
+                            color = Color.White, fontSize = if (isTv) 18.sp else 14.sp, maxLines = 2)
                     }
                 }
             }
