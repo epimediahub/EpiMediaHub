@@ -116,7 +116,7 @@ class FullCatalogueTests(CatalogueFixture, unittest.TestCase):
             payload = con.execute("SELECT payload_json FROM skip_catalogue_series WHERE series_id='501'").fetchone()[0]
         self.assertNotIn("TEST_PROVIDER_SECRET", payload)
         self.assertNotIn("https://", payload)
-        self.assertEqual(set(json.loads(payload)), {"series_id", "name", "year", "release"})
+        self.assertEqual(set(json.loads(payload)), {"series_id", "name", "year", "release", "language_priority"})
 
     def test_duplicate_series_metadata_is_ambiguous_and_never_fetched(self):
         self.listing += [self.listing[0] | {"name": "Different Title"}]
@@ -142,6 +142,10 @@ class FullCatalogueTests(CatalogueFixture, unittest.TestCase):
 
     def test_cross_season_duplicate_file_is_rejected(self):
         self.infos["501"]["episodes"]["2"][0]["id"] = 101
+        self.advance()
+        with self.db() as con:
+            self.assertEqual(con.execute("SELECT status FROM skip_catalogue_series WHERE series_id='501'").fetchone()[0], 'failed')
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_assets WHERE stream_id='101'").fetchone()[0], 0)
         self.advance()
         with self.db() as con:
             self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_assets").fetchone()[0], 1)
@@ -301,7 +305,7 @@ class GuardAndBudgetTests(CatalogueFixture, unittest.TestCase):
         self.advance(max_steps=2)
         with self.db() as con:
             self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_assets WHERE playlist_id=1").fetchone()[0], 0)
-            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_assets WHERE playlist_id=2").fetchone()[0], 1)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_assets WHERE playlist_id=2").fetchone()[0], 4)
 
     def test_disabling_during_metadata_fetch_prevents_registration(self):
         def fetch(*args, **kwargs):

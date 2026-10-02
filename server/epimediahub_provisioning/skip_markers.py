@@ -214,6 +214,100 @@ def marker_browser(con, state, source_key="", season=None, page=1, episode_page=
                 source_key=source_key if selected else "", season=season)
 
 
+def wake_reference_jobs(con, source_key, season=None):
+    sql = """UPDATE skip_jobs SET status='queued',attempts=0,updated_at=?
+      WHERE asset_key IN (SELECT asset_key FROM skip_assets WHERE source_key=?"""
+    params = [now(), source_key]
+    if season is not None:
+        sql += " AND season=?"
+        params.append(season)
+    sql += ") AND status IN ('no_reference','no_match','done','review')"
+    con.execute(sql, params)
+
+
+def review_record(con, row, decision, start, end, disabled, wake=True):
+    """Shared single/bulk review: invalidate fingerprints and retain human decisions."""
+    record_id = row['id']
+    if decision == 'approve':
+        con.execute("""UPDATE skip_records SET status='superseded',reviewed_at=? WHERE id<>?
+          AND asset_key=? AND segment_type=? AND ABS(duration_ms-?)<=2000 AND status='approved'""",
+          (now(), record_id, row['asset_key'], row['segment_type'], row['duration_ms']))
+        if wake:
+            wake_reference_jobs(con, row['source_key'])
+    con.execute('DELETE FROM skip_fingerprints WHERE record_id=?', (record_id,))
+    con.execute('UPDATE skip_records SET status=?,start_ms=?,end_ms=?,disabled=?,reviewed_at=? WHERE id=?',
+                ('approved' if decision == 'approve' else 'rejected', start, end, int(disabled), now(), record_id))
+    con.execute('UPDATE skip_auto_evidence SET human_review=1 WHERE record_id=?', (record_id,))
+    from skip_automation import retire_proposals
+    retire_proposals(con, row, row['segment_type'], record_id)
+    if decision == 'reject' or disabled:
+        con.execute('INSERT OR REPLACE INTO skip_auto_blocks VALUES(?,?,?,?)',
+                    (row['asset_key'], row['segment_type'], row['duration_ms'], now()))
+    else:
+        con.execute('DELETE FROM skip_auto_blocks WHERE asset_key=? AND kind=? AND ABS(duration_ms-?)<=2000',
+                    (row['asset_key'], row['segment_type'], row['duration_ms']))
+
+
+def approve_pending_scope(con, source_key, season=None):
+    """Approve the whole selected series/season, with one effective marker per file/section."""
+    from itertools import groupby
+    from skip_automation import PROPOSAL_RANK, BOUNDARY_TOLERANCE
+    sql = """SELECT r.*,COALESCE(e.human_review,0) human_review FROM skip_records r
+      LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
+      WHERE r.status='pending' AND r.media_type='episode' AND r.source_key=?"""
+    params = [source_key]
+    if season is not None:
+        sql += ' AND r.season=?'
+        params.append(season)
+    sql += ' ORDER BY r.asset_key,r.segment_type,r.duration_ms,r.id'
+    rows = con.execute(sql, params).fetchall()
+    result = dict(approved=0, duplicates=0, conflicts=0, protected=0, invalid=0)
+    approved_seasons = set()
+    for _, versions in groupby(rows, key=lambda row: (row['asset_key'], row['segment_type'])):
+        batches = []
+        for row in versions:
+            if not batches or row['duration_ms'] - batches[-1][-1]['duration_ms'] > 2000:
+                batches.append([])
+            batches[-1].append(row)
+        for batch in batches:
+            first = batch[0]
+            # A previous correction/rejection for this file has precedence over
+            # a broad approval, including decisions in another source identity.
+            decided = con.execute("""SELECT 1 FROM skip_records WHERE asset_key=? AND segment_type=?
+              AND duration_ms BETWEEN ? AND ? AND status IN ('approved','rejected') LIMIT 1""",
+              (first['asset_key'], first['segment_type'], batch[0]['duration_ms'] - 2000, batch[-1]['duration_ms'] + 2000)).fetchone()
+            blocked = con.execute('SELECT 1 FROM skip_auto_blocks WHERE asset_key=? AND kind=? AND duration_ms BETWEEN ? AND ? LIMIT 1',
+                                  (first['asset_key'], first['segment_type'], batch[0]['duration_ms'] - 2000, batch[-1]['duration_ms'] + 2000)).fetchone()
+            if decided or blocked:
+                result['protected'] += len(batch)
+                continue
+            if any(not valid_range(row['segment_type'], row['start_ms'], row['end_ms'], row['duration_ms'], bool(row['disabled']))
+                   for row in batch):
+                result['invalid'] += len(batch)
+                continue
+            alternatives = con.execute("""SELECT id FROM skip_records WHERE status='pending'
+              AND asset_key=? AND segment_type=? AND duration_ms BETWEEN ? AND ?""",
+              (first['asset_key'], first['segment_type'], batch[0]['duration_ms'] - 2000, batch[-1]['duration_ms'] + 2000)).fetchall()
+            if (len(alternatives) != len(batch)
+                    or batch[-1]['duration_ms'] - batch[0]['duration_ms'] > 2000
+                    or len({(row['season'], row['episode'], row['disabled']) for row in batch}) != 1
+                    or max(row['start_ms'] for row in batch) - min(row['start_ms'] for row in batch) > BOUNDARY_TOLERANCE
+                    or max(row['end_ms'] for row in batch) - min(row['end_ms'] for row in batch) > BOUNDARY_TOLERANCE):
+                result['conflicts'] += len(batch)
+                continue
+            chosen = max(batch, key=lambda row: (row['human_review'] or row['source'] == 'device',
+                                                PROPOSAL_RANK.get(row['source'], 0), row['confidence'], -row['id']))
+            review_record(con, chosen, 'approve', chosen['start_ms'], chosen['end_ms'], bool(chosen['disabled']), wake=False)
+            con.executemany("UPDATE skip_records SET status='superseded',reviewed_at=? WHERE id=? AND status='pending'",
+                            [(now(), row['id']) for row in batch if row['id'] != chosen['id']])
+            result['approved'] += 1
+            result['duplicates'] += len(batch) - 1
+            approved_seasons.add(chosen['season'])
+    for approved_season in approved_seasons:
+        wake_reference_jobs(con, source_key, approved_season)
+    return result
+
+
 def install(app, db):
     from app import digest, web_auth
     from skip_analysis import register_asset, authorized_playlist, source_account
@@ -363,19 +457,42 @@ def install(app, db):
                 abort(400)
             if decision == "approve" and not valid_range(row["segment_type"], start, end, row["duration_ms"], off):
                 abort(400)
-            if decision == "approve":
-                con.execute("UPDATE skip_records SET status='superseded',reviewed_at=? WHERE id<>? AND asset_key=? AND segment_type=? AND ABS(duration_ms-?)<=2000 AND status='approved'", (now(), record_id, row["asset_key"], row["segment_type"], row["duration_ms"]))
-                con.execute("UPDATE skip_jobs SET status='queued',attempts=0,updated_at=? WHERE asset_key IN (SELECT asset_key FROM skip_assets WHERE source_key=?) AND status IN ('no_reference','no_match','done','review')", (now(), row["source_key"]))
-            con.execute("DELETE FROM skip_fingerprints WHERE record_id=?", (record_id,))
-            con.execute("UPDATE skip_records SET status=?,start_ms=?,end_ms=?,disabled=?,reviewed_at=? WHERE id=?", ("approved" if decision == "approve" else "rejected", start, end, int(off), now(), record_id))
-            con.execute("UPDATE skip_auto_evidence SET human_review=1 WHERE record_id=?", (record_id,))
-            from skip_automation import retire_proposals
-            retire_proposals(con, row, row['segment_type'], record_id)
-            if decision == "reject" or off:
-                con.execute("INSERT OR REPLACE INTO skip_auto_blocks VALUES(?,?,?,?)", (row["asset_key"], row["segment_type"], row["duration_ms"], now()))
-            else:
-                con.execute("DELETE FROM skip_auto_blocks WHERE asset_key=? AND kind=? AND ABS(duration_ms-?)<=2000", (row["asset_key"], row["segment_type"], row["duration_ms"]))
+            review_record(con, row, decision, start, end, off)
         return return_to_marker(row, "Zeitmarke freigegeben" if decision == "approve" else "Vorschlag abgelehnt")
+
+    @app.post('/admin/skip/bulk-review')
+    def v082_skip_bulk_review():
+        guard = web_auth()
+        if guard:
+            return guard
+        csrf()
+        source_key = request.form.get('source_key', '')
+        scope = request.form.get('scope', '')
+        if not KEY.fullmatch(source_key) or scope not in ('series', 'season'):
+            abort(400)
+        raw_season = request.form.get('season', '')
+        season = None
+        if scope == 'season':
+            if not re.fullmatch(r'\d{1,4}', raw_season) or int(raw_season) > 1000:
+                abort(400)
+            season = int(raw_season)
+        with db() as con:
+            con.execute('BEGIN IMMEDIATE')
+            if not con.execute("SELECT 1 FROM skip_records WHERE source_key=? AND media_type='episode' LIMIT 1", (source_key,)).fetchone():
+                abort(404)
+            counts = approve_pending_scope(con, source_key, season)
+        notice = f"{counts['approved']} Zeitmarken freigegeben"
+        for key, label in (('duplicates', 'doppelte Vorschläge zusammengeführt'),
+                           ('conflicts', 'widersprüchliche Vorschläge bleiben zur Einzelprüfung'),
+                           ('protected', 'Vorschläge mit bestehender Entscheidung unverändert'),
+                           ('invalid', 'ungültige Vorschläge bleiben zur Einzelprüfung')):
+            if counts[key]:
+                notice += f" · {counts[key]} {label}"
+        return redirect(url_for('v082_skip_dashboard', state='pending', series=source_key, season=season,
+                                page=page_number(request.form.get('return_page', '1')),
+                                episode_page=page_number(request.form.get('return_episode_page', '1')),
+                                _anchor='season-' + str(season) if season is not None else 'series-' + source_key,
+                                notice=notice))
 
     @app.post("/admin/skip/<int:record_id>/identity")
     def v082_skip_identity(record_id):
@@ -503,6 +620,6 @@ def install(app, db):
         response = previous_health()
         data = response.get_json()
         data["api_version"] = "0.8.2"
-        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True, "skip_high_audio_approval": True, "skip_proposal_dedup": True, "skip_online_error_details": True}
+        data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True, "skip_high_audio_approval": True, "skip_proposal_dedup": True, "skip_online_error_details": True, "skip_language_priority": True, "skip_bulk_review": True}
         return jsonify(data)
     app.view_functions["health"] = health

@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 import unittest
 
 from test_skip_analysis_references import ReferenceFixture, REAL_FLASK
@@ -62,7 +63,7 @@ mode=os.environ.get('FIXTURE_MODE','success')
 if '127.0.0.1' in url:
     new='skip_nightly_catalogue' in Path(os.environ['FIXTURE_APP'],'skip_markers.py').read_text()
     healthy=new and mode!='bad-health'
-    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy}}
+    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy,'skip_language_priority':healthy,'skip_bulk_review':healthy and mode!='missing-bulk-review'}}
     output.write_text(json.dumps(body))
 else:
     assert '/'+os.environ['FIXTURE_REF']+'/' in url
@@ -97,11 +98,60 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON'],*sys.argv[1:
         p = self.bindir / name
         p.write_text('#!'+sys.executable+'\nimport os,sys\n'+code+'\n'); p.chmod(0o755)
 
-    def launch(self, mode='success', enable=True):
-        result = subprocess.run(['bash', str(self.installer)] + (['--start-catalogue'] if enable else []),
-                                env=self.env | dict(FIXTURE_MODE=mode), text=True, capture_output=True, timeout=45)
+    def launch(self, mode='success', enable=True, wait_worker=False):
+        args = ['bash', str(self.installer)]
+        if enable:
+            args.append('--start-catalogue')
+        if wait_worker:
+            args.append('--wait-worker')
+        result = subprocess.run(args, env=self.env | dict(FIXTURE_MODE=mode), text=True, capture_output=True, timeout=45)
         self.assertNotIn('not-read-or-executed', result.stdout + result.stderr)
         return result
+
+    def test_optional_worker_wait_finishes_after_lock_release_and_restores_timer(self):
+        logfile = self.workspace / 'waiting.log'
+        with (self.datadir / 'skip-analysis.lock').open('a') as worker_lock:
+            fcntl.flock(worker_lock, fcntl.LOCK_EX)
+            with logfile.open('w') as log:
+                process = subprocess.Popen(['bash', str(self.installer), '--wait-worker'], env=self.env,
+                                           text=True, stdout=log, stderr=subprocess.STDOUT)
+                try:
+                    deadline = time.monotonic() + 15
+                    while 'Analysedurchlauf warten' not in logfile.read_text() and process.poll() is None and time.monotonic() < deadline:
+                        time.sleep(.02)
+                    self.assertIn('Analysedurchlauf warten', logfile.read_text())
+                    self.assertIsNone(process.poll())
+                    self.assertEqual(json.loads(self.state.read_text())['events'], [])
+                    fcntl.flock(worker_lock, fcntl.LOCK_UN)
+                    self.assertEqual(process.wait(timeout=30), 0, logfile.read_text())
+                finally:
+                    if process.poll() is None:
+                        process.kill(); process.wait()
+        self.assertTrue(json.loads(self.state.read_text())['timer'])
+
+    def test_optional_worker_wait_timeout_preserves_code_timer_and_database(self):
+        self.installer.write_text(self.installer.read_text().replace('lock_options=(-w 900)', 'lock_options=(-w 1)'))
+        with (self.datadir / 'skip-analysis.lock').open('a') as worker_lock:
+            fcntl.flock(worker_lock, fcntl.LOCK_EX)
+            result = self.launch(wait_worker=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.unchanged()
+        self.assertTrue(json.loads(self.state.read_text())['timer'])
+        self.assertEqual(json.loads(self.state.read_text())['events'], [])
+
+    def test_success_prioritizes_existing_tagged_queue_and_schedules_category_refresh(self):
+        from skip_catalogue import LANGUAGE_POLICY
+        with self.db() as con:
+            con.execute('INSERT INTO skip_catalogue_series VALUES(?,?,?,?,?,?,?,?,?,?)',
+                        (1, '501', json.dumps({'series_id': '501', 'name': '[IT] Lie to Me', 'year': '2009', 'release': ''}), 'signature', 0, 1, 1, 0, '', ''))
+            con.execute('INSERT INTO skip_catalogue_episodes VALUES(?,?,?,?,?)', (1, '501', self.target['asset_key'], 'version', 1))
+            con.execute('DELETE FROM skip_auto_maintenance WHERE name=?', (LANGUAGE_POLICY,))
+        result = self.launch()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with self.db() as con:
+            self.assertEqual(con.execute('SELECT priority FROM skip_language_priority WHERE asset_key=?', (self.target['asset_key'],)).fetchone()[0], 0)
+            self.assertEqual(con.execute('SELECT checked_at FROM skip_catalogue_language_refresh WHERE playlist_id=1').fetchone()[0], 0)
+            self.assertEqual(con.execute('SELECT status,attempts,detail FROM skip_jobs').fetchone()[:], ('no_reference', 2, 'previous'))
 
     def unchanged(self):
         for name, content in self.originals.items():
@@ -189,6 +239,12 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON'],*sys.argv[1:
         with self.db() as con:
             self.assertEqual(con.execute('SELECT generation,next_due,retry_at FROM skip_catalogue_runs').fetchone()[:],(7,999999,444444))
             self.assertEqual(con.execute('SELECT value,updated_at FROM skip_catalogue_config').fetchone()[:],(24,'previous-choice'))
+
+    def test_missing_bulk_review_feature_rolls_back_and_preserves_markers(self):
+        result = self.launch('missing-bulk-review', enable=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.unchanged()
+        self.assertTrue(json.loads(self.state.read_text())['timer'])
 
     def test_corrupt_download_never_stops_services_or_changes_code(self):
         result=self.launch('corrupt')
