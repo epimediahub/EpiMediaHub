@@ -9,10 +9,10 @@ erneut eingeplant. Ein Katalogfund allein gibt keine Zeitmarke frei.
 ## Installation
 
 Voraussetzung ist der laufende Raspberry-Server 0.8.2 mit Audioanalyse und
-Staffelautomatik für die gewünschten Playlists. Android 1.0.16 und 1.0.17 bleiben kompatibel.
+Staffelautomatik für die gewünschten Playlists. Android 1.0.16 bis 1.0.18 bleiben kompatibel.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/dcb0254c5daac9c0392c58e0e214309018e03c37/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/c33e9c50a90137f478e78be6552cab2ff744de58/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
 sudo bash /var/tmp/epimediahub-skip-catalogue.sh --wait-worker --start-catalogue
 ```
 
@@ -29,7 +29,7 @@ vorhandenen Worker-Lock, ohne den Durchlauf abzubrechen. Der Timer muss dafür
 nicht manuell gestoppt werden. Ohne diese Option endet der Installer bei einem
 belegten Lock weiterhin vor Änderungen. Beide Optionen sind kombinierbar.
 
-Das Skript lädt 26 Dateien aus einem festen Commit und prüft SHA256,
+Das Skript lädt 28 Dateien aus einem festen Commit und prüft SHA256,
 Syntax sowie die tatsächlichen Richtlinien-, API- und Audiotests vor Änderungen.
 Es verwendet den bestehenden Worker-Lock, sichert Code und SQLite-Datenbank
 und stellt bei einem fehlgeschlagenen Neustart den vorherigen Code sowie nur
@@ -46,7 +46,7 @@ Wenn die Intro-Maske einen internen Serverfehler zeigt und das Protokoll
 `sqlite3.OperationalError: database is locked` meldet:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/dcb0254c5daac9c0392c58e0e214309018e03c37/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/c33e9c50a90137f478e78be6552cab2ff744de58/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
 sudo bash /var/tmp/epimediahub-skip-catalogue.sh --repair-database --start-catalogue
 ```
 
@@ -288,8 +288,10 @@ stoppt die Verarbeitung der betreffenden Playlist.
 ## Automatische Freigabe und spätere Korrekturen
 
 Die automatische Übernahme ist standardmäßig für aktive Analyse-Playlists
-aktiviert. Erkannte Zeitmarken aus Audioanalyse, Videokapiteln, TheIntroDB und
-wiederkehrendem Ton werden ohne weitere Bestätigung freigegeben. Beim ersten
+aktiviert. Erkannte Zeitmarken aus Audioanalyse, Videokapiteln und TheIntroDB
+werden ohne weitere Bestätigung freigegeben. Der neue V2-Staffelvergleich
+gibt nur hohe, übereinstimmende Treffer mit mindestens drei anderen Folgen
+automatisch frei. Unsichere V2-Ergebnisse bleiben unter „Zur Prüfung“. Beim ersten
 Update werden auch vorhandene maschinelle Vorschläge übernommen. Die Zeiten
 müssen gültig sein und zur registrierten Datei, Laufzeit, Staffel und Folge passen.
 Eine fehlende Zeitmarke wird nicht durch eine erfundene Standardzeit ersetzt.
@@ -307,14 +309,18 @@ weiterhin das Ändern oder Zurückziehen einer Zeitmarke. Ergebnisse aus einer
 während der Analyse korrigierten Referenz werden verworfen.
 
 Für die erste Referenz ist keine menschliche Bestätigung erforderlich:
-Videokapitel, Online-Zeiten und wiederkehrender Ton aus mindestens drei Folgen
-können den Einstieg liefern. Rein übertragene Audio-Zeiten werden nicht als neue
+Videokapitel, Online-Zeiten und eindeutiger wiederkehrender Ton aus mindestens
+vier Folgen können den Einstieg liefern. V2 prüft bis zu vier Vergleichsfolgen
+innerhalb der ersten beziehungsweise letzten zwölf Minuten. Details stehen
+in [Intro-Erkennung V2](README_skip_detector_v2.md). Rein übertragene Audio-Zeiten werden nicht als neue
 unabhängige Referenz weitergereicht. Die Quelle bleibt an die konkrete Datei
 gebunden. Nur vollständig gelesene und kürzlich geprüfte Audio-Fingerabdrücke
 werden bis zu einer Stunde wiederverwendet. Korrekturen löschen diesen Cache.
 Ältere oder ungeprüfte Fingerabdrücke werden erneut an der Datei kontrolliert.
-Erledigte Folgen werden durch eine Freigabe nicht erneut eingeplant; wartende
-Folgen derselben Staffel können die neue Referenz anschließend verwenden.
+Der V2-Installer plant fehlende Intros einmal zur regulären Nachprüfung ein,
+ohne Tageslimits zurückzusetzen. Neue Vergleichsfolgen können frühere Folgen
+aus dem Fingerprint-Cache ergänzen. Bestätigte Zeiten und eigene Korrekturen
+bleiben erhalten; wartende Folgen können vorhandene Referenzen verwenden.
 
 ## Tageslimit und App-Performance
 
@@ -334,10 +340,10 @@ Wiedergaben außerhalb der EpiMediaHub-App kann diese Meldung nicht erfassen.
 
 ## Validierung
 
-Der vollständige Prüflauf umfasst 273 Tests ohne übersprungene Tests:
-233 Richtlinien-, Katalog-, HTTP-, Sprach-, Freigabe- und Fortschrittstests,
+Der vollständige Prüflauf umfasst 294 Tests ohne übersprungene Tests:
+252 Richtlinien-, Katalog-, HTTP-, Sprach-, Freigabe-, Fortschritts- und V2-Tests,
 14 Marker-/API-Tests einschließlich echter FFmpeg-/Chromaprint-Erkennung sowie
-26 Installer-Tests. Zusätzlich läuft der bestehende Dashboard-/Geräte-Smoke-Test.
+28 Installer-Tests. Zusätzlich läuft der bestehende Dashboard-/Geräte-Smoke-Test.
 Die neuen Fälle prüfen die automatische Übernahme bestehender Vorschläge,
 Referenzen ohne menschliche Erstfreigabe, Korrekturen im Player, geschützte
 Ablehnungen, die Sammelfreigabe bei abweichenden Zeiten, vollständige Serienseiten,
@@ -359,7 +365,7 @@ an der aktiven Datenbank. Zwei weitere Installer-Tests prüfen die vollständig
 vorbereitete Statistik vor dem Neustart und Wiederherstellung bei fehlendem
 Health-Merkmal `skip_progress_cache`.
 
-Quellcommit: `990533bf76b727ccc9ff6706909adad6e53dbcac`.
-Validierter Installer-Commit: `dcb0254c5daac9c0392c58e0e214309018e03c37`.
-[GitHub-Actions-Prüflauf](https://github.com/epimediahub/EpiMediaHub/actions/runs/37045686053).
+Quellcommit: `02e9a8addf8e3293baef064572bfe22a961a1111`.
+Validierter Installer-Commit: `c33e9c50a90137f478e78be6552cab2ff744de58`.
+[GitHub-Actions-Prüflauf](https://github.com/epimediahub/EpiMediaHub/actions/runs/37065569966).
 Workflow: `.github/workflows/raspberry-v082-automatic-validate.yml`.

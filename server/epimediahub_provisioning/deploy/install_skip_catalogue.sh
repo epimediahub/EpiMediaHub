@@ -22,7 +22,7 @@ done
 app_dir=/opt/epimediahub/provisioning
 python_bin="$app_dir/.venv/bin/python"
 env_file=/etc/epimediahub/provisioning.env
-source_ref=990533bf76b727ccc9ff6706909adad6e53dbcac
+source_ref=02e9a8addf8e3293baef064572bfe22a961a1111
 source_base="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$source_ref/server/epimediahub_provisioning"
 task_dir="$(mktemp -d -p /var/tmp epimediahub-skip-catalogue.XXXXXX)"
 backup_dir="/var/backups/epimediahub/skip-catalogue-$(date +%Y%m%d-%H%M%S)"
@@ -33,7 +33,7 @@ timer_was_active=0
 if systemctl is-active --quiet epimediahub-skip-analysis.timer; then
   timer_was_active=1
 fi
-files=(app.py skip_database.py skip_analysis.py skip_analysis_worker.py skip_markers.py skip_automation.py skip_catalogue.py skip_release.py skip_progress.py templates/skip_markers.html templates/skip_progress.html deploy/check_skip_dashboard.py)
+files=(app.py skip_database.py skip_analysis.py skip_analysis_worker.py skip_markers.py skip_automation.py skip_detector_v2.py skip_catalogue.py skip_release.py skip_progress.py templates/skip_markers.html templates/skip_progress.html deploy/check_skip_dashboard.py)
 
 cleanup() { rm -rf "$task_dir"; }
 recover() {
@@ -151,21 +151,22 @@ PY
 test -f "$data_dir/provisioning.db"
 
 mkdir -p "$task_dir/tests" "$task_dir/deploy" "$task_dir/templates"
-downloads=("${files[@]}" tests/test_skip_analysis_redirects.py tests/test_skip_analysis_references.py tests/test_skip_analysis_boundaries.py tests/test_skip_analysis_automation.py tests/test_skip_analysis_catalogue.py tests/test_skip_analysis_dashboard.py tests/test_skip_analysis_dedup.py tests/test_skip_analysis_online_errors.py tests/test_skip_analysis_languages.py tests/test_skip_analysis_bulk_review.py tests/test_skip_analysis_acceptance.py tests/test_skip_analysis_database.py tests/test_skip_analysis_progress_cache.py deploy/inspect_skip_references.py)
+downloads=("${files[@]}" tests/test_skip_analysis_redirects.py tests/test_skip_analysis_references.py tests/test_skip_analysis_boundaries.py tests/test_skip_analysis_automation.py tests/test_skip_analysis_catalogue.py tests/test_skip_analysis_dashboard.py tests/test_skip_analysis_dedup.py tests/test_skip_analysis_online_errors.py tests/test_skip_analysis_languages.py tests/test_skip_analysis_bulk_review.py tests/test_skip_analysis_acceptance.py tests/test_skip_analysis_detector_v2.py tests/test_skip_analysis_database.py tests/test_skip_analysis_progress_cache.py deploy/inspect_skip_references.py)
 for file in "${downloads[@]}"; do
   curl -fsSL --connect-timeout 10 --max-time 60 "$source_base/$file" -o "$task_dir/$file"
 done
 sha256sum -c <<EOF
 363a597d0661a6f9c586af0e63e6e44a7bb19f8590e89d1b5bf42a0f0a4a8c66  $task_dir/app.py
 0738a33d7ae3a279f41772e7e75d2e18020c36d9a7fb723f4ee378dd02547fbb  $task_dir/skip_database.py
-8ded57ab108a2ca06ad03ecabd09ee1435eb96ad7da2b3977657f5a8229241c1  $task_dir/skip_analysis.py
+0aed1d0952ab76ec4cfd9a788a86f867849b27039092a08fbee74a214e43f8f5  $task_dir/skip_analysis.py
 d9ee08f4a6076d9145bbf6bd920396c53858a0880be86c463ade86d21bf523eb  $task_dir/skip_analysis_worker.py
-607411a372b9f60a49c774bd0e2fb8066a548430986fbe613e54ca9c411d8ac3  $task_dir/skip_markers.py
-6a1ad00ed784297ba5384cb9f7459fffd8a4f75914cb437b4d89d4a541887423  $task_dir/skip_automation.py
+eebc62803a1fd43cd76edc1aa8feb08c6fe85a5cc8889060325a4be711075ae1  $task_dir/skip_markers.py
+15664943b0bf32bce54585080dc957d5fac1f4bb845bac79f2386c674a5340e9  $task_dir/skip_automation.py
+1f8c16e9a769f13598247d0ba356e1479b13e338f293085be62e2c9939fdb2e9  $task_dir/skip_detector_v2.py
 b8c285243b76f1f80c3067f9f19ae67a6d2844bee013580d333d69a88e62d97d  $task_dir/skip_catalogue.py
-fbfac69bebb78d4589e5f91fecf792be87c1e62f9125067ff9627b94620b98f7  $task_dir/skip_release.py
+9279caa73a9a7a1195109303e94dedc6d682cfe2bf56b1969628152d359d6cf4  $task_dir/skip_release.py
 3d25c4d494c60058bc9595020e15aeb4927408a436e48859c04d29e956e9cd74  $task_dir/skip_progress.py
-d17de554f916ed4fb0386e0c70fbf2c908736e5e71adf85a16bd192d20f8afc0  $task_dir/templates/skip_markers.html
+f816f9d5c865372ce1691b8c9d38db4f1ae7ff2443da435f948bbb7389f4afcb  $task_dir/templates/skip_markers.html
 cf24e43da12b7c3054fc377526f7f47a2251cc87875fb96dfce0d86e479cd633  $task_dir/templates/skip_progress.html
 8752d9ab417096558097a694e3aacca05e494db2bfde669273927838ac835ac4  $task_dir/deploy/check_skip_dashboard.py
 c058c9f1b6702f99406ca15b2160f46ff1b80ec9235860445fe062f98b2ab788  $task_dir/tests/test_skip_analysis_redirects.py
@@ -178,13 +179,15 @@ e65184b85ee5de3d58b0835e054973c6f1c8c496dc3ade7426fc570c748e7b08  $task_dir/test
 66f94841a88568511c40a7a4a06b244f0ea8cc38d5b3f6de308e0d05a9e7a68b  $task_dir/tests/test_skip_analysis_online_errors.py
 5d63c5afbb7194e715296bfdbe36e6872dca31b63c51a175942b183af5e2a4de  $task_dir/tests/test_skip_analysis_languages.py
 97eafdf485e43b01a3e70d2ad025e210c84dc363146684c7014edd9ff52d8e9e  $task_dir/tests/test_skip_analysis_bulk_review.py
-f78aa936690e9afb51b037ae609718d285659d2288e833ac7ea5fd1779e21372  $task_dir/tests/test_skip_analysis_acceptance.py
+817fa41a6b040aa8e033664b113468839e01c8809b7eb241c47e6fafcf8a1d3a  $task_dir/tests/test_skip_analysis_acceptance.py
+7dafbca83e19a8e59a6406cfedefa581bd9946de6e59b780834e17e193ae37f5  $task_dir/tests/test_skip_analysis_detector_v2.py
 18c8ac007ae2f4ccac0758602b9ead7d6a58034847069cb211b4115d29b3c515  $task_dir/tests/test_skip_analysis_database.py
 b5b977915c0ed241562c28210b7b0fd99e63d554bd75f5608ad26af23ff26794  $task_dir/tests/test_skip_analysis_progress_cache.py
 df57e84d73475ee3ae5dff1183e3d821655f8d805af67bd6fb34369c08cbc87d  $task_dir/deploy/inspect_skip_references.py
 EOF
 "$python_bin" -m compileall -q "$task_dir"
-echo 'Automatische Freigaben, Serienfortschritt, Player-Korrekturen und Audioanalyse prüfen ...'
+"$python_bin" "$task_dir/skip_detector_v2.py"
+echo 'Staffelvergleich V2, automatische Freigaben, Serienfortschritt und Player-Korrekturen prüfen ...'
 PYTHONPATH="$task_dir:$app_dir" "$python_bin" -m unittest discover -s "$task_dir/tests" -p 'test_skip_analysis*.py' -q
 
 if [ "$repair_database" -eq 1 ]; then
@@ -284,7 +287,7 @@ test "$healthy" -eq 1
 import json, sys
 with open(sys.argv[1]) as source:
     data = json.load(source)
-if data.get('api_version') != '0.8.2' or data.get('status') != 'ok' or not all(data.get('features',{}).get(name) is True for name in ('skip_nightly_catalogue','skip_high_audio_approval','skip_proposal_dedup','skip_online_error_details','skip_language_priority','skip_bulk_review','skip_network_address_fallback','skip_automatic_acceptance','skip_series_progress','skip_database_concurrency','skip_progress_cache')):
+if data.get('api_version') != '0.8.2' or data.get('status') != 'ok' or not all(data.get('features',{}).get(name) is True for name in ('skip_nightly_catalogue','skip_high_audio_approval','skip_proposal_dedup','skip_online_error_details','skip_language_priority','skip_bulk_review','skip_network_address_fallback','skip_automatic_acceptance','skip_series_progress','skip_database_concurrency','skip_progress_cache','skip_detector_v2')):
     raise SystemExit('Der aktualisierte Server meldet keinen gültigen Analyse-Status.')
 PY
 if [ "$timer_was_active" -eq 1 ] || [ "$start_catalogue" -eq 1 ]; then
@@ -304,7 +307,11 @@ echo 'Danach täglich ab 03:00 Uhr deutscher Zeit neue und geänderte Folgen pr�
 echo 'TMDB-Schlüssel und geprüfte Marker bleiben erhalten.'
 echo 'Zeitmarken im Dashboard nach Serie, Staffel und Folge öffnen.'
 echo 'Unter Zur Prüfung alle offenen Vorschläge einer Serie oder Staffel mit einem Button freigeben.'
-echo 'Erkannte Zeiten werden automatisch freigegeben; abweichende Varianten werden zusammengeführt.'
+echo 'Intro-Erkennung V2 ist in den bestehenden Analysedienst integriert.'
+echo 'V2 vergleicht bis zu vier andere Folgen derselben Staffel in den ersten/letzten 12 Minuten.'
+echo 'V2: hohe Qualität und mindestens drei unabhängige Vergleichsfolgen werden automatisch freigegeben.'
+echo 'Unsichere V2-Treffer bleiben zur Prüfung; Stille, mehrdeutige Wiederholungen und lange Szenen werden verworfen.'
+echo 'Frühere Folgen werden mit gespeicherten Fingerprints ergänzt, ohne ihr Audio erneut zu laden.'
 echo 'Eigene Korrekturen im Player oder Dashboard haben Vorrang.'
 echo 'Bisherige unklare Online-Fehler werden im Leerlauf erneut geprüft, ohne erneute Audioanalyse.'
 echo 'Deutsch und Italienisch werden gemeinsam bevorzugt, danach die übrigen Serien.'

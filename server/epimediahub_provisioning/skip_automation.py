@@ -5,7 +5,6 @@ take precedence, and machine approvals cannot become independent human evidence.
 """
 from __future__ import annotations
 
-from collections import Counter, defaultdict
 from math import ceil
 import hashlib
 import json
@@ -21,8 +20,9 @@ from skip_analysis import (configured_source, source_url, provider_asset_key,
                            provider_proxy, probe, fingerprint, matching_offset,
                            chapter_candidates, provider_failure)
 from skip_markers import add_record, now, valid_range
+from skip_detector_v2 import Config, IntroOutroDetectorV2, MarkerType, Status, POLICY as DETECTOR_POLICY
 
-WINDOW_MS = 600_000
+WINDOW_MS = 720_000
 AUTO_CONFIDENCE = .92
 BOUNDARY_TOLERANCE = 500
 MAX_SEASON_EPISODES = 200
@@ -82,6 +82,7 @@ def migrate(con):
     maintain_proposals(con)
     from skip_release import migrate as release_migrate
     release_migrate(con)
+    migrate_detector(con)
     # The old message discarded the actual cause. Recheck those entries using
     # metadata only; keep every marker, audio job and daily audio budget intact.
     con.execute("""INSERT OR IGNORE INTO skip_auto_online_retry
@@ -502,7 +503,7 @@ def protected(con, asset, kind):
 
 
 def pending_proposals(con, asset, kind):
-    return con.execute("""SELECT r.* FROM skip_records r
+    return con.execute("""SELECT r.*,e.evidence_json FROM skip_records r
       LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
       WHERE r.asset_key=? AND r.source_key=? AND r.media_type=? AND r.season=? AND r.episode=?
       AND r.duration_ms=? AND r.segment_type=? AND r.status='pending' AND r.disabled=0
@@ -512,7 +513,14 @@ def pending_proposals(con, asset, kind):
 
 
 def proposal_rank(row):
-    return (PROPOSAL_RANK[row['source']], row['confidence'], -row['id'])
+    rank = PROPOSAL_RANK.get(row['source'], 5 if row['source'] == 'auto_audio' else 0)
+    try:
+        evidence = json.loads(row['evidence_json'] or '{}')
+        if isinstance(evidence, dict) and evidence.get('policy') == DETECTOR_POLICY:
+            rank = 5
+    except (KeyError, IndexError, ValueError, TypeError):
+        pass
+    return (rank, row['confidence'], -row['id'])
 
 
 def same_boundaries(first, second):
@@ -550,7 +558,8 @@ def store_proposal(con, asset, kind, start, end, source, confidence=0, evidence=
     update_evidence = True
     if matches:
         saved = max(matches, key=proposal_rank)
-        update_evidence = (PROPOSAL_RANK[source], confidence) >= proposal_rank(saved)[:2]
+        update_evidence = proposal_rank(dict(source=source, confidence=confidence, id=0,
+                                             evidence_json=json.dumps(evidence)))[:2] >= proposal_rank(saved)[:2]
         if update_evidence:
             con.execute("UPDATE skip_records SET start_ms=?,end_ms=?,source=?,confidence=? WHERE id=? AND status='pending'",
                         (start, end, source, confidence, saved['id']))
@@ -698,80 +707,130 @@ def publish(con, asset, kind, evidence):
 
 
 def common_span(a, b, step):
-    """Find a unique contiguous high-information repetition in two bounded windows."""
-    if not 160 <= min(len(a), len(b)) or max(len(a), len(b)) > 5000:
+    """Compatibility helper; production uses the multi-episode V2 consensus."""
+    if not 0 < step <= 1000:
         return None
-    index = defaultdict(list)
-    for i, word in enumerate(b):
-        for band in (0, 1):
-            index[(band, (word >> (16 * band)) & 65535)].append(i)
-    offsets = Counter()
-    for i, word in enumerate(a):
-        for band in (0, 1):
-            positions = index[(band, (word >> (16 * band)) & 65535)]
-            if len(positions) <= 24:
-                for j in positions:
-                    offsets[j - i] += 1
-    spans = []
-    chosen = []
-    for offset, count in offsets.most_common(24):
-        if count < 30 or any(abs(offset - previous) * step < 2000 for previous in chosen):
-            continue
-        chosen.append(offset)
-        begin, finish = max(0, -offset), min(len(a), len(b) - offset)
-        distances = [(a[i] ^ b[i + offset]).bit_count() / 32 for i in range(begin, finish)]
-        run_start = None
-        for k in range(len(distances) + 1):
-            good = k < len(distances) and sum(distances[max(0, k - 3):k + 5]) / len(distances[max(0, k - 3):k + 5]) <= .075
-            if good and run_start is None:
-                run_start = k
-            if not good and run_start is not None:
-                length = k - run_start
-                words = a[begin + run_start:begin + k]
-                if 19_000 <= length * step <= 180_000 and len(set(words)) >= max(30, len(words) // 3):
-                    score = 1 - sum(distances[run_start:k]) / length
-                    spans.append((begin + run_start, begin + k, offset, score))
-                run_start = None
-    if not spans:
-        return None
-    spans.sort(key=lambda x: (-(x[1] - x[0]), -x[3]))
-    best = spans[0]
-    if any(abs(x[0] - best[0]) * step > 2000 and x[1] - x[0] >= (best[1] - best[0]) * .8 for x in spans[1:]):
-        return None
-    return best
+    match = IntroOutroDetectorV2(Config(item_duration_sec=step / 1000)).find_pair_candidate(a, b, MarkerType.INTRO)
+    if match:
+        return (round(match.segment.start * 1000 / step), round(match.segment.end * 1000 / step),
+                -match.offset_frames, match.quality)
+    return None
 
 
-def bootstrap(con, asset, kind):
-    rows = con.execute("""SELECT w.*,a.episode FROM skip_auto_windows w JOIN skip_assets a ON a.asset_key=w.asset_key
+def migrate_detector(con):
+    """Revisit missing intros once, through the normal idle/quota-controlled queue."""
+    if con.execute('SELECT 1 FROM skip_auto_maintenance WHERE name=?', (DETECTOR_POLICY,)).fetchone():
+        return
+    if not con.execute('SELECT 1 FROM skip_auto_settings WHERE enabled=1 LIMIT 1').fetchone():
+        con.execute('INSERT INTO skip_auto_maintenance VALUES(?,?)', (DETECTOR_POLICY, now()))
+        return
+    con.execute("""UPDATE skip_jobs SET status='queued',attempts=0,
+      detail='Intro wird mit dem Staffelvergleich erneut geprüft',updated_at=?
+      WHERE status IN ('no_reference','no_match','review','done') AND asset_key IN (
+        SELECT a.asset_key FROM skip_assets a
+        JOIN skip_auto_settings x ON x.playlist_id=a.playlist_id AND x.enabled=1
+        JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id AND s.enabled=1
+        JOIN customer_playlists p ON p.id=a.playlist_id
+        JOIN customers c ON c.id=p.customer_id AND c.enabled=1
+        WHERE a.media_type='episode' AND NOT EXISTS (
+          SELECT 1 FROM skip_records r WHERE r.asset_key=a.asset_key AND r.segment_type='intro'
+          AND ABS(r.duration_ms-a.duration_ms)<=2000 AND (r.status IN ('approved','rejected')
+          OR (r.status='pending' AND (r.source='device' OR EXISTS (
+            SELECT 1 FROM skip_auto_evidence e WHERE e.record_id=r.id AND e.human_review=1)))))
+        AND NOT EXISTS (SELECT 1 FROM skip_auto_blocks b WHERE b.asset_key=a.asset_key AND b.kind='intro'
+          AND ABS(b.duration_ms-a.duration_ms)<=2000))""", (now(),))
+    con.execute('INSERT INTO skip_auto_maintenance VALUES(?,?)', (DETECTOR_POLICY, now()))
+
+
+def detector_windows(con, asset, kind):
+    return con.execute("""SELECT w.*,a.episode,a.source_key,a.season,a.playlist_id FROM skip_auto_windows w
+      JOIN skip_assets a ON a.asset_key=w.asset_key
+      JOIN skip_auto_settings x ON x.playlist_id=a.playlist_id AND x.enabled=1
       JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id AND s.enabled=1
-      WHERE a.source_key=? AND a.season=? AND w.kind=? AND w.asset_key<>?
-      ORDER BY w.created_at DESC LIMIT 6""", (asset["source_key"], asset["season"], kind, asset["asset_key"])).fetchall()
-    own = con.execute("SELECT * FROM skip_auto_windows WHERE asset_key=? AND kind=?", (asset["asset_key"], kind)).fetchone()
-    if not own or protected(con, asset, kind):
+      JOIN customer_playlists p ON p.id=a.playlist_id
+      JOIN customers c ON c.id=p.customer_id AND c.enabled=1
+      WHERE a.source_key=? AND a.season=? AND a.media_type='episode' AND w.kind=?
+      AND ABS(w.duration_ms-a.duration_ms)<=2000 AND w.length_ms>=15000
+      AND w.offset_ms>=0 AND w.offset_ms+w.length_ms<=a.duration_ms+250
+      AND NOT EXISTS (SELECT 1 FROM skip_auto_blocks b WHERE b.asset_key=a.asset_key AND b.kind=w.kind
+        AND ABS(b.duration_ms-a.duration_ms)<=2000)
+      ORDER BY ABS(a.episode-?),w.created_at DESC,w.asset_key LIMIT 32""",
+      (asset['source_key'], asset['season'], kind, asset['episode'])).fetchall()
+
+
+def bootstrap(con, asset, kind, busy=lambda: False):
+    if not enabled(con, asset['playlist_id']) or protected(con, asset, kind):
         return False
-    target = json.loads(own["words_json"])
-    matches, used = [], {asset["episode"]}
-    for row in rows:
-        if row["episode"] in used or abs(row["step_ms"] - own["step_ms"]) > .001:
+    current = con.execute('SELECT * FROM skip_assets WHERE asset_key=?', (asset['asset_key'],)).fetchone()
+    if (not current or any(current[k] != asset[k] for k in ('source_key','season','episode','playlist_id'))
+            or abs(current['duration_ms'] - asset['duration_ms']) > 2000):
+        return False
+    rows = detector_windows(con, asset, kind)
+    own = next((r for r in rows if r['asset_key'] == asset['asset_key']), None)
+    if not own or not 0 < own['step_ms'] <= 1000:
+        return False
+    selected, fps, used = [], [], set()
+    for row in [own] + [r for r in rows if r['asset_key'] != own['asset_key']]:
+        if row['episode'] in used or abs(row['step_ms'] - own['step_ms']) > .001:
             continue
-        span = common_span(target, json.loads(row["words_json"]), own["step_ms"])
-        if span:
-            matches.append((row, span)); used.add(row["episode"])
-    if len(matches) < 2:
+        try:
+            words = json.loads(row['words_json'])
+        except (ValueError, TypeError):
+            continue
+        if (not isinstance(words, list) or not 1 <= len(words) <= 10000
+                or len(words) * row['step_ms'] > row['length_ms'] + 250
+                or any(type(w) is not int or not -(1 << 31) <= w < (1 << 32) for w in words)):
+            continue
+        selected.append(row); fps.append(words); used.add(row['episode'])
+        if len(selected) == 5:
+            break
+    if not selected or selected[0]['asset_key'] != own['asset_key']:
         return False
-    spans = [x[1] for x in matches]
-    if (max(x[0] for x in spans) - min(x[0] for x in spans)) * own["step_ms"] > 1000 or (max(x[1] for x in spans) - min(x[1] for x in spans)) * own["step_ms"] > 1000:
+    detector = IntroOutroDetectorV2(Config(item_duration_sec=own['step_ms'] / 1000), busy)
+    decision = detector.detect_for_episode(0, fps, MarkerType(kind.upper()))
+    if decision.status == Status.REJECTED:
         return False
-    start = own["offset_ms"] + round(sum(x[0] for x in spans) / len(spans) * own["step_ms"])
-    end = own["offset_ms"] + round(sum(x[1] for x in spans) / len(spans) * own["step_ms"])
-    duration = asset["duration_ms"]
-    if (not valid_range(kind, start, end, duration)
-            or (kind == "intro" and start > min(WINDOW_MS, duration * .4))
-            or (kind == "outro" and (start < duration * .65 or end < duration - 15_000))):
+    start = own['offset_ms'] + round(decision.segment.start * 1000)
+    end = own['offset_ms'] + round(decision.segment.end * 1000)
+    duration = asset['duration_ms']
+    if (not valid_range(kind, start, end, duration) or end > own['offset_ms'] + own['length_ms'] + 250
+            or (kind == 'intro' and start > min(WINDOW_MS, duration * .4))
+            or (kind == 'outro' and (start < duration * .65 or end < duration - 15000))):
         return False
-    saved = store_proposal(con, asset, kind, start, end, 'audio_repetition', min(x[3] for x in spans),
-                           {"method": "three_episode_repetition", "episodes": [asset["episode"]] + [x[0]["episode"] for x in matches]})
-    return bool(saved)  # Repeated music alone cannot establish precise semantic boundaries.
+    contributors = [own] + [selected[p] for p in decision.supported_partners]
+    evidence = dict(method='episode_consensus', policy=DETECTOR_POLICY, status=decision.status.value,
+                    support=decision.support, attempted_partners=decision.attempted_partners,
+                    mean_pair_quality=decision.mean_pair_quality, min_pair_quality=decision.min_pair_quality,
+                    min_match_ratio=decision.min_match_ratio, boundary_spread_sec=decision.boundary_spread_sec,
+                    temporal_consistency=decision.temporal_consistency, position_plausibility=decision.position_plausibility,
+                    episodes=[r['episode'] for r in contributors],
+                    windows=[dict(asset_key=r['asset_key'], episode=r['episode'], duration_ms=r['duration_ms'],
+                                  offset_ms=r['offset_ms'], length_ms=r['length_ms'], step_ms=r['step_ms'],
+                                  fingerprint_sha256=hashlib.sha256(r['words_json'].encode()).hexdigest())
+                             for r in contributors])
+    saved = store_proposal(con, asset, kind, start, end, 'audio_repetition', decision.confidence, evidence)
+    if saved:
+        # The current consensus replaces machine alternatives, including weak
+        # reference votes. A REVIEW result must not be bypassed by legacy release.
+        retire_proposals(con, asset, kind, saved['id'])
+    return bool(saved)
+
+
+def refresh_neighbour_consensus(db, asset, kind, busy=lambda: False):
+    """Use cached audio to update earlier episodes as independent partners arrive."""
+    from skip_release import accept_pending
+    with db() as con:
+        keys = [r['asset_key'] for r in detector_windows(con, asset, kind)
+                if r['asset_key'] != asset['asset_key']][:4]
+    for key in keys:
+        if busy():
+            raise ValueError('analysis_deferred')
+        with db() as con:
+            neighbour = con.execute('SELECT * FROM skip_assets WHERE asset_key=?', (key,)).fetchone()
+            if neighbour and bootstrap(con, neighbour, kind, busy) and accept_pending(con, asset_key=key):
+                con.execute("""UPDATE skip_jobs SET status='done',detail=?,updated_at=?
+                  WHERE asset_key=? AND status IN ('no_reference','no_match')""",
+                  ('Abschnitt aus dem Staffelvergleich automatisch freigegeben; Zeiten später korrigierbar', now(), key))
 
 
 def save_window(con, asset, kind, words, step, offset, length):
@@ -899,8 +958,9 @@ def analyze(db, job, busy_factory):
         with db() as con:
             if decision and publish(con, asset, kind, decision):
                 approvals += 1
-            elif not votes and bootstrap(con, asset, kind):
+            elif bootstrap(con, asset, kind, busy):
                 proposals += 1
+        refresh_neighbour_consensus(db, asset, kind, busy)
     with db() as con:
         from skip_release import accept_pending
         approvals += accept_pending(con, asset_key=asset['asset_key'])
