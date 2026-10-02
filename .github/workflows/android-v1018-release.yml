@@ -124,8 +124,20 @@ jobs:
       - name: Build signed v1.0.18 APKs
         shell: bash
         run: |
+          set -euo pipefail
           cd "$PROJECT_ROOT"
-          gradle :app:assembleRelease --stacktrace --no-daemon -Dorg.gradle.workers.max=2
+          for attempt in 1 2 3 4; do
+            set +e
+            gradle :app:assembleRelease --stacktrace --no-daemon -Dorg.gradle.workers.max=2 2>&1 | tee "$RUNNER_TEMP/android-release-build.log"
+            build_exit=${PIPESTATUS[0]}
+            set -e
+            if [ "$build_exit" -eq 0 ]; then break; fi
+            if [ "$attempt" -eq 4 ] || ! grep -Eq 'Received status code 429|HTTP 429' "$RUNNER_TEMP/android-release-build.log"; then
+              exit "$build_exit"
+            fi
+            echo "Build-Abhängigkeiten vorübergehend gedrosselt; erneuter Versuch ($attempt/4)."
+            if [ "$attempt" -eq 1 ]; then sleep 30; else sleep 60; fi
+          done
 
       - name: Verify Android 1.0.18 release
         shell: bash
