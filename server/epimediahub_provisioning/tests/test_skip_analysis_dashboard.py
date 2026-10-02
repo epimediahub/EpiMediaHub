@@ -135,6 +135,14 @@ class DashboardApiTests(DashboardFixture, unittest.TestCase):
         self.assertIn("Wartet auf die Analyse", body)
         self.assertIn("Keine passenden Online-Zeiten", body)
 
+    def test_same_episode_in_different_files_is_labelled_as_separate_versions(self):
+        self.mark(1001,13)
+        self.mark(1002,13)
+        body=self.view(series=self.seed['source_key'],season=2,episode=13)
+        self.assertIn('2 Videofassungen',body)
+        self.assertIn('Videofassung 1',body)
+        self.assertIn('Videofassung 2',body)
+
     def test_titles_are_escaped_and_films_do_not_show_fictitious_seasons(self):
         self.mark(1001, 0, season=0, media_type="movie", title="<script>alert(1)</script>")
         body = self.view(series=self.seed["source_key"])
