@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import os
 import re
 import sqlite3
 import time
@@ -236,11 +237,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true", help="Process at most one bounded job")
     parser.parse_args()
-    from app import BASE_DIR, db
-    from wsgi import app
-    with (Path(BASE_DIR) / "skip-analysis.lock").open("w") as lock:
+    data_dir = Path(os.environ.get("EPIMEDIAHUB_DATA_DIR", "/var/lib/epimediahub"))
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with (data_dir / "skip-analysis.lock").open("a") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise SystemExit(0)
+        # Importing the application runs schema migrations. Those writes must
+        # also be protected against another worker or an ongoing installation.
+        from app import db
+        from wsgi import app
         print("skip_analysis_status=" + process_one(db))
