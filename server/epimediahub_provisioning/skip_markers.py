@@ -440,7 +440,7 @@ def install(app, db):
         notice = f"{counts['approved']} Zeitmarken freigegeben"
         for key, label in (('duplicates', 'doppelte Vorschläge zusammengeführt'),
                            ('conflicts', 'abweichende Varianten automatisch ausgewählt'),
-                           ('protected', 'Vorschläge mit bestehender Entscheidung unverändert'),
+                           ('protected', 'alte Vorschläge erledigt; bestehende Entscheidungen beibehalten'),
                            ('invalid', 'ungültige Vorschläge bleiben zur Einzelprüfung')):
             if counts[key]:
                 notice += f" · {counts[key]} {label}"

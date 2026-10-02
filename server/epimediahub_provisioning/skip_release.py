@@ -73,7 +73,7 @@ def approve_rows(con, rows, human=False):
                 # Already decided markers stay authoritative. Old generated
                 # proposals disappear from the review queue instead of looking stuck.
                 for row in batch:
-                    if row['source'] in MACHINE_SOURCES and not row['human_review']:
+                    if human or (row['source'] in MACHINE_SOURCES and not row['human_review']):
                         con.execute("UPDATE skip_records SET status='superseded' WHERE id=? AND status='pending'", (row['id'],))
                 counts['protected'] += len(batch)
                 continue

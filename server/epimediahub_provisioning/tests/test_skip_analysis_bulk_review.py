@@ -124,7 +124,8 @@ class BulkReviewTests(BulkReviewFixture, unittest.TestCase):
             con.execute('INSERT INTO skip_auto_blocks VALUES(?,?,?,?)', (row['asset_key'], 'intro', row['duration_ms'], 'previous-block'))
             before = [row[:] for row in con.execute("SELECT * FROM skip_records WHERE status IN ('approved','rejected')")]
         notice = self.notice(self.approve())
-        self.assertIn('3 Vorschläge mit bestehender Entscheidung unverändert', notice)
+        self.assertIn('3 alte Vorschläge erledigt; bestehende Entscheidungen beibehalten', notice)
+        self.assertNotIn('pending',self.statuses().values())
         with self.db() as con:
             self.assertEqual([row[:] for row in con.execute("SELECT * FROM skip_records WHERE status IN ('approved','rejected')")], before)
             self.assertEqual(con.execute('SELECT updated_at FROM skip_auto_blocks').fetchone()[0], 'previous-block')
