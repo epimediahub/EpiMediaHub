@@ -63,7 +63,7 @@ mode=os.environ.get('FIXTURE_MODE','success')
 if '127.0.0.1' in url:
     new='skip_nightly_catalogue' in Path(os.environ['FIXTURE_APP'],'skip_markers.py').read_text()
     healthy=new and mode!='bad-health'
-    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy,'skip_language_priority':healthy}}
+    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy,'skip_language_priority':healthy,'skip_bulk_review':healthy and mode!='missing-bulk-review'}}
     output.write_text(json.dumps(body))
 else:
     assert '/'+os.environ['FIXTURE_REF']+'/' in url
@@ -239,6 +239,12 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON'],*sys.argv[1:
         with self.db() as con:
             self.assertEqual(con.execute('SELECT generation,next_due,retry_at FROM skip_catalogue_runs').fetchone()[:],(7,999999,444444))
             self.assertEqual(con.execute('SELECT value,updated_at FROM skip_catalogue_config').fetchone()[:],(24,'previous-choice'))
+
+    def test_missing_bulk_review_feature_rolls_back_and_preserves_markers(self):
+        result = self.launch('missing-bulk-review', enable=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.unchanged()
+        self.assertTrue(json.loads(self.state.read_text())['timer'])
 
     def test_corrupt_download_never_stops_services_or_changes_code(self):
         result=self.launch('corrupt')
