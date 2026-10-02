@@ -403,7 +403,7 @@ def chapter_candidates(chapters, duration):
 
 
 def fingerprint(source, start_ms, length_ms, busy=lambda: False, *, require_complete=False, with_coverage=False):
-    if not 15_000 <= length_ms <= 600_000 or start_ms < 0:
+    if not 15_000 <= length_ms <= 720_000 or start_ms < 0:
         raise ValueError("fingerprint_window")
     pcm = run(["ffmpeg", "-nostdin", "-v", "error", "-threads", "1", *input_options(source), "-ss", str(start_ms / 1000), "-i", source, "-t", str(length_ms / 1000), "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "11025", "-f", "s16le", "pipe:1"], busy=busy)
     if require_complete and len(pcm) / (2 * 11025) * 1000 < length_ms - 250:

@@ -97,7 +97,7 @@ class AcceptanceTests(AutomationFixture, unittest.TestCase):
     def test_repetition_seeds_automatic_reference_without_self_training_from_derived_audio(self):
         rng=random.Random(8401); shared=[rng.getrandbits(32) for _ in range(220)]
         data=[]
-        for stream,episode,position in (('81',12,200),('82',13,300),('83',14,400)):
+        for stream,episode,position in (('81',12,200),('82',13,300),('83',14,400),('84',15,500)):
             item=self.descriptor(stream,episode);self.registered(item);data.append(item)
             words=[rng.getrandbits(32) for _ in range(position)]+shared+[rng.getrandbits(32) for _ in range(80)]
             with self.db() as con: auto.save_window(con,item,'intro',words,125,0,120000)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from collections import defaultdict
 
 from skip_markers import now, valid_range
@@ -36,9 +37,9 @@ def enabled(con, playlist_id):
 
 
 def choose(rows):
-    from skip_automation import PROPOSAL_RANK
+    from skip_automation import proposal_rank
     return max(rows, key=lambda r: (r['human_review'] or r['source'] == 'device',
-                                   PROPOSAL_RANK.get(r['source'], 5 if r['source'] == 'auto_audio' else 0),
+                                   proposal_rank(r)[0],
                                    r['confidence'], r['id']))
 
 
@@ -131,7 +132,7 @@ def accept_pending(con, asset_key=None, playlist_id=None):
     for row in con.execute(sql, params).fetchall():
         if row['playlist_id'] not in settings:
             settings[row['playlist_id']] = enabled(con, row['playlist_id'])
-        if settings[row['playlist_id']] and current_reference(con, row):
+        if settings[row['playlist_id']] and current_reference(con, row) and detector_release_ready(con, row):
             rows.append(row)
     # A device proposal represents a correction in progress, not a machine competitor.
     rows = [r for r in rows if not con.execute('''SELECT 1 FROM skip_records d
@@ -140,6 +141,51 @@ def accept_pending(con, asset_key=None, playlist_id=None):
       AND (d.source='device' OR e.human_review=1) LIMIT 1''',
       (r['asset_key'], r['segment_type'], r['duration_ms'])).fetchone()]
     return approve_rows(con, rows)['approved']
+
+
+def detector_release_ready(con, row):
+    """V2 review evidence cannot enter the legacy blanket-acceptance path."""
+    from skip_detector_v2 import POLICY as detector_policy
+    try:
+        evidence = json.loads(row['evidence_json'] or '{}')
+    except (ValueError, TypeError):
+        evidence = {}
+    if not isinstance(evidence, dict):
+        return True
+    if evidence.get('method') != 'episode_consensus' and evidence.get('policy') != detector_policy:
+        return True
+    if (evidence.get('policy') != detector_policy or evidence.get('status') != 'AUTO_CONFIRMED'
+            or not .92 <= row['confidence'] <= 1):
+        return False
+    for name, low, high in (('min_pair_quality', .92, 1), ('min_match_ratio', .90, 1),
+                            ('boundary_spread_sec', 0, 1)):
+        value = evidence.get(name)
+        if type(value) not in (int, float) or not low <= value <= high:
+            return False
+    windows = evidence.get('windows')
+    support = evidence.get('support')
+    if type(support) is not int or not 3 <= support <= 4 or not isinstance(windows, list) or len(windows) != support + 1:
+        return False
+    used, own = set(), False
+    for item in windows:
+        if not isinstance(item, dict):
+            return False
+        cached = con.execute('''SELECT w.*,a.source_key,a.season,a.episode,a.duration_ms current_duration
+          FROM skip_auto_windows w JOIN skip_assets a ON a.asset_key=w.asset_key
+          JOIN skip_auto_settings x ON x.playlist_id=a.playlist_id AND x.enabled=1
+          JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id AND s.enabled=1
+          JOIN customer_playlists p ON p.id=a.playlist_id JOIN customers c ON c.id=p.customer_id AND c.enabled=1
+          WHERE w.asset_key=? AND w.kind=? AND NOT EXISTS (
+            SELECT 1 FROM skip_auto_blocks b WHERE b.asset_key=a.asset_key AND b.kind=w.kind
+            AND ABS(b.duration_ms-a.duration_ms)<=2000)''', (item.get('asset_key'), row['segment_type'])).fetchone()
+        if (not cached or cached['source_key'] != row['source_key'] or cached['season'] != row['season']
+                or cached['episode'] in used or abs(cached['duration_ms'] - cached['current_duration']) > 2000
+                or any(cached[k] != item.get(k) for k in ('episode','duration_ms','offset_ms','length_ms','step_ms'))
+                or hashlib.sha256(cached['words_json'].encode()).hexdigest() != item.get('fingerprint_sha256')):
+            return False
+        used.add(cached['episode'])
+        own |= cached['asset_key'] == row['asset_key'] and cached['episode'] == row['episode']
+    return own
 
 
 def current_reference(con, row):
