@@ -304,6 +304,20 @@ class WorkerTests(AutomationFixture, unittest.TestCase):
         with self.db() as con:
             self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE asset_key=? AND status='approved'", (self.target['asset_key'],)).fetchone()[0], 0)
 
+    def test_short_repeated_motif_does_not_block_the_unique_complete_intro(self):
+        audio=self.setup_audio(two=False)
+        def repeated(source,start,length,busy,**options):
+            result=audio(source,start,length,busy,**options)
+            if start==0 and options.get('with_coverage'):
+                words,step,coverage=result
+                # Repeat only the opening motif elsewhere, while the complete
+                # reviewed sequence still occurs exactly once.
+                words=words+[0]*100+words[400:453]+[0]*100
+                self.assertIsNone(auto.matching_offset(words[400:453],words,step))
+                return words,step,coverage
+            return result
+        self.assertEqual(self.analyze(repeated)[0],'done')
+
     def test_reported_runtime_mismatch_never_decodes_or_publishes(self):
         audio = self.setup_audio()
         with mock.patch.object(auto, "provider_proxy", side_effect=lambda *a: contextlib.nullcontext("fixture")), mock.patch.object(auto, "probe", return_value=(10_000, [])), mock.patch.object(auto, "fingerprint") as decode:
