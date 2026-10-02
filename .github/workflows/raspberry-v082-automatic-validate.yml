@@ -5,6 +5,7 @@ on:
   push:
     branches: [raspberry-v0.8.2-auto-progress]
     paths:
+      - 'server/epimediahub_provisioning/app.py'
       - 'server/epimediahub_provisioning/skip*.py'
       - 'server/epimediahub_provisioning/skip_markers.py'
       - 'server/epimediahub_provisioning/skip_automation.py'
@@ -17,6 +18,7 @@ on:
       - 'server/epimediahub_provisioning/tests/test_skip_analysis*.py'
       - 'server/epimediahub_provisioning/tests/test_skip_installer*.py'
       - 'server/epimediahub_provisioning/deploy/inspect_skip_references.py'
+      - 'server/epimediahub_provisioning/deploy/check_skip_dashboard.py'
       - '.github/workflows/raspberry-v082-automatic-validate.yml'
 
 permissions:

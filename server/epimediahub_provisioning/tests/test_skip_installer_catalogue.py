@@ -30,8 +30,8 @@ class InstallerTests(ReferenceFixture, unittest.TestCase):
             directory.mkdir(parents=True, exist_ok=True)
         shutil.move(self.db_path, self.datadir / 'provisioning.db')
         self.db_path = self.datadir / 'provisioning.db'
-        self.originals = {'skip_analysis.py': 'OLD_ANALYSIS = True\n', 'skip_analysis_worker.py': 'OLD_WORKER = True\n',
-                          'skip_markers.py': 'OLD_MARKERS = True\n', 'templates/skip_markers.html': '<p>previous dashboard</p>\n'}
+        self.originals = {'app.py': 'OLD_APP = True\n', 'skip_analysis.py': 'OLD_ANALYSIS = True\n', 'skip_analysis_worker.py': 'OLD_WORKER = True\n',
+                          'skip_markers.py': 'OLD_MARKERS = True\nAPI_VERSION = "0.8.2"\ndef v082_skip_dashboard(): pass\ndef v082_skip_presence(): pass\n', 'templates/skip_markers.html': '<p>previous dashboard</p>\n'}
         for name, content in self.originals.items():
             (self.appdir / name).write_text(content)
         self.state = self.workspace / 'services.json'
@@ -41,6 +41,7 @@ class InstallerTests(ReferenceFixture, unittest.TestCase):
         self.marker(self.seed)
         self.waiting()
         with self.db() as con:
+            con.execute("ALTER TABLE customers ADD COLUMN name TEXT NOT NULL DEFAULT 'Fixture customer'")
             con.execute("INSERT INTO skip_auto_settings VALUES(1,1,1,'previous-choice')")
             con.execute("INSERT INTO skip_catalogue_settings VALUES(1,0,'previous-choice')")
             con.execute("INSERT INTO skip_auto_metadata_config VALUES('tmdb_api_key',?,'previous-choice')",("a"*32,))
@@ -54,7 +55,13 @@ class InstallerTests(ReferenceFixture, unittest.TestCase):
         self.installer.write_text(source)
         self.script('id', "print('0')")
         self.script('chown', 'pass')
-        self.script('install', "import shutil\nshutil.copyfile(sys.argv[-2],sys.argv[-1])")
+        self.script('install', """
+import shutil
+from pathlib import Path
+shutil.copyfile(sys.argv[-2],sys.argv[-1])
+if os.environ.get('FIXTURE_MODE')=='bad-dashboard' and sys.argv[-1].endswith('check_skip_dashboard.py'):
+    Path(os.environ['FIXTURE_APP'],'templates/skip_progress.html').unlink()
+""")
         self.script('curl', """
 import json, shutil
 from pathlib import Path
@@ -62,8 +69,9 @@ args=sys.argv[1:]; output=Path(args[args.index('-o')+1]); url=next(x for x in ar
 mode=os.environ.get('FIXTURE_MODE','success')
 if '127.0.0.1' in url:
     new='skip_nightly_catalogue' in Path(os.environ['FIXTURE_APP'],'skip_markers.py').read_text()
+    if mode=='unavailable-health' and not new: raise SystemExit(22)
     healthy=new and mode!='bad-health'
-    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy,'skip_language_priority':healthy,'skip_bulk_review':healthy and mode!='missing-bulk-review','skip_network_address_fallback':healthy and mode!='missing-network-fallback','skip_automatic_acceptance':healthy and mode!='missing-automatic-acceptance','skip_series_progress':healthy and mode!='missing-series-progress'}}
+    body={'api_version':'0.8.0' if mode=='old-api' else '0.8.2','status':'ok','features':{'skip_nightly_catalogue':healthy,'skip_high_audio_approval':healthy,'skip_proposal_dedup':healthy,'skip_online_error_details':healthy,'skip_language_priority':healthy,'skip_bulk_review':healthy and mode!='missing-bulk-review','skip_network_address_fallback':healthy and mode!='missing-network-fallback','skip_automatic_acceptance':healthy and mode!='missing-automatic-acceptance','skip_series_progress':healthy and mode!='missing-series-progress','skip_database_concurrency':healthy and mode!='missing-database-concurrency'}}
     output.write_text(json.dumps(body))
 else:
     assert '/'+os.environ['FIXTURE_REF']+'/' in url
@@ -78,6 +86,10 @@ p=Path(os.environ['FIXTURE_STATE']); state=json.loads(p.read_text()); args=sys.a
 if args[0]=='is-active': raise SystemExit(0 if state['timer'] else 3)
 state['events'].append(args)
 if args[0]=='stop' and 'epimediahub-skip-analysis.timer' in args: state['timer']=False
+if args[0]=='stop' and 'epimediahub-skip-analysis.service' in args and state.get('worker_pid'):
+    import signal
+    try: os.kill(state['worker_pid'],signal.SIGTERM)
+    except ProcessLookupError: pass
 if args[0]=='start' and 'epimediahub-skip-analysis.timer' in args: state['timer']=True
 p.write_text(json.dumps(state))
 """)
@@ -98,12 +110,14 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON'],*sys.argv[1:
         p = self.bindir / name
         p.write_text('#!'+sys.executable+'\nimport os,sys\n'+code+'\n'); p.chmod(0o755)
 
-    def launch(self, mode='success', enable=True, wait_worker=False):
+    def launch(self, mode='success', enable=True, wait_worker=False, repair=False):
         args = ['bash', str(self.installer)]
         if enable:
             args.append('--start-catalogue')
         if wait_worker:
             args.append('--wait-worker')
+        if repair:
+            args.append('--repair-database')
         result = subprocess.run(args, env=self.env | dict(FIXTURE_MODE=mode), text=True, capture_output=True, timeout=45)
         self.assertNotIn('not-read-or-executed', result.stdout + result.stderr)
         return result
@@ -160,6 +174,8 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON'],*sys.argv[1:
         self.assertFalse((self.appdir / 'skip_catalogue.py').exists())
         self.assertFalse((self.appdir / 'skip_release.py').exists())
         self.assertFalse((self.appdir / 'skip_progress.py').exists())
+        self.assertFalse((self.appdir / 'skip_database.py').exists())
+        self.assertFalse((self.appdir / 'deploy/check_skip_dashboard.py').exists())
         self.assertFalse((self.appdir / 'templates/skip_progress.html').exists())
         with self.db() as con:
             marker = con.execute('SELECT * FROM skip_records').fetchone()
@@ -307,6 +323,78 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON'],*sys.argv[1:
         self.assertNotEqual(result.returncode,0)
         self.unchanged()
         self.assertEqual(json.loads(self.state.read_text())['events'],[])
+
+    def test_repair_works_when_health_is_blocked_and_preserves_existing_data(self):
+        with self.db() as con:
+            con.execute("UPDATE skip_jobs SET status='running'")
+            con.execute("INSERT INTO skip_analysis_budget VALUES(?,37)", (__import__('skip_markers').now()[:10],))
+            con.execute("DROP INDEX idx_skip_catalogue_episode_asset")
+        result = self.launch('unavailable-health', repair=True, enable=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('vorhandenem Datenbestand erfolgreich geladen', result.stdout)
+        with self.db() as con:
+            self.assertEqual(con.execute('PRAGMA journal_mode').fetchone()[0], 'wal')
+            self.assertIsNotNone(con.execute("SELECT 1 FROM sqlite_master WHERE name='idx_skip_catalogue_episode_asset'").fetchone())
+            self.assertEqual(con.execute('SELECT status,attempts FROM skip_jobs').fetchone()[:], ('queued',2))
+            self.assertEqual(con.execute('SELECT count FROM skip_analysis_budget').fetchone()[0], 37)
+            self.assertEqual(con.execute('SELECT status,start_ms,end_ms FROM skip_records').fetchone()[:], ('approved',283043,309573))
+            self.assertEqual(con.execute("SELECT value FROM skip_auto_metadata_config WHERE name='tmdb_api_key'").fetchone()[0], 'a'*32)
+        self.assertTrue(json.loads(self.state.read_text())['timer'])
+
+    def test_repair_stops_active_writer_before_taking_worker_lock(self):
+        ready = self.workspace / 'worker-ready'
+        code = """
+import fcntl,sqlite3,sys,time
+from pathlib import Path
+with Path(sys.argv[1]).open('a') as lock:
+    fcntl.flock(lock,fcntl.LOCK_EX)
+    con=sqlite3.connect(sys.argv[2]); con.execute('BEGIN EXCLUSIVE')
+    Path(sys.argv[3]).write_text('ready')
+    time.sleep(30)
+"""
+        worker = subprocess.Popen([sys.executable,'-c',code,str(self.datadir/'skip-analysis.lock'),str(self.db_path),str(ready)])
+        try:
+            deadline = time.monotonic()+5
+            while not ready.exists() and time.monotonic()<deadline:
+                time.sleep(.01)
+            self.assertTrue(ready.exists())
+            state=json.loads(self.state.read_text()); state['worker_pid']=worker.pid; self.state.write_text(json.dumps(state))
+            result=self.launch('unavailable-health',repair=True,enable=False)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(worker.wait(timeout=3),-15)
+            self.assertTrue(json.loads(self.state.read_text())['timer'])
+        finally:
+            if worker.poll() is None:
+                worker.terminate(); worker.wait(timeout=3)
+
+    def test_real_dashboard_failure_restores_code_even_if_health_would_pass(self):
+        result=self.launch('bad-dashboard',repair=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('Intro-Dashboard konnte',result.stderr)
+        self.unchanged()
+        self.assertTrue(json.loads(self.state.read_text())['timer'])
+
+    def test_missing_database_feature_rolls_back_code_and_preserves_data(self):
+        result=self.launch('missing-database-concurrency',repair=True)
+        self.assertNotEqual(result.returncode,0)
+        self.unchanged()
+        self.assertTrue(json.loads(self.state.read_text())['timer'])
+
+    def test_corrupt_repair_download_preserves_active_services(self):
+        result=self.launch('corrupt',repair=True)
+        self.assertNotEqual(result.returncode,0)
+        self.unchanged()
+        self.assertEqual(json.loads(self.state.read_text())['events'],[])
+
+    def test_repair_restarts_services_when_worker_lock_cannot_be_released(self):
+        with (self.datadir/'skip-analysis.lock').open('a') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX)
+            result=self.launch(repair=True)
+        self.assertNotEqual(result.returncode,0)
+        self.unchanged()
+        state=json.loads(self.state.read_text())
+        self.assertTrue(state['timer'])
+        self.assertIn(['restart','epimediahub-provisioning.service'],state['events'])
 
 
 if __name__=='__main__':
