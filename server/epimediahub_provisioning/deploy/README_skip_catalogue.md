@@ -12,7 +12,7 @@ Voraussetzung ist der laufende Raspberry-Server 0.8.2 mit Audioanalyse und
 Staffelautomatik für die gewünschten Playlists. Android 1.0.16 und 1.0.17 bleiben kompatibel.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/2ee92e9dbe4bb593242b0b4dc22c69efb20d966d/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/dcb0254c5daac9c0392c58e0e214309018e03c37/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
 sudo bash /var/tmp/epimediahub-skip-catalogue.sh --wait-worker --start-catalogue
 ```
 
@@ -29,13 +29,16 @@ vorhandenen Worker-Lock, ohne den Durchlauf abzubrechen. Der Timer muss dafür
 nicht manuell gestoppt werden. Ohne diese Option endet der Installer bei einem
 belegten Lock weiterhin vor Änderungen. Beide Optionen sind kombinierbar.
 
-Das Skript lädt 25 Dateien aus einem festen Commit und prüft SHA256,
+Das Skript lädt 26 Dateien aus einem festen Commit und prüft SHA256,
 Syntax sowie die tatsächlichen Richtlinien-, API- und Audiotests vor Änderungen.
 Es verwendet den bestehenden Worker-Lock, sichert Code und SQLite-Datenbank
 und stellt bei einem fehlgeschlagenen Neustart den vorherigen Code sowie nur
 die selbst geänderten Katalogeinstellungen wieder her. Vor dem Neustart wird die
-Intro-Maske mit einer schreibgeschützten Kopie des vorhandenen Datenbestands
-vollständig gerendert; ein erfolgreicher Health-Aufruf allein reicht nicht aus.
+Serienstatistik einmalig vorbereitet und die Intro-Maske mit einer
+schreibgeschützten Kopie des vorhandenen Datenbestands vollständig gerendert;
+ein erfolgreicher Health-Aufruf allein reicht nicht aus. Am Ende zeigt der
+Installer getrennte Zeiten für Datenbankkopie, Aktualisierung geänderter Serien
+und Rendern der Intro-Maske.
 
 ## Reparatur bei „database is locked“
 
@@ -43,7 +46,7 @@ Wenn die Intro-Maske einen internen Serverfehler zeigt und das Protokoll
 `sqlite3.OperationalError: database is locked` meldet:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/2ee92e9dbe4bb593242b0b4dc22c69efb20d966d/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
+curl -fsSL https://raw.githubusercontent.com/epimediahub/EpiMediaHub/dcb0254c5daac9c0392c58e0e214309018e03c37/server/epimediahub_provisioning/deploy/install_skip_catalogue.sh -o /var/tmp/epimediahub-skip-catalogue.sh &&
 sudo bash /var/tmp/epimediahub-skip-catalogue.sh --repair-database --start-catalogue
 ```
 
@@ -193,6 +196,41 @@ Quellen bleiben getrennt, und mehrere Fassungen einer Folge werden mitgezählt.
 Noch nicht vollständig erfasste Folgenlisten und das verbrauchte Tagesbudget
 werden angezeigt. Während der Bestandsaufnahme wächst die Übersicht.
 
+Die Fortschrittszahlen werden je Serie gespeichert. Ein Seitenwechsel oder
+Filter liest diese Statistik, statt sämtliche Folgen und Intro-Marken erneut
+zu durchsuchen. Änderungen an Dateien, Analysejobs, Marken und Katalogständen
+markieren nur die betroffenen Serien zur Neuberechnung. Das gilt auch für
+Änderungen aus einem anderen Web- oder Worker-Prozess. Kunden- und Playlistnamen,
+Analyseeinstellungen sowie Tagesbudget werden weiterhin aktuell gelesen.
+
+Dashboard und Worker aktualisieren jeweils eine begrenzte Zahl geänderter
+Serien. Bei einem größeren Rückstand zeigt die Übersicht die noch zu
+aktualisierende Zahl an. Die gerade ausgewählte Serie wird bevorzugt, damit
+Freigaben und Korrekturen beim anschließenden Öffnen sichtbar werden. Eine
+während der Berechnung geänderte Serie bleibt zur erneuten Aktualisierung
+vorgemerkt; auch zwischenzeitliches Aktualisieren und erneutes Ändern können
+keine veralteten Zahlen veröffentlichen. Bestehende Bestände werden bei der
+Installation vor dem Neustart vollständig vorbereitet.
+
+Im lokalen Vergleich mit 60.001 Dateien, 180.001 freigegebenen Intro-Marken und
+2.001 Seriengruppen sank die Fortschrittsberechnung von 0,616 auf 0,0127 Sekunden
+(rund 48-mal schneller). Die einmalige Vorbereitung brauchte 0,288 Sekunden.
+Dies sind Messungen derselben lokalen Testdatenbank, keine Laufzeitgarantie für
+einen Raspberry oder für das gesamte Dashboard. Die übrigen Dashboard-Abfragen
+und die Datenbankkopie werden durch diesen Vergleich nicht gemessen.
+
+Zur Messung mit dem vorhandenen Raspberry-Datenbestand:
+
+```sh
+sudo bash -c 'time timeout 60s /opt/epimediahub/provisioning/.venv/bin/python /opt/epimediahub/provisioning/deploy/check_skip_dashboard.py /var/lib/epimediahub/provisioning.db /opt/epimediahub/provisioning/templates'
+```
+
+Die drei ausgegebenen Phasenzeiten trennen Kopieren, Statistikaktualisierung
+und Rendern. Der Prüfer verändert weder die aktive Datenbank noch
+Authentifizierung oder Dienstkonfiguration. Eventuell noch offene Statistik
+wird ausschließlich in seiner privaten Datenbankkopie vorbereitet. Die
+Passworteingabe für `sudo` liegt außerhalb der hier gemessenen Laufzeit.
+
 
 Die Zeitmarken sind nach Serie → Staffel → Folge gegliedert. Die Titelübersicht
 zeigt höchstens 20 Serien pro Seite; die Auswahl einer Staffel lädt höchstens
@@ -296,10 +334,10 @@ Wiedergaben außerhalb der EpiMediaHub-App kann diese Meldung nicht erfassen.
 
 ## Validierung
 
-Der vollständige Prüflauf umfasst 259 Tests ohne übersprungene Tests:
-221 Richtlinien-, Katalog-, HTTP-, Sprach-, Freigabe- und Fortschrittstests,
+Der vollständige Prüflauf umfasst 273 Tests ohne übersprungene Tests:
+233 Richtlinien-, Katalog-, HTTP-, Sprach-, Freigabe- und Fortschrittstests,
 14 Marker-/API-Tests einschließlich echter FFmpeg-/Chromaprint-Erkennung sowie
-24 Installer-Tests. Zusätzlich läuft der bestehende Dashboard-/Geräte-Smoke-Test.
+26 Installer-Tests. Zusätzlich läuft der bestehende Dashboard-/Geräte-Smoke-Test.
 Die neuen Fälle prüfen die automatische Übernahme bestehender Vorschläge,
 Referenzen ohne menschliche Erstfreigabe, Korrekturen im Player, geschützte
 Ablehnungen, die Sammelfreigabe bei abweichenden Zeiten, vollständige Serienseiten,
@@ -312,7 +350,16 @@ Reparatur bei aktiver Schreibsperre beziehungsweise ausgefallenem Health-Endpunk
 Ein Fehler beim tatsächlichen Rendern der Intro-Maske löst ebenfalls die
 Wiederherstellung aus.
 
-Quellcommit: `e5a06e9a57e42d82d78b11ef345db0846406c041`.
-Validierter Installer-Commit: `2ee92e9dbe4bb593242b0b4dc22c69efb20d966d`.
-[GitHub-Actions-Prüflauf](https://github.com/epimediahub/EpiMediaHub/actions/runs/37038350280).
+Zwölf zusätzliche Fortschrittstests prüfen gespeicherte Seiten ohne Zugriff auf
+den Folgen-/Markenbestand, Statuswechsel, Freigaben, Korrekturen, Laufzeit- und
+Quellenänderungen, unveränderte Player-Registrierung, Katalogänderungen,
+Playlistlöschung, begrenzte Aktualisierung, gleichzeitige Änderungen einschließlich
+zwischenzeitlicher Bereinigung sowie die getrennten Prüferzeiten ohne Änderungen
+an der aktiven Datenbank. Zwei weitere Installer-Tests prüfen die vollständig
+vorbereitete Statistik vor dem Neustart und Wiederherstellung bei fehlendem
+Health-Merkmal `skip_progress_cache`.
+
+Quellcommit: `990533bf76b727ccc9ff6706909adad6e53dbcac`.
+Validierter Installer-Commit: `dcb0254c5daac9c0392c58e0e214309018e03c37`.
+[GitHub-Actions-Prüflauf](https://github.com/epimediahub/EpiMediaHub/actions/runs/37045686053).
 Workflow: `.github/workflows/raspberry-v082-automatic-validate.yml`.
