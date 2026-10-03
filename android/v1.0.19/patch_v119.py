@@ -55,6 +55,8 @@ replace_once(java / 'ui/PlayerScreen.kt', '    val v116Context = LocalContext.cu
     '    LaunchedEffect(item.resumeKey) { de.epimediahub.app.radio.RadioPlaybackService.pauseForVideo() }\n    val v116Context = LocalContext.current.applicationContext')
 replace_once(java / 'ui/V112SmartTubePlayer.kt', '    val reportProgress by rememberUpdatedState(onProgress)',
     '    LaunchedEffect(video.videoId) { de.epimediahub.app.radio.RadioPlaybackService.pauseForVideo() }\n    val reportProgress by rememberUpdatedState(onProgress)')
+replace_once(java / 'EpiMediaHubApp.kt', '                        (context as? Activity)?.finishAndRemoveTask()',
+    '                        de.epimediahub.app.radio.RadioPlaybackService.stopForExit()\n                        (context as? Activity)?.finishAndRemoveTask()')
 
 manifest = root / 'app/src/main/AndroidManifest.xml'
 text = manifest.read_text()

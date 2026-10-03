@@ -98,6 +98,9 @@ class RadioPlaybackService : MediaSessionService() {
         @Volatile private var active: RadioPlaybackService? = null
         /** Prevent simultaneous sound when Live TV, a film or SmartTube starts. */
         fun pauseForVideo() { active?.session?.player?.pause() }
+        fun stopForExit() {
+            active?.let { service -> service.session?.player?.let { it.stop(); it.clearMediaItems() }; service.stopSelf() }
+        }
     }
 }
 
@@ -139,7 +142,7 @@ internal class RadioController(context: Context) : AutoCloseable {
         val station = radioStation(player.currentMediaItem)
         val title = player.mediaMetadata.title?.toString().orEmpty()
         mutable.value = RadioPlaybackState(station, title.takeUnless { it == station?.name }.orEmpty(), player.isPlaying,
-            player.playbackState == Player.STATE_BUFFERING, true,
+            player.playbackState == Player.STATE_BUFFERING && player.playWhenReady, true,
             player.hasPreviousMediaItem(), player.hasNextMediaItem(),
             if (player.playerError != null) "Sender gerade nicht erreichbar. Erneut versuchen oder einen anderen Sender wählen." else "")
     }

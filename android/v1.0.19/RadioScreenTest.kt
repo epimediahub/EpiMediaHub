@@ -86,7 +86,7 @@ class RadioScreenTest {
         val playlist = compose.onNodeWithTag("home-playlist-switch")
         val radio = compose.onNodeWithTag("home-radio")
         val left = playlist.getUnclippedBoundsInRoot(); val right = radio.getUnclippedBoundsInRoot()
-        assertEquals(right.width, right.height)
+        assertEquals(right.right - right.left, right.bottom - right.top)
         assertTrue(right.left > left.right)
         playlist.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         playlist.performKeyInput { keyDown(Key.DirectionRight); keyUp(Key.DirectionRight) }

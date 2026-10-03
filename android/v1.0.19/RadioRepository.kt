@@ -92,7 +92,10 @@ internal class RadioBrowserClient(
                     runCatching {
                         cacheDir.mkdirs()
                         val temp = File.createTempFile("radio-", ".tmp", cacheDir)
-                        try { temp.writeText(parsed.toString()); if (!temp.renameTo(file)) file.writeText(parsed.toString()) }
+                        try {
+                            temp.writeText(parsed.toString()); if (!temp.renameTo(file)) file.writeText(parsed.toString())
+                            file.setLastModified(clock())
+                        }
                         finally { temp.delete() }
                         cacheDir.listFiles()?.filter { it.extension == "json" }?.sortedByDescending { it.lastModified() }
                             ?.drop(80)?.forEach { it.delete() }

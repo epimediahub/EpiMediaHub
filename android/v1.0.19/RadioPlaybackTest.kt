@@ -31,7 +31,7 @@ class RadioPlaybackTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val service = context.packageManager.getServiceInfo(ComponentName(context, RadioPlaybackService::class.java), 0)
         assertEquals(android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK, service.foregroundServiceType)
-        val permissions = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.toList()
+        val permissions = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty().toList()
         assertTrue(permissions.contains("android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"))
         assertTrue(permissions.contains("android.permission.WAKE_LOCK"))
     }
