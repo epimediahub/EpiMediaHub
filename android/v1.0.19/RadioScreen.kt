@@ -26,6 +26,7 @@ import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -95,11 +96,20 @@ internal fun RadioContent(state: RadioUiState, playback: RadioPlaybackState, isT
     var search by remember { mutableStateOf(false) }
     val backFocus = remember { FocusRequester() }
     val inputMode = LocalInputModeManager.current
+    val view = LocalView.current
     val shown = remember(state.mode, state.query, state.stations, state.favorites, state.recent) { state.visible }
     val favorites = remember(state.favorites) { state.favoriteIds }
     val memory = "radio:${state.mode}:${state.query}"
     val list = v111RememberLazyListState(memory)
-    BackHandler { actions.back() }
+    BackHandler { actions.stop(); actions.back() }
+    DisposableEffect(view) {
+        val previousKeepScreenOn = view.keepScreenOn
+        view.keepScreenOn = true
+        onDispose {
+            view.keepScreenOn = previousKeepScreenOn
+            actions.stop()
+        }
+    }
     LaunchedEffect(isTv) {
         if (isTv) { inputMode.requestInputMode(InputMode.Keyboard); delay(100); runCatching { backFocus.requestFocus() } }
     }
