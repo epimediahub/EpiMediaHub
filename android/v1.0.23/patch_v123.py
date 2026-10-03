@@ -33,7 +33,8 @@ settings.write_text(settings.read_text() + '\ninclude(":ffmpeg-audio")\n')
 build = root / "build.gradle.kts"
 text = build.read_text()
 version = re.search(r'id\("com.android.application"\) version "([^"]+)"', text).group(1)
-replace_once(build, 'plugins {', f'plugins {{\n    id("com.android.library") version "{version}" apply false')
+if 'id("com.android.library")' not in text:
+    replace_once(build, 'plugins {', f'plugins {{\n    id("com.android.library") version "{version}" apply false')
 
 player = java / "ui/PlayerScreen.kt"
 replace_once(player, '''        val renderersFactory = DefaultRenderersFactory(context)

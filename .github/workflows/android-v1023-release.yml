@@ -126,7 +126,8 @@ jobs:
           cache-read-only: false
 
       - name: Cache audio native libraries
-        uses: actions/cache@v4
+        id: audio-cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             ${{ env.PROJECT_ROOT }}/ffmpeg-audio/src/main/jni/ffmpeg/android-libs
@@ -135,6 +136,15 @@ jobs:
 
       - name: Build audio-only FFmpeg for all Android architectures
         run: bash build_tools/build_android_audio_v123.sh
+
+      - name: Preserve successful native build independently of app tests
+        if: steps.audio-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.PROJECT_ROOT }}/ffmpeg-audio/src/main/jni/ffmpeg/android-libs
+            ${{ env.PROJECT_ROOT }}/ffmpeg-6.1.6.tar.xz
+          key: ${{ steps.audio-cache.outputs.cache-primary-key }}
 
       - name: Generate original audio test fixtures
         shell: bash
