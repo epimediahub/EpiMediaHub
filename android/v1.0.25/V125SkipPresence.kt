@@ -5,6 +5,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
+/** An older server treats every presence request as a new heartbeat. */
+internal class V125PresenceCapabilities {
+    private val acknowledged = mutableSetOf<String>()
+    fun recorded(id: String, supportsRelease: Boolean) {
+        if (id.isNotBlank() && supportsRelease) acknowledged += id
+    }
+    fun release(id: String): Boolean = acknowledged.remove(id)
+}
+
 /** The server lease also expires after a crash or a disconnected device. */
 internal suspend fun v125KeepSkipPresence(record: suspend (Boolean) -> Unit) {
     try {

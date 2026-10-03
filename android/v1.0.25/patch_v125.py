@@ -45,7 +45,10 @@ replace_once(java / 'ui/RadioScreen.kt',
 repo = java / 'data/V116SkipRepository.kt'
 replace_once(repo, 'internal class V116SkipRepository(private val context: Context) {',
     '''internal class V116SkipRepository(private val context: Context) {
-    companion object { private val presenceLock = kotlinx.coroutines.sync.Mutex() }''')
+    companion object {
+        private val presenceLock = kotlinx.coroutines.sync.Mutex()
+        private val presenceCapabilities = V125PresenceCapabilities()
+    }''')
 if 'import kotlinx.coroutines.sync.withLock' not in repo.read_text():
     replace_once(repo, 'import kotlinx.coroutines.*', 'import kotlinx.coroutines.*\nimport kotlinx.coroutines.sync.withLock')
 replace_once(repo, '''    suspend fun presence(item: MediaEntry) {
@@ -54,8 +57,10 @@ replace_once(repo, '''    suspend fun presence(item: MediaEntry) {
     }''', '''    suspend fun presence(item: MediaEntry, presenceId: String = "", active: Boolean = true) {
         val id = playlistId(item)
         if (id > 0) presenceLock.withLock {
-            request("${SetupCodeProvisioning.provisioningBaseUrl(context)}/v1/device/skip/presence",
+            if (!active && !presenceCapabilities.release(presenceId)) return@withLock
+            val response = request("${SetupCodeProvisioning.provisioningBaseUrl(context)}/v1/device/skip/presence",
                 JSONObject().put("playlist_id", id).put("presence_id", presenceId).put("active", active), true)
+            if (active) presenceCapabilities.recorded(presenceId, response?.optBoolean("supports_release") == true)
         }
     }
 

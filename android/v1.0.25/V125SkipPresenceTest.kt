@@ -8,6 +8,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class V125SkipPresenceTest {
+    @Test fun olderServerDoesNotReceiveAnExtraHeartbeatWhenPlaybackEnds() {
+        val capabilities = V125PresenceCapabilities()
+        capabilities.recorded("old-server", false)
+        assertFalse(capabilities.release("old-server"))
+    }
+
+    @Test fun releaseRequiresAnAcknowledgedSessionAndIsSentOnlyOnce() {
+        val capabilities = V125PresenceCapabilities()
+        capabilities.recorded("current", true)
+        assertFalse(capabilities.release("previous"))
+        assertTrue(capabilities.release("current"))
+        assertFalse(capabilities.release("current"))
+    }
+
     @Test fun cancellingPlaybackImmediatelyReleasesItsLease() = runBlocking {
         val recorded = CompletableDeferred<Unit>()
         val events = mutableListOf<Boolean>()

@@ -269,7 +269,10 @@ jobs:
           grep -Fq 'vod-settings-actions' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V115PlayerChrome.kt"
           grep -Fq 'Color(0xF50B111C)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
           grep -Fq 'player.play()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V116VodPlayer.kt"
-          grep -Fq 'skipRepository.presence(item)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'skipRepository.presence(item, presenceId, active)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'v125KeepSkipPresence' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'allowEmpty = true' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/RadioScreen.kt"
+          grep -Fq 'presenceCapabilities.release(presenceId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V116SkipRepository.kt"
           grep -Fq 'list_versions=true' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V115SkipRepository.kt"
           grep -Fq 'clearOverridesOfType' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V115Tracks.kt"
 
