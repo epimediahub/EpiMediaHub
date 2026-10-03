@@ -82,7 +82,7 @@ def _activate_subject(con, subject_id, reseller_id, customer_id, device_id):
     license_id=con.execute("""INSERT INTO lifetime_licenses(subject_id,reseller_id,customer_id,activated_device_id,status,source,activated_at)
                               VALUES(?,?,?,?, 'ACTIVE','credit',?)""",(subject_id,reseller_id,customer_id,device_id,now)).lastrowid
     con.execute("""INSERT INTO credit_transactions(reseller_id,amount,kind,license_id,note,created_at)
-                   VALUES(?,-1,'activation',?,?,?)""",(reseller_id,license_id,`Lifetime-Aktivierung ${device_id}`,now))
+                   VALUES(?,-1,'activation',?,?,?)""",(reseller_id,license_id,f"Lifetime-Aktivierung {device_id}",now))
     return con.execute("SELECT * FROM lifetime_licenses WHERE id=?",(license_id,)).fetchone(),True,None
 
 @app.post("/v1/license/status")
