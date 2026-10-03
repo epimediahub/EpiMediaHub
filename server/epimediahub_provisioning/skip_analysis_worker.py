@@ -208,8 +208,17 @@ def process_one(db):
         if job is None:
             return online_status if online_status == 'online_checked' else "idle"
         language = con.execute("SELECT priority FROM skip_language_priority WHERE asset_key=?", (job['asset_key'],)).fetchone()
-        if (not language or language[0] != 0) and preferred_inventory_pending(con):
-            return 'catalogue_pending'
+        if not language or language[0] != 0:
+            preferred_jobs = con.execute("""SELECT 1 FROM skip_jobs pj
+              JOIN skip_assets pa ON pa.asset_key=pj.asset_key
+              JOIN skip_language_priority pl ON pl.asset_key=pa.asset_key AND pl.priority=0
+              JOIN skip_analysis_sources ps ON ps.playlist_id=pa.playlist_id AND ps.enabled=1
+              JOIN skip_auto_settings px ON px.playlist_id=pa.playlist_id AND px.enabled=1
+              JOIN customer_playlists pp ON pp.id=pa.playlist_id
+              JOIN customers pc ON pc.id=pp.customer_id AND pc.enabled=1
+              WHERE pj.status='queued' AND pj.attempts<3 LIMIT 1""").fetchone()
+            if preferred_inventory_pending(con) or preferred_jobs:
+                return 'preferred_pending'
         con.execute("UPDATE skip_jobs SET status='running',updated_at=? WHERE id=?", (now(), job["id"]))
     try:
         status, detail = analyze(db, job)
