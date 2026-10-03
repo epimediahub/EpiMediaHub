@@ -1,0 +1,4 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>EpiMediaHub Reseller</title><link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}"></head>
+<body class="login-page"><main class="login-card"><div class="brand" style="justify-content:center"><span class="brandmark">E</span><div><strong>EpiMediaHub</strong><small>Reseller Center</small></div></div><h1>Reseller Login</h1><p class="muted">Kunden, Geräte und Credits verwalten.</p>
+<form method="post"><label>Benutzername</label><input name="login_name" autocomplete="username" required><label>Passwort</label><input name="password" type="password" autocomplete="current-password" required>{% if error %}<p class="error">{{ error }}</p>{% endif %}<button class="primary" type="submit">Anmelden</button></form></main></body></html>
