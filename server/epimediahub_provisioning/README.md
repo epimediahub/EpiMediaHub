@@ -11,7 +11,8 @@ Recommended split:
 - `https://epimediahub.com` / `https://www.epimediahub.com` — public website/downloads later
 - `https://admin.epimediahub.com` — protected customer/device admin interface
 - `https://setup.epimediahub.com` — customer activation URLs and QR codes
-- `https://api.epimediahub.com` — Android-Gerätekopplung und Gerätesynchronisierung
+- `https://api.epimediahub.com` — Android-Gerätekopplung, Lizenzstatus und Gerätesynchronisierung
+- `https://reseller.epimediahub.com` — Reseller-Dashboard für Kunden, Geräte, Credits und Lifetime-Aktivierungen
 
 For the current combined Raspberry deployment, the public provisioning base URL is:
 
@@ -33,7 +34,7 @@ https://setup.epimediahub.com/connect/<one-time-token>
 - Activation URLs contain a separate high-entropy token.
 - A setup code can be redeemed exactly once.
 - Successful redemption returns a per-device session token; activation codes are not reusable credentials.
-- New Android installations generate a random app-scoped installation ID. No MAC address or other hardware identifier is collected.
+- New Android installations generate a random app-scoped installation ID for provisioning. For the 7-day trial, Android 1.0.20 derives a SHA-256 trial key locally from `ANDROID_ID`; the raw Android ID and MAC address are never sent to the server.
 - Normal setup uses a short-lived 8-character pairing code. The pairing secret and permanent device token are never shown in the dashboard.
 - Production traffic must be exposed through HTTPS reverse proxy/tunnel. The Flask service itself listens only on `127.0.0.1:8787`.
 
@@ -55,13 +56,45 @@ PORT=8787
 Before exposing the service publicly:
 
 1. Point `setup.epimediahub.com` to the Raspberry-facing HTTPS endpoint or secure tunnel.
-2. Point `admin.epimediahub.com` to the protected admin endpoint.
+2. Point `admin.epimediahub.com` and `reseller.epimediahub.com` to the protected dashboard endpoint.
 3. Keep Flask bound to `127.0.0.1:8787`; never expose the development server directly.
 4. Terminate TLS/HTTPS in a reverse proxy or secure tunnel and redirect HTTP to HTTPS.
 5. Enable registrar account 2FA and DNSSEC when supported by the domain provider.
 6. Keep the admin interface and public setup route logically separated even when both currently terminate on the same Raspberry service.
 
 The exact DNS record type (A/AAAA/CNAME/tunnel target) depends on the chosen public-access method and domain provider.
+
+## Licensing and reseller credits
+
+Android 1.0.20 uses a server-authoritative 7-day trial. The first successful
+`POST /v1/license/status` creates the trial window. After expiry the app is
+locked until a Lifetime license is present.
+
+Credits are an append-only ledger: the current reseller balance is the sum of
+`credit_transactions.amount`. A Lifetime activation is executed inside an
+SQLite `BEGIN IMMEDIATE` transaction and deducts exactly 1 credit. The
+commercial display value is currently 5.00 EUR per credit.
+
+Existing devices present when the schema is first enabled are captured once
+and converted to grandfathered Lifetime licenses on their first Android 1.0.20
+license check, without deducting a credit.
+
+Reseller browser access is available at `/reseller/login`; the main admin
+manages resellers and credit adjustments at `/admin/credits`.
+
+### License status
+`POST /v1/license/status`
+
+```json
+{
+  "device_id": "android-random-installation-uuid",
+  "trial_key": "sha256-derived-client-trial-key",
+  "platform": "android"
+}
+```
+
+The response status is one of `TRIAL_ACTIVE`, `TRIAL_EXPIRED`, or
+`LIFETIME_ACTIVE`.
 
 ## API v1
 
