@@ -56,7 +56,37 @@ replace_once(
         } else if (showIntro) {"""
 )
 
+home = java / "ui/V083Home.kt"
+home_text = home.read_text()
+home_anchor = """    }
+}
+
+@Composable
+private fun V083Header("""
+assert home_text.count(home_anchor) == 1, "V083Home end anchor missing"
+home_text = home_text.replace(
+    home_anchor,
+    """        de.epimediahub.app.ui.V120TrialBadge(
+            state = de.epimediahub.app.data.V120LicenseManager.cached(context),
+            accent = accent,
+            isTv = isTv,
+            modifier = if (isTv) {
+                Modifier.align(Alignment.TopCenter).padding(top = 18.dp)
+            } else {
+                Modifier.align(Alignment.TopEnd).padding(top = 44.dp, end = 10.dp)
+            }
+        )
+    }
+}
+
+@Composable
+private fun V083Header(""",
+    1
+)
+home.write_text(home_text)
+
 assert 'versionCode = 1020' in gradle.read_text()
 assert 'v120RememberLicenseState' in app.read_text()
 assert 'V120LicenseGate(' in app.read_text()
+assert 'V120TrialBadge(' in home.read_text()
 print("Android 1.0.20: seven-day trial, credit activation and lifetime license gate installed")
