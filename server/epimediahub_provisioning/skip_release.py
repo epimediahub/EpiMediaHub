@@ -144,29 +144,61 @@ def accept_pending(con, asset_key=None, playlist_id=None):
 
 
 def detector_release_ready(con, row):
-    """V2 review evidence cannot enter the legacy blanket-acceptance path."""
-    from skip_detector_v2 import POLICY as detector_policy
+    """Allow automatic publication only from reproducible V2/V3 detector evidence."""
+    from skip_detector_v2 import POLICY as v2_policy
+    v3_policy = 'chromaprint_fft_v3_1'
     try:
         evidence = json.loads(row['evidence_json'] or '{}')
     except (ValueError, TypeError):
         evidence = {}
     if not isinstance(evidence, dict):
         return True
-    if evidence.get('method') != 'episode_consensus' and evidence.get('policy') != detector_policy:
+
+    policy = evidence.get('policy')
+    method = evidence.get('method')
+    if policy not in (v2_policy, v3_policy) and method not in ('episode_consensus', 'episode_consensus_v3'):
         return True
-    if (evidence.get('policy') != detector_policy or evidence.get('status') != 'AUTO_CONFIRMED'
-            or not .92 <= row['confidence'] <= 1):
-        return False
-    for name, low, high in (('min_pair_quality', .92, 1), ('min_match_ratio', .90, 1),
-                            ('boundary_spread_sec', 0, 1)):
-        value = evidence.get(name)
-        if type(value) not in (int, float) or not low <= value <= high:
+
+    if policy == v2_policy:
+        if (method != 'episode_consensus' or evidence.get('status') != 'AUTO_CONFIRMED'
+                or not .92 <= row['confidence'] <= 1):
             return False
-    windows = evidence.get('windows')
-    support = evidence.get('support')
-    if type(support) is not int or not 3 <= support <= 4 or not isinstance(windows, list) or len(windows) != support + 1:
+        for name, low, high in (('min_pair_quality', .92, 1), ('min_match_ratio', .90, 1),
+                                ('boundary_spread_sec', 0, 1)):
+            value = evidence.get(name)
+            if type(value) not in (int, float) or not low <= value <= high:
+                return False
+        windows = evidence.get('windows')
+        support = evidence.get('support')
+        if type(support) is not int or not 3 <= support <= 4 or not isinstance(windows, list) or len(windows) != support + 1:
+            return False
+
+    elif policy == v3_policy:
+        if (method != 'episode_consensus_v3' or evidence.get('status') != 'AUTO_CONFIRMED'
+                or not .92 <= row['confidence'] <= 1 or evidence.get('truncated') is True):
+            return False
+        mean_q = evidence.get('mean_pair_quality')
+        spread = evidence.get('boundary_spread_sec')
+        position = evidence.get('position_plausibility')
+        support = evidence.get('support')
+        attempted = evidence.get('attempted_partners')
+        windows = evidence.get('windows')
+        trusted = evidence.get('trusted_episodes', [])
+        if (type(mean_q) not in (int, float) or not .90 <= mean_q <= 1
+                or type(spread) not in (int, float) or not 0 <= spread <= 2.0
+                or type(position) not in (int, float) or not 0 <= position <= 1
+                or type(support) is not int or not 2 <= support <= 4
+                or type(attempted) is not int or not support <= attempted <= 4
+                or not isinstance(windows, list) or len(windows) != attempted + 1
+                or not isinstance(trusted, list)
+                or len(trusted) != len(set(trusted))
+                or any(type(x) is not int for x in trusted)
+                or (support == 2 and not trusted)):
+            return False
+    else:
         return False
-    used, own = set(), False
+
+    used, own, cached_by_episode = set(), False, {}
     for item in windows:
         if not isinstance(item, dict):
             return False
@@ -184,9 +216,22 @@ def detector_release_ready(con, row):
                 or hashlib.sha256(cached['words_json'].encode()).hexdigest() != item.get('fingerprint_sha256')):
             return False
         used.add(cached['episode'])
+        cached_by_episode[cached['episode']] = cached
         own |= cached['asset_key'] == row['asset_key'] and cached['episode'] == row['episode']
-    return own
 
+    if policy == v3_policy:
+        for episode in evidence.get('trusted_episodes', []):
+            cached = cached_by_episode.get(episode)
+            if not cached:
+                return False
+            human = con.execute('''SELECT 1 FROM skip_records r
+              LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
+              WHERE r.asset_key=? AND r.segment_type=? AND r.status='approved' AND r.disabled=0
+              AND ABS(r.duration_ms-?)<=2000 AND (r.source='device' OR COALESCE(e.human_review,0)=1)
+              LIMIT 1''', (cached['asset_key'], row['segment_type'], cached['duration_ms'])).fetchone()
+            if not human:
+                return False
+    return own
 
 def current_reference(con, row):
     """Do not publish a result computed from a reference corrected in the meantime."""
