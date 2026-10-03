@@ -23,6 +23,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalInputModeManager
@@ -115,11 +116,11 @@ internal fun RadioContent(state: RadioUiState, playback: RadioPlaybackState, isT
     }
 
     Column(Modifier.fillMaxSize().testTag("radio-screen").onPreviewKeyEvent {
-        if (it.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) false else when (it.nativeKeyEvent.keyCode) {
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { actions.toggle(); true }
-            KeyEvent.KEYCODE_MEDIA_NEXT -> { actions.next(); true }
-            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { actions.previous(); true }
-            KeyEvent.KEYCODE_MEDIA_STOP -> { actions.stop(); true }
+        if (it.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) false else when {
+            it.key == Key.MediaPlayPause || it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { actions.toggle(); true }
+            it.key == Key.MediaNext || it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MEDIA_NEXT -> { actions.next(); true }
+            it.key == Key.MediaPrevious || it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { actions.previous(); true }
+            it.key == Key.MediaStop || it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MEDIA_STOP -> { actions.stop(); true }
             else -> false
         }
     }.padding(horizontal = if (isTv) 26.dp else 10.dp, vertical = if (isTv) 14.dp else 5.dp)) {
@@ -267,9 +268,11 @@ private fun RadioLogo(station: RadioStation, modifier: Modifier, accent: Color) 
     }
 }
 
-private fun Modifier.radioMediaKey(keyCode: Int, action: () -> Unit): Modifier =
+private fun Modifier.radioMediaKey(composeKey: Key, keyCode: Int, action: () -> Unit): Modifier =
     onPreviewKeyEvent {
-        if (it.nativeKeyEvent.action == KeyEvent.ACTION_DOWN && it.nativeKeyEvent.keyCode == keyCode) {
+        if (it.nativeKeyEvent.action == KeyEvent.ACTION_DOWN &&
+            (it.key == composeKey || it.nativeKeyEvent.keyCode == keyCode)
+        ) {
             action()
             true
         } else false
@@ -293,13 +296,13 @@ private fun RadioPlayerBar(state: RadioPlaybackState, favorites: Set<String>, is
             if (station != null) IconButton({ actions.favorite(station) }, Modifier.v114FocusRing().testTag("radio-player-favorite")) {
                 Icon(if (station.uuid in favorites) Icons.Default.Star else Icons.Default.StarBorder, "Favorit", tint = accent)
             }
-            IconButton(actions.previous, Modifier.v114FocusRing().testTag("radio-previous").radioMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS, actions.previous), enabled = state.previous) { Icon(Icons.Default.SkipPrevious, "Vorheriger Sender") }
-            IconButton(actions.toggle, Modifier.v114FocusRing().testTag("radio-play-pause").radioMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, actions.toggle), enabled = station != null && state.ready) {
+            IconButton(actions.previous, Modifier.v114FocusRing().testTag("radio-previous").radioMediaKey(Key.MediaPrevious, KeyEvent.KEYCODE_MEDIA_PREVIOUS, actions.previous), enabled = state.previous) { Icon(Icons.Default.SkipPrevious, "Vorheriger Sender") }
+            IconButton(actions.toggle, Modifier.v114FocusRing().testTag("radio-play-pause").radioMediaKey(Key.MediaPlayPause, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, actions.toggle), enabled = station != null && state.ready) {
                 Icon(if (state.playing || state.buffering) Icons.Default.Pause else Icons.Default.PlayArrow,
                     if (state.playing || state.buffering) "Pause" else if (state.error.isNotBlank()) "Erneut versuchen" else "Abspielen")
             }
-            IconButton(actions.next, Modifier.v114FocusRing().testTag("radio-next").radioMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT, actions.next), enabled = state.next) { Icon(Icons.Default.SkipNext, "Nächster Sender") }
-            IconButton(actions.stop, Modifier.v114FocusRing().testTag("radio-stop").radioMediaKey(KeyEvent.KEYCODE_MEDIA_STOP, actions.stop), enabled = station != null) { Icon(Icons.Default.Stop, "Radio stoppen") }
+            IconButton(actions.next, Modifier.v114FocusRing().testTag("radio-next").radioMediaKey(Key.MediaNext, KeyEvent.KEYCODE_MEDIA_NEXT, actions.next), enabled = state.next) { Icon(Icons.Default.SkipNext, "Nächster Sender") }
+            IconButton(actions.stop, Modifier.v114FocusRing().testTag("radio-stop").radioMediaKey(Key.MediaStop, KeyEvent.KEYCODE_MEDIA_STOP, actions.stop), enabled = station != null) { Icon(Icons.Default.Stop, "Radio stoppen") }
         }
     }
 }
