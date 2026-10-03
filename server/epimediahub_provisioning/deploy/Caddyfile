@@ -2,7 +2,7 @@
     email admin@epimediahub.com
 }
 
-setup.epimediahub.com, admin.epimediahub.com, api.epimediahub.com {
+setup.epimediahub.com, admin.epimediahub.com, api.epimediahub.com, reseller.epimediahub.com {
     encode zstd gzip
 
     header {
