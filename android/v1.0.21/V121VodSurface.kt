@@ -152,6 +152,8 @@ private class V121FrameRateController(
     private var closed = false
     private var lastApplied = 0f
     private var ownsHint = false
+    private var rendererReady = false
+    private var hintGeneration = 0
     private val apply = Runnable { applyFrameRate() }
     private val preferences = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == FRAME_RATE_KEY) { enabled = prefs.getBoolean(FRAME_RATE_KEY, true); schedule() }
@@ -192,8 +194,24 @@ private class V121FrameRateController(
             try {
                 // Android honours the user's system Match Content Frame Rate preference.
                 // Disable Media3's competing seamless-only hints only while we own this hint.
-                player.videoChangeFrameRateStrategy = C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
-                ownsHint = true
+                if (!ownsHint) {
+                    ownsHint = true
+                    rendererReady = false
+                    val generation = ++hintGeneration
+                    player.videoChangeFrameRateStrategy = C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
+                    // Renderer messages run on the playback thread. Apply our hint only after
+                    // its earlier rate updates and the OFF message have both been processed.
+                    player.createMessage { _, _ ->
+                        handler.post {
+                            if (!closed && ownsHint && generation == hintGeneration) {
+                                rendererReady = true
+                                applyFrameRate()
+                            }
+                        }
+                    }.send()
+                    return
+                }
+                if (!rendererReady) return
                 surface.setFrameRate(fps, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE, Surface.CHANGE_FRAME_RATE_ALWAYS)
                 lastApplied = fps
                 Log.i("EpiMediaHubVideo", "Requested TV content frame rate: $fps fps")
@@ -211,6 +229,8 @@ private class V121FrameRateController(
     private fun clearHint() {
         if (!ownsHint) return
         ownsHint = false
+        rendererReady = false
+        hintGeneration++
         lastApplied = 0f
         if (Build.VERSION.SDK_INT >= 31) runCatching {
             val surface = view.holder.surface
