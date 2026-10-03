@@ -49,6 +49,10 @@ def ensure_license_schema():
           activated_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS legacy_device_entitlements(device_id TEXT PRIMARY KEY,created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS license_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS credit_orders(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,reseller_id INTEGER NOT NULL REFERENCES resellers(id) ON DELETE CASCADE,
+          credits INTEGER NOT NULL,amount_cents INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'PENDING',
+          created_at TEXT NOT NULL,processed_at TEXT,note TEXT NOT NULL DEFAULT '');
         """)
         if not _has_column(con,"customers","reseller_id"):con.execute("ALTER TABLE customers ADD COLUMN reseller_id INTEGER")
         con.execute("""INSERT OR IGNORE INTO resellers(id,name,login_name,password_hash,enabled,created_at)
@@ -158,8 +162,10 @@ def reseller_dashboard():
                                LEFT JOIN lifetime_licenses l ON l.subject_id=s.id AND l.status='ACTIVE'
                                WHERE c.reseller_id=? ORDER BY d.id DESC""",(reseller["id"],)).fetchall()
         transactions=con.execute("SELECT * FROM credit_transactions WHERE reseller_id=? ORDER BY id DESC LIMIT 100",(reseller["id"],)).fetchall()
+        orders=con.execute("SELECT * FROM credit_orders WHERE reseller_id=? ORDER BY id DESC LIMIT 25",(reseller["id"],)).fetchall()
     return render_template("reseller.html",reseller=reseller,credits=credits,credit_value_eur=credits*CREDIT_PRICE_EUR_CENTS/100,
-                           customers=_prepared_customers(customers),devices=devices,transactions=transactions,notice=request.args.get("notice",""))
+                           customers=_prepared_customers(customers),devices=devices,transactions=transactions,orders=orders,
+                           notice=request.args.get("notice",""))
 
 @app.post("/reseller/customers")
 def reseller_create_customer():
@@ -239,7 +245,9 @@ def _transfer_license(con, license_id, reseller_id, target_device_row_id, enforc
                          (subject["id"],license_id)).fetchone()
     if occupied is not None:return None,"target_already_active"
     old_device=license_row["activated_device_id"]
+    old_subject_id=license_row["subject_id"]
     now=iso(utcnow())
+    con.execute("UPDATE license_subjects SET trial_expires_at=? WHERE id=?",(now,old_subject_id))
     con.execute("""UPDATE lifetime_licenses
                    SET subject_id=?,customer_id=?,activated_device_id=?,source='transfer',activated_at=?
                    WHERE id=?""",
@@ -275,6 +283,20 @@ def admin_transfer_license(license_id):
         if error:return redirect(url_for("admin_credits",notice=error))
     return redirect(url_for("admin_credits",notice="license_transferred"))
 
+@app.post("/reseller/credit-orders")
+def reseller_create_credit_order():
+    reseller=_reseller_row()
+    if reseller is None:return redirect(url_for("reseller_login"))
+    try:credits=int(request.form.get("credits","0"))
+    except ValueError:credits=0
+    if credits not in {10,25,50,100}:return redirect(url_for("reseller_dashboard",notice="credit_order_invalid"))
+    now=iso(utcnow())
+    with db() as con:
+        con.execute("""INSERT INTO credit_orders(reseller_id,credits,amount_cents,status,created_at)
+                       VALUES(?,?,?,'PENDING',?)""",
+                    (reseller["id"],credits,credits*CREDIT_PRICE_EUR_CENTS,now))
+    return redirect(url_for("reseller_dashboard",notice="credit_order_created"))
+
 @app.get("/admin/credits")
 def admin_credits():
     guard=_admin_guard()
@@ -289,8 +311,38 @@ def admin_credits():
                                LEFT JOIN resellers r ON r.id=c.reseller_id LEFT JOIN license_subjects s ON s.current_device_id=d.device_id
                                LEFT JOIN lifetime_licenses l ON l.subject_id=s.id AND l.status='ACTIVE' ORDER BY d.id DESC""").fetchall()
         tx=con.execute("""SELECT t.*,r.name reseller_name FROM credit_transactions t JOIN resellers r ON r.id=t.reseller_id ORDER BY t.id DESC LIMIT 200""").fetchall()
-    return render_template("credits.html",resellers=resellers,customers=customers,devices=devices,transactions=tx,
+        orders=con.execute("""SELECT o.*,r.name reseller_name FROM credit_orders o JOIN resellers r ON r.id=o.reseller_id
+                              ORDER BY CASE o.status WHEN 'PENDING' THEN 0 ELSE 1 END,o.id DESC LIMIT 200""").fetchall()
+    return render_template("credits.html",resellers=resellers,customers=customers,devices=devices,transactions=tx,orders=orders,
                            credit_price_eur=CREDIT_PRICE_EUR_CENTS/100,notice=request.args.get("notice",""))
+
+@app.post("/admin/credit-orders/<int:order_id>/approve")
+def admin_approve_credit_order(order_id):
+    guard=_admin_guard()
+    if guard:return guard
+    with db() as con:
+        con.execute("BEGIN IMMEDIATE")
+        order=con.execute("SELECT * FROM credit_orders WHERE id=?",(order_id,)).fetchone()
+        if order is None:abort(404)
+        if order["status"]!="PENDING":return redirect(url_for("admin_credits",notice="credit_order_already_processed"))
+        now=iso(utcnow())
+        con.execute("UPDATE credit_orders SET status='PAID',processed_at=? WHERE id=?",(now,order_id))
+        con.execute("""INSERT INTO credit_transactions(reseller_id,amount,kind,note,created_at)
+                       VALUES(?,?,'purchase',?,?)""",
+                    (order["reseller_id"],order["credits"],f"Credit-Bestellung #{order_id} bezahlt",now))
+    return redirect(url_for("admin_credits",notice="credit_order_approved"))
+
+@app.post("/admin/credit-orders/<int:order_id>/cancel")
+def admin_cancel_credit_order(order_id):
+    guard=_admin_guard()
+    if guard:return guard
+    with db() as con:
+        con.execute("BEGIN IMMEDIATE")
+        order=con.execute("SELECT status FROM credit_orders WHERE id=?",(order_id,)).fetchone()
+        if order is None:abort(404)
+        if order["status"]!="PENDING":return redirect(url_for("admin_credits",notice="credit_order_already_processed"))
+        con.execute("UPDATE credit_orders SET status='CANCELLED',processed_at=? WHERE id=?",(iso(utcnow()),order_id))
+    return redirect(url_for("admin_credits",notice="credit_order_cancelled"))
 
 @app.post("/admin/resellers")
 def admin_create_reseller():
