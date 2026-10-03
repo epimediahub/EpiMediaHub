@@ -141,6 +141,17 @@ jobs:
             if [ "$attempt" -eq 1 ]; then sleep 30; else sleep 60; fi
           done
 
+      - name: Encode preview from actual Compose frames and shipped sound
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
+          mkdir -p "$PROJECT_ROOT/app/build/reports/ui"
+          ffmpeg -hide_banner -loglevel error -y -framerate 60 -i "$PROJECT_ROOT/app/build/intro-preview/frames/frame-%04d.png" -i "$PROJECT_ROOT/app/src/main/res/raw/epimedia_intro_heartbeat_cinema.wav" -vf 'pad=ceil(iw/2)*2:ceil(ih/2)*2' -af 'volume=0.76' -c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k -t 5.8 -movflags +faststart "$PROJECT_ROOT/app/build/reports/ui/EpiMediaHub-Intro-v1.0.21.mp4"
+
       - name: Preserve regression and intro UI test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -255,6 +266,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
+          cp "$PROJECT_ROOT/app/build/reports/ui/EpiMediaHub-Intro-v1.0.21.mp4" dist/
           cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" dist/EpiMediaHub_Android_v1.0.21-arm64-v8a.apk
           cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" dist/EpiMediaHub_Android_v1.0.21-armeabi-v7a.apk
           cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk" dist/EpiMediaHub_Android_v1.0.21-universal.apk
@@ -327,7 +339,7 @@ jobs:
           else
             gh release create "$TAG" --title "EpiMediaHub Android v1.0.21 Vorschau" --notes-file android/release_notes/v1.0.21.md --prerelease --draft --target "${GITHUB_SHA}"
           fi
-          for file in dist/*.apk dist/SHA256SUMS.txt; do
+          for file in dist/*.apk dist/*.mp4 dist/SHA256SUMS.txt; do
             timeout 15m gh release upload "$TAG" "$file" --clobber
           done
           gh release edit "$TAG" --notes-file android/release_notes/v1.0.21.md --draft --prerelease --target "${GITHUB_SHA}"

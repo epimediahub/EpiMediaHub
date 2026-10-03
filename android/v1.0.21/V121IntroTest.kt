@@ -56,6 +56,25 @@ class V121IntroTest {
         }
     }
 
+    /** Produce a review video from the actual Compose scene, using its shipped timeline. */
+    @Test fun renderIntroPreviewFrames() {
+        screen()
+        val directory = File("build/intro-preview/frames").apply { mkdirs() }
+        val count = (V121IntroTimeline.DURATION_MS * 60 / 1000).toInt()
+        for (frame in 0 until count) {
+            at(frame * 1000L / 60L)
+            compose.runOnIdle {
+                val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+                root.draw(Canvas(bitmap))
+                File(directory, "frame-%04d.png".format(frame)).outputStream().use {
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                }
+                bitmap.recycle()
+            }
+        }
+        assertEquals(348, directory.listFiles { _, name -> name.endsWith(".png") }!!.size)
+    }
+
     @Test fun englishWorldThenOneAppThenOriginalLogoAppearInOrder() {
         screen()
         compose.onNodeWithText("The whole world\nof multimedia", useUnmergedTree = true).assertIsDisplayed()
