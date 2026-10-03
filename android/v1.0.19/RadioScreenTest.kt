@@ -43,7 +43,7 @@ class RadioScreenTest {
     private val ui = mutableStateOf(RadioUiState(stations = listOf(station, second)))
     private val playback = mutableStateOf(RadioPlaybackState(station, "Artist – Song", true, ready = true, previous = true, next = true))
     private val selected = mutableListOf<String>()
-    private var saved = 0; private var toggles = 0; private var next = 0; private var back = 0
+    private var saved = 0; private var toggles = 0; private var next = 0; private var back = 0; private var stop = 0
     private val accent = Color(0xFF32B9EE)
     private fun screen(tv: Boolean = true) {
         compose.setContent {
@@ -54,7 +54,7 @@ class RadioScreenTest {
                     RadioContent(ui.value, playback.value, tv, accent, RadioActions(
                         back = { back++ }, mode = { ui.value = ui.value.copy(mode = it) }, query = { ui.value = ui.value.copy(query = it) },
                         play = { selected += it.uuid }, favorite = { saved++; ui.value = ui.value.copy(favorites = listOf(it)) },
-                        toggle = { toggles++ }, next = { next++ }))
+                        toggle = { toggles++ }, next = { next++ }, stop = { stop++ }))
                 }
             }
         }
@@ -119,6 +119,7 @@ class RadioScreenTest {
         screen()
         fits("radio-back", "radio-country", "radio-language", "radio-category", "radio-search", "radio-player", "radio-previous", "radio-play-pause", "radio-next", "radio-stop")
         iconsHaveContrast(capture("radio-tv.png"), "radio-back", "radio-search", "radio-previous", "radio-play-pause", "radio-next", "radio-stop")
+        compose.runOnIdle { assertTrue("Radio view must keep the screen awake", root.keepScreenOn) }
     }
     @Test @Config(sdk = [28], qualifiers = "w640dp-h360dp-land") fun mobilePlayerAndFiltersFitInLandscape() {
         screen(false)
@@ -148,7 +149,7 @@ class RadioScreenTest {
         compose.onNodeWithTag("radio-play-pause").performClick()
         compose.onNodeWithTag("radio-next").performKeyInput { keyDown(Key.MediaNext); keyUp(Key.MediaNext) }
         settle(); assertEquals(1, toggles); assertEquals(1, next)
-        compose.onNodeWithTag("radio-back").performClick(); assertEquals(1, back)
+        compose.onNodeWithTag("radio-back").performClick(); assertEquals(1, stop); assertEquals(1, back)
     }
     @Test fun anUnavailableDirectoryLeavesFavoritesAndRetryAccessible() {
         ui.value = ui.value.copy(stations = emptyList(), error = "Senderverzeichnis gerade nicht erreichbar.", favorites = listOf(station))
