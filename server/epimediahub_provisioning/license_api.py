@@ -217,6 +217,64 @@ def reseller_activate_device(device_row_id):
         if error:return redirect(url_for("reseller_dashboard",notice=error))
     return redirect(url_for("reseller_dashboard",notice="activated" if charged else "already_active"))
 
+def _transfer_license(con, license_id, reseller_id, target_device_row_id, enforce_limit=True):
+    license_row=con.execute("""SELECT * FROM lifetime_licenses
+                               WHERE id=? AND reseller_id=? AND status='ACTIVE'""",(license_id,reseller_id)).fetchone()
+    if license_row is None:return None,"license_not_found"
+    if enforce_limit:
+        used=con.execute("""SELECT COUNT(*) count FROM credit_transactions
+                            WHERE reseller_id=? AND license_id=? AND kind='license_transfer'""",
+                         (reseller_id,license_id)).fetchone()["count"]
+        if int(used or 0)>=2:return None,"transfer_limit"
+    target=con.execute("""SELECT d.*,c.reseller_id FROM devices d JOIN customers c ON c.id=d.customer_id
+                          WHERE d.id=? AND c.reseller_id=? AND d.enabled=1""",
+                       (target_device_row_id,reseller_id)).fetchone()
+    if target is None:return None,"target_invalid"
+    subject=con.execute("""SELECT * FROM license_subjects WHERE current_device_id=?
+                           ORDER BY id DESC LIMIT 1""",(target["device_id"],)).fetchone()
+    if subject is None:return None,"license_subject_missing"
+    if int(subject["id"])==int(license_row["subject_id"]):return None,"target_same"
+    occupied=con.execute("""SELECT id FROM lifetime_licenses
+                            WHERE subject_id=? AND status='ACTIVE' AND id<>?""",
+                         (subject["id"],license_id)).fetchone()
+    if occupied is not None:return None,"target_already_active"
+    old_device=license_row["activated_device_id"]
+    now=iso(utcnow())
+    con.execute("""UPDATE lifetime_licenses
+                   SET subject_id=?,customer_id=?,activated_device_id=?,source='transfer',activated_at=?
+                   WHERE id=?""",
+                (subject["id"],target["customer_id"],target["device_id"],now,license_id))
+    con.execute("""INSERT INTO credit_transactions(reseller_id,amount,kind,license_id,note,created_at)
+                   VALUES(?,0,'license_transfer',?,?,?)""",
+                (reseller_id,license_id,f"Gerätewechsel {old_device} -> {target['device_id']}",now))
+    return target,None
+
+@app.post("/reseller/licenses/<int:license_id>/transfer")
+def reseller_transfer_license(license_id):
+    reseller=_reseller_row()
+    if reseller is None:return redirect(url_for("reseller_login"))
+    try:target_device_row_id=int(request.form.get("target_device_row_id",""))
+    except ValueError:return redirect(url_for("reseller_dashboard",notice="target_invalid"))
+    with db() as con:
+        con.execute("BEGIN IMMEDIATE")
+        _,error=_transfer_license(con,license_id,reseller["id"],target_device_row_id,enforce_limit=True)
+        if error:return redirect(url_for("reseller_dashboard",notice=error))
+    return redirect(url_for("reseller_dashboard",notice="license_transferred"))
+
+@app.post("/admin/licenses/<int:license_id>/transfer")
+def admin_transfer_license(license_id):
+    guard=_admin_guard()
+    if guard:return guard
+    try:target_device_row_id=int(request.form.get("target_device_row_id",""))
+    except ValueError:return redirect(url_for("admin_credits",notice="target_invalid"))
+    with db() as con:
+        con.execute("BEGIN IMMEDIATE")
+        license_row=con.execute("SELECT reseller_id FROM lifetime_licenses WHERE id=? AND status='ACTIVE'",(license_id,)).fetchone()
+        if license_row is None:abort(404)
+        _,error=_transfer_license(con,license_id,int(license_row["reseller_id"]),target_device_row_id,enforce_limit=False)
+        if error:return redirect(url_for("admin_credits",notice=error))
+    return redirect(url_for("admin_credits",notice="license_transferred"))
+
 @app.get("/admin/credits")
 def admin_credits():
     guard=_admin_guard()
