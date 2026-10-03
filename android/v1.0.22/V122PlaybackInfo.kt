@@ -71,6 +71,10 @@ internal fun V122PlaybackInfoDialog(isTv: Boolean, onDismiss: () -> Unit,
 internal fun V122PlaybackInfoContent(data: V122PlaybackSnapshot, isTv: Boolean,
     compatibility: Boolean, onDismiss: () -> Unit, onSwitchPlayer: (() -> Unit)? = null) {
     val close = remember { FocusRequester() }
+    // A dialog can be the first focusable TV content (e.g. Live TV after a touch launch).
+    // Put the host into remote/keyboard mode as well as the dialog's own window.
+    val hostInputMode = LocalInputModeManager.current
+    LaunchedEffect(isTv) { if (isTv) hostInputMode.requestInputMode(InputMode.Keyboard) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         val inputMode = LocalInputModeManager.current
         val maxHeight = LocalConfiguration.current.screenHeightDp.dp * .92f
