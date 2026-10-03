@@ -6,7 +6,14 @@ TARGET="$BASE/skip_detector_v3.py"
 TMP="$(mktemp /tmp/skip_detector_v3.XXXXXX.py)"
 trap 'rm -f "$TMP"' EXIT
 if [ ! -x "$PY" ]; then echo "FEHLER: Python-Venv nicht gefunden: $PY" >&2; exit 1; fi
-if ! "$PY" -c 'import numpy' >/dev/null 2>&1; then echo "FEHLER: NumPy fehlt in $PY" >&2; exit 1; fi
+if ! "$PY" -c 'import numpy' >/dev/null 2>&1; then
+  echo "=== NumPy fehlt – wird automatisch in der EpiMediaHub-Venv installiert ==="
+  if ! "$PY" -m pip --version >/dev/null 2>&1; then
+    "$PY" -m ensurepip --upgrade
+  fi
+  "$PY" -m pip install --disable-pip-version-check --no-cache-dir "numpy>=1.26,<3"
+  "$PY" -c 'import numpy as np; print("NumPy OK:", np.__version__)'
+fi
 for exe in ffmpeg fpcalc; do
   if ! command -v "$exe" >/dev/null 2>&1; then
     echo "FEHLER: $exe fehlt." >&2
