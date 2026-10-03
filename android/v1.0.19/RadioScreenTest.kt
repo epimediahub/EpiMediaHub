@@ -69,11 +69,27 @@ class RadioScreenTest {
             assertTrue("$it must fit: $bounds in $viewport", bounds.left >= viewport.left && bounds.right <= viewport.right && bounds.top >= viewport.top && bounds.bottom <= viewport.bottom)
         }
     }
-    private fun capture(name: String) {
+    private fun capture(name: String): Bitmap {
         lateinit var bitmap: Bitmap
         compose.runOnIdle { bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888); root.draw(Canvas(bitmap)) }
         File("build/reports/ui").mkdirs()
         File("build/reports/ui", name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        return bitmap
+    }
+    private fun iconsHaveContrast(bitmap: Bitmap, vararg tags: String) {
+        val density = root.resources.displayMetrics.density
+        tags.forEach { tag ->
+            val bounds = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot()
+            val x = ((bounds.left.value + bounds.right.value) * .5f * density).toInt()
+            val y = ((bounds.top.value + bounds.bottom.value) * .5f * density).toInt()
+            val radius = (8 * density).toInt()
+            var bright = 0
+            for (px in x - radius..x + radius) for (py in y - radius..y + radius) {
+                val color = bitmap.getPixel(px, py)
+                if (android.graphics.Color.red(color) > 200 && android.graphics.Color.green(color) > 200 && android.graphics.Color.blue(color) > 200) bright++
+            }
+            assertTrue("$tag needs a readable light icon on the dark panel", bright >= 5)
+        }
     }
     @Test fun homeRadioIsRoundAndDirectlyBesideThePlaylistShortcut() {
         var opened = 0
@@ -102,12 +118,12 @@ class RadioScreenTest {
     @Test fun tvPlayerAndFiltersFitWithoutHorizontalScrolling() {
         screen()
         fits("radio-back", "radio-country", "radio-language", "radio-category", "radio-search", "radio-player", "radio-previous", "radio-play-pause", "radio-next", "radio-stop")
-        capture("radio-tv.png")
+        iconsHaveContrast(capture("radio-tv.png"), "radio-back", "radio-search", "radio-previous", "radio-play-pause", "radio-next", "radio-stop")
     }
     @Test @Config(sdk = [28], qualifiers = "w640dp-h360dp-land") fun mobilePlayerAndFiltersFitInLandscape() {
         screen(false)
         fits("radio-back", "radio-country", "radio-language", "radio-category", "radio-player", "radio-play-pause", "radio-next", "radio-stop")
-        capture("radio-mobile.png")
+        iconsHaveContrast(capture("radio-mobile.png"), "radio-back", "radio-search", "radio-play-pause", "radio-next", "radio-stop")
     }
     @Test fun countryPickerChangesCountryWithoutChangingTheLanguage() {
         ui.value = ui.value.copy(query = RadioQuery(language = "english"))

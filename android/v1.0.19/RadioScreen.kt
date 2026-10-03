@@ -116,7 +116,7 @@ internal fun RadioContent(state: RadioUiState, playback: RadioPlaybackState, isT
         Row(Modifier.fillMaxWidth().height(if (isTv) 56.dp else 42.dp).background(Color(0xE80B111C), RoundedCornerShape(12.dp)), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             IconButton(actions.back, Modifier.focusRequester(backFocus).v114FocusRing().testTag("radio-back")) {
-                Icon(Icons.Default.ArrowBack, "Zurück")
+                Icon(Icons.Default.ArrowBack, "Zurück", tint = Color.White)
             }
             Icon(Icons.Default.Radio, null, tint = accent)
             Text("RADIO", color = Color.White, fontWeight = FontWeight.Black, fontSize = if (isTv) 26.sp else 20.sp)
@@ -144,7 +144,7 @@ internal fun RadioContent(state: RadioUiState, playback: RadioPlaybackState, isT
                     RadioFilter("Land: ${radioCountryName(state.query.countryCode).ifBlank { "Weltweit" }}", "radio-country", Modifier.weight(1f), isTv) { picker = "country" }
                     RadioFilter("Sprache: ${radioLanguageName(state.query.language).ifBlank { "Alle" }}", "radio-language", Modifier.weight(1f), isTv) { picker = "language" }
                     RadioFilter(state.query.category?.label ?: "Musik & Themen", "radio-category", Modifier.weight(1f), isTv) { picker = "category" }
-                    IconButton({ search = true }, Modifier.v114FocusRing().testTag("radio-search")) { Icon(Icons.Default.Search, "Sender suchen") }
+                    IconButton({ search = true }, Modifier.v114FocusRing().testTag("radio-search")) { Icon(Icons.Default.Search, "Sender suchen", tint = Color.White) }
                 }
                 if (state.query != RadioQuery()) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -259,7 +259,7 @@ private fun RadioLogo(station: RadioStation, modifier: Modifier, accent: Color) 
 
 @Composable
 private fun RadioPlayerBar(state: RadioPlaybackState, favorites: Set<String>, isTv: Boolean, accent: Color, actions: RadioActions) {
-    Surface(Modifier.fillMaxWidth().height(if (isTv) 94.dp else 76.dp).testTag("radio-player"), color = Color(0xF509111D), shape = RoundedCornerShape(14.dp),
+    Surface(Modifier.fillMaxWidth().height(if (isTv) 94.dp else 76.dp).testTag("radio-player"), color = Color(0xF509111D), contentColor = Color.White, shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, accent.copy(.35f))) {
         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val station = state.station
@@ -294,7 +294,7 @@ private fun RadioPicker(title: String, options: List<RadioOption>, selected: Str
     val shown = remember(options, filter) { options.filter { radioNormalized(it.label).contains(radioNormalized(filter)) || it.id.contains(filter, true) } }
     Dialog(dismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxWidth(if (isTv) .65f else .85f).fillMaxHeight(.87f).testTag("radio-picker"),
-            color = Color(0xFF0B1421), shape = RoundedCornerShape(18.dp)) {
+            color = Color(0xFF0B1421), contentColor = Color.White, shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(16.dp)) {
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                 Row(verticalAlignment = Alignment.CenterVertically) {
