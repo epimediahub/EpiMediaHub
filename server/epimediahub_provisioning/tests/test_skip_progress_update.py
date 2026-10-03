@@ -9,7 +9,7 @@ from test_skip_analysis_automation import AutomationFixture
 import test_skip_markers as marker_tests
 import skip_automation as auto
 import skip_catalogue as catalogue
-from skip_analysis_worker import process_batch, busy_check
+from skip_analysis_worker import process_batch, process_one, busy_check
 from skip_markers import now
 db = marker_tests.db
 
@@ -59,6 +59,17 @@ class BatchTests(AutomationFixture, unittest.TestCase):
              mock.patch('skip_analysis_worker.process_one', side_effect=process) as process:
             self.assertEqual(process_batch(self.db, max_seconds=1), ['no_match'])
             self.assertEqual(process.call_count, 1)
+
+    def test_expired_audio_budget_keeps_the_job_queued_without_using_an_attempt(self):
+        self.registered(self.target)
+        with self.patches(), mock.patch('skip_analysis_worker.time.monotonic', return_value=1000), \
+             mock.patch.object(auto, 'provider_proxy', side_effect=AssertionError('expired job must not open provider')):
+            self.assertEqual(process_one(self.db, deadline=999), 'queued')
+        with self.db() as con:
+            row = con.execute('SELECT attempts,detail FROM skip_jobs').fetchone()
+            self.assertEqual(row['attempts'], 0)
+            self.assertIn('Zeitbudget', row['detail'])
+            self.assertEqual(con.execute('SELECT count FROM skip_analysis_budget').fetchone()[0], 0)
 
 
 class WindowCacheTests(AutomationFixture, unittest.TestCase):

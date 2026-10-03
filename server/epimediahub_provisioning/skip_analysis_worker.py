@@ -99,13 +99,13 @@ def reference_detail(con, asset):
     return "Zuerst ein Intro dieser Staffel markieren und freigeben"
 
 
-def analyze(db, job):
+def analyze(db, job, busy_factory=busy_check):
     from skip_automation import enabled, store_proposal, analyze as automatic_analyze
     with db() as con:
         automatic_asset = con.execute("SELECT playlist_id,media_type FROM skip_assets WHERE asset_key=?", (job["asset_key"],)).fetchone()
         automatic = automatic_asset and automatic_asset["media_type"] == "episode" and enabled(con, automatic_asset["playlist_id"])
     if automatic:
-        return automatic_analyze(db, job, busy_check)
+        return automatic_analyze(db, job, busy_factory)
     with db() as con:
         asset = con.execute("SELECT * FROM skip_assets WHERE asset_key=?", (job["asset_key"],)).fetchone()
         playlist = con.execute("SELECT p.* FROM customer_playlists p JOIN skip_analysis_sources s ON s.playlist_id=p.id WHERE p.id=? AND s.enabled=1", (asset["playlist_id"],)).fetchone() if asset else None
@@ -117,7 +117,7 @@ def analyze(db, job):
           AND r.end_ms-r.start_ms BETWEEN 19000 AND 300000 AND ABS(a.duration_ms-r.duration_ms)<=2000
           ORDER BY r.reviewed_at DESC LIMIT 3""", (asset["source_key"], asset["season"])).fetchall()
         template_playlists = [con.execute("SELECT * FROM customer_playlists WHERE id=?", (row["playlist_id"],)).fetchone() for row in templates]
-    busy = busy_check(db, [playlist] + template_playlists)
+    busy = busy_factory(db, [playlist] + template_playlists)
     if busy():
         return "queued", "Wartet, bis die Wiedergabe beendet ist"
     data = dict(asset, imdb_id="", tmdb_id=0)
@@ -179,7 +179,7 @@ def analyze(db, job):
     return ("review", "Vorschläge im Dashboard prüfen") if proposals else ("no_match", "Kein ausreichend eindeutiges Intro erkannt")
 
 
-def process_one(db, *, exclude_job_ids=(), on_claim=None):
+def process_one(db, *, exclude_job_ids=(), on_claim=None, deadline=None):
     from skip_catalogue import advance as catalogue_advance, daily_limit, preferred_inventory_pending
     # Inventory must keep progressing even after today's audio quota is used.
     catalogue_advance(db, busy_check)
@@ -225,7 +225,15 @@ def process_one(db, *, exclude_job_ids=(), on_claim=None):
     if on_claim is not None:
         on_claim(job["id"])
     try:
-        status, detail = analyze(db, job)
+        if deadline is None:
+            status, detail = analyze(db, job)
+        else:
+            def bounded_busy(db, playlists):
+                playback_busy = busy_check(db, playlists)
+                def check():
+                    return time.monotonic() >= deadline or playback_busy()
+                return check
+            status, detail = analyze(db, job, busy_factory=bounded_busy)
     except ValueError as error:
         if str(error) == "analysis_deferred":
             status, detail = "queued", "Wartet, bis die Wiedergabe beendet ist"
@@ -233,6 +241,8 @@ def process_one(db, *, exclude_job_ids=(), on_claim=None):
             status, detail = "failed", failure_detail(error)
     except (OSError, KeyError, TypeError, json.JSONDecodeError, sqlite3.Error, OverflowError):
         status, detail = "failed", "Analyse nicht möglich; eigene Zeitmarken bleiben nutzbar"
+    if status == "queued" and deadline is not None and time.monotonic() >= deadline:
+        detail = "Zeitbudget des Laufs erreicht; vorhandene Audiofenster bleiben für den nächsten Lauf erhalten"
     with db() as con:
         from skip_release import accept_pending
         accepted = accept_pending(con, asset_key=job['asset_key'])
@@ -250,8 +260,8 @@ def process_batch(db, max_jobs=4, max_seconds=600, report=None):
     """No parallel provider connections, no repeated busy job in the same batch.
 
     Each job still applies the existing language order, traffic budget and
-    live-playback checks. The deadline is checked between bounded jobs; systemd
-    retains the hard service timeout for a slow provider.
+    live-playback checks. Audio/proxy operations also check the shared deadline;
+    systemd retains a final hard service timeout for a stalled provider.
     """
     if not 1 <= max_jobs <= 8 or not 1 <= max_seconds <= 600:
         raise ValueError("invalid_batch_limits")
@@ -259,7 +269,7 @@ def process_batch(db, max_jobs=4, max_seconds=600, report=None):
     for _ in range(max_jobs):
         if time.monotonic() >= deadline:
             break
-        status = process_one(db, exclude_job_ids=claimed, on_claim=claimed.add)
+        status = process_one(db, exclude_job_ids=claimed, on_claim=claimed.add, deadline=deadline)
         statuses.append(status)
         if report is not None:
             report(status)

@@ -2,7 +2,7 @@
 
 Der Stand baut auf der bereits eingebundenen Policy `chromaprint_fft_v3_1` auf. V3.1 wird nicht erneut als neues Verfahren angekündigt. Das bisher im Installer eingebettete Modul liegt jetzt auch als normale Quelldatei vor.
 
-- Der Timer verarbeitet bis zu vier unterschiedliche Jobs nacheinander. Eine weiterhin aktive Wiedergabe lässt den betroffenen Job unverbraucht in der Queue; derselbe Job wird innerhalb einer Gruppe nicht erneut ausgewählt. Es entstehen keine parallelen Anbieter-Verbindungen.
+- Der Timer verarbeitet bis zu vier unterschiedliche Jobs nacheinander. Eine weiterhin aktive Wiedergabe lässt den betroffenen Job unverbraucht in der Queue; derselbe Job wird innerhalb einer Gruppe nicht erneut ausgewählt. Das gemeinsame Zeitbudget wird auch während der Audio-/Proxyarbeit geprüft: bei Ablauf bleibt der Job ohne verbrauchten Versuch in der Queue, vollständige Fenster bleiben gespeichert. Es entstehen keine parallelen Anbieter-Verbindungen.
 - Zwischen Gruppen werden 30 Sekunden statt zwei Minuten gewartet. Der Tageszähler und die strenge Reihenfolge Deutsch/Italienisch bleiben erhalten. Fehler werden weiterhin im vorhandenen Verkehrsbudget gezählt.
 - Vollständige, höchstens eine Stunde alte Anfangs-/Endfenster werden nach erneuter Laufzeitprüfung wiederverwendet. Unvollständige, beschädigte und abweichende Fenster werden neu gelesen. Dies spart erneute Audioextraktion; es garantiert keine bestimmte Erkennungsdauer.
 - App 1.0.25 meldet den Abschluss einer Player-Sitzung mit `active=false`. Die Sitzung ist mit einer ID an Gerät und Playlist gebunden. Ein verspätetes Ende der vorherigen Folge darf eine neue Wiedergabe nicht freigeben. Bei Absturz/offline bleibt das bisherige 70-Sekunden-Ablaufverfahren wirksam.
