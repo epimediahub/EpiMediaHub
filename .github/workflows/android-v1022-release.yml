@@ -152,12 +152,12 @@ jobs:
             ${{ env.PROJECT_ROOT }}/app/build/reports/ui
           if-no-files-found: ignore
 
-      - name: Verify Android 1.0.21 release
+      - name: Verify Android 1.0.22 release
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionName = "1.0.21"' "$PROJECT_ROOT/app/build.gradle.kts"
-          grep -Fq 'versionCode = 1021' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionName = "1.0.22"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 1022' "$PROJECT_ROOT/app/build.gradle.kts"
           grep -Fq 'v120RememberLicenseState' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
           grep -Fq 'https://api.epimediahub.com/v1/license/status' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V120LicenseManager.kt"
           grep -Fq 'RadioHomeActions(showPlaylistSwitch' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
@@ -242,8 +242,8 @@ jobs:
           do
             test -s "$APK"
             "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > /tmp/apk-badging.txt
-            grep -F "versionCode='1021'" /tmp/apk-badging.txt
-            grep -F "versionName='1.0.21'" /tmp/apk-badging.txt
+            grep -F "versionCode='1022'" /tmp/apk-badging.txt
+            grep -F "versionName='1.0.22'" /tmp/apk-badging.txt
             grep -F "sdkVersion:'25'" /tmp/apk-badging.txt
             "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" dex packages --defined-only "$APK" > /tmp/media3-packages.txt
             grep -F 'androidx.media3.exoplayer.dash.DashMediaSource$Factory' /tmp/media3-packages.txt
@@ -273,9 +273,9 @@ jobs:
 
           cat > dist/android-latest.json <<EOF
           {
-            "version": "1.0.21",
-            "versionCode": 1021,
-            "notes": "Android 1.0.21 Vorschau: Englisches Startintro mit Herzschlag und cineastischem Logo-Klang. Film- und Serienplayer mit stabiler Videofläche und automatischer TV-Bildratenanpassung. Wiedergabe auf dem betroffenen Gerät noch prüfen.",
+            "version": "1.0.22",
+            "versionCode": 1022,
+            "notes": "Android 1.0.22 Test: Stabile Videofläche und TV-Bildratenanpassung jetzt auch im Live-TV. Erkennt fehlende Bildraten aus Bildzeitstempeln. Neue Wiedergabe-Info zeigt TV-Ausgabe, Decoder, ausgelassene Bilder und Puffer. Live-TV: Menütaste. Filme/Serien: Menütaste → Wiedergabe-Info.",
             "apks": {
               "arm64-v8a": {
                 "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v1.0.22-arm64-v8a.apk",
