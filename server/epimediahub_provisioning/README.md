@@ -73,14 +73,20 @@ locked until a Lifetime license is present.
 Credits are an append-only ledger: the current reseller balance is the sum of
 `credit_transactions.amount`. A Lifetime activation is executed inside an
 SQLite `BEGIN IMMEDIATE` transaction and deducts exactly 1 credit. The
-commercial display value is currently 5.00 EUR per credit.
+commercial display value is currently 5.00 EUR per credit. Resellers can create
+fixed-price requests for 10, 25, 50 or 100 credits; an administrator confirms
+payment before the corresponding ledger credit is posted.
 
 Existing devices present when the schema is first enabled are captured once
 and converted to grandfathered Lifetime licenses on their first Android 1.0.20
 license check, without deducting a credit.
 
 Reseller browser access is available at `/reseller/login`; the main admin
-manages resellers and credit adjustments at `/admin/credits`.
+manages resellers, purchase requests and credit adjustments at `/admin/credits`.
+A Lifetime license can be transferred to another device of the same reseller
+without consuming a credit. Resellers may do this twice per license; further
+transfers remain available to the administrator. Every transfer is recorded as
+a zero-credit ledger event and the old device subject is expired.
 
 ### License status
 `POST /v1/license/status`
