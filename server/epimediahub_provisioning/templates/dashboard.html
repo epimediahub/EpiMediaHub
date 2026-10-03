@@ -25,7 +25,7 @@
   {% endif %}
 
   <section class="hero">
-    <div><span class="eyebrow">DASHBOARD</span><h1>Kunden & Geräte</h1><p>Kunden, Playlists, Receiver und Aktivierungen zentral verwalten.</p></div>
+    <div><span class="eyebrow">DASHBOARD</span><h1>Kunden & Geräte</h1><p>Kunden, Playlists, Receiver und Aktivierungen zentral verwalten.</p><p style="margin-top:14px"><a class="secondary linkbutton" href="{{ url_for('admin_credits') }}">Credits & Reseller verwalten</a></p></div>
     <div class="stats"><div class="stat"><b>{{ customers|length }}</b><span>Kunden</span></div><div class="stat"><b>{{ devices|selectattr('enabled')|list|length }}</b><span>Aktive Geräte</span></div></div>
   </section>
 
