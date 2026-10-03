@@ -47,3 +47,5 @@ install_dashboard_v080(app, db)
 
 from skip_markers import install as install_skip_markers
 install_skip_markers(app, db)
+
+import license_api  # Registers additive credit and license routes.

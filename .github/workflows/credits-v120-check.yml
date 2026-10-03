@@ -1,0 +1,42 @@
+name: Credits 1.0.20 Raspberry compatibility
+
+on:
+  push:
+    branches: [raspberry-v0.8.3-credits]
+    paths:
+      - '.github/workflows/credits-v120-check.yml'
+      - 'server/epimediahub_provisioning/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  credits-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing server dependencies
+        run: python -m pip install -r server/epimediahub_provisioning/requirements.txt 'numpy>=1.26,<3'
+      - name: Restore the existing installed detector from its pinned repository payload
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64, gzip, re
+          root = Path('server/epimediahub_provisioning')
+          installer = (root / 'deploy/install_skip_detector_v3_1.sh').read_text()
+          encoded = re.search(r"PAYLOAD='([^']+)'", installer).group(1)
+          (root / 'skip_detector_v3.py').write_bytes(gzip.decompress(base64.b64decode(encoded)))
+          PY
+      - name: Verify prices, migration, isolation and credit transactions
+        run: python server/epimediahub_provisioning/tests/test_credit_pricing.py
+      - name: Verify snapshot preflight, embedded payload and file rollback
+        run: python server/epimediahub_provisioning/tests/test_credit_installer.py
+      - name: Verify existing reseller workflows and limits
+        env:
+          EPIMEDIAHUB_EXPECTED_API_VERSION: '0.8.2'
+        run: python server/epimediahub_provisioning/tests/smoke_v080.py
