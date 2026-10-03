@@ -109,6 +109,8 @@ def license_status():
             con.execute("UPDATE license_subjects SET current_device_id=?,platform=?,last_seen_at=? WHERE id=?",
                         (device_id,platform,iso(now),subject["id"]))
             subject=con.execute("SELECT * FROM license_subjects WHERE id=?",(subject["id"],)).fetchone()
+            con.execute("""UPDATE lifetime_licenses SET activated_device_id=?
+                           WHERE subject_id=? AND status='ACTIVE'""",(device_id,subject["id"]))
         legacy=con.execute("SELECT 1 FROM legacy_device_entitlements WHERE device_id=?",(device_id,)).fetchone()
         active=con.execute("SELECT 1 FROM lifetime_licenses WHERE subject_id=? AND status='ACTIVE'",(subject["id"],)).fetchone()
         if legacy and active is None:
