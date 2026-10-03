@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import sqlite3
 from datetime import datetime, timedelta
@@ -9,8 +10,22 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app import app, customer_config, db, digest, form_config, iso, normalize_code, utcnow
 
 TRIAL_DAYS = 7
-CREDIT_PRICE_EUR_CENTS = 500
+RETAIL_LICENSE_PRICE_EUR_CENTS = 1000
 DEFAULT_RESELLER_ID = 1
+
+def _price_cents(value):
+    """An empty price is unset; accept exact euro amounts without float rounding."""
+    value = value.strip()
+    if not value:
+        return None
+    if not re.fullmatch(r"[0-9]{1,6}(?:[.,][0-9]{1,2})?", value):
+        raise ValueError("invalid_price")
+    whole, _, fraction = value.replace(",", ".").partition(".")
+    return int(whole) * 100 + int(fraction.ljust(2, "0"))
+
+@app.template_filter("eur")
+def _format_eur(cents):
+    return f"{int(cents) // 100},{int(cents) % 100:02d}"
 
 def _has_column(con, table, column):
     return column in {row[1] for row in con.execute(f"PRAGMA table_info({table})")}
@@ -55,9 +70,13 @@ def ensure_license_schema():
           created_at TEXT NOT NULL,processed_at TEXT,note TEXT NOT NULL DEFAULT '');
         """)
         if not _has_column(con,"customers","reseller_id"):con.execute("ALTER TABLE customers ADD COLUMN reseller_id INTEGER")
+        if not _has_column(con,"resellers","credit_price_cents"):
+            con.execute("ALTER TABLE resellers ADD COLUMN credit_price_cents INTEGER CHECK(credit_price_cents >= 0)")
         con.execute("""INSERT OR IGNORE INTO resellers(id,name,login_name,password_hash,enabled,created_at)
                        VALUES(?,?,?,?,1,?)""",(DEFAULT_RESELLER_ID,"EpiMediaHub Direct","direct-admin-only",
                        generate_password_hash(secrets.token_urlsafe(48)),now))
+        con.execute("UPDATE resellers SET credit_price_cents=? WHERE id=?",
+                    (RETAIL_LICENSE_PRICE_EUR_CENTS,DEFAULT_RESELLER_ID))
         con.execute("UPDATE customers SET reseller_id=? WHERE reseller_id IS NULL",(DEFAULT_RESELLER_ID,))
         if con.execute("SELECT 1 FROM license_meta WHERE key='grandfathered_existing_devices_v1'").fetchone() is None:
             con.execute("INSERT OR IGNORE INTO legacy_device_entitlements(device_id,created_at) SELECT device_id,? FROM devices",(now,))
@@ -165,7 +184,8 @@ def reseller_dashboard():
                                WHERE c.reseller_id=? ORDER BY d.id DESC""",(reseller["id"],)).fetchall()
         transactions=con.execute("SELECT * FROM credit_transactions WHERE reseller_id=? ORDER BY id DESC LIMIT 100",(reseller["id"],)).fetchall()
         orders=con.execute("SELECT * FROM credit_orders WHERE reseller_id=? ORDER BY id DESC LIMIT 25",(reseller["id"],)).fetchall()
-    return render_template("reseller.html",reseller=reseller,credits=credits,credit_value_eur=credits*CREDIT_PRICE_EUR_CENTS/100,
+    return render_template("reseller.html",reseller=reseller,credits=credits,
+                           retail_price_cents=RETAIL_LICENSE_PRICE_EUR_CENTS,
                            customers=_prepared_customers(customers),devices=devices,transactions=transactions,orders=orders,
                            notice=request.args.get("notice",""))
 
@@ -294,9 +314,17 @@ def reseller_create_credit_order():
     if credits not in {10,25,50,100}:return redirect(url_for("reseller_dashboard",notice="credit_order_invalid"))
     now=iso(utcnow())
     with db() as con:
+        con.execute("BEGIN IMMEDIATE")
+        current=con.execute("SELECT credit_price_cents FROM resellers WHERE id=? AND enabled=1",(reseller["id"],)).fetchone()
+        if current is None:return redirect(url_for("reseller_login"))
+        price=current["credit_price_cents"]
+        if price is None:return redirect(url_for("reseller_dashboard",notice="credit_price_missing"))
+        try:quoted_price=int(request.form.get("unit_price_cents",""))
+        except ValueError:quoted_price=None
+        if quoted_price != price:return redirect(url_for("reseller_dashboard",notice="credit_price_changed"))
         con.execute("""INSERT INTO credit_orders(reseller_id,credits,amount_cents,status,created_at)
                        VALUES(?,?,?,'PENDING',?)""",
-                    (reseller["id"],credits,credits*CREDIT_PRICE_EUR_CENTS,now))
+                    (reseller["id"],credits,credits*price,now))
     return redirect(url_for("reseller_dashboard",notice="credit_order_created"))
 
 @app.get("/admin/credits")
@@ -306,7 +334,7 @@ def admin_credits():
     with db() as con:
         resellers=[]
         for r in con.execute("SELECT * FROM resellers ORDER BY id").fetchall():
-            item=dict(r);item["credits"]=_balance(con,r["id"]);item["value_eur"]=item["credits"]*CREDIT_PRICE_EUR_CENTS/100;resellers.append(item)
+            item=dict(r);item["credits"]=_balance(con,r["id"]);resellers.append(item)
         customers=con.execute("SELECT c.*,r.name reseller_name FROM customers c LEFT JOIN resellers r ON r.id=c.reseller_id ORDER BY c.id DESC").fetchall()
         devices=con.execute("""SELECT d.*,c.name customer_name,c.reseller_id,r.name reseller_name,s.id subject_id,s.trial_started_at,s.trial_expires_at,
                                l.id license_id,l.status license_status,l.source license_source FROM devices d JOIN customers c ON c.id=d.customer_id
@@ -316,7 +344,8 @@ def admin_credits():
         orders=con.execute("""SELECT o.*,r.name reseller_name FROM credit_orders o JOIN resellers r ON r.id=o.reseller_id
                               ORDER BY CASE o.status WHEN 'PENDING' THEN 0 ELSE 1 END,o.id DESC LIMIT 200""").fetchall()
     return render_template("credits.html",resellers=resellers,customers=customers,devices=devices,transactions=tx,orders=orders,
-                           credit_price_eur=CREDIT_PRICE_EUR_CENTS/100,notice=request.args.get("notice",""))
+                           retail_price_cents=RETAIL_LICENSE_PRICE_EUR_CENTS,direct_reseller_id=DEFAULT_RESELLER_ID,
+                           notice=request.args.get("notice",""))
 
 @app.post("/admin/credit-orders/<int:order_id>/approve")
 def admin_approve_credit_order(order_id):
@@ -352,11 +381,26 @@ def admin_create_reseller():
     if guard:return guard
     name=request.form.get("name","").strip();login_name=request.form.get("login_name","").strip().lower();password=request.form.get("password","")
     if not name or not login_name or len(password)<8:return redirect(url_for("admin_credits",notice="reseller_invalid"))
+    try:price=_price_cents(request.form.get("credit_price_eur",""))
+    except ValueError:return redirect(url_for("admin_credits",notice="credit_price_invalid"))
     try:
-        with db() as con:con.execute("INSERT INTO resellers(name,login_name,password_hash,enabled,created_at) VALUES(?,?,?,1,?)",
-                                     (name,login_name,generate_password_hash(password),iso(utcnow())))
+        with db() as con:con.execute("INSERT INTO resellers(name,login_name,password_hash,enabled,created_at,credit_price_cents) VALUES(?,?,?,1,?,?)",
+                                     (name,login_name,generate_password_hash(password),iso(utcnow()),price))
     except sqlite3.IntegrityError:return redirect(url_for("admin_credits",notice="reseller_exists"))
     return redirect(url_for("admin_credits",notice="reseller_created"))
+
+@app.post("/admin/resellers/<int:reseller_id>/price")
+def admin_set_reseller_price(reseller_id):
+    guard=_admin_guard()
+    if guard:return guard
+    if reseller_id==DEFAULT_RESELLER_ID:
+        return redirect(url_for("admin_credits",notice="retail_price_fixed"))
+    try:price=_price_cents(request.form.get("credit_price_eur",""))
+    except ValueError:return redirect(url_for("admin_credits",notice="credit_price_invalid"))
+    with db() as con:
+        if con.execute("UPDATE resellers SET credit_price_cents=? WHERE id=?",(price,reseller_id)).rowcount==0:
+            abort(404)
+    return redirect(url_for("admin_credits",notice="credit_price_updated"))
 
 @app.post("/admin/resellers/<int:reseller_id>/credits")
 def admin_adjust_credits(reseller_id):

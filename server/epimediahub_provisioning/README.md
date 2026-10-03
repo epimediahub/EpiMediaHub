@@ -73,9 +73,26 @@ locked until a Lifetime license is present.
 Credits are an append-only ledger: the current reseller balance is the sum of
 `credit_transactions.amount`. A Lifetime activation is executed inside an
 SQLite `BEGIN IMMEDIATE` transaction and deducts exactly 1 credit. The
-commercial display value is currently 5.00 EUR per credit. Resellers can create
-fixed-price requests for 10, 25, 50 or 100 credits; an administrator confirms
-payment before the corresponding ledger credit is posted.
+administrator sets each reseller's price per credit manually in `/admin/credits`.
+There is no default reseller price. Until a price is set, new credit orders are
+disabled; existing credit balances and device activations remain usable. Prices
+are stored as integer euro cents and can be changed or cleared by the admin.
+An explicitly entered zero price is permitted; an empty price means unset.
+The end-customer price is 10.00 EUR once per Lifetime device license.
+
+Resellers can request 10, 25, 50 or 100 credits at their assigned price. The server
+checks the displayed unit price against the current assigned price and computes
+the total itself. A stale quote must be reviewed again before an order is created.
+Every order retains its original total after later price changes. An administrator
+confirms payment before the corresponding ledger credit is posted. Prices are
+shown separately from the credit balance, which is a count of activations.
+
+On upgrade, existing resellers start with an unset price, so the admin can enter
+the agreed terms. Existing orders, ledger entries, trials and licenses are preserved.
+The internal Direct account uses the fixed 10.00 EUR end-customer price.
+
+Run pricing, order, authorization and activation regressions with:
+`python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_credit_pricing.py'`.
 
 Existing devices present when the schema is first enabled are captured once
 and converted to grandfathered Lifetime licenses on their first Android 1.0.20

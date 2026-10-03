@@ -86,7 +86,7 @@ fun V120LicenseGate(
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    if (expired) "Bitte wende dich an deinen Anbieter. Die dauerhafte Aktivierung erfolgt im Reseller-Dashboard mit 1 Credit."
+                    if (expired) "Dauerhaft aktivieren für einmalig 10 € pro Gerät. Bitte wende dich an deinen Anbieter."
                     else "Bitte Internetverbindung prüfen und erneut versuchen.",
                     color = Color.White.copy(.72f), fontSize = if (isTv) 16.sp else 14.sp,
                     textAlign = TextAlign.Center, lineHeight = if (isTv) 23.sp else 20.sp

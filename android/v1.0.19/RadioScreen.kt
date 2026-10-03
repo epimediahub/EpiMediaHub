@@ -127,7 +127,7 @@ internal fun RadioContent(state: RadioUiState, playback: RadioPlaybackState, isT
     }.padding(horizontal = if (isTv) 26.dp else 10.dp, vertical = if (isTv) 14.dp else 5.dp)) {
         Row(Modifier.fillMaxWidth().height(if (isTv) 56.dp else 42.dp).background(Color(0xE80B111C), RoundedCornerShape(12.dp)), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconButton(actions.back, Modifier.focusRequester(backFocus).v114FocusRing().testTag("radio-back")) {
+            IconButton({ actions.stop(); actions.back() }, Modifier.focusRequester(backFocus).v114FocusRing().testTag("radio-back")) {
                 Icon(Icons.Default.ArrowBack, "Zurück", tint = Color.White)
             }
             Icon(Icons.Default.Radio, null, tint = accent)
@@ -349,3 +349,4 @@ private fun RadioSearchDialog(title: String, initial: String, isTv: Boolean, acc
             dismissButton = { TextButton(dismiss) { Text("Abbrechen") } })
     }
 }
+
