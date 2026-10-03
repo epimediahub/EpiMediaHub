@@ -14,5 +14,11 @@ setup.epimediahub.com, admin.epimediahub.com, api.epimediahub.com, reseller.epim
         -Server
     }
 
+    @reseller_root {
+        host reseller.epimediahub.com
+        path /
+    }
+    redir @reseller_root /reseller 302
+
     reverse_proxy 127.0.0.1:8787
 }
