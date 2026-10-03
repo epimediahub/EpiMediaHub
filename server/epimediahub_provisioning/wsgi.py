@@ -6,6 +6,7 @@ from flask import render_template
 
 from app import app, db, digest
 import device_api  # registers authenticated /v1/device/* routes and schema migrations
+import license_api  # registers 7-day trial, credit ledger and reseller routes
 
 
 @app.get("/connect/<token>")
