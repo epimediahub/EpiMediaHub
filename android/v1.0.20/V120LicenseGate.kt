@@ -29,7 +29,15 @@ fun v120RememberLicenseState(context: Context, refreshKey: Int): V120LicenseStat
     LaunchedEffect(context, refreshKey) {
         while (true) {
             state = withContext(Dispatchers.IO) { V120LicenseManager.check(context) }
-            delay(15L * 60L * 1000L)
+            val delayMs = when (state.kind) {
+                V120LicenseKind.TRIAL_ACTIVE -> {
+                    val untilExpiryMs = ((state.remainingSeconds ?: 0L) + 1L) * 1000L
+                    minOf(15L * 60L * 1000L, maxOf(5_000L, untilExpiryMs))
+                }
+                V120LicenseKind.ERROR -> 60_000L
+                else -> 15L * 60L * 1000L
+            }
+            delay(delayMs)
         }
     }
     return state
