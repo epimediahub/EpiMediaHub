@@ -2,11 +2,12 @@ name: Check Android v1.0.20 trial, credits and lifetime licensing
 
 on:
   push:
-    branches: [android-v1.0.20-radio]
+    branches: [android-v1.0.20-credits]
     paths:
       - '.github/workflows/android-v1020-check.yml'
       - 'android/v1.0.20/**'
       - 'build_tools/install_android_v1020_source.sh'
+      - 'server/epimediahub_provisioning/**'
       - 'build_tools/generate_intro_sound_v109.py'
   workflow_dispatch:
 
