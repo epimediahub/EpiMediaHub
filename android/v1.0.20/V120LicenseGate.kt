@@ -99,3 +99,32 @@ fun V120LicenseGate(
         }
     }
 }
+
+
+@Composable
+fun V120TrialBadge(
+    state: V120LicenseState?,
+    accent: Color,
+    isTv: Boolean,
+    modifier: Modifier = Modifier
+) {
+    if (state?.kind != V120LicenseKind.TRIAL_ACTIVE) return
+    val days = state.remainingDays ?: return
+    Surface(
+        modifier = modifier,
+        color = Color(0xE6111B26),
+        shape = RoundedCornerShape(999.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(.55f))
+    ) {
+        Text(
+            text = if (days == 1L) "TESTVERSION · NOCH 1 TAG" else "TESTVERSION · NOCH $days TAGE",
+            modifier = Modifier.padding(
+                horizontal = if (isTv) 16.dp else 11.dp,
+                vertical = if (isTv) 8.dp else 6.dp
+            ),
+            color = Color.White.copy(.88f),
+            fontSize = if (isTv) 13.sp else 10.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
