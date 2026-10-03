@@ -3,7 +3,8 @@ package de.epimediahub.app.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.graphics.asAndroidBitmap
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -17,6 +18,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
+import org.robolectric.shadows.ShadowDialog
 import java.io.File
 
 @OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
@@ -42,10 +44,17 @@ class V122PlaybackInfoTest {
         compose.onNodeWithText("Bildrate und TV-Ausgabe passen nicht zusammen").assertIsDisplayed()
         compose.onNodeWithText("1420 ausgegeben · 7 ausgelassen").assertIsDisplayed()
         compose.onNodeWithTag("playback-info-close").assertIsFocused()
-        val bitmap = compose.onNodeWithTag("playback-info").captureToImage().asAndroidBitmap()
-        val directory = File("build/reports/ui").apply { mkdirs() }
-        File(directory, "v122-playback-info-tv.png").outputStream().use {
-            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        // Draw the actual dialog with Robolectric's native Canvas. PixelCopy's window
+        // redraw callback is not delivered by this headless test environment.
+        compose.runOnIdle {
+            val root = ShadowDialog.getLatestDialog().window!!.decorView
+            val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+            root.draw(Canvas(bitmap))
+            val directory = File("build/reports/ui").apply { mkdirs() }
+            File(directory, "v122-playback-info-tv.png").outputStream().use {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+            bitmap.recycle()
         }
         compose.onNodeWithTag("playback-info-close").performKeyInput { keyDown(Key.Enter); keyUp(Key.Enter) }
         assertEquals(1, dismissed)
