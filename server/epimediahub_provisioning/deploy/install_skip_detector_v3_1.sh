@@ -14,10 +14,20 @@ if ! "$PY" -c 'import numpy' >/dev/null 2>&1; then
   "$PY" -m pip install --disable-pip-version-check --no-cache-dir "numpy>=1.26,<3"
   "$PY" -c 'import numpy as np; print("NumPy OK:", np.__version__)'
 fi
+missing_pkgs=()
+command -v ffmpeg >/dev/null 2>&1 || missing_pkgs+=(ffmpeg)
+command -v fpcalc >/dev/null 2>&1 || missing_pkgs+=(libchromaprint-tools)
+
+if [ "${#missing_pkgs[@]}" -gt 0 ]; then
+  echo "=== Fehlende Systempakete werden automatisch installiert: ${missing_pkgs[*]} ==="
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y --no-install-recommends "${missing_pkgs[@]}"
+fi
+
 for exe in ffmpeg fpcalc; do
   if ! command -v "$exe" >/dev/null 2>&1; then
-    echo "FEHLER: $exe fehlt." >&2
-    [ "$exe" != "fpcalc" ] || echo "Debian/Raspberry Pi: Paket libchromaprint-tools" >&2
+    echo "FEHLER: $exe ist nach der Paketinstallation weiterhin nicht verfügbar." >&2
     exit 1
   fi
 done
