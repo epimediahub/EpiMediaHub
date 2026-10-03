@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One bounded, idle-time analysis job per timer invocation."""
+"""Sequential, bounded idle-time analysis; one job or a short timer batch."""
 from __future__ import annotations
 
 import argparse
@@ -179,7 +179,7 @@ def analyze(db, job):
     return ("review", "Vorschläge im Dashboard prüfen") if proposals else ("no_match", "Kein ausreichend eindeutiges Intro erkannt")
 
 
-def process_one(db):
+def process_one(db, *, exclude_job_ids=(), on_claim=None):
     from skip_catalogue import advance as catalogue_advance, daily_limit, preferred_inventory_pending
     # Inventory must keep progressing even after today's audio quota is used.
     catalogue_advance(db, busy_check)
@@ -198,13 +198,15 @@ def process_one(db):
     discover_one(db, busy_check)
     with db() as con:
         con.execute("UPDATE skip_jobs SET status='queued' WHERE status='running' AND updated_at<?", (time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 1800)),))
+        excluded = tuple(exclude_job_ids)
+        exclusion = " AND j.id NOT IN (" + ",".join("?" for _ in excluded) + ")" if excluded else ""
         job = con.execute("""SELECT j.* FROM skip_jobs j
           JOIN skip_assets a ON a.asset_key=j.asset_key
           LEFT JOIN skip_language_priority l ON l.asset_key=j.asset_key
           LEFT JOIN skip_catalogue_priority p ON p.asset_key=j.asset_key
-          WHERE j.status='queued' AND j.attempts<3
+          WHERE j.status='queued' AND j.attempts<3""" + exclusion + """
           ORDER BY CASE WHEN a.media_type='episode' THEN COALESCE(l.priority,1) ELSE 1 END,
-          COALESCE(p.priority,1),j.updated_at,j.id LIMIT 1""").fetchone()
+          COALESCE(p.priority,1),j.updated_at,j.id LIMIT 1""", excluded).fetchone()
         if job is None:
             return online_status if online_status == 'online_checked' else "idle"
         language = con.execute("SELECT priority FROM skip_language_priority WHERE asset_key=?", (job['asset_key'],)).fetchone()
@@ -220,6 +222,8 @@ def process_one(db):
             if preferred_inventory_pending(con) or preferred_jobs:
                 return 'preferred_pending'
         con.execute("UPDATE skip_jobs SET status='running',updated_at=? WHERE id=?", (now(), job["id"]))
+    if on_claim is not None:
+        on_claim(job["id"])
     try:
         status, detail = analyze(db, job)
     except ValueError as error:
@@ -242,10 +246,39 @@ def process_one(db):
     return status
 
 
+def process_batch(db, max_jobs=4, max_seconds=600, report=None):
+    """No parallel provider connections, no repeated busy job in the same batch.
+
+    Each job still applies the existing language order, traffic budget and
+    live-playback checks. The deadline is checked between bounded jobs; systemd
+    retains the hard service timeout for a slow provider.
+    """
+    if not 1 <= max_jobs <= 8 or not 1 <= max_seconds <= 600:
+        raise ValueError("invalid_batch_limits")
+    deadline, claimed, statuses = time.monotonic() + max_seconds, set(), []
+    for _ in range(max_jobs):
+        if time.monotonic() >= deadline:
+            break
+        status = process_one(db, exclude_job_ids=claimed, on_claim=claimed.add)
+        statuses.append(status)
+        if report is not None:
+            report(status)
+        if status in ("idle", "daily_limit", "preferred_pending", "catalogue_pending"):
+            break
+    return statuses
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true", help="Process at most one bounded job")
-    parser.parse_args()
+    parser.add_argument("--batch", action="store_true", help="Process a short sequential batch")
+    parser.add_argument("--max-jobs", type=int, default=4)
+    parser.add_argument("--max-seconds", type=int, default=600)
+    args = parser.parse_args()
+    if args.once and args.batch:
+        parser.error("choose --once or --batch")
+    if not 1 <= args.max_jobs <= 8 or not 1 <= args.max_seconds <= 600:
+        parser.error("max-jobs must be 1..8 and max-seconds must be 1..600")
     data_dir = Path(os.environ.get("EPIMEDIAHUB_DATA_DIR", "/var/lib/epimediahub"))
     data_dir.mkdir(parents=True, exist_ok=True)
     with (data_dir / "skip-analysis.lock").open("a") as lock:
@@ -260,4 +293,11 @@ if __name__ == "__main__":
         from skip_progress import refresh as refresh_progress
         with db() as con:
             refresh_progress(con, budget=.5)
-        print("skip_analysis_status=" + process_one(db))
+        def report(status):
+            with db() as con:
+                refresh_progress(con, budget=.5)
+            print("skip_analysis_status=" + status, flush=True)
+        if args.batch:
+            process_batch(db, args.max_jobs, args.max_seconds, report)
+        else:
+            report(process_one(db))

@@ -1,0 +1,40 @@
+name: Validate V3.1 worker progress and playback release
+on:
+  workflow_dispatch:
+  push:
+    branches: [raspberry-v0.8.2-skip-progress]
+    paths:
+      - 'server/epimediahub_provisioning/**'
+      - '.github/workflows/raspberry-v082-progress-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install backend and audio dependencies
+        run: |
+          python -m pip install -r server/epimediahub_provisioning/requirements.txt
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg libchromaprint1
+      - name: Validate code and actual FFT detector
+        run: |
+          python -m compileall -q server/epimediahub_provisioning
+          bash -n server/epimediahub_provisioning/deploy/install_skip_progress.sh
+          python server/epimediahub_provisioning/skip_detector_v3.py --selftest
+      - name: Verify existing API and private marker playback
+        env:
+          EPIMEDIAHUB_EXPECTED_API_VERSION: '0.8.2'
+        run: |
+          python server/epimediahub_provisioning/tests/smoke_v080.py
+          python server/epimediahub_provisioning/tests/smoke_v082.py
+      - name: Verify catalogue, language order, real audio and publication safety
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_analysis*.py' -v
+      - name: Verify batching, cache, session release and installer rollback
+        run: |
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_progress*.py' -v

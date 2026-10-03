@@ -61,6 +61,10 @@ def migrate(con):
       device_id INTEGER PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
       playlist_id INTEGER NOT NULL REFERENCES customer_playlists(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS skip_presence_sessions(
+      device_id INTEGER PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS skip_jobs(
       id INTEGER PRIMARY KEY AUTOINCREMENT, asset_key TEXT NOT NULL UNIQUE REFERENCES skip_assets(asset_key) ON DELETE CASCADE,
       status TEXT NOT NULL DEFAULT 'queued', attempts INTEGER NOT NULL DEFAULT 0,
@@ -341,6 +345,11 @@ def install(app, db):
     @app.post("/v1/device/skip/presence")
     def v082_skip_presence():
         raw = body()
+        active = raw.get("active", True)
+        presence_id = raw.get("presence_id", "")
+        if (type(active) is not bool or not isinstance(presence_id, str)
+                or (presence_id and not re.fullmatch(r"[a-zA-Z0-9-]{1,64}", presence_id))):
+            return jsonify(error="invalid_presence"), 400
         with db() as con:
             row = device(con)
             try:
@@ -349,8 +358,19 @@ def install(app, db):
                 playlist = None
             if playlist is None:
                 return jsonify(error="playlist_not_available"), 404
-            con.execute("INSERT INTO skip_presence VALUES(?,?,?) ON CONFLICT(device_id) DO UPDATE SET playlist_id=excluded.playlist_id,expires_at=excluded.expires_at", (row["id"], playlist["id"], int(time.time()) + 70))
-        return jsonify(status="recorded")
+            if active:
+                con.execute("INSERT INTO skip_presence VALUES(?,?,?) ON CONFLICT(device_id) DO UPDATE SET playlist_id=excluded.playlist_id,expires_at=excluded.expires_at", (row["id"], playlist["id"], int(time.time()) + 70))
+                con.execute("INSERT INTO skip_presence_sessions VALUES(?,?) ON CONFLICT(device_id) DO UPDATE SET session_id=excluded.session_id", (row['id'], presence_id))
+            else:
+                # A late close from the previous episode must not release the
+                # new playback session or another device on the same account.
+                deleted = con.execute("""DELETE FROM skip_presence WHERE device_id=? AND playlist_id=?
+                  AND EXISTS (SELECT 1 FROM skip_presence_sessions s
+                    WHERE s.device_id=skip_presence.device_id AND s.session_id=?)""",
+                  (row['id'], playlist['id'], presence_id)).rowcount
+                if deleted:
+                    con.execute("DELETE FROM skip_presence_sessions WHERE device_id=?", (row['id'],))
+        return jsonify(status="recorded" if active else "released", supports_release=True)
 
     def csrf():
         supplied = request.form.get("csrf", "")

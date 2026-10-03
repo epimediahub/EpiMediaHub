@@ -224,7 +224,7 @@ class LanguageQueueTests(CatalogueFixture, unittest.TestCase):
         with mock.patch.object(catalogue, 'advance', return_value='queued'), \
              mock.patch.object(auto, 'discover_one', return_value='idle'), \
              mock.patch('skip_analysis_worker.analyze') as analyze:
-            self.assertEqual(process_one(self.db), 'catalogue_pending')
+            self.assertEqual(process_one(self.db), 'preferred_pending')
             analyze.assert_not_called()
         with self.db() as con:
             self.assertEqual(con.execute('SELECT status,attempts FROM skip_jobs').fetchone()[:], ('queued', 0))

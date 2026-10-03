@@ -6,6 +6,7 @@ take precedence, and machine approvals cannot become independent human evidence.
 from __future__ import annotations
 
 from math import ceil
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -895,6 +896,27 @@ def save_window(con, asset, kind, words, step, offset, length):
     con.execute("DELETE FROM skip_auto_windows WHERE rowid NOT IN (SELECT rowid FROM skip_auto_windows ORDER BY created_at DESC LIMIT 256)")
 
 
+def cached_window(con, asset, kind, offset, length):
+    """Reuse a recent complete window only after the file runtime is rechecked."""
+    row = con.execute("SELECT * FROM skip_auto_windows WHERE asset_key=? AND kind=?",
+                      (asset['asset_key'], kind)).fetchone()
+    if (not row or row['duration_ms'] != asset['duration_ms'] or row['offset_ms'] != offset
+            or not length - 250 <= row['length_ms'] <= length + 250
+            or not 0 < row['step_ms'] <= 1000):
+        return None
+    try:
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(row['created_at'].replace('Z', '+00:00'))).total_seconds()
+        words = json.loads(row['words_json'])
+    except (ValueError, TypeError, AttributeError):
+        return None
+    if (not 0 <= age <= 3600 or not isinstance(words, list) or not 1 <= len(words) <= 10000
+            or len(words) * row['step_ms'] > row['length_ms'] + 250
+            or len(words) * row['step_ms'] < row['length_ms'] - 8000
+            or any(type(w) is not int or not -(1 << 31) <= w < (1 << 32) for w in words)):
+        return None
+    return words, row['step_ms'], offset, row['length_ms']
+
+
 def analyze(db, job, busy_factory):
     from skip_analysis_worker import store_fingerprint, reusable_fingerprint
     with db() as con:
@@ -937,6 +959,11 @@ def analyze(db, job, busy_factory):
                     continue
             offset = 0 if kind == "intro" else max(0, duration - WINDOW_MS)
             length = min(WINDOW_MS, duration)
+            with db() as con:
+                cached = cached_window(con, asset, kind, offset, length)
+            if cached is not None:
+                windows[kind] = cached
+                continue
             try:
                 with provider_proxy(source_url(playlist, asset), busy) as source:
                     words, step, coverage = fingerprint(source, offset, length, busy, with_coverage=True)
