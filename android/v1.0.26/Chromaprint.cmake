@@ -1,0 +1,12 @@
+# Hash-verified upstream source is prepared before Gradle configures CMake.
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(FFT_LIB kissfft CACHE STRING "Chromaprint FFT backend" FORCE)
+set(KISSFFT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/chromaprint/src/3rdparty/kissfft")
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Static Chromaprint" FORCE)
+set(BUILD_TESTS OFF CACHE BOOL "No upstream test executable in APK" FORCE)
+set(BUILD_TOOLS OFF CACHE BOOL "No upstream command line tools in APK" FORCE)
+add_subdirectory(chromaprint)
+add_library(epiChromaprint SHARED epi_chromaprint_jni.cc)
+target_include_directories(epiChromaprint PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/chromaprint/src")
+target_link_libraries(epiChromaprint PRIVATE chromaprint swresample avutil)
+target_link_options(epiChromaprint PRIVATE "-Wl,-z,max-page-size=16384")
