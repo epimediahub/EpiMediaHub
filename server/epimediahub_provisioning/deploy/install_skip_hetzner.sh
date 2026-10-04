@@ -2,7 +2,7 @@
 # Fresh, dedicated Hetzner analysis host. No customer database is copied.
 set -Eeuo pipefail
 umask 0077
-SOURCE_REF="__SOURCE_REF__"
+SOURCE_REF="e41748a092f7969c0876277b0f2a3c8a0a687e7d"
 RAW="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$SOURCE_REF/server/epimediahub_provisioning"
 BASE="${EPIMEDIAHUB_WORKER_DIR:-/opt/epimediahub/analysis}"
 UNIT_ROOT="${EPIMEDIAHUB_SYSTEMD_DIR:-/etc/systemd/system}"
