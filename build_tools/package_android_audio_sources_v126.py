@@ -8,8 +8,9 @@ import tempfile
 
 project = Path(os.environ["PROJECT_ROOT"])
 repo = Path(__file__).resolve().parent.parent
+version = os.environ.get("APP_VERSION", "1.0.26")
 with tempfile.TemporaryDirectory() as temporary:
-    package = Path(temporary) / "EpiMediaHub-Audio-1.0.26"
+    package = Path(temporary) / f"EpiMediaHub-Audio-{version}"
     package.mkdir()
     shutil.copytree(project / "ffmpeg-audio", package / "ffmpeg-audio",
                     ignore=shutil.ignore_patterns("build", ".cxx", "android-libs"))
@@ -25,8 +26,8 @@ with tempfile.TemporaryDirectory() as temporary:
 dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
 rootProject.name = "EpiMediaHub-Audio-1.0.26"
 include(":ffmpeg-audio")
-''')
-    destination = repo / "dist/EpiMediaHub_Audio_Sources_v1.0.26.tar.xz"
+'''.replace('EpiMediaHub-Audio-1.0.26', f'EpiMediaHub-Audio-{version}'))
+    destination = repo / f"dist/EpiMediaHub_Audio_Sources_v{version}.tar.xz"
     destination.parent.mkdir(exist_ok=True)
     with tarfile.open(destination, "w:xz") as archive:
         archive.add(package, arcname=package.name)
