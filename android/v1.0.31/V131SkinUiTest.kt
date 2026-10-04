@@ -49,6 +49,18 @@ class V131SkinUiTest {
         return MainViewModel(app)
     }
     private fun settle() { compose.waitForIdle(); compose.mainClock.advanceTimeBy(500); compose.waitForIdle() }
+    private fun awaitArtwork(id: String) {
+        val app = RuntimeEnvironment.getApplication()
+        val variant = V131SkinArtwork.variant(app, id) ?: return
+        val targets = if (variant.pairAsset.isNotBlank()) listOf(variant.pairAsset) else variant.portraits.map { it.asset }
+        if (targets.isEmpty()) return
+        // Virtual animation time does not wait for Coil's real asset IO.
+        compose.waitUntil(timeoutMillis = 15_000) {
+            val keys = V131SkinArtwork.imageLoader(app).memoryCache?.keys.orEmpty().map { it.key }
+            targets.all { asset -> keys.any { it.contains(asset) } }
+        }
+        settle()
+    }
     private fun capture(view: View, name: String) {
         lateinit var bitmap: Bitmap
         compose.runOnIdle { bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888); view.draw(Canvas(bitmap)) }
@@ -70,6 +82,7 @@ class V131SkinUiTest {
         settle(); compose.onNodeWithTag("skin-f1_ferrari__players").assertIsFocused()
             .performKeyInput { pressKey(Key.DirectionRight) }
         settle(); compose.onNodeWithTag("skin-f1_ferrari__legends").assertIsFocused()
+        awaitArtwork("f1_ferrari__legends")
         capture(view, "v131-team-carousel-tv")
         compose.onNodeWithTag("skin-f1_ferrari__legends").performKeyInput { pressKey(Key.Enter) }
         settle(); assertEquals("f1_ferrari__legends", vm.ui.value.themeId)
@@ -95,6 +108,7 @@ class V131SkinUiTest {
         for (id in listOf("f1_ferrari__players", "juventus__legends", "nba_los_angeles_lakers__legends", "nfl_kansas_city_chiefs__players")) {
             compose.runOnIdle { vm.selectTheme(id) }; settle()
             for (title in listOf("LIVE TV", "FILME", "SERIEN", "MEDIATHEK", "SMARTTUBE", "EINSTELLUNGEN")) compose.onNodeWithText(title).assertIsDisplayed()
+            awaitArtwork(id)
             capture(view, "v131-home-" + id)
         }
     }
