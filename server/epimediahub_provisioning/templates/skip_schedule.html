@@ -1,0 +1,21 @@
+<section class="card" id="analysis-order" style="margin:20px 0" aria-label="Reihenfolge der Hintergrundanalyse">
+<h2>Aktuelle Analyse & Reihenfolge</h2>
+{% if schedule.current %}
+<p><strong>Aktuelle Playlist: {{ schedule.current.playlist_name }}</strong></p>
+{% if schedule.current.title %}
+<p>Serie: <strong>{{ schedule.current.title }}</strong> · Staffel {{ schedule.current.season }} · Folge {{ schedule.current.episode }}</p>
+<p>Bearbeitet: {{ schedule.current.processed or 0 }} / {{ schedule.current.files }} Videofassungen dieser Serie{% if schedule.current.review %} · {{ schedule.current.review }} Vorschläge zur Prüfung{% endif %}{% if schedule.current.problems %} · {{ schedule.current.problems }} Zugriffs-/Referenzprobleme{% endif %}</p>
+{% else %}<p>Die Folgenliste dieser Playlist wird abgeglichen; die nächste Serie wird anschließend eingeplant.</p>{% endif %}
+{% else %}<p>Aktuell sind keine weiteren Analyseaufträge oder fälligen Katalogabgleiche eingeplant.</p>{% endif %}
+{% if schedule.playlists %}
+<form method="post" action="{{ url_for('v082_skip_order') }}">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<p>Eine Playlist wird abgearbeitet, bevor die nächste beginnt. Kleinere Nummern kommen zuerst. Jede Nummer einmal vergeben.</p>
+<div class="tools">{% for playlist in schedule.playlists %}
+<label>{{ playlist.name }}<input type="number" name="position_{{ playlist.id }}" min="1" max="999" value="{{ playlist.position }}" required></label>
+{% endfor %}</div>
+<button type="submit">Reihenfolge speichern</button>
+</form>
+{% endif %}
+<p>Deutsch und Italienisch haben innerhalb der aktuellen Playlist Vorrang. Wiedergabepausen und Neustarts behalten die aktuelle Serie bei. „Bearbeitet“ umfasst auch Vorschläge und erfolglose Prüfungen; freigegebene Intros und offene Probleme bleiben in der Serienübersicht sichtbar.</p>
+</section>

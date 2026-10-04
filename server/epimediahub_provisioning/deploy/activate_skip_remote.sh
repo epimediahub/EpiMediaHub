@@ -8,9 +8,10 @@ UNIT_ROOT="${EPIMEDIAHUB_SYSTEMD_DIR:-/etc/systemd/system}"
 STAGE="$BASE/remote-analysis-stage"
 PY="$BASE/.venv/bin/python"
 DROPIN="$UNIT_ROOT/epimediahub-skip-analysis.service.d/remote.conf"
+TIMER_DROPIN="$UNIT_ROOT/epimediahub-skip-analysis.timer.d/remote.conf"
 REMOTE_URL=http://10.87.26.1:8790
 BACKUP="$BASE/backups/remote-analysis-$(date +%Y%m%d-%H%M%S)"
-FILES=(skip_analysis.py skip_automation.py skip_analysis_worker.py skip_detector_v2.py skip_detector_v3.py skip_remote_client.py skip_remote_protocol.py skip_remote_verify.py)
+FILES=(skip_analysis.py skip_automation.py skip_analysis_worker.py skip_detector_v2.py skip_detector_v3.py skip_remote_client.py skip_remote_protocol.py skip_remote_verify.py skip_catalogue.py skip_schedule.py skip_markers.py templates/skip_markers.html templates/skip_schedule.html)
 TIMER_ACTIVE=0
 TIMER_STOPPED=0
 INSTALLED=0
@@ -23,8 +24,10 @@ rollback() {
       if [ -f "$BACKUP/$file" ]; then cp -a "$BACKUP/$file" "$BASE/$file"; else rm -f "$BASE/$file"; fi
     done
     if [ -f "$BACKUP/remote.conf" ]; then cp -a "$BACKUP/remote.conf" "$DROPIN"; else rm -f "$DROPIN"; fi
+    if [ -f "$BACKUP/timer.conf" ]; then cp -a "$BACKUP/timer.conf" "$TIMER_DROPIN"; else rm -f "$TIMER_DROPIN"; fi
     if [ -f "$BACKUP/skip_remote_role.json" ]; then cp -a "$BACKUP/skip_remote_role.json" "$BASE/skip_remote_role.json"; else rm -f "$BASE/skip_remote_role.json"; fi
     systemctl daemon-reload
+    systemctl restart epimediahub-provisioning.service || true
   fi
   if [ "$TIMER_STOPPED" = 1 ] && [ "$TIMER_ACTIVE" = 1 ]; then systemctl start epimediahub-skip-analysis.timer || true; fi
   echo "Umstellung fehlgeschlagen; vorheriger Analysecode und Timer wiederhergestellt." >&2
@@ -89,9 +92,10 @@ systemctl stop epimediahub-skip-analysis.service || true
 # Check the real provider after the old worker has finished, while playback
 # heartbeats still protect the account. Failure resumes the original timer.
 SKIP_ANALYSIS_REMOTE_URL="$REMOTE_URL" PYTHONPATH="$STAGE:$BASE" "$PY" "$STAGE/skip_remote_verify.py" "$DATA_DIR/provisioning.db"
-install -d -m 0700 "$BACKUP"
+install -d -m 0700 "$BACKUP" "$BACKUP/templates"
 for file in "${FILES[@]}"; do [ ! -f "$BASE/$file" ] || cp -a "$BASE/$file" "$BACKUP/$file"; done
 [ ! -f "$DROPIN" ] || cp -a "$DROPIN" "$BACKUP/remote.conf"
+[ ! -f "$TIMER_DROPIN" ] || cp -a "$TIMER_DROPIN" "$BACKUP/timer.conf"
 [ ! -f "$BASE/skip_remote_role.json" ] || cp -a "$BASE/skip_remote_role.json" "$BACKUP/skip_remote_role.json"
 "$PY" - "$DATA_DIR/provisioning.db" "$BACKUP/provisioning.db" <<'PY'
 import sqlite3,sys
@@ -99,6 +103,7 @@ with sqlite3.connect(sys.argv[1]) as source,sqlite3.connect(sys.argv[2]) as targ
     source.backup(target)
 PY
 INSTALLED=1
+install -d -m 0755 "$BASE/templates"
 for file in "${FILES[@]}"; do install -o root -g root -m 0644 "$STAGE/$file" "$BASE/$file"; done
 "$PY" - "$BASE/skip_remote_role.json" "$REMOTE_URL" "$PROVIDER_PATH" <<'PY'
 from pathlib import Path
@@ -107,18 +112,37 @@ path=Path(sys.argv[1])
 path.write_text(json.dumps({'protocol':1,'url':sys.argv[2],'provider_path':sys.argv[3]})+'\n')
 path.chmod(0o644)
 PY
-install -d -m 0755 "$(dirname "$DROPIN")"
+install -d -m 0755 "$(dirname "$DROPIN")" "$(dirname "$TIMER_DROPIN")"
 cat > "$DROPIN" <<EOF
 [Unit]
 After=wg-quick@wg-epi-analysis.service
 Wants=wg-quick@wg-epi-analysis.service
 [Service]
+ExecStart=
+ExecStart=$PY skip_analysis_worker.py --batch --max-jobs 8 --max-seconds 600
 Environment=SKIP_ANALYSIS_REMOTE_URL=$REMOTE_URL
 Environment=SKIP_ANALYSIS_PROVIDER_PATH=$PROVIDER_PATH
 EOF
 chmod 0644 "$DROPIN"
+cat > "$TIMER_DROPIN" <<'EOF'
+[Timer]
+OnUnitInactiveSec=
+OnUnitInactiveSec=5s
+RandomizedDelaySec=5s
+AccuracySec=1s
+EOF
+chmod 0644 "$TIMER_DROPIN"
 systemctl daemon-reload
 SKIP_ANALYSIS_REMOTE_URL="$REMOTE_URL" PYTHONPATH="$BASE" "$PY" -c 'from skip_remote_client import health; health()'
+systemctl restart epimediahub-provisioning.service
+curl -fsS --retry 5 --retry-delay 2 --retry-connrefused http://127.0.0.1:8787/health -o "$STAGE/dashboard-health.json"
+"$PY" - "$STAGE/dashboard-health.json" <<'PY'
+import json,sys
+with open(sys.argv[1]) as source:
+    health=json.load(source)
+assert health.get('status')=='ok' and health.get('features',{}).get('skip_playlist_order')
+print('Dashboard gesund; Playlist- und Serienreihenfolge verfügbar')
+PY
 flock -u 9
 exec 9>&-
 systemctl start epimediahub-skip-analysis.timer
@@ -130,6 +154,8 @@ else
   echo "Anbieterabruf: Hetzner liest die Mediendaten direkt."
 fi
 echo "Der Raspberry steuert Aufträge, Wiedergabe-Abstimmung und zentrale Zeitmarken."
-echo "Deutsch/Italienisch, automatische Freigabekriterien und bestehendes Tagesbudget bleiben erhalten."
+echo "Playlist-Reihenfolge im Dashboard anpassbar. Jede Serie wird nach Staffel und Folge abgearbeitet."
+echo "Deutsch/Italienisch innerhalb der aktuellen Playlist, automatische Freigabekriterien und bestehendes Tagesbudget bleiben erhalten."
+echo "Bis zu acht aufeinanderfolgende Aufträge; kurze Timerpause. Vorhandene Audiofenster werden weiterverwendet."
 echo "Bei Verbindungsabbruch wird pausiert; es gibt keine zweite lokale Audioanalyse."
 echo "Sicherung: $BACKUP"

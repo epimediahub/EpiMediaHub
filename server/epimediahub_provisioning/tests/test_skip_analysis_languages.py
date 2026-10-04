@@ -105,12 +105,12 @@ class LanguageQueueTests(CatalogueFixture, unittest.TestCase):
         self.assertEqual(set(streams[:5]), {'101', '102', '103', '110', '301'})
         self.assertEqual(streams[-1], '201')
 
-    def test_new_italian_episode_keeps_new_episode_priority_inside_preferred_group(self):
+    def test_new_italian_series_is_selected_but_its_episodes_are_checked_in_order(self):
         self.advance()
         self.listing[2]['last_modified'] += 1
         self.infos['503']['episodes']['1'].append({'id': 302, 'episode_num': 2, 'container_extension': 'mkv'})
         self.advance(catalogue.next_night(START))
-        self.assertEqual(self.run_audio(), ['302'])
+        self.assertEqual(self.run_audio(), ['301'])
 
     def test_categories_can_prioritize_an_untagged_italian_series(self):
         self.listing[1].update(category_id=22)

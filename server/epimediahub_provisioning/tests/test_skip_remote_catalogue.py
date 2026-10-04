@@ -71,6 +71,7 @@ class RemoteCatalogueWorkerTests(catalogue_tests.CatalogueFixture,RpcFixture,uni
         with self.db() as con:
             con.execute('UPDATE customer_playlists SET config_json=?',(json.dumps(self.config),))
         self.actions=[]
+        self.events=[]
         fixture=self
         class Provider(BaseHTTPRequestHandler):
             def log_message(self,*_): pass
@@ -78,6 +79,7 @@ class RemoteCatalogueWorkerTests(catalogue_tests.CatalogueFixture,RpcFixture,uni
                 query=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
                 action=query['action'][0]
                 fixture.actions.append(action)
+                if action=='get_series_info': fixture.events.append(('inventory',query['series_id'][0]))
                 body=(fixture.listing if action=='get_series' else [] if action=='get_series_categories'
                       else fixture.infos[query['series_id'][0]])
                 data=json.dumps(body).encode()
@@ -112,10 +114,11 @@ class RemoteCatalogueWorkerTests(catalogue_tests.CatalogueFixture,RpcFixture,uni
         self.assertIn('get_series_info',self.actions)
         self.assertEqual(remote.health()['completed'],3)
         with self.db() as con:
-            self.assertEqual(con.execute('SELECT COUNT(*) FROM skip_assets').fetchone()[0],5)
+            self.assertEqual(con.execute('SELECT COUNT(*) FROM skip_assets').fetchone()[0],4)
             self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_jobs WHERE status='no_match' AND attempts=1").fetchone()[0],3)
             self.assertEqual(con.execute('SELECT count FROM skip_analysis_budget').fetchone()[0],3)
-            self.assertEqual(con.execute('SELECT full_done FROM skip_catalogue_runs').fetchone()[0],1)
+            self.assertEqual(con.execute('SELECT full_done FROM skip_catalogue_runs').fetchone()[0],0)
+            self.assertEqual(self.actions.count('get_series_info'),1)
             self.assertEqual(con.execute('SELECT COUNT(*) FROM skip_records').fetchone()[0],0)
 
     def test_real_catalogue_and_three_jobs_run_with_direct_remote_audio(self):
@@ -132,6 +135,23 @@ class RemoteCatalogueWorkerTests(catalogue_tests.CatalogueFixture,RpcFixture,uni
                  mock.patch.object(remote,'role_path',return_value=path):
                 os.environ.pop('SKIP_ANALYSIS_PROVIDER_PATH')
                 self.worker_batch()
+
+    def test_series_finishes_over_real_rpc_before_next_series_inventory(self):
+        rng=random.Random(29);words=[rng.getrandbits(32) for _ in range(100)]
+        def analyze(db,job,**kwargs):
+            with db() as con:
+                asset=con.execute('SELECT stream_id FROM skip_assets WHERE asset_key=?',(job['asset_key'],)).fetchone()
+            self.assertEqual(audio.matching_offset(words,words,125),(0,1.0))
+            self.events.append(('audio',asset['stream_id']))
+            return 'no_match','Remote comparison completed'
+        with mock.patch.dict(os.environ,SKIP_ANALYSIS_PROVIDER_PATH='raspberry'), \
+             mock.patch('skip_analysis_worker.analyze',side_effect=analyze):
+            self.assertEqual(process_batch(self.db,max_jobs=8,max_seconds=60),['no_match']*5+['idle'])
+        self.assertEqual(self.events,[('inventory','501'),('audio','101'),('audio','102'),
+                                      ('audio','103'),('audio','110'),('inventory','502'),('audio','201')])
+        self.assertEqual(remote.health()['completed'],5)
+        with self.db() as con:
+            self.assertEqual(con.execute('SELECT full_done FROM skip_catalogue_runs').fetchone()[0],1)
 
 
 if __name__=='__main__': unittest.main()

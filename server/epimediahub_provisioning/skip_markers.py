@@ -401,8 +401,10 @@ def install(app, db):
             audio_limit = daily_limit(con)
             from skip_progress import overview
             progress = overview(con, request.args.get('progress_filter','all'), request.args.get('progress_search',''), request.args.get('progress_page','1'), preferred_source=browser['source_key'])
+            from skip_schedule import overview as schedule_overview
+            schedule = schedule_overview(con)
         selected_episode = page_number(request.args.get("episode", ""), 0)
-        return render_template("skip_markers.html", browser=browser, sources=sources, job_groups=media_groups(jobs), online_groups=media_groups(online_status), tmdb_ready=tmdb_ready, catalogues=catalogues, audio_limit=audio_limit, progress=progress, state=state, selected_episode=selected_episode, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", ""))
+        return render_template("skip_markers.html", browser=browser, sources=sources, job_groups=media_groups(jobs), online_groups=media_groups(online_status), tmdb_ready=tmdb_ready, catalogues=catalogues, audio_limit=audio_limit, progress=progress, schedule=schedule, state=state, selected_episode=selected_episode, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", ""))
 
     def return_to_marker(row, notice):
         state = request.form.get("return_state", "pending")
@@ -540,6 +542,32 @@ def install(app, db):
                 con.execute("DELETE FROM skip_auto_series WHERE playlist_id=?", (playlist_id,))
         return redirect(url_for("v082_skip_dashboard", notice=('Automatik gespeichert · Erkannte Zeitmarken werden automatisch freigegeben' if auto_accept else 'Automatik gespeichert · Neue Vorschläge werden manuell geprüft')))
 
+    @app.post('/admin/skip/order')
+    def v082_skip_order():
+        guard = web_auth()
+        if guard:
+            return guard
+        csrf()
+        from skip_schedule import save_order
+        positions = []
+        for key in request.form:
+            if key.startswith('position_'):
+                identifier, value = key[9:], request.form[key]
+                if (not re.fullmatch(r'[1-9]\d{0,9}', identifier)
+                        or not re.fullmatch(r'[1-9]\d{0,2}', value)
+                        or len(request.form.getlist(key)) != 1):
+                    abort(400)
+                positions.append((int(value), int(identifier)))
+        if len({position for position, _ in positions}) != len(positions):
+            abort(400)
+        with db() as con:
+            try:
+                save_order(con, [identifier for _, identifier in sorted(positions)])
+            except ValueError:
+                abort(400)
+        return redirect(url_for('v082_skip_dashboard', _anchor='analysis-order',
+                                notice='Playlist-Reihenfolge gespeichert; gilt ab dem nächsten Auftrag'))
+
     @app.post("/admin/skip/catalogue")
     def v082_skip_catalogue():
         guard = web_auth()
@@ -605,5 +633,6 @@ def install(app, db):
         data = response.get_json()
         data["api_version"] = "0.8.2"
         data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True, "skip_high_audio_approval": True, "skip_proposal_dedup": True, "skip_online_error_details": True, "skip_language_priority": True, "skip_bulk_review": True, "skip_network_address_fallback": True, "skip_automatic_acceptance": True, "skip_series_progress": True, "skip_database_concurrency": True, "skip_progress_cache": True, "skip_detector_v2": True, "skip_detector_v3_1": True}
+        data['features'].update(skip_playlist_order=True, skip_series_order=True)
         return jsonify(data)
     app.view_functions["health"] = health

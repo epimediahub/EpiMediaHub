@@ -344,7 +344,7 @@ class GuardAndBudgetTests(CatalogueFixture, unittest.TestCase):
                 con.execute("UPDATE skip_jobs SET status='queued',attempts=0")
             self.assertEqual(process_one(self.db), "daily_limit")
 
-    def test_new_nightly_episodes_take_priority_over_bulk_backlog(self):
+    def test_nightly_priority_selects_series_while_its_episodes_stay_in_numeric_order(self):
         self.advance()
         self.listing[0]["last_modified"] += 1
         self.add_episode()
@@ -353,7 +353,7 @@ class GuardAndBudgetTests(CatalogueFixture, unittest.TestCase):
             self.assertEqual(process_one(self.db), "no_match")
         with self.db() as con:
             asset = con.execute("SELECT stream_id FROM skip_assets WHERE asset_key=?", (analyze.call_args.args[1]["asset_key"],)).fetchone()
-            self.assertEqual(asset[0], "104")
+            self.assertEqual(asset[0], "101")
 
 
 @unittest.skipUnless(REAL_FLASK, "Full Flask API dependencies required")

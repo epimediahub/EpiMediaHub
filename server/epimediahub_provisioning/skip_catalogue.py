@@ -152,7 +152,7 @@ def set_series_language(con, playlist_id, series_id, priority):
       ON CONFLICT(asset_key) DO UPDATE SET priority=excluded.priority""", (priority, playlist_id, series_id))
 
 
-def preferred_inventory_pending(con):
+def preferred_inventory_pending(con, playlist_id=None):
     """Do not consume an older other-language job while known preferred files are being inventoried."""
     return bool(con.execute("""SELECT 1 FROM skip_catalogue_series z
       JOIN skip_catalogue_languages l ON l.playlist_id=z.playlist_id AND l.series_id=z.series_id AND l.priority=0
@@ -162,8 +162,9 @@ def preferred_inventory_pending(con):
       JOIN skip_analysis_sources s ON s.playlist_id=z.playlist_id AND s.enabled=1
       JOIN customer_playlists p ON p.id=z.playlist_id
       JOIN customers c ON c.id=p.customer_id AND c.enabled=1
-      WHERE z.pending_generation>0 AND r.phase<>'idle' AND r.retry_at<=? LIMIT 1""",
-      (int(time.time()),)).fetchone())
+      WHERE z.pending_generation>0 AND r.phase<>'idle' AND r.retry_at<=?
+        AND (? IS NULL OR z.playlist_id=?) LIMIT 1""",
+      (int(time.time()), playlist_id, playlist_id)).fetchone())
 
 
 def provider_listing(playlist, busy):
@@ -251,6 +252,8 @@ def migrate(con):
             if label_languages(row["title"]) & PREFERRED_LANGUAGES:
                 set_asset_language(con, row["asset_key"], 0)
         con.execute("INSERT INTO skip_auto_maintenance VALUES(?,?)", (LANGUAGE_POLICY, now()))
+    from skip_schedule import migrate as schedule_migrate
+    schedule_migrate(con)
 
 
 def active(con, playlist_id):
@@ -454,7 +457,7 @@ def finish(con, playlist_id, timestamp):
       WHERE playlist_id=?""", (timestamp, next_night(timestamp), time.time(), playlist_id))
 
 
-def step(db, busy_factory, timestamp):
+def step(db, busy_factory, timestamp, playlist_id=None):
     from skip_automation import provider_api
     with db() as con:
         con.execute("""INSERT OR IGNORE INTO skip_catalogue_runs(playlist_id)
@@ -467,12 +470,13 @@ def step(db, busy_factory, timestamp):
           JOIN customer_playlists p ON p.id=r.playlist_id
           JOIN customers c ON c.id=p.customer_id AND c.enabled=1
           LEFT JOIN skip_catalogue_language_refresh f ON f.playlist_id=r.playlist_id
-          WHERE r.retry_at<=? AND (r.phase<>'idle' OR r.next_due<=? OR (f.checked_at=0 AND f.retry_at<=?))
+          WHERE (? IS NULL OR r.playlist_id=?) AND r.retry_at<=?
+          AND (r.phase<>'idle' OR r.next_due<=? OR (f.checked_at=0 AND f.retry_at<=?))
           ORDER BY CASE WHEN r.phase='idle' OR (f.checked_at=0 AND f.retry_at<=?) THEN -1 ELSE COALESCE((
             SELECT MIN(COALESCE(l.priority,1)) FROM skip_catalogue_series z
             LEFT JOIN skip_catalogue_languages l ON l.playlist_id=z.playlist_id AND l.series_id=z.series_id
             WHERE z.playlist_id=r.playlist_id AND z.pending_generation=r.generation),1) END,
-          r.last_touch,r.playlist_id""", (timestamp, timestamp, timestamp, timestamp)).fetchall()
+          r.last_touch,r.playlist_id""", (playlist_id, playlist_id, timestamp, timestamp, timestamp, timestamp)).fetchall()
     if not runs:
         return "idle"
     for run in runs:
@@ -559,7 +563,7 @@ def step(db, busy_factory, timestamp):
     return "queued"
 
 
-def advance(db, busy_factory, timestamp=None, max_steps=8):
+def advance(db, busy_factory, timestamp=None, max_steps=8, playlist_id=None, stop_when_ready=False):
     """Small serial metadata batch, never dependent on the daily audio budget."""
     timestamp = int(time.time()) if timestamp is None else timestamp
     deadline = time.monotonic() + 30
@@ -567,10 +571,15 @@ def advance(db, busy_factory, timestamp=None, max_steps=8):
     for _ in range(max_steps):
         if time.monotonic() >= deadline:
             break
-        result = step(db, busy_factory, timestamp)
+        result = step(db, busy_factory, timestamp, playlist_id)
         if result in ("idle", "queued", "disabled", "failed"):
             return result if outcome == "idle" else outcome
         outcome = result
+        if stop_when_ready and playlist_id is not None:
+            from skip_schedule import ready
+            with db() as con:
+                if ready(con, playlist_id):
+                    break
     return outcome
 
 

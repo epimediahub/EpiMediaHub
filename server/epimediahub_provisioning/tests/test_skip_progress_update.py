@@ -36,8 +36,8 @@ class BatchTests(AutomationFixture, unittest.TestCase):
     def test_busy_job_is_not_repeated_and_stays_queued_without_spending_quota(self):
         self.ready()
         with self.patches(), mock.patch('skip_analysis_worker.analyze', return_value=('queued', 'playback')) as analyze:
-            self.assertEqual(process_batch(self.db, max_jobs=3), ['queued'] * 3)
-        self.assertEqual(len({call.args[1]['id'] for call in analyze.call_args_list}), 3)
+            self.assertEqual(process_batch(self.db, max_jobs=3), ['queued'])
+        self.assertEqual(len({call.args[1]['id'] for call in analyze.call_args_list}), 1)
         with self.db() as con:
             self.assertEqual(con.execute('SELECT count FROM skip_analysis_budget').fetchone()[0], 0)
             self.assertEqual(con.execute('SELECT SUM(attempts) FROM skip_jobs').fetchone()[0], 0)

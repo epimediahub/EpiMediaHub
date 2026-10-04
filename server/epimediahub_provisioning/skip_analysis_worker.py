@@ -180,11 +180,9 @@ def analyze(db, job, busy_factory=busy_check):
 
 
 def process_one(db, *, exclude_job_ids=(), on_claim=None, deadline=None):
-    from skip_catalogue import advance as catalogue_advance, daily_limit, preferred_inventory_pending
-    # Inventory must keep progressing even after today's audio quota is used.
-    catalogue_advance(db, busy_check)
+    from skip_catalogue import advance as catalogue_advance, daily_limit
+    from skip_schedule import current_playlist, ready, select_job, remember, legacy_discovery_pending
     from skip_automation import refresh_online_one
-    online_status = refresh_online_one(db, busy_check)
     with db() as con:
         # Limit aggregate traffic and processing on a Raspberry, irrespective of clients.
         count = con.execute("SELECT COUNT(*) FROM skip_jobs WHERE status NOT IN ('queued','disabled') AND substr(updated_at,1,10)=substr(?,1,10)", (now(),)).fetchone()[0]
@@ -192,35 +190,32 @@ def process_one(db, *, exclude_job_ids=(), on_claim=None, deadline=None):
         con.execute("INSERT OR IGNORE INTO skip_analysis_budget VALUES(?,?)", (day, count))
         con.execute("UPDATE skip_analysis_budget SET count=MAX(count,?) WHERE day=?", (count, day))
         budget = con.execute("SELECT count FROM skip_analysis_budget WHERE day=?", (day,)).fetchone()[0]
-        if budget >= daily_limit(con):
-            return "daily_limit"
-    from skip_automation import discover_one
-    discover_one(db, busy_check)
-    with db() as con:
+        limited = budget >= daily_limit(con)
         con.execute("UPDATE skip_jobs SET status='queued' WHERE status='running' AND updated_at<?", (time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 1800)),))
-        excluded = tuple(exclude_job_ids)
-        exclusion = " AND j.id NOT IN (" + ",".join("?" for _ in excluded) + ")" if excluded else ""
-        job = con.execute("""SELECT j.* FROM skip_jobs j
-          JOIN skip_assets a ON a.asset_key=j.asset_key
-          LEFT JOIN skip_language_priority l ON l.asset_key=j.asset_key
-          LEFT JOIN skip_catalogue_priority p ON p.asset_key=j.asset_key
-          WHERE j.status='queued' AND j.attempts<3""" + exclusion + """
-          ORDER BY CASE WHEN a.media_type='episode' THEN COALESCE(l.priority,1) ELSE 1 END,
-          COALESCE(p.priority,1),j.updated_at,j.id LIMIT 1""", excluded).fetchone()
+        playlist_id = current_playlist(con)
+        audio_ready = playlist_id is not None and ready(con, playlist_id)
+    if limited:
+        # Inventory and online retries can progress after the daily audio quota.
+        catalogue_advance(db, busy_check, playlist_id=playlist_id)
+        refresh_online_one(db, busy_check, playlist_id=playlist_id)
+        return 'daily_limit'
+    if playlist_id is None:
+        status = refresh_online_one(db, busy_check)
+        return 'online_checked' if status == 'online_checked' else 'idle'
+    if not audio_ready:
+        catalogue_advance(db, busy_check, playlist_id=playlist_id, stop_when_ready=True)
+    from skip_automation import discover_one
+    with db() as con:
+        discover = not ready(con, playlist_id) and legacy_discovery_pending(con, playlist_id)
+    if discover:
+        discover_one(db, busy_check, playlist_id=playlist_id)
+    with db() as con:
+        # Re-read after provider metadata and explicit dashboard order changes.
+        playlist_id = current_playlist(con)
+        job, waiting = select_job(con, playlist_id, tuple(exclude_job_ids))
         if job is None:
-            return online_status if online_status == 'online_checked' else "idle"
-        language = con.execute("SELECT priority FROM skip_language_priority WHERE asset_key=?", (job['asset_key'],)).fetchone()
-        if not language or language[0] != 0:
-            preferred_jobs = con.execute("""SELECT 1 FROM skip_jobs pj
-              JOIN skip_assets pa ON pa.asset_key=pj.asset_key
-              JOIN skip_language_priority pl ON pl.asset_key=pa.asset_key AND pl.priority=0
-              JOIN skip_analysis_sources ps ON ps.playlist_id=pa.playlist_id AND ps.enabled=1
-              JOIN skip_auto_settings px ON px.playlist_id=pa.playlist_id AND px.enabled=1
-              JOIN customer_playlists pp ON pp.id=pa.playlist_id
-              JOIN customers pc ON pc.id=pp.customer_id AND pc.enabled=1
-              WHERE pj.status='queued' AND pj.attempts<3 LIMIT 1""").fetchone()
-            if preferred_inventory_pending(con) or preferred_jobs:
-                return 'preferred_pending'
+            return waiting
+        remember(con, job)
         con.execute("UPDATE skip_jobs SET status='running',updated_at=? WHERE id=?", (now(), job["id"]))
     if on_claim is not None:
         on_claim(job["id"])
@@ -273,7 +268,8 @@ def process_batch(db, max_jobs=4, max_seconds=600, report=None):
         statuses.append(status)
         if report is not None:
             report(status)
-        if status in ("idle", "daily_limit", "preferred_pending", "catalogue_pending"):
+        if status in ("idle", "daily_limit", "preferred_pending", "catalogue_pending",
+                      "playlist_pending", "series_pending", "queued"):
             break
     return statuses
 
@@ -303,10 +299,13 @@ if __name__ == "__main__":
         from skip_progress import refresh as refresh_progress
         with db() as con:
             refresh_progress(con, budget=.5)
+        reported_at = [time.monotonic()]
         def report(status):
+            elapsed = time.monotonic() - reported_at[0]
             with db() as con:
                 refresh_progress(con, budget=.5)
-            print("skip_analysis_status=" + status, flush=True)
+            print("skip_analysis_status=" + status + " elapsed_seconds=" + str(round(elapsed, 1)), flush=True)
+            reported_at[0] = time.monotonic()
         if args.batch:
             process_batch(db, args.max_jobs, args.max_seconds, report)
         else:

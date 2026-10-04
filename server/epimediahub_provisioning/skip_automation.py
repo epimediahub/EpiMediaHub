@@ -253,7 +253,7 @@ def season_entries(info, season):
     return result
 
 
-def discover_one(db, busy_factory):
+def discover_one(db, busy_factory, playlist_id=None):
     """Enumerate one previously watched season per idle tick, at most daily."""
     with db() as con:
         anchor = con.execute("""SELECT a.* FROM skip_assets a
@@ -265,9 +265,10 @@ def discover_one(db, busy_factory):
           LEFT JOIN skip_language_priority l ON l.asset_key=a.asset_key
           LEFT JOIN skip_auto_series z ON z.source_key=a.source_key AND z.playlist_id=a.playlist_id AND z.season=a.season
           WHERE a.media_type='episode' AND d.asset_key IS NULL
+          AND (? IS NULL OR a.playlist_id=?)
           AND NOT EXISTS(SELECT 1 FROM skip_catalogue_settings cs WHERE cs.playlist_id=a.playlist_id AND cs.enabled=1)
           AND COALESCE(z.checked_at,0)<? ORDER BY COALESCE(l.priority,1),COALESCE(z.checked_at,0),a.updated_at DESC LIMIT 1""",
-          (int(time.time()) - 86400,)).fetchone()
+          (playlist_id, playlist_id, int(time.time()) - 86400)).fetchone()
         if not anchor:
             return "idle"
         playlist = con.execute("SELECT * FROM customer_playlists WHERE id=?", (anchor["playlist_id"],)).fetchone()
@@ -459,7 +460,7 @@ def online_segments(db, asset, busy):
     return segments
 
 
-def refresh_online_one(db, busy_factory):
+def refresh_online_one(db, busy_factory, playlist_id=None):
     """Retry one due metadata request per idle tick, without fetching any video."""
     stamp, day = int(time.time()), now()[:10]
     with db() as con:
@@ -476,8 +477,9 @@ def refresh_online_one(db, busy_factory):
           LEFT JOIN skip_auto_online_cooldown l ON l.service=r.service
           LEFT JOIN skip_language_priority lang ON lang.asset_key=a.asset_key
           WHERE r.retry_at<=? AND COALESCE(l.retry_at,0)<=? AND a.duration_ms>=5000
+            AND (? IS NULL OR a.playlist_id=?)
           ORDER BY CASE WHEN a.media_type='episode' THEN COALESCE(lang.priority,1) ELSE 1 END,
-          r.retry_at,a.asset_key LIMIT 1""", (stamp, stamp)).fetchone()
+          r.retry_at,a.asset_key LIMIT 1""", (stamp, stamp, playlist_id, playlist_id)).fetchone()
         if not asset:
             return 'idle'
         playlist = con.execute('SELECT * FROM customer_playlists WHERE id=?', (asset['playlist_id'],)).fetchone()

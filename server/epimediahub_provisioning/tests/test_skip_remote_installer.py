@@ -73,12 +73,14 @@ os.execv(os.environ['FIXTURE_PYTHON'],[os.environ['FIXTURE_PYTHON']]+sys.argv[1:
         self.script('curl', '''
 args=sys.argv[1:]; out=Path(args[args.index('-o')+1]); url=next(x for x in args if x.startswith('http'))
 mode=os.environ.get('FIXTURE_MODE','success')
-if '10.87.26.1' in url:
-    out.write_text(json.dumps({'status':'broken' if mode=='bad-health' else 'ok'}))
+if '10.87.26.1' in url or '127.0.0.1:8787' in url:
+    broken=mode=='bad-health' or (mode=='dashboard-failure' and '127.0.0.1' in url)
+    out.write_text(json.dumps({'status':'broken' if broken else 'ok','features':{'skip_playlist_order':not broken}}))
 else:
     name=url.rsplit('/',1)[-1]
     source=Path(os.environ['FIXTURE_SOURCE'],name)
     if name=='activate_skip_remote.sh': source=Path(os.environ['FIXTURE_ROOT'],'deploy',name)
+    if name.endswith('.html'): source=Path(os.environ['FIXTURE_ROOT'],'templates',name)
     shutil.copyfile(source,out)
     if mode=='corrupt' and name=='skip_remote_worker.py': out.write_text('invalid python @')
 ''')
@@ -105,6 +107,9 @@ else:
 
     def staged_client(self):
         stage = self.base / 'remote-analysis-stage'; stage.mkdir()
+        (stage/'templates').mkdir()
+        for source in (ROOT/'templates').glob('skip_*.html'):
+            shutil.copyfile(source,stage/'templates'/source.name)
         for source in ROOT.glob('*.py'):
             shutil.copyfile(source, stage / source.name)
         (stage / 'skip_remote_client.py').write_text('''
@@ -265,12 +270,39 @@ if os.environ['FIXTURE_MODE']=='provider-denied': raise SystemExit('provider_htt
         self.assertNotIn('CPUQuota', conf)
         self.assertNotIn('MemoryMax', conf)
         self.assertNotIn('daily', conf)
+        self.assertIn('--max-jobs 8 --max-seconds 600',conf)
+        timer=(self.units/'epimediahub-skip-analysis.timer.d/remote.conf').read_text()
+        self.assertIn('OnUnitInactiveSec=\nOnUnitInactiveSec=5s',timer)
+        self.assertIn('RandomizedDelaySec=5s',timer)
+        self.assertIn('AccuracySec=1s',timer)
+        self.assertEqual((self.base/'skip_schedule.py').read_bytes(),(ROOT/'skip_schedule.py').read_bytes())
+        self.assertEqual((self.base/'templates/skip_schedule.html').read_bytes(),(ROOT/'templates/skip_schedule.html').read_bytes())
         self.assertEqual(json.loads((self.base / 'skip_remote_role.json').read_text())['url'],
                          'http://10.87.26.1:8790')
         self.assertTrue(json.loads(self.state.read_text())['active'])
         backups = list((self.base / 'backups').glob('*/provisioning.db'))
         self.assertEqual(len(backups), 1)
         self.assertEqual(backups[0].stat().st_mode & 0o077, 0)
+        self.preserve()
+
+    def test_dashboard_failure_restores_templates_timer_order_code_and_remote_role(self):
+        self.staged_client()
+        (self.base/'templates').mkdir()
+        old_template=self.base/'templates/skip_markers.html';old_template.write_text('old dashboard')
+        schedule_template=self.base/'templates/skip_schedule.html'
+        timer=self.units/'epimediahub-skip-analysis.timer.d/remote.conf'
+        timer.parent.mkdir();timer.write_text('[Timer]\nOnUnitInactiveSec=30s\n')
+        previous_timer=timer.read_bytes()
+        previous_schedule=(self.base/'skip_schedule.py').read_bytes()+b'\n# prior code\n'
+        (self.base/'skip_schedule.py').write_bytes(previous_schedule)
+        result=self.run_script('activate_skip_remote.sh',mode='dashboard-failure')
+        self.assertNotEqual(result.returncode,0)
+        self.assertEqual(old_template.read_text(),'old dashboard')
+        self.assertFalse(schedule_template.exists())
+        self.assertEqual(timer.read_bytes(),previous_timer)
+        self.assertEqual((self.base/'skip_schedule.py').read_bytes(),previous_schedule)
+        self.assertFalse((self.base/'skip_remote_role.json').exists())
+        self.assertTrue(json.loads(self.state.read_text())['active'])
         self.preserve()
 
 

@@ -40,13 +40,14 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends wireguard-tools curl
-FILES=(skip_analysis.py skip_automation.py skip_analysis_worker.py skip_detector_v2.py skip_detector_v3.py skip_remote_client.py skip_remote_protocol.py skip_remote_verify.py)
+FILES=(skip_analysis.py skip_automation.py skip_analysis_worker.py skip_detector_v2.py skip_detector_v3.py skip_remote_client.py skip_remote_protocol.py skip_remote_verify.py skip_catalogue.py skip_schedule.py skip_markers.py templates/skip_markers.html templates/skip_schedule.html)
+install -d -m 0700 "$WORK/templates"
 for file in "${FILES[@]}"; do curl -fsSL --connect-timeout 15 --max-time 90 "$RAW/$file" -o "$WORK/$file"; done
 curl -fsSL --connect-timeout 15 --max-time 90 "$RAW/deploy/activate_skip_remote.sh" -o "$WORK/activate.sh"
 "$PY" -m py_compile "$WORK"/*.py
 bash -n "$WORK/activate.sh"
 "$PY" "$WORK/skip_detector_v3.py" --selftest
-install -d -m 0700 "$STAGE" "$WG_ROOT"
+install -d -m 0700 "$STAGE" "$STAGE/templates" "$WG_ROOT"
 install -d -m 0755 "$BIN_ROOT"
 for file in "${FILES[@]}"; do install -m 0644 "$WORK/$file" "$STAGE/$file"; done
 install -m 0755 "$WORK/activate.sh" "$BIN_ROOT/epimediahub-activate-remote-analysis"
