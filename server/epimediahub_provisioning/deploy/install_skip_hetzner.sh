@@ -3,7 +3,9 @@
 set -Eeuo pipefail
 umask 0077
 SOURCE_REF="e41748a092f7969c0876277b0f2a3c8a0a687e7d"
+CLIENT_INSTALLER_REF="6a7364070b476ccb10466cbceb2e8bf535bccf60"
 RAW="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$SOURCE_REF/server/epimediahub_provisioning"
+CLIENT_INSTALLER="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$CLIENT_INSTALLER_REF/server/epimediahub_provisioning/deploy/install_skip_remote_client.sh"
 BASE="${EPIMEDIAHUB_WORKER_DIR:-/opt/epimediahub/analysis}"
 UNIT_ROOT="${EPIMEDIAHUB_SYSTEMD_DIR:-/etc/systemd/system}"
 WG_ROOT="${EPIMEDIAHUB_WIREGUARD_DIR:-/etc/wireguard}"
@@ -161,5 +163,5 @@ PY
 PUBLIC_KEY="$(wg pubkey < "$KEY")"
 echo "Hetzner-Worker gesund. Öffentlicher WireGuard-Schlüssel: $PUBLIC_KEY"
 echo "Auf dem Raspberry ausführen:"
-echo "curl -fsSL '$RAW/deploy/install_skip_remote_client.sh' -o /tmp/epimediahub-remote-client.sh && sudo bash /tmp/epimediahub-remote-client.sh '$PUBLIC_IP' '$PUBLIC_KEY'"
+echo "curl -fsSL '$CLIENT_INSTALLER' -o /tmp/epimediahub-remote-client.sh && sudo bash /tmp/epimediahub-remote-client.sh '$PUBLIC_IP' '$PUBLIC_KEY'"
 echo "Nur öffentliche Schlüssel werden angezeigt; private Schlüssel bleiben auf den jeweiligen Geräten."
