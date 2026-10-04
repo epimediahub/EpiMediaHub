@@ -190,7 +190,7 @@ between(hub, '                Column(horizontalAlignment = Alignment.CenterHoriz
                     "Katalog wird vorbereitet", accent, isTv)
 ''')
 replace(hub, 'if (item.image.isNotBlank()) AsyncImage(item.image, item.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)',
-    'V128MediaArtwork(item, Modifier.fillMaxSize())', count=2)
+    'if (item.image.isNotBlank() || LocalV128ArtworkLocked.current(item)) V128MediaArtwork(item, Modifier.fillMaxSize())', count=2)
 replace(hub, '    LaunchedEffect(kind, u.active?.id, newest.size) {',
     '''    val contentState = v111RememberLazyListState("cinematic-main:" + kind.name)
     val heroVisible by remember(contentState) { derivedStateOf { contentState.firstVisibleItemIndex == 0 && !contentState.isScrollInProgress } }
@@ -235,6 +235,12 @@ replace(service, '    public void resetInfoType() {',
 
     public void resetInfoType() {''')
 bridge = media / 'service/internal/EpiMediaPlaybackBridge.kt'
+replace(bridge, 'object EpiMediaPlaybackBridge {',
+    '''object EpiMediaPlaybackBridge {
+    @JvmStatic
+    fun clientName(info: com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo): String? =
+        (info.clientInfo as? com.liskovsoft.youtubeapi.common.helpers.AppClient)?.name
+''')
 replace(bridge, '        clickTrackingParams: String? = null\n',
     '        clickTrackingParams: String? = null,\n        preferredClient: String? = null\n')
 replace(bridge, 'FormatInfoWrapper.getMedia3CompatibleFormatInfo(videoId, clickTrackingParams)',
@@ -286,7 +292,7 @@ replace(core, '''        cachedPlayback(video.videoId)?.let {
             val info = EpiMediaPlaybackBridge.getMedia3CompatibleFormatInfo(video.videoId,
                 preferredClient = clients.load(account))''')
 replace(core, '            val hls = info.hlsManifestUrl?.takeIf',
-    '''            selectedClient = (info.clientInfo as? com.liskovsoft.youtubeapi.common.helpers.AppClient)?.name
+    '''            selectedClient = EpiMediaPlaybackBridge.clientName(info)
             checkAccount(service, account)
             val hls = info.hlsManifestUrl?.takeIf''')
 replace(core, 'val file = File(context.cacheDir, "smarttube-${video.videoId}.mpd")',
