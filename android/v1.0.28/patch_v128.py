@@ -49,6 +49,8 @@ replace(client, '                                kind = kind,',
     '                                kind = kind,\n                                adult = V128AdultContent.providerAdult(o),\n                                ageRating = V128AdultContent.providerAge(o),', count=3)
 replace(client, '        return item.copy(\n            name =',
     '''        return item.copy(
+            categoryId = firstNonBlank(item.categoryId, info.optString("category_id"), (root.optJSONObject("movie_data") ?: JSONObject()).optString("category_id")),
+            categoryName = firstNonBlank(item.categoryName, info.optString("category_name"), (root.optJSONObject("movie_data") ?: JSONObject()).optString("category_name")),
             adult = item.adult || V128AdultContent.providerAdult(info) || V128AdultContent.providerAdult(root.optJSONObject("movie_data") ?: JSONObject()),
             ageRating = maxOf(item.ageRating, V128AdultContent.providerAge(info), V128AdultContent.providerAge(root.optJSONObject("movie_data") ?: JSONObject())),
             name =''', count=2)
@@ -103,7 +105,7 @@ replace(vm, '        val list = prefs.loadPlaylists()\n        val active =',
     '''        val list = prefs.loadPlaylists()
         if (list != _ui.value.playlists) {
             m3uCache.clear(); xtreamLibraryCache.clear(); libraryCatalogCache.clear()
-            parentalCategories.clear()
+            parentalCategories.clear(); parentalCategoryKinds.clear()
         }
         val active =''')
 replace(vm, '''    fun refreshPlaylistsAtAppStart() {

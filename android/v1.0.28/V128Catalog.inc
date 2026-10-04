@@ -11,7 +11,7 @@
         libraryLoadJob?.cancel()
         val hidden = prefs.loadHiddenCategories(profile.id, kind)
         fun applyCatalogue(catalogue: V128LibraryCatalog) {
-            catalogue.categories.forEach { parentalCategories["${profile.id}|$kind|${it.id}"] = it.name }
+            rememberParentalCategories(profile.id, kind, catalogue.categories)
             set { it.copy(loading = false, catalogRowsLoading = false, categories = catalogue.categories,
                 catalogRows = catalogue.rows, hiddenCategoryIds = hidden, error = "") }
         }

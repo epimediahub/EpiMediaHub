@@ -6,6 +6,7 @@ import com.sun.net.httpserver.HttpServer
 import de.epimediahub.app.MainViewModel
 import de.epimediahub.app.Screen
 import de.epimediahub.app.data.PrefsRepository
+import de.epimediahub.app.data.V128ParentalControl
 import de.epimediahub.app.model.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -26,6 +27,43 @@ import java.util.concurrent.atomic.AtomicInteger
 @Config(sdk = [28])
 @LooperMode(LooperMode.Mode.PAUSED)
 class V128CatalogueLoadingTest {
+    @Test fun favoritesAndLivePlaybackReadAdultCategoryFlagsBeforeAnyLibraryWasOpened() {
+        val app = RuntimeEnvironment.getApplication<Application>()
+        app.getSharedPreferences("epi_parental_v128", Context.MODE_PRIVATE).edit().clear().commit()
+        app.getSharedPreferences("epimediahub", Context.MODE_PRIVATE).edit().clear().commit()
+        V128ParentalControl(app).apply { setPin("0042"); update(true, false, false) }
+        val threads = Executors.newCachedThreadPool()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.executor = threads
+        server.createContext("/player_api.php") { exchange ->
+            val action = exchange.requestURI.rawQuery.orEmpty().substringAfter("action=", "").substringBefore('&')
+            val body = if (action.endsWith("_categories"))
+                """[{"category_id":"42","category_name":"Premium","is_adult":1}]"""
+            else """{"info":{"age_rating":12},"movie_data":{"category_id":"42"}}"""
+            val bytes = body.toByteArray()
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.start()
+        try {
+            val url = "http://127.0.0.1:${server.address.port}"
+            PrefsRepository(app).savePlaylists(listOf(PlaylistProfile("protected", "Fixture", url, PlaylistType.XTREAM, url, "fixture", "fixture")))
+            listOf(MediaKind.MOVIE, MediaKind.LIVE).forEach { kind ->
+                val vm = MainViewModel(app)
+                val entry = MediaEntry("18", "Neutraler Titel", kind, categoryId = "42", sourceProfileId = "protected")
+                vm.play(entry)
+                val limit = System.nanoTime() + 8_000_000_000L
+                while (vm.ui.value.pinPrompt == null && System.nanoTime() < limit) { ShadowLooper.idleMainLooper(); Thread.sleep(10) }
+                ShadowLooper.idleMainLooper()
+                assertNotNull("Category-only adult flags must protect $kind on a cold start", vm.ui.value.pinPrompt)
+                assertEquals(Screen.Home, vm.ui.value.screen)
+                assertTrue(vm.isContentLocked(entry))
+                assertTrue(PrefsRepository(app).loadRecentlyWatched("protected").isEmpty())
+                vm.cancelParentalPin()
+            }
+        } finally { server.stop(0); threads.shutdownNow() }
+    }
+
     @Test fun categoryAndLibraryMetadataOverlapAndWarmReentryDoesNotDownloadAgain() {
         val app = RuntimeEnvironment.getApplication<Application>()
         app.getSharedPreferences("epi_parental_v128", Context.MODE_PRIVATE).edit().clear().commit()

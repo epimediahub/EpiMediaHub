@@ -3,7 +3,13 @@
     private var parentalSettingsAuthorized = false
     private var contentAccessJob: kotlinx.coroutines.Job? = null
     private val parentalMetadataChecked = mutableSetOf<String>()
-    private val parentalCategories = mutableMapOf<String, String>()
+    private val parentalCategories = mutableMapOf<String, MediaCategory>()
+    private val parentalCategoryKinds = mutableSetOf<String>()
+
+    private fun rememberParentalCategories(profileId: String, kind: MediaKind, categories: List<MediaCategory>) {
+        categories.forEach { parentalCategories["$profileId|$kind|${it.id}"] = it }
+        parentalCategoryKinds += "$profileId|$kind"
+    }
 
     private fun requestParentalPin(title: String, approved: () -> Unit) {
         val request = V128PinPrompt(++pinRequestSequence, title)
@@ -60,12 +66,16 @@
     private fun parentalItem(item: MediaEntry): MediaEntry {
         val enriched = _ui.value.details[item.resumeKey] ?: item
         val profileId = item.sourceProfileId.ifBlank { _ui.value.active?.id.orEmpty() }
-        val categoryName = enriched.categoryName.ifBlank { parentalCategories["$profileId|${item.kind}|${item.categoryId}"].orEmpty() }
         val series = if (item.kind == MediaKind.EPISODE) _ui.value.details.values.firstOrNull {
             it.kind == MediaKind.SERIES && it.sourceProfileId == profileId && (it.seriesId == item.seriesId || it.id == item.seriesId)
         } else null
+        val categoryKind = if (item.kind == MediaKind.EPISODE) MediaKind.SERIES else item.kind
+        val categoryId = series?.categoryId?.takeIf { it.isNotBlank() } ?: enriched.categoryId
+        val category = parentalCategories["$profileId|$categoryKind|$categoryId"]
+        val categoryName = enriched.categoryName.ifBlank { category?.name.orEmpty() }
         return enriched.copy(sourceProfileId = profileId, categoryName = categoryName,
-            adult = enriched.adult || series?.adult == true, ageRating = maxOf(enriched.ageRating, series?.ageRating ?: -1))
+            adult = enriched.adult || category?.adult == true || series?.adult == true,
+            ageRating = maxOf(enriched.ageRating, series?.ageRating ?: -1))
     }
 
     fun isContentLocked(item: MediaEntry): Boolean {
@@ -89,17 +99,29 @@
                 MediaEntry(item.seriesId, item.name, MediaKind.SERIES, sourceProfileId = effective.sourceProfileId, seriesId = item.seriesId)
             else -> null
         }
+        val categoryKind = if (item.kind == MediaKind.EPISODE) MediaKind.SERIES else item.kind
+        val needsCategories = profile != null && "${profile.id}|$categoryKind" !in parentalCategoryKinds
+        val needsDetails = metadataItem != null && metadataItem.resumeKey !in parentalMetadataChecked && metadataItem.resumeKey !in state.details
         if (!V128AdultContent.restricted(effective, state.parentalSettings.copy(lockUnrated = false)) && profile?.type == PlaylistType.XTREAM &&
-            metadataItem != null && metadataItem.resumeKey !in parentalMetadataChecked && metadataItem.resumeKey !in state.details) {
+            (needsDetails || needsCategories)) {
             contentAccessJob?.cancel()
             set { it.copy(parentalChecking = true) }
             contentAccessJob = viewModelScope.launch {
-                val detail = try { withContext(Dispatchers.IO) { XtreamClient(profile).details(metadataItem) } }
-                    catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-                    catch (_: Exception) { null }
-                parentalMetadataChecked += metadataItem.resumeKey
+                val (categories, detail) = withContext(Dispatchers.IO) {
+                    coroutineScope {
+                        val categoriesRequest = async { if (needsCategories) XtreamClient(profile).categories(categoryKind) else null }
+                        val detailRequest = async {
+                            if (!needsDetails || metadataItem == null) null else try { XtreamClient(profile).details(metadataItem) }
+                            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                            catch (_: Exception) { null }
+                        }
+                        categoriesRequest.await() to detailRequest.await()
+                    }
+                }
+                categories?.let { rememberParentalCategories(profile.id, categoryKind, it) }
+                if (metadataItem != null) parentalMetadataChecked += metadataItem.resumeKey
                 set { it.copy(parentalChecking = false, details = if (detail == null) it.details else
-                    it.details + (metadataItem.resumeKey to detail.copy(sourceProfileId = effective.sourceProfileId))) }
+                    it.details + (metadataItem!!.resumeKey to detail.copy(sourceProfileId = effective.sourceProfileId))) }
                 if (authorizeContent(item, approved)) approved()
             }
             return false
