@@ -78,7 +78,7 @@ entry = entry.replace('''        return buildList {
             for (i in 0 until a.length()) {
                 val o = a.optJSONObject(i) ?: continue
 ''', '''        fun request(query: String): List<MediaEntry> = V129JsonRows.load(apiCandidates(action, query), checkActive) { o ->
-                if (requestedCategory.isNotBlank() && o.optString("category_id") != requestedCategory) return@load null
+                if (requestedCategory.isNotBlank() && query.isBlank() && o.optString("category_id") != requestedCategory) return@load null
 ''')
 assert entry.count('                        add(\n                            MediaEntry(') == 3
 entry = entry.replace('                        add(\n                            MediaEntry(', '                        MediaEntry(')
