@@ -113,10 +113,13 @@ def enabled(con, playlist_id, online=False):
 
 
 def fetch_json(url, busy=lambda: False, limit=1_000_000):
-    """Use the same validated, pinned, bounded provider transport for every host."""
+    """Fetch metadata on the catalogue host with the validated provider transport."""
+    from skip_remote_client import local_execution
     if busy():
         raise ValueError("analysis_deferred")
-    with provider_proxy(url, busy) as local:
+    # Metadata stays on the Pi even when media decoding is remote. Scope this
+    # override to the fetch so the following audio operation remains offloaded.
+    with local_execution(), provider_proxy(url, busy) as local:
         with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(local, timeout=35) as response:
             chunks, size, started = [], 0, time.monotonic()
             while True:

@@ -9,6 +9,7 @@ from pathlib import Path
 from skip_analysis import source_url, provider_proxy, probe, fingerprint
 from skip_analysis_worker import busy_check
 from skip_remote_client import configured, health
+from skip_automation import provider_api
 
 
 def verify(db):
@@ -33,6 +34,12 @@ def verify(db):
         busy = busy_check(db, [playlist])
         if busy():
             continue
+        # Exercise the catalogue path under the remote role before installing
+        # it. A media-only check cannot detect a JSON fetch using RemoteSource.
+        listing = provider_api(playlist, 'get_series', busy, _limit=24_000_000)
+        if not isinstance(listing, list):
+            raise ValueError('catalogue_response_invalid')
+        del listing
         with provider_proxy(source_url(playlist, asset), busy) as source:
             duration, _ = probe(source, busy)
             if asset['duration_ms'] and abs(duration - asset['duration_ms']) > 2000:
@@ -64,7 +71,7 @@ def main():
         if isinstance(error, sqlite3.Error):
             reason = 'database_check_failed'
         raise SystemExit('Anbieterprüfung vor Umstellung fehlgeschlagen: ' + reason) from None
-    print('Echte Anbieterfolge auf Hetzner gelesen und Audio-Fingerprint berechnet; zentrale Daten unverändert')
+    print('Anbieterkatalog auf Raspberry geprüft; echte Folge auf Hetzner gelesen und Audio-Fingerprint berechnet; zentrale Daten unverändert')
 
 
 if __name__ == '__main__':

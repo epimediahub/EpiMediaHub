@@ -240,10 +240,13 @@ class QueueTests(AutomationFixture, unittest.TestCase):
             before = [tuple(row) for row in con.execute('SELECT * FROM skip_jobs')]
         with mock.patch.object(migration, 'configured', return_value=True), \
              mock.patch.object(migration, 'health'), \
+             mock.patch.object(migration, 'provider_api', return_value=[]) as metadata, \
              mock.patch.object(migration, 'provider_proxy', return_value=contextlib.nullcontext('fixture')), \
              mock.patch.object(migration, 'probe', return_value=(self.target['duration_ms'], [])), \
              mock.patch.object(migration, 'fingerprint', return_value=([3] * 100, 125)) as fingerprint:
             migration.verify(self.db)
+        self.assertEqual(metadata.call_args.args[1],'get_series')
+        self.assertEqual(metadata.call_args.kwargs['_limit'],24_000_000)
         self.assertEqual(fingerprint.call_args.args[1:3], (0, 20000))
         self.assertTrue(fingerprint.call_args.kwargs['require_complete'])
         with self.db() as con:
@@ -256,10 +259,26 @@ class QueueTests(AutomationFixture, unittest.TestCase):
         with mock.patch.object(migration, 'configured', return_value=True), \
              mock.patch.object(migration, 'health'), \
              mock.patch.object(migration, 'busy_check', return_value=lambda: True), \
+             mock.patch.object(migration, 'provider_api') as metadata, \
              mock.patch.object(migration, 'provider_proxy') as provider:
             with self.assertRaisesRegex(ValueError, 'no_idle_matching_episode'):
                 migration.verify(self.db)
         provider.assert_not_called()
+        metadata.assert_not_called()
+
+    def test_invalid_catalogue_prevents_activation_before_reading_provider_audio(self):
+        self.registered(self.target)
+        with self.db() as con:
+            before='\n'.join(con.iterdump())
+        with mock.patch.object(migration,'configured',return_value=True), \
+             mock.patch.object(migration,'health'), \
+             mock.patch.object(migration,'provider_api',return_value={}), \
+             mock.patch.object(migration,'provider_proxy') as provider:
+            with self.assertRaisesRegex(ValueError,'^catalogue_response_invalid$'):
+                migration.verify(self.db)
+        provider.assert_not_called()
+        with self.db() as con:
+            self.assertEqual('\n'.join(con.iterdump()),before)
 
     def test_transport_failure_keeps_attempts_budget_and_existing_markers(self):
         self.registered(self.target)
