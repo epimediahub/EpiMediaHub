@@ -14,8 +14,8 @@ with tempfile.TemporaryDirectory() as temporary:
     shutil.copytree(project / "ffmpeg-audio", package / "ffmpeg-audio",
                     ignore=shutil.ignore_patterns("build", ".cxx", "android-libs"))
     shutil.copytree(project / "app/src/main/assets/licenses", package / "licenses")
-    for name in ("AUDIO_SOURCES.md", "upstream.json"):
-        shutil.copyfile(repo / "android/v1.0.23" / name, package / name)
+    shutil.copyfile(repo / "android/v1.0.26/AUDIO_SOURCES.md", package / "AUDIO_SOURCES.md")
+    shutil.copyfile(repo / "android/v1.0.23/upstream.json", package / "upstream.json")
     shutil.copyfile(repo / "build_tools/build_android_audio_v123.sh", package / "build_android_audio_v123.sh")
     shutil.copyfile(project / "ffmpeg-6.1.6.tar.xz", package / "ffmpeg-6.1.6.tar.xz")
     shutil.copyfile(project / "chromaprint-1.5.1.tar.gz", package / "chromaprint-1.5.1.tar.gz")

@@ -9,10 +9,12 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.lang.reflect.Proxy
 import java.nio.ByteBuffer
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28])
 class V126CaptureAudioSinkTest {
     @Test fun partialBufferRetriesPreserveAudioAndUseFileTimeExactlyOnce() {
         val blocks = mutableListOf<ByteArray>()

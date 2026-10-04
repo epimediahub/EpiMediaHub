@@ -46,6 +46,8 @@ internal class V126FingerprintCapture(private val upload: suspend (V126Fingerpri
             var native: EpiChromaprint? = null
             var currentGeneration = -1
             var audioKey = ""
+            var keyedFormat: Format? = null
+            var formatKey = ""
             var startUs = 0L
             var frames = 0L
             var rate = 0
@@ -66,7 +68,11 @@ internal class V126FingerprintCapture(private val upload: suspend (V126Fingerpri
                     val bytesPerSample = if (block.format.pcmEncoding == C.ENCODING_PCM_FLOAT) 4 else 2
                     val bpf = bytesPerSample * block.format.channelCount
                     val endUs = startUs + if (rate > 0) frames * 1_000_000L / rate else 0
-                    val key = V116SkipKeys.hash("${block.format.id}|${block.format.language}|${block.format.sampleRate}|${block.format.channelCount}|${block.format.pcmEncoding}")
+                    if (keyedFormat !== block.format) {
+                        keyedFormat = block.format
+                        formatKey = V116SkipKeys.hash("${block.format.id}|${block.format.language}|${block.format.sampleRate}|${block.format.channelCount}|${block.format.pcmEncoding}")
+                    }
+                    val key = formatKey
                     if (native != null && (block.generation != currentGeneration || key != audioKey ||
                             abs(block.ptsUs - endUs) > 20_000L)) finish()
                     if (block.ptsUs !in 0 until WINDOW_US) continue
@@ -102,7 +108,7 @@ internal class V126FingerprintCapture(private val upload: suspend (V126Fingerpri
     override fun offer(buffer: ByteBuffer, ptsUs: Long, format: Format) {
         if (!enabled || closed.get() || ptsUs !in 0 until WINDOW_US ||
             format.sampleRate !in 8000..192000 || format.channelCount !in 1..8 ||
-            format.pcmEncoding !in listOf(C.ENCODING_PCM_16BIT, C.ENCODING_PCM_FLOAT)) return
+            (format.pcmEncoding != C.ENCODING_PCM_16BIT && format.pcmEncoding != C.ENCODING_PCM_FLOAT)) return
         if (buffer.remaining() > 262_144) { discontinuity(); return }
         val copy = ByteArray(buffer.remaining()); buffer.get(copy)
         if (pcm.trySend(Block(copy, ptsUs, format, generation.get())).isFailure) discontinuity()
