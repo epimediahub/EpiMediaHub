@@ -364,7 +364,7 @@ jobs:
           {
             "version": "1.0.29",
             "versionCode": 1029,
-            "notes": "Android 1.0.29: Eigene vierstellige PIN für 18+-Inhalte und optional das Hauptmenü. Dunkle Ladeboxen für Serien, Filme und Live-TV. Schnellere Katalogwechsel und Vorbereitung des ersten SmartTube-Videos. Markanterer letzter Herzschlag im Intro. Kein weiteres Serverupdate erforderlich.",
+            "notes": "Android 1.0.29: Speichersparendes Laden großer Live-TV-, Film- und Serienkataloge. 18+-Schalter wieder mit der Fernbedienung erreichbar. SmartTube mit früherer Startvorbereitung und eigener Kids-Auswahl: automatische Kinderinhalte, bunte Oberfläche und Eltern-PIN beim Verlassen. Kein Serverupdate erforderlich.",
             "apks": {
               "arm64-v8a": {
                 "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v1.0.29-arm64-v8a.apk",
