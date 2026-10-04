@@ -1,6 +1,6 @@
 """Pi-side cancellable computation client over the dedicated WireGuard link.
 
-No provider traffic or local decoder fallback when remote computation is enabled.
+An optional private provider relay performs no local decoding or comparisons.
 Every operation requires the exact same analysis source on both machines.
 """
 from __future__ import annotations
@@ -46,10 +46,7 @@ def role_path():
     return Path(__file__).with_name('skip_remote_role.json')
 
 
-def endpoint_value():
-    value = os.environ.get('SKIP_ANALYSIS_REMOTE_URL')
-    if value:
-        return value
+def read_role():
     try:
         text = role_path().read_text()
         if len(text) > 2048:
@@ -57,15 +54,31 @@ def endpoint_value():
         role = json.loads(text)
         if role.get('protocol') != PROTOCOL or not isinstance(role.get('url'), str):
             raise ValueError()
-        return role['url']
+        if role.get('provider_path', 'direct') not in ('direct', 'raspberry'):
+            raise ValueError()
+        return role
     except (OSError, ValueError, AttributeError):
         raise RemoteDeferred('Dauerhafte Hetzner-Konfiguration ist nicht lesbar; lokale Audioanalyse bleibt ausgeschaltet') from None
+
+
+def endpoint_value():
+    return os.environ.get('SKIP_ANALYSIS_REMOTE_URL') or read_role()['url']
+
+
+def provider_path():
+    value = os.environ.get('SKIP_ANALYSIS_PROVIDER_PATH')
+    if value is None:
+        value = read_role().get('provider_path', 'direct') if role_path().exists() else 'direct'
+    if value not in ('direct', 'raspberry'):
+        raise RemoteDeferred('Privater Anbieterabruf ist nicht korrekt eingerichtet')
+    return value
 
 
 @dataclasses.dataclass(repr=False)
 class RemoteSource:
     url: str
     busy: object
+    via_pi: bool = False
 
     def __repr__(self):
         return '<private remote audio source>'
@@ -170,7 +183,7 @@ def _busy(source, busy):
 
 def probe(source, busy):
     check = _busy(source, busy)
-    value = call('probe', {'url': source.url}, check)
+    value = call('probe', {'url': source.url, 'via_pi': source.via_pi}, check)
     try:
         duration = number(value['duration_ms'], 5000, 86_400_000)
         chapters = value['chapters']
@@ -184,7 +197,7 @@ def probe(source, busy):
 def fingerprint(source, start_ms, length_ms, busy, *, require_complete=False, with_coverage=False):
     check = _busy(source, busy)
     value = call('fingerprint', dict(url=source.url, start_ms=start_ms, length_ms=length_ms,
-                                   require_complete=require_complete), check)
+                                   require_complete=require_complete, via_pi=source.via_pi), check)
     try:
         result = words(value['words']), number(value['step_ms'], .001, 1000)
         coverage = number(value['coverage_ms'], 0, length_ms + 250)

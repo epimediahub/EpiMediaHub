@@ -261,20 +261,36 @@ def pinned_connection(cls, host, addresses, **kwargs):
 
 @contextmanager
 def provider_proxy(url, busy=lambda: False):
-    from skip_remote_client import configured, RemoteSource
+    from skip_remote_client import configured, provider_path, RemoteSource
     if configured():
         if busy():
             raise ValueError('analysis_deferred')
-        # Hetzner validates and pins the real upstream. Do not create a local
-        # proxy or stream on the Pi when computation has been offloaded.
-        yield RemoteSource(url, busy)
+        if provider_path() == 'raspberry':
+            from skip_remote_protocol import CLIENT_IP, SERVER_IP, PROVIDER_RELAY_PORT
+            # Relay compressed bytes only. The private URL contains a short-lived
+            # random token; provider credentials never reach the compute host.
+            with _provider_proxy_local(url, busy, bind=(CLIENT_IP, PROVIDER_RELAY_PORT),
+                                       peer=SERVER_IP) as relay:
+                yield RemoteSource(relay, busy, via_pi=True)
+        else:
+            yield RemoteSource(url, busy)
         return
+    with _provider_proxy_local(url, busy) as source:
+        yield source
+
+
+@contextmanager
+def _provider_proxy_local(url, busy, *, bind=('127.0.0.1', 0), peer=None):
     host = urllib.parse.urlsplit(url).hostname
     public_address(url, host)
     budget = [MAX_INPUT_BYTES]
     failure = [None]
     retry_after = [0]
     lock = threading.Lock()
+    upstream = threading.Lock()
+    stopped = threading.Event()
+    active = threading.Condition()
+    readers = [0]
     token = "/" + secrets.token_urlsafe(24)
 
     class HTTP(urllib.request.HTTPHandler):
@@ -290,6 +306,10 @@ def provider_proxy(url, busy=lambda: False):
     opener = urllib.request.build_opener(HTTP(), HTTPS(), ProviderRedirect(), urllib.request.ProxyHandler({}))
 
     class Handler(BaseHTTPRequestHandler):
+        def setup(self):
+            super().setup()
+            self.connection.settimeout(5)
+
         def log_message(self, *_):
             pass
 
@@ -300,9 +320,31 @@ def provider_proxy(url, busy=lambda: False):
             self.relay("GET")
 
         def relay(self, method):
-            if self.path != token or busy():
+            if peer is not None and self.client_address[0] != peer:
+                self.send_error(403)
+                return
+            if self.path != token or busy() or stopped.is_set():
                 self.send_error(503)
                 return
+            # Range/seek requests cannot create parallel provider connections.
+            with active:
+                readers[0] += 1
+            acquired = False
+            try:
+                while not busy() and not stopped.is_set():
+                    if upstream.acquire(timeout=.1):
+                        acquired = True
+                        self.relay_one(method)
+                        return
+                self.send_error(503)
+            finally:
+                if acquired:
+                    upstream.release()
+                with active:
+                    readers[0] -= 1
+                    active.notify_all()
+
+        def relay_one(self, method):
             headers = {"User-Agent": "EpiMediaHub/0.8.2 private analysis", "Accept-Encoding": "identity"}
             requested_range = self.headers.get("Range")
             if requested_range and not re.fullmatch(r"bytes=[0-9]+-[0-9]*", requested_range):
@@ -320,7 +362,7 @@ def provider_proxy(url, busy=lambda: False):
                     self.end_headers(); sent = True
                     if method == "HEAD":
                         return
-                    while not busy():
+                    while not busy() and not stopped.is_set():
                         with lock:
                             if budget[0] <= 0:
                                 failure[0] = "analysis_input_limit"
@@ -328,7 +370,7 @@ def provider_proxy(url, busy=lambda: False):
                             amount = min(65_536, budget[0])
                             budget[0] -= amount
                         chunk = response.read(amount)
-                        if not chunk:
+                        if not chunk or busy() or stopped.is_set():
                             break
                         self.wfile.write(chunk)
             except Exception as error:
@@ -342,12 +384,12 @@ def provider_proxy(url, busy=lambda: False):
                     self.send_error(502)
             self.close_connection = True
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = ThreadingHTTPServer(bind, Handler)
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
     try:
         try:
-            yield f"http://127.0.0.1:{server.server_port}{token}"
+            yield f"http://{bind[0]}:{server.server_port}{token}"
         except (ValueError, urllib.error.HTTPError) as error:
             if isinstance(error, urllib.error.HTTPError):
                 error.close()
@@ -355,7 +397,10 @@ def provider_proxy(url, busy=lambda: False):
                 raise ProviderFailure(failure[0], retry_after[0]) from None
             raise
     finally:
+        stopped.set()
         server.shutdown(); server.server_close(); thread.join(timeout=2)
+        with active:
+            active.wait_for(lambda: readers[0] == 0, timeout=6)
 
 
 def run(command, max_bytes=20_000_000, timeout=180, busy=lambda: False):
@@ -382,7 +427,8 @@ def run(command, max_bytes=20_000_000, timeout=180, busy=lambda: False):
 
 def input_options(source):
     # Nested HLS/concat playlists must not escape the controlled provider proxy.
-    protocols = "http,tcp" if source.startswith("http://127.0.0.1:") else "file"
+    from skip_remote_protocol import RelayInput
+    protocols = "http,tcp" if source.startswith("http://127.0.0.1:") or isinstance(source, RelayInput) else "file"
     return ["-protocol_whitelist", protocols, "-format_whitelist", "mov,matroska,avi,mpegts,mpeg,mp3,wav"]
 
 

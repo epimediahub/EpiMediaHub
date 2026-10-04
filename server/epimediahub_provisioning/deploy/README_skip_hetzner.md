@@ -23,6 +23,20 @@ Nicht erreichbarer Worker, belegter Worker, Versionsabweichung und Transportabbr
 
 Auf Hetzner läuft die Berechnung als unprivilegierter Benutzer `epimediahub-worker`, mit bis zu 350 % CPU und 3 GB RAM. Temporäre PCM-Daten liegen nur in temporären Dateien während eines Auftrags. Provider-Adressen und Passwörter werden nicht protokolliert oder dauerhaft gespeichert; sie werden verschlüsselt über WireGuard übertragen und nur für den jeweiligen Auftrag verwendet.
 
+## Anbieter nur vom Raspberry erreichbar
+
+Wenn dieselben Folgen auf dem Raspberry funktionieren, der Anbieterzugriff von Hetzner aber scheitert, kann der Raspberry ausschließlich die komprimierten Mediendaten durch den bestehenden Tunnel weiterreichen. Laufzeitprüfung, Audiodekodierung, Chromaprint und Staffelvergleiche bleiben auf Hetzner. In diesem Modus bleiben Anbieter-Adressen und Zugangsdaten auf dem Raspberry; Hetzner erhält nur eine kurzlebige private Abrufadresse.
+
+Bei einer bereits eingerichteten Verbindung zuerst den aktuellen, auf einen Commit festgelegten `install_skip_hetzner.sh` erneut auf Hetzner mit dessen öffentlicher IPv4 ausführen. Danach den dazugehörigen `install_skip_remote_client.sh --refresh-code` auf dem Raspberry ausführen. Das aktualisiert den vorbereiteten Code, ohne die vorhandenen Schlüssel, Peer-Freigaben oder Tunnelkonfigurationen zu ersetzen. Anschließend auf dem Raspberry aktivieren:
+
+```sh
+sudo /usr/local/sbin/epimediahub-activate-remote-analysis --provider-via-raspberry
+```
+
+Der Abrufdienst hört nur während eines Auftrags auf `10.87.26.2:8791`, akzeptiert ausschließlich den Hetzner-Peer `10.87.26.1` mit einem zufälligen Token und öffnet höchstens eine Anbieter-Verbindung zugleich. Sprünge in der Mediendatei werden als HTTP-Range-Anfragen weitergereicht. Eine vorhandene UFW erhält nur die passende Regel auf `wg-epi-analysis`; UFW wird auf dem Raspberry nicht aktiviert. In einer anderen lokal konfigurierten Firewall muss derselbe private Peerzugriff erlaubt sein. Die Aktivierung prüft vor der Umstellung eine echte Folge samt 20 Sekunden Audio auf Hetzner über diesen Abrufpfad und speichert ihn auch für manuelle Worker-Aufrufe.
+
+`--provider-direct` schaltet nach derselben erfolgreichen Prüfung wieder auf den direkten Anbieterzugriff von Hetzner um. Ohne Option behält eine erneute Aktivierung den bestehenden Anbieterpfad bei.
+
 ## Prüfen
 
 - Hetzner: `systemctl status epimediahub-analysis-worker.service` und `wg show wg-epi-analysis`.

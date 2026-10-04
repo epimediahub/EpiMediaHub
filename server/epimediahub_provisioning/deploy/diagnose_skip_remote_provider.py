@@ -201,7 +201,9 @@ def main():
     if not (stage / 'skip_remote_client.py').is_file():
         emit('Vorbereiteter Remote-Analysecode fehlt')
         return 2
-    sys.path[:0] = [str(stage), str(args.app_dir)]
+    # After activation the installed role also preserves the provider path.
+    primary = args.app_dir if (args.app_dir / 'skip_remote_role.json').exists() else stage
+    sys.path[:0] = [str(primary), str(args.app_dir)]
     os.environ['SKIP_ANALYSIS_REMOTE_URL'] = 'http://10.87.26.1:8790'
     try:
         data_dir = data_directory(args.env_file)

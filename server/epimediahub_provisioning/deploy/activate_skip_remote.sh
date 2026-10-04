@@ -34,6 +34,22 @@ trap rollback ERR
 if [ "$(id -u)" != 0 ]; then echo "Bitte mit sudo ausführen." >&2; exit 1; fi
 test -x "$PY"
 test -f "$ENV_FILE"
+if [ "$#" -gt 1 ]; then echo "Nur eine Anbieteroption angeben." >&2; exit 1; fi
+case "${1:-}" in
+  --provider-via-raspberry) PROVIDER_PATH=raspberry ;;
+  --provider-direct) PROVIDER_PATH=direct ;;
+  "") PROVIDER_PATH="$("$PY" - "$BASE/skip_remote_role.json" <<'PY'
+from pathlib import Path
+import json,sys
+path=Path(sys.argv[1])
+value=json.loads(path.read_text()).get('provider_path','direct') if path.exists() else 'direct'
+if value not in ('direct','raspberry'): raise SystemExit('Ungültiger Anbieterpfad')
+print(value)
+PY
+)" ;;
+  *) echo "Unbekannte Anbieteroption." >&2; exit 1 ;;
+esac
+export SKIP_ANALYSIS_PROVIDER_PATH="$PROVIDER_PATH"
 systemctl is-active --quiet wg-quick@wg-epi-analysis.service
 echo "Private Verbindung, Codeversion und Audiovergleich auf Hetzner prüfen …"
 SKIP_ANALYSIS_REMOTE_URL="$REMOTE_URL" PYTHONPATH="$STAGE:$BASE" "$PY" - <<'PY'
@@ -46,6 +62,9 @@ target=[rng.getrandbits(32) for _ in range(20)]+reference+[rng.getrandbits(32) f
 assert match(reference,target,125)==(2500,1.0)
 print('Hetzner-Code und echter privater Berechnungsaufruf erfolgreich geprüft')
 PY
+if [ "$PROVIDER_PATH" = raspberry ] && command -v ufw >/dev/null; then
+  ufw allow in on wg-epi-analysis from 10.87.26.1 to 10.87.26.2 port 8791 proto tcp
+fi
 DATA_DIR="$("$PY" - "$ENV_FILE" <<'PY'
 from pathlib import Path
 import shlex,sys
@@ -81,11 +100,11 @@ with sqlite3.connect(sys.argv[1]) as source,sqlite3.connect(sys.argv[2]) as targ
 PY
 INSTALLED=1
 for file in "${FILES[@]}"; do install -o root -g root -m 0644 "$STAGE/$file" "$BASE/$file"; done
-"$PY" - "$BASE/skip_remote_role.json" "$REMOTE_URL" <<'PY'
+"$PY" - "$BASE/skip_remote_role.json" "$REMOTE_URL" "$PROVIDER_PATH" <<'PY'
 from pathlib import Path
 import json,sys
 path=Path(sys.argv[1])
-path.write_text(json.dumps({'protocol':1,'url':sys.argv[2]})+'\n')
+path.write_text(json.dumps({'protocol':1,'url':sys.argv[2],'provider_path':sys.argv[3]})+'\n')
 path.chmod(0o644)
 PY
 install -d -m 0755 "$(dirname "$DROPIN")"
@@ -95,6 +114,7 @@ After=wg-quick@wg-epi-analysis.service
 Wants=wg-quick@wg-epi-analysis.service
 [Service]
 Environment=SKIP_ANALYSIS_REMOTE_URL=$REMOTE_URL
+Environment=SKIP_ANALYSIS_PROVIDER_PATH=$PROVIDER_PATH
 EOF
 chmod 0644 "$DROPIN"
 systemctl daemon-reload
@@ -103,8 +123,13 @@ flock -u 9
 exec 9>&-
 systemctl start epimediahub-skip-analysis.timer
 systemctl start --no-block epimediahub-skip-analysis.service
-echo "Auslagerung aktiviert: Provider-Audio, Chromaprint und Fingerprint-Vergleiche laufen auf Hetzner."
-echo "Der Raspberry behält nur Auftragssteuerung, Wiedergabe-Abstimmung und zentrale Zeitmarken."
+echo "Auslagerung aktiviert: Audiodekodierung, Chromaprint und Fingerprint-Vergleiche laufen auf Hetzner."
+if [ "$PROVIDER_PATH" = raspberry ]; then
+  echo "Anbieterabruf: komprimierte Mediendaten werden vom Raspberry privat zu Hetzner durchgereicht."
+else
+  echo "Anbieterabruf: Hetzner liest die Mediendaten direkt."
+fi
+echo "Der Raspberry steuert Aufträge, Wiedergabe-Abstimmung und zentrale Zeitmarken."
 echo "Deutsch/Italienisch, automatische Freigabekriterien und bestehendes Tagesbudget bleiben erhalten."
 echo "Bei Verbindungsabbruch wird pausiert; es gibt keine zweite lokale Audioanalyse."
 echo "Sicherung: $BACKUP"

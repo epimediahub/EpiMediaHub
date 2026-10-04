@@ -14,6 +14,19 @@ if [ "$(id -u)" != 0 ]; then echo "Bitte mit sudo ausführen." >&2; exit 1; fi
 PY="$BASE/.venv/bin/python"
 test -x "$PY"
 test -f "$BASE/skip_catalogue.py"
+REFRESH=0
+if [ "${1:-}" = --refresh-code ]; then
+  [ "$#" = 1 ]
+  test -f "$WG_ROOT/epimediahub-analysis-client.key"
+  "$PY" - "$WG_ROOT/wg-epi-analysis.conf" <<'PY'
+from pathlib import Path
+import sys
+if not Path(sys.argv[1]).read_text().startswith('# EpiMediaHub private analysis client\n'):
+    raise SystemExit('Keine vorhandene verwaltete Analyseverbindung')
+PY
+  systemctl is-active --quiet wg-quick@wg-epi-analysis.service
+  REFRESH=1
+else
 "$PY" - "${1:-}" "${2:-}" <<'PY'
 import ipaddress,base64,sys
 try:
@@ -23,6 +36,7 @@ try:
 except (ValueError,AssertionError):
     raise SystemExit('Hetzner-IPv4 und öffentlichen Server-WireGuard-Schlüssel angeben')
 PY
+fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends wireguard-tools curl
@@ -36,6 +50,11 @@ install -d -m 0700 "$STAGE" "$WG_ROOT"
 install -d -m 0755 "$BIN_ROOT"
 for file in "${FILES[@]}"; do install -m 0644 "$WORK/$file" "$STAGE/$file"; done
 install -m 0755 "$WORK/activate.sh" "$BIN_ROOT/epimediahub-activate-remote-analysis"
+if [ "$REFRESH" = 1 ]; then
+  echo "Neuer Analysecode vorbereitet; bestehende private Verbindung und Schlüssel erhalten."
+  echo "Danach auf dem Raspberry: sudo $BIN_ROOT/epimediahub-activate-remote-analysis --provider-via-raspberry"
+  exit 0
+fi
 KEY="$WG_ROOT/epimediahub-analysis-client.key"
 CONF="$WG_ROOT/wg-epi-analysis.conf"
 if [ ! -f "$KEY" ]; then

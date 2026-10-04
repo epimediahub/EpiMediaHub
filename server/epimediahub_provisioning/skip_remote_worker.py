@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from skip_remote_client import local_execution
 from skip_remote_protocol import (CLIENT_IP, LEASE_SECONDS, MAX_BODY, PORT, PROTOCOL,
-                                  SERVER_IP, TASK_SECONDS, number, versions, words)
+                                  SERVER_IP, TASK_SECONDS, RelayInput, relay_url, number, versions, words)
 
 
 def parse_window(value):
@@ -48,6 +48,10 @@ def validate(operation, payload):
     if operation in ('probe', 'fingerprint'):
         if not isinstance(payload.get('url'), str) or not 1 <= len(payload['url']) <= 8192:
             raise ValueError('invalid_request')
+        if type(payload.get('via_pi', False)) is not bool:
+            raise ValueError('invalid_request')
+        if payload.get('via_pi') and not relay_url(payload['url']):
+            raise ValueError('unsafe_source')
         if operation == 'fingerprint':
             number(payload.get('start_ms'), 0, 86_400_000)
             number(payload.get('length_ms'), 15_000, 720_000)
@@ -76,7 +80,12 @@ def execute(operation, payload, busy):
     with local_execution():
         from skip_analysis import provider_proxy, probe, fingerprint, matching_offset
         if operation in ('probe', 'fingerprint'):
-            with provider_proxy(payload['url'], busy) as source:
+            # A fixed, authenticated private peer supplies the compressed bytes.
+            # The compute host never contacts or resolves the original provider.
+            from contextlib import nullcontext
+            upstream = (nullcontext(RelayInput(payload['url'])) if payload.get('via_pi')
+                        else provider_proxy(payload['url'], busy))
+            with upstream as source:
                 if operation == 'probe':
                     duration, chapters = probe(source, busy)
                     return dict(duration_ms=duration, chapters=chapters)

@@ -180,6 +180,63 @@ if os.environ['FIXTURE_MODE']=='provider-denied': raise SystemExit('provider_htt
         self.assertEqual(json.loads(self.state.read_text())['events'], [])
         self.preserve()
 
+    def test_pi_code_refresh_preserves_the_paired_connection_and_keys(self):
+        self.assertEqual(self.run_script('install_skip_remote_client.sh','2.31.6.81',PUBLIC).returncode,0)
+        conf=self.wg/'wg-epi-analysis.conf'; key=self.wg/'epimediahub-analysis-client.key'
+        original_conf,original_key=conf.read_bytes(),key.read_bytes()
+        original_code=(self.base/'skip_analysis.py').read_bytes()
+        before=json.loads(self.state.read_text())['events']
+        result=self.run_script('install_skip_remote_client.sh','--refresh-code')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(conf.read_bytes(),original_conf)
+        self.assertEqual(key.read_bytes(),original_key)
+        self.assertEqual((self.base/'skip_analysis.py').read_bytes(),original_code)
+        self.assertNotIn(PRIVATE,result.stdout+result.stderr)
+        self.assertEqual(json.loads(self.state.read_text())['events'],before)
+        self.assertIn('--provider-via-raspberry',result.stdout)
+        self.preserve()
+
+    def test_server_code_update_preserves_peer_and_prints_refresh_without_key_entry(self):
+        self.assertEqual(self.run_script('install_skip_hetzner.sh','2.31.6.81').returncode,0)
+        conf=self.wg/'wg-epi-analysis.conf';key=self.wg/'epimediahub-analysis-server.key'
+        conf.write_text(conf.read_text()+'\n[Peer]\nPublicKey = '+PUBLIC+'\nAllowedIPs = 10.87.26.2/32\n')
+        original_conf,original_key=conf.read_bytes(),key.read_bytes()
+        result=self.run_script('install_skip_hetzner.sh','2.31.6.81')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(conf.read_bytes(),original_conf)
+        self.assertEqual(key.read_bytes(),original_key)
+        self.assertIn('--refresh-code',result.stdout)
+        self.assertIn('--provider-via-raspberry',result.stdout)
+        self.assertNotIn(PRIVATE,result.stdout+result.stderr)
+        self.preserve()
+
+    def test_gateway_activation_persists_the_path_and_opens_only_the_private_peer_port(self):
+        stage=self.staged_client()
+        (stage/'skip_remote_verify.py').write_text("import os\nprint('preflight_provider_path='+os.environ['SKIP_ANALYSIS_PROVIDER_PATH'])\n")
+        self.script('ufw',"Path(os.environ['FIXTURE_STATE']).with_name('firewall.json').write_text(json.dumps(sys.argv[1:]))")
+        result=self.run_script('activate_skip_remote.sh','--provider-via-raspberry')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('preflight_provider_path=raspberry',result.stdout)
+        role=json.loads((self.base/'skip_remote_role.json').read_text())
+        self.assertEqual(role['provider_path'],'raspberry')
+        conf=(self.units/'epimediahub-skip-analysis.service.d/remote.conf').read_text()
+        self.assertIn('Environment=SKIP_ANALYSIS_PROVIDER_PATH=raspberry',conf)
+        firewall=json.loads(self.state.with_name('firewall.json').read_text())
+        self.assertEqual(firewall,['allow','in','on','wg-epi-analysis','from','10.87.26.1',
+                                   'to','10.87.26.2','port','8791','proto','tcp'])
+        self.preserve()
+
+    def test_gateway_failure_restores_the_previous_provider_path(self):
+        self.staged_client()
+        file=self.base/'skip_remote_role.json'
+        original=json.dumps(dict(protocol=1,url='http://10.87.26.1:8790',provider_path='direct'))+'\n'
+        file.write_text(original)
+        result=self.run_script('activate_skip_remote.sh','--provider-via-raspberry',mode='post-install-failure')
+        self.assertNotEqual(result.returncode,0)
+        self.assertEqual(file.read_text(),original)
+        self.assertTrue(json.loads(self.state.read_text())['active'])
+        self.preserve()
+
     def test_pi_provider_denial_resumes_original_timer_before_installing_code(self):
         self.staged_client()
         original = (self.base / 'skip_analysis.py').read_bytes()

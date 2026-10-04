@@ -3,18 +3,34 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 from pathlib import Path
 
 PROTOCOL = 1
 SERVER_IP = '10.87.26.1'
 CLIENT_IP = '10.87.26.2'
 PORT = 8790
+PROVIDER_RELAY_PORT = 8791
 INTERFACE = 'wg-epi-analysis'
 LEASE_SECONDS = 12
 TASK_SECONDS = 230
 MAX_BODY = 2_000_000
 COMPONENTS = ('skip_analysis.py', 'skip_automation.py', 'skip_detector_v2.py',
               'skip_detector_v3.py', 'skip_remote_client.py', 'skip_remote_protocol.py')
+
+
+def relay_url(value):
+    return isinstance(value, str) and re.fullmatch(
+        r'http://' + re.escape(CLIENT_IP) + ':' + str(PROVIDER_RELAY_PORT)
+        + r'/[A-Za-z0-9_-]{32}', value) is not None
+
+
+class RelayInput(str):
+    """An authenticated peer's fixed private endpoint, never a general HTTP URL."""
+    def __new__(cls, value):
+        if not relay_url(value):
+            raise ValueError('unsafe_source')
+        return super().__new__(cls, value)
 
 
 def versions():

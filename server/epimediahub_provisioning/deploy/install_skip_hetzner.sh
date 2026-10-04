@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fresh, dedicated Hetzner analysis host. No customer database is copied.
+# Install/update a dedicated Hetzner analysis host. No customer database is copied.
 set -Eeuo pipefail
 umask 0077
 SOURCE_REF="e41748a092f7969c0876277b0f2a3c8a0a687e7d"
@@ -163,5 +163,15 @@ PY
 PUBLIC_KEY="$(wg pubkey < "$KEY")"
 echo "Hetzner-Worker gesund. Öffentlicher WireGuard-Schlüssel: $PUBLIC_KEY"
 echo "Auf dem Raspberry ausführen:"
-echo "curl -fsSL '$CLIENT_INSTALLER' -o /tmp/epimediahub-remote-client.sh && sudo bash /tmp/epimediahub-remote-client.sh '$PUBLIC_IP' '$PUBLIC_KEY'"
+if "$BASE/.venv/bin/python" - "$CONF" <<'PY'
+from pathlib import Path
+import sys
+raise SystemExit(0 if '[Peer]' in Path(sys.argv[1]).read_text() else 1)
+PY
+then
+  echo "curl -fsSL '$CLIENT_INSTALLER' -o /tmp/epimediahub-remote-client.sh && sudo bash /tmp/epimediahub-remote-client.sh --refresh-code"
+  echo "Bestehende Peer-Freigabe erhalten. Danach auf dem Raspberry: sudo /usr/local/sbin/epimediahub-activate-remote-analysis --provider-via-raspberry"
+else
+  echo "curl -fsSL '$CLIENT_INSTALLER' -o /tmp/epimediahub-remote-client.sh && sudo bash /tmp/epimediahub-remote-client.sh '$PUBLIC_IP' '$PUBLIC_KEY'"
+fi
 echo "Nur öffentliche Schlüssel werden angezeigt; private Schlüssel bleiben auf den jeweiligen Geräten."
