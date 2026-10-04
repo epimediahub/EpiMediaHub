@@ -7,8 +7,13 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+import threading
 import types
 import unittest
+import urllib.error
+import urllib.parse
+import urllib.request
+from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +21,8 @@ sys.path.insert(0, str(ROOT))
 import skip_analysis as audio
 import skip_remote_client as remote
 from test_skip_analysis_automation import AutomationFixture
+from test_skip_remote_analysis import RpcFixture
+import skip_remote_protocol as protocol
 
 spec = importlib.util.spec_from_file_location('provider_diagnosis',
                                             ROOT / 'deploy/diagnose_skip_remote_provider.py')
@@ -90,6 +97,93 @@ class ComparisonTests(AutomationFixture, unittest.TestCase):
         self.assertNotIn(secret, text)
         self.assertNotIn('PASSWORD_SECRET', text)
         self.assertIn('analysis_failed', text)
+
+    def test_gateway_comparison_names_the_private_path_and_observes_both_failed_attempts(self):
+        def probe(*_):
+            if remote.configured(): raise ValueError('analysis_failed')
+            return self.target['duration_ms'],[]
+        with self.network(probe),mock.patch.dict('os.environ',SKIP_ANALYSIS_PROVIDER_PATH='raspberry'):
+            self.assertEqual(diagnosis.compare(self.db,self.emit),0)
+        text=self.output.getvalue()
+        self.assertIn('Hetzner liest die echten Folgen über den privaten Raspberry-Abruf',text)
+        self.assertIn('PRIVATER ABRUF: Anfragen=0, Range=0, Medienbytes=0, HTTP=-',text)
+        self.assertIn('Hetzner scheitert am privaten Medienabruf',text)
+
+
+class RelayDiagnosisTests(RpcFixture,unittest.TestCase):
+    def setUp(self):
+        self.start_server()
+        self.output=io.StringIO()
+        self.emit=lambda value:print(value,file=self.output)
+
+    def test_native_testaudio_uses_the_remote_decoder_and_no_provider_connection(self):
+        parent=threading.get_ident()
+        calls=[]
+        original=audio.run
+        def run(*args,**kwargs):
+            self.assertNotEqual(threading.get_ident(),parent,'Testaudio must decode on Hetzner')
+            calls.append(args[0][0])
+            return original(*args,**kwargs)
+        with mock.patch.object(protocol,'CLIENT_IP','127.0.0.1'), \
+             mock.patch.object(protocol,'SERVER_IP','127.0.0.1'), \
+             mock.patch.object(audio,'public_address',side_effect=AssertionError('No provider contact')), \
+             mock.patch.object(audio,'run',side_effect=run):
+            self.assertTrue(diagnosis.relay_test(audio,remote,self.emit))
+        self.assertEqual(calls,['ffprobe','ffmpeg'])
+        text=self.output.getvalue()
+        self.assertIn('TUNNEL-TEST: Audio=ok',text)
+        self.assertIn('Audiodekodierung auf Hetzner: OK',text)
+        self.assertNotIn('http://',text)
+
+    def test_missing_reverse_connection_is_reported_without_opening_a_provider(self):
+        with mock.patch.object(protocol,'CLIENT_IP','127.0.0.1'), \
+             mock.patch.object(protocol,'SERVER_IP','127.0.0.1'), \
+             mock.patch.object(audio,'public_address',side_effect=AssertionError('No provider contact')), \
+             mock.patch.object(audio,'probe',side_effect=ValueError('analysis_failed')):
+            self.assertFalse(diagnosis.relay_test(audio,remote,self.emit))
+        text=self.output.getvalue()
+        self.assertIn('Anfragen=0, Abgewiesen=0, Testbytes=0',text)
+        self.assertIn('kam keine Hetzner-Anfrage an',text)
+        self.assertNotIn('http://',text)
+
+    def test_audio_failure_after_successful_probe_keeps_the_exact_phase(self):
+        with mock.patch.object(protocol,'CLIENT_IP','127.0.0.1'), \
+             mock.patch.object(protocol,'SERVER_IP','127.0.0.1'), \
+             mock.patch.object(audio,'probe',return_value=(24000,[])), \
+             mock.patch.object(audio,'fingerprint',side_effect=ValueError('https://host/user/SECRET')):
+            self.assertFalse(diagnosis.relay_test(audio,remote,self.emit))
+        text=self.output.getvalue()
+        self.assertIn('TUNNEL-TEST: Audio=analysis_failed',text)
+        self.assertNotIn('SECRET',text)
+
+    def test_observer_preserves_media_bytes_and_excludes_error_pages_and_private_urls(self):
+        payload=b'binary-media'*7000
+        class Provider(BaseHTTPRequestHandler):
+            def log_message(self,*_): pass
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header('Content-Length',str(len(payload)))
+                self.end_headers();self.wfile.write(payload)
+        provider=ThreadingHTTPServer(('127.0.0.1',0),Provider)
+        thread=threading.Thread(target=provider.serve_forever,daemon=True);thread.start()
+        url=f'http://media.fixture:{provider.server_port}/user/SECRET/episode.mp4'
+        try:
+            with mock.patch.object(audio,'public_address',return_value=(urllib.parse.urlsplit(url),('127.0.0.1',))), \
+                 diagnosis.relay_observation(audio,self.emit) as stats:
+                with audio._provider_proxy_local(url,lambda:False) as source:
+                    with self.assertRaises(urllib.error.HTTPError) as error:
+                        urllib.request.urlopen(source+'wrong',timeout=2)
+                    self.assertEqual(error.exception.code,503);error.exception.close()
+                    with urllib.request.urlopen(source,timeout=2) as response:
+                        self.assertEqual(response.read(),payload)
+                self.assertEqual(stats,dict(requests=2,ranges=0,bytes=len(payload),statuses={503:1,200:1}))
+            text=self.output.getvalue()
+            self.assertIn(f'Medienbytes={len(payload)}',text)
+            self.assertIn('HTTP=200:1,503:1',text)
+            self.assertNotIn('SECRET',text)
+            self.assertNotIn('http://',text)
+        finally:
+            provider.shutdown();provider.server_close();thread.join(timeout=2)
 
 
 class CoordinationTests(unittest.TestCase):
