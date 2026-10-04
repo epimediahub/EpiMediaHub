@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 umask 0077
 SOURCE_REF="27eb20f0dfd909d55040557eb0d8989c8fb4e872"
-CLIENT_INSTALLER_REF="6a7364070b476ccb10466cbceb2e8bf535bccf60"
+CLIENT_INSTALLER_REF="4fbb88ce9aebe2569042989bdf919f107453b1b9"
 RAW="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$SOURCE_REF/server/epimediahub_provisioning"
 CLIENT_INSTALLER="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$CLIENT_INSTALLER_REF/server/epimediahub_provisioning/deploy/install_skip_remote_client.sh"
 BASE="${EPIMEDIAHUB_WORKER_DIR:-/opt/epimediahub/analysis}"
