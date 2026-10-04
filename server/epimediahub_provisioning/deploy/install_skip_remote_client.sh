@@ -2,7 +2,7 @@
 # Prepare the private Pi connection; local computation remains active until activation.
 set -Eeuo pipefail
 umask 0077
-SOURCE_REF="27eb20f0dfd909d55040557eb0d8989c8fb4e872"
+SOURCE_REF="5073f07fcc4b29d661750c10249498718737af5e"
 RAW="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$SOURCE_REF/server/epimediahub_provisioning"
 BASE="${EPIMEDIAHUB_APP_DIR:-/opt/epimediahub/provisioning}"
 WG_ROOT="${EPIMEDIAHUB_WIREGUARD_DIR:-/etc/wireguard}"
