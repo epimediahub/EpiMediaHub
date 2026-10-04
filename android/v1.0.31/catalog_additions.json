@@ -1,0 +1,2328 @@
+{
+  "groups": [
+    {
+      "id": "nba",
+      "label": "NBA",
+      "themes": [
+        "nba_atlanta_hawks",
+        "nba_boston_celtics",
+        "nba_brooklyn_nets",
+        "nba_charlotte_hornets",
+        "nba_chicago_bulls",
+        "nba_cleveland_cavaliers",
+        "nba_dallas_mavericks",
+        "nba_denver_nuggets",
+        "nba_detroit_pistons",
+        "nba_golden_state_warriors",
+        "nba_houston_rockets",
+        "nba_indiana_pacers",
+        "nba_los_angeles_clippers",
+        "nba_los_angeles_lakers",
+        "nba_memphis_grizzlies",
+        "nba_miami_heat",
+        "nba_milwaukee_bucks",
+        "nba_minnesota_timberwolves",
+        "nba_new_orleans_pelicans",
+        "nba_new_york_knicks",
+        "nba_oklahoma_city_thunder",
+        "nba_orlando_magic",
+        "nba_philadelphia_76ers",
+        "nba_phoenix_suns",
+        "nba_portland_trail_blazers",
+        "nba_sacramento_kings",
+        "nba_san_antonio_spurs",
+        "nba_toronto_raptors",
+        "nba_utah_jazz",
+        "nba_washington_wizards"
+      ]
+    },
+    {
+      "id": "nfl",
+      "label": "NFL",
+      "themes": [
+        "nfl_arizona_cardinals",
+        "nfl_atlanta_falcons",
+        "nfl_baltimore_ravens",
+        "nfl_buffalo_bills",
+        "nfl_carolina_panthers",
+        "nfl_chicago_bears",
+        "nfl_cincinnati_bengals",
+        "nfl_cleveland_browns",
+        "nfl_dallas_cowboys",
+        "nfl_denver_broncos",
+        "nfl_detroit_lions",
+        "nfl_green_bay_packers",
+        "nfl_houston_texans",
+        "nfl_indianapolis_colts",
+        "nfl_jacksonville_jaguars",
+        "nfl_kansas_city_chiefs",
+        "nfl_las_vegas_raiders",
+        "nfl_los_angeles_chargers",
+        "nfl_los_angeles_rams",
+        "nfl_miami_dolphins",
+        "nfl_minnesota_vikings",
+        "nfl_new_england_patriots",
+        "nfl_new_orleans_saints",
+        "nfl_new_york_giants",
+        "nfl_new_york_jets",
+        "nfl_philadelphia_eagles",
+        "nfl_pittsburgh_steelers",
+        "nfl_san_francisco_49ers",
+        "nfl_seattle_seahawks",
+        "nfl_tampa_bay_buccaneers",
+        "nfl_tennessee_titans",
+        "nfl_washington_commanders"
+      ]
+    }
+  ],
+  "themes": {
+    "man_city__players": {
+      "label": "Manchester City · Spieler",
+      "group": "england",
+      "accent": "#6CABDD",
+      "background": "man_city.png",
+      "family": true
+    },
+    "man_city__legends": {
+      "label": "Manchester City · Legenden",
+      "group": "england",
+      "accent": "#6CABDD",
+      "background": "man_city.png",
+      "family": true
+    },
+    "liverpool__players": {
+      "label": "Liverpool · Spieler",
+      "group": "england",
+      "accent": "#C8102E",
+      "background": "liverpool.png",
+      "family": true
+    },
+    "liverpool__legends": {
+      "label": "Liverpool · Legenden",
+      "group": "england",
+      "accent": "#C8102E",
+      "background": "liverpool.png",
+      "family": true
+    },
+    "arsenal__players": {
+      "label": "Arsenal · Spieler",
+      "group": "england",
+      "accent": "#EF0107",
+      "background": "arsenal.png",
+      "family": true
+    },
+    "arsenal__legends": {
+      "label": "Arsenal · Legenden",
+      "group": "england",
+      "accent": "#EF0107",
+      "background": "arsenal.png",
+      "family": true
+    },
+    "man_utd__players": {
+      "label": "Manchester United · Spieler",
+      "group": "england",
+      "accent": "#DA291C",
+      "background": "man_utd.png",
+      "family": true
+    },
+    "man_utd__legends": {
+      "label": "Manchester United · Legenden",
+      "group": "england",
+      "accent": "#DA291C",
+      "background": "man_utd.png",
+      "family": true
+    },
+    "chelsea__players": {
+      "label": "Chelsea · Spieler",
+      "group": "england",
+      "accent": "#034694",
+      "background": "chelsea.png",
+      "family": true
+    },
+    "chelsea__legends": {
+      "label": "Chelsea · Legenden",
+      "group": "england",
+      "accent": "#034694",
+      "background": "chelsea.png",
+      "family": true
+    },
+    "inter__players": {
+      "label": "Inter · Spieler",
+      "group": "italy",
+      "accent": "#48A9FF",
+      "background": "inter.png",
+      "family": true
+    },
+    "inter__legends": {
+      "label": "Inter · Legenden",
+      "group": "italy",
+      "accent": "#48A9FF",
+      "background": "inter.png",
+      "family": true
+    },
+    "milan__players": {
+      "label": "AC Milan · Spieler",
+      "group": "italy",
+      "accent": "#FB090B",
+      "background": "milan.png",
+      "family": true
+    },
+    "milan__legends": {
+      "label": "AC Milan · Legenden",
+      "group": "italy",
+      "accent": "#FB090B",
+      "background": "milan.png",
+      "family": true
+    },
+    "juventus__players": {
+      "label": "Juventus · Spieler",
+      "group": "italy",
+      "accent": "#FFFFFF",
+      "background": "juventus.png",
+      "family": true
+    },
+    "juventus__legends": {
+      "label": "Juventus · Legenden",
+      "group": "italy",
+      "accent": "#FFFFFF",
+      "background": "juventus.png",
+      "family": true
+    },
+    "napoli__players": {
+      "label": "Napoli · Spieler",
+      "group": "italy",
+      "accent": "#12A0D7",
+      "background": "napoli.png",
+      "family": true
+    },
+    "napoli__legends": {
+      "label": "Napoli · Legenden",
+      "group": "italy",
+      "accent": "#12A0D7",
+      "background": "napoli.png",
+      "family": true
+    },
+    "roma__players": {
+      "label": "AS Roma · Spieler",
+      "group": "italy",
+      "accent": "#F0BC42",
+      "background": "roma.png",
+      "family": true
+    },
+    "roma__legends": {
+      "label": "AS Roma · Legenden",
+      "group": "italy",
+      "accent": "#F0BC42",
+      "background": "roma.png",
+      "family": true
+    },
+    "real_madrid__players": {
+      "label": "Real Madrid · Spieler",
+      "group": "spain",
+      "accent": "#FEBE10",
+      "background": "real_madrid.png",
+      "family": true
+    },
+    "real_madrid__legends": {
+      "label": "Real Madrid · Legenden",
+      "group": "spain",
+      "accent": "#FEBE10",
+      "background": "real_madrid.png",
+      "family": true
+    },
+    "barcelona__players": {
+      "label": "FC Barcelona · Spieler",
+      "group": "spain",
+      "accent": "#A50044",
+      "background": "barcelona.png",
+      "family": true
+    },
+    "barcelona__legends": {
+      "label": "FC Barcelona · Legenden",
+      "group": "spain",
+      "accent": "#A50044",
+      "background": "barcelona.png",
+      "family": true
+    },
+    "atletico__players": {
+      "label": "Atlético Madrid · Spieler",
+      "group": "spain",
+      "accent": "#CB3524",
+      "background": "atletico.png",
+      "family": true
+    },
+    "atletico__legends": {
+      "label": "Atlético Madrid · Legenden",
+      "group": "spain",
+      "accent": "#CB3524",
+      "background": "atletico.png",
+      "family": true
+    },
+    "sevilla__players": {
+      "label": "Sevilla · Spieler",
+      "group": "spain",
+      "accent": "#D71920",
+      "background": "sevilla.png",
+      "family": true
+    },
+    "sevilla__legends": {
+      "label": "Sevilla · Legenden",
+      "group": "spain",
+      "accent": "#D71920",
+      "background": "sevilla.png",
+      "family": true
+    },
+    "athletic__players": {
+      "label": "Athletic Club · Spieler",
+      "group": "spain",
+      "accent": "#EE2523",
+      "background": "athletic.png",
+      "family": true
+    },
+    "athletic__legends": {
+      "label": "Athletic Club · Legenden",
+      "group": "spain",
+      "accent": "#EE2523",
+      "background": "athletic.png",
+      "family": true
+    },
+    "bayern__players": {
+      "label": "Bayern München · Spieler",
+      "group": "germany",
+      "accent": "#DC052D",
+      "background": "bayern.png",
+      "family": true
+    },
+    "bayern__legends": {
+      "label": "Bayern München · Legenden",
+      "group": "germany",
+      "accent": "#DC052D",
+      "background": "bayern.png",
+      "family": true
+    },
+    "dortmund__players": {
+      "label": "Borussia Dortmund · Spieler",
+      "group": "germany",
+      "accent": "#FDE100",
+      "background": "dortmund.png",
+      "family": true
+    },
+    "dortmund__legends": {
+      "label": "Borussia Dortmund · Legenden",
+      "group": "germany",
+      "accent": "#FDE100",
+      "background": "dortmund.png",
+      "family": true
+    },
+    "leverkusen__players": {
+      "label": "Bayer Leverkusen · Spieler",
+      "group": "germany",
+      "accent": "#E32221",
+      "background": "leverkusen.png",
+      "family": true
+    },
+    "leverkusen__legends": {
+      "label": "Bayer Leverkusen · Legenden",
+      "group": "germany",
+      "accent": "#E32221",
+      "background": "leverkusen.png",
+      "family": true
+    },
+    "frankfurt__players": {
+      "label": "Eintracht Frankfurt · Spieler",
+      "group": "germany",
+      "accent": "#E1000F",
+      "background": "frankfurt.png",
+      "family": true
+    },
+    "frankfurt__legends": {
+      "label": "Eintracht Frankfurt · Legenden",
+      "group": "germany",
+      "accent": "#E1000F",
+      "background": "frankfurt.png",
+      "family": true
+    },
+    "leipzig__players": {
+      "label": "RB Leipzig · Spieler",
+      "group": "germany",
+      "accent": "#D50032",
+      "background": "leipzig.png",
+      "family": true
+    },
+    "leipzig__legends": {
+      "label": "RB Leipzig · Legenden",
+      "group": "germany",
+      "accent": "#D50032",
+      "background": "leipzig.png",
+      "family": true
+    },
+    "fc_koeln__players": {
+      "label": "1. FC Köln · Spieler",
+      "group": "germany",
+      "accent": "#E0002B",
+      "background": "fc_koeln.png",
+      "family": true
+    },
+    "fc_koeln__legends": {
+      "label": "1. FC Köln · Legenden",
+      "group": "germany",
+      "accent": "#E0002B",
+      "background": "fc_koeln.png",
+      "family": true
+    },
+    "psg__players": {
+      "label": "Paris Saint-Germain · Spieler",
+      "group": "france",
+      "accent": "#004170",
+      "background": "psg.png",
+      "family": true
+    },
+    "psg__legends": {
+      "label": "Paris Saint-Germain · Legenden",
+      "group": "france",
+      "accent": "#004170",
+      "background": "psg.png",
+      "family": true
+    },
+    "marseille__players": {
+      "label": "Olympique Marseille · Spieler",
+      "group": "france",
+      "accent": "#2FAEE0",
+      "background": "marseille.png",
+      "family": true
+    },
+    "marseille__legends": {
+      "label": "Olympique Marseille · Legenden",
+      "group": "france",
+      "accent": "#2FAEE0",
+      "background": "marseille.png",
+      "family": true
+    },
+    "lyon__players": {
+      "label": "Olympique Lyon · Spieler",
+      "group": "france",
+      "accent": "#D71920",
+      "background": "lyon.png",
+      "family": true
+    },
+    "lyon__legends": {
+      "label": "Olympique Lyon · Legenden",
+      "group": "france",
+      "accent": "#D71920",
+      "background": "lyon.png",
+      "family": true
+    },
+    "monaco__players": {
+      "label": "AS Monaco · Spieler",
+      "group": "france",
+      "accent": "#E51B36",
+      "background": "monaco.png",
+      "family": true
+    },
+    "monaco__legends": {
+      "label": "AS Monaco · Legenden",
+      "group": "france",
+      "accent": "#E51B36",
+      "background": "monaco.png",
+      "family": true
+    },
+    "lille__players": {
+      "label": "Lille OSC · Spieler",
+      "group": "france",
+      "accent": "#D71920",
+      "background": "lille.png",
+      "family": true
+    },
+    "lille__legends": {
+      "label": "Lille OSC · Legenden",
+      "group": "france",
+      "accent": "#D71920",
+      "background": "lille.png",
+      "family": true
+    },
+    "ajax__players": {
+      "label": "Ajax · Spieler",
+      "group": "netherlands",
+      "accent": "#D2122E",
+      "background": "ajax.png",
+      "family": true
+    },
+    "ajax__legends": {
+      "label": "Ajax · Legenden",
+      "group": "netherlands",
+      "accent": "#D2122E",
+      "background": "ajax.png",
+      "family": true
+    },
+    "psv__players": {
+      "label": "PSV Eindhoven · Spieler",
+      "group": "netherlands",
+      "accent": "#ED1B2F",
+      "background": "psv.png",
+      "family": true
+    },
+    "psv__legends": {
+      "label": "PSV Eindhoven · Legenden",
+      "group": "netherlands",
+      "accent": "#ED1B2F",
+      "background": "psv.png",
+      "family": true
+    },
+    "feyenoord__players": {
+      "label": "Feyenoord · Spieler",
+      "group": "netherlands",
+      "accent": "#D22630",
+      "background": "feyenoord.png",
+      "family": true
+    },
+    "feyenoord__legends": {
+      "label": "Feyenoord · Legenden",
+      "group": "netherlands",
+      "accent": "#D22630",
+      "background": "feyenoord.png",
+      "family": true
+    },
+    "az__players": {
+      "label": "AZ Alkmaar · Spieler",
+      "group": "netherlands",
+      "accent": "#D71920",
+      "background": "az.png",
+      "family": true
+    },
+    "az__legends": {
+      "label": "AZ Alkmaar · Legenden",
+      "group": "netherlands",
+      "accent": "#D71920",
+      "background": "az.png",
+      "family": true
+    },
+    "twente__players": {
+      "label": "FC Twente · Spieler",
+      "group": "netherlands",
+      "accent": "#E30613",
+      "background": "twente.png",
+      "family": true
+    },
+    "twente__legends": {
+      "label": "FC Twente · Legenden",
+      "group": "netherlands",
+      "accent": "#E30613",
+      "background": "twente.png",
+      "family": true
+    },
+    "galatasaray__players": {
+      "label": "Galatasaray · Spieler",
+      "group": "turkey",
+      "accent": "#FDB912",
+      "background": "galatasaray.png",
+      "family": true
+    },
+    "galatasaray__legends": {
+      "label": "Galatasaray · Legenden",
+      "group": "turkey",
+      "accent": "#FDB912",
+      "background": "galatasaray.png",
+      "family": true
+    },
+    "fenerbahce__players": {
+      "label": "Fenerbahçe · Spieler",
+      "group": "turkey",
+      "accent": "#FDE100",
+      "background": "fenerbahce.png",
+      "family": true
+    },
+    "fenerbahce__legends": {
+      "label": "Fenerbahçe · Legenden",
+      "group": "turkey",
+      "accent": "#FDE100",
+      "background": "fenerbahce.png",
+      "family": true
+    },
+    "trabzonspor__players": {
+      "label": "Trabzonspor · Spieler",
+      "group": "turkey",
+      "accent": "#5DB7E5",
+      "background": "trabzonspor.png",
+      "family": true
+    },
+    "trabzonspor__legends": {
+      "label": "Trabzonspor · Legenden",
+      "group": "turkey",
+      "accent": "#5DB7E5",
+      "background": "trabzonspor.png",
+      "family": true
+    },
+    "besiktas__players": {
+      "label": "Beşiktaş · Spieler",
+      "group": "turkey",
+      "accent": "#FFFFFF",
+      "background": "besiktas.png",
+      "family": true
+    },
+    "besiktas__legends": {
+      "label": "Beşiktaş · Legenden",
+      "group": "turkey",
+      "accent": "#FFFFFF",
+      "background": "besiktas.png",
+      "family": true
+    },
+    "basaksehir__players": {
+      "label": "Başakşehir · Spieler",
+      "group": "turkey",
+      "accent": "#F58220",
+      "background": "basaksehir.png",
+      "family": true
+    },
+    "basaksehir__legends": {
+      "label": "Başakşehir · Legenden",
+      "group": "turkey",
+      "accent": "#F58220",
+      "background": "basaksehir.png",
+      "family": true
+    },
+    "porto__players": {
+      "label": "FC Porto · Spieler",
+      "group": "portugal",
+      "accent": "#2A65B9",
+      "background": "porto.png",
+      "family": true
+    },
+    "porto__legends": {
+      "label": "FC Porto · Legenden",
+      "group": "portugal",
+      "accent": "#2A65B9",
+      "background": "porto.png",
+      "family": true
+    },
+    "benfica__players": {
+      "label": "Benfica · Spieler",
+      "group": "portugal",
+      "accent": "#E32219",
+      "background": "benfica.png",
+      "family": true
+    },
+    "benfica__legends": {
+      "label": "Benfica · Legenden",
+      "group": "portugal",
+      "accent": "#E32219",
+      "background": "benfica.png",
+      "family": true
+    },
+    "sporting__players": {
+      "label": "Sporting CP · Spieler",
+      "group": "portugal",
+      "accent": "#1B8D49",
+      "background": "sporting.png",
+      "family": true
+    },
+    "sporting__legends": {
+      "label": "Sporting CP · Legenden",
+      "group": "portugal",
+      "accent": "#1B8D49",
+      "background": "sporting.png",
+      "family": true
+    },
+    "celtic__players": {
+      "label": "Celtic · Spieler",
+      "group": "scotland",
+      "accent": "#14934A",
+      "background": "celtic.png",
+      "family": true
+    },
+    "celtic__legends": {
+      "label": "Celtic · Legenden",
+      "group": "scotland",
+      "accent": "#14934A",
+      "background": "celtic.png",
+      "family": true
+    },
+    "rangers__players": {
+      "label": "Rangers · Spieler",
+      "group": "scotland",
+      "accent": "#2457A6",
+      "background": "rangers.png",
+      "family": true
+    },
+    "rangers__legends": {
+      "label": "Rangers · Legenden",
+      "group": "scotland",
+      "accent": "#2457A6",
+      "background": "rangers.png",
+      "family": true
+    },
+    "national_de__players": {
+      "label": "Deutschland · Spieler",
+      "group": "national_teams",
+      "accent": "#E9C46A",
+      "family": true
+    },
+    "national_de__legends": {
+      "label": "Deutschland · Legenden",
+      "group": "national_teams",
+      "accent": "#E9C46A",
+      "family": true
+    },
+    "national_it__players": {
+      "label": "Italien · Spieler",
+      "group": "national_teams",
+      "accent": "#008C45",
+      "family": true
+    },
+    "national_it__legends": {
+      "label": "Italien · Legenden",
+      "group": "national_teams",
+      "accent": "#008C45",
+      "family": true
+    },
+    "national_fr__players": {
+      "label": "Frankreich · Spieler",
+      "group": "national_teams",
+      "accent": "#0055A4",
+      "family": true
+    },
+    "national_fr__legends": {
+      "label": "Frankreich · Legenden",
+      "group": "national_teams",
+      "accent": "#0055A4",
+      "family": true
+    },
+    "national_es__players": {
+      "label": "Spanien · Spieler",
+      "group": "national_teams",
+      "accent": "#AA151B",
+      "family": true
+    },
+    "national_es__legends": {
+      "label": "Spanien · Legenden",
+      "group": "national_teams",
+      "accent": "#AA151B",
+      "family": true
+    },
+    "national_en__players": {
+      "label": "England · Spieler",
+      "group": "national_teams",
+      "accent": "#CF081F",
+      "family": true
+    },
+    "national_en__legends": {
+      "label": "England · Legenden",
+      "group": "national_teams",
+      "accent": "#CF081F",
+      "family": true
+    },
+    "national_pt__players": {
+      "label": "Portugal · Spieler",
+      "group": "national_teams",
+      "accent": "#046A38",
+      "family": true
+    },
+    "national_pt__legends": {
+      "label": "Portugal · Legenden",
+      "group": "national_teams",
+      "accent": "#046A38",
+      "family": true
+    },
+    "national_nl__players": {
+      "label": "Niederlande · Spieler",
+      "group": "national_teams",
+      "accent": "#F36C21",
+      "family": true
+    },
+    "national_nl__legends": {
+      "label": "Niederlande · Legenden",
+      "group": "national_teams",
+      "accent": "#F36C21",
+      "family": true
+    },
+    "national_be__players": {
+      "label": "Belgien · Spieler",
+      "group": "national_teams",
+      "accent": "#FDDA24",
+      "family": true
+    },
+    "national_be__legends": {
+      "label": "Belgien · Legenden",
+      "group": "national_teams",
+      "accent": "#FDDA24",
+      "family": true
+    },
+    "national_hr__players": {
+      "label": "Kroatien · Spieler",
+      "group": "national_teams",
+      "accent": "#E60026",
+      "family": true
+    },
+    "national_hr__legends": {
+      "label": "Kroatien · Legenden",
+      "group": "national_teams",
+      "accent": "#E60026",
+      "family": true
+    },
+    "national_ar__players": {
+      "label": "Argentinien · Spieler",
+      "group": "national_teams",
+      "accent": "#74ACDF",
+      "family": true
+    },
+    "national_ar__legends": {
+      "label": "Argentinien · Legenden",
+      "group": "national_teams",
+      "accent": "#74ACDF",
+      "family": true
+    },
+    "national_br__players": {
+      "label": "Brasilien · Spieler",
+      "group": "national_teams",
+      "accent": "#FFDF00",
+      "family": true
+    },
+    "national_br__legends": {
+      "label": "Brasilien · Legenden",
+      "group": "national_teams",
+      "accent": "#FFDF00",
+      "family": true
+    },
+    "national_uy__players": {
+      "label": "Uruguay · Spieler",
+      "group": "national_teams",
+      "accent": "#5BC0EB",
+      "family": true
+    },
+    "national_uy__legends": {
+      "label": "Uruguay · Legenden",
+      "group": "national_teams",
+      "accent": "#5BC0EB",
+      "family": true
+    },
+    "national_mx__players": {
+      "label": "Mexiko · Spieler",
+      "group": "national_teams",
+      "accent": "#006847",
+      "family": true
+    },
+    "national_mx__legends": {
+      "label": "Mexiko · Legenden",
+      "group": "national_teams",
+      "accent": "#006847",
+      "family": true
+    },
+    "national_us__players": {
+      "label": "USA · Spieler",
+      "group": "national_teams",
+      "accent": "#3C3B6E",
+      "family": true
+    },
+    "national_us__legends": {
+      "label": "USA · Legenden",
+      "group": "national_teams",
+      "accent": "#3C3B6E",
+      "family": true
+    },
+    "national_ma__players": {
+      "label": "Marokko · Spieler",
+      "group": "national_teams",
+      "accent": "#C1272D",
+      "family": true
+    },
+    "national_ma__legends": {
+      "label": "Marokko · Legenden",
+      "group": "national_teams",
+      "accent": "#C1272D",
+      "family": true
+    },
+    "national_tr__players": {
+      "label": "Türkei · Spieler",
+      "group": "national_teams",
+      "accent": "#E30A17",
+      "family": true
+    },
+    "national_tr__legends": {
+      "label": "Türkei · Legenden",
+      "group": "national_teams",
+      "accent": "#E30A17",
+      "family": true
+    },
+    "national_jp__players": {
+      "label": "Japan · Spieler",
+      "group": "national_teams",
+      "accent": "#BC002D",
+      "family": true
+    },
+    "national_jp__legends": {
+      "label": "Japan · Legenden",
+      "group": "national_teams",
+      "accent": "#BC002D",
+      "family": true
+    },
+    "national_kr__players": {
+      "label": "Südkorea · Spieler",
+      "group": "national_teams",
+      "accent": "#0047A0",
+      "family": true
+    },
+    "national_kr__legends": {
+      "label": "Südkorea · Legenden",
+      "group": "national_teams",
+      "accent": "#0047A0",
+      "family": true
+    },
+    "national_ch__players": {
+      "label": "Schweiz · Spieler",
+      "group": "national_teams",
+      "accent": "#D52B1E",
+      "family": true
+    },
+    "national_ch__legends": {
+      "label": "Schweiz · Legenden",
+      "group": "national_teams",
+      "accent": "#D52B1E",
+      "family": true
+    },
+    "national_dk__players": {
+      "label": "Dänemark · Spieler",
+      "group": "national_teams",
+      "accent": "#C60C30",
+      "family": true
+    },
+    "national_dk__legends": {
+      "label": "Dänemark · Legenden",
+      "group": "national_teams",
+      "accent": "#C60C30",
+      "family": true
+    },
+    "f1_ferrari__players": {
+      "label": "Ferrari F1 · Fahrer",
+      "group": "formula_1",
+      "accent": "#FF2800",
+      "family": true
+    },
+    "f1_ferrari__legends": {
+      "label": "Ferrari F1 · Legenden",
+      "group": "formula_1",
+      "accent": "#FF2800",
+      "family": true
+    },
+    "f1_mercedes__players": {
+      "label": "Mercedes F1 · Fahrer",
+      "group": "formula_1",
+      "accent": "#00A19C",
+      "family": true
+    },
+    "f1_mercedes__legends": {
+      "label": "Mercedes F1 · Legenden",
+      "group": "formula_1",
+      "accent": "#00A19C",
+      "family": true
+    },
+    "f1_red_bull__players": {
+      "label": "Red Bull Racing · Fahrer",
+      "group": "formula_1",
+      "accent": "#1E41FF",
+      "family": true
+    },
+    "f1_red_bull__legends": {
+      "label": "Red Bull Racing · Legenden",
+      "group": "formula_1",
+      "accent": "#1E41FF",
+      "family": true
+    },
+    "f1_mclaren__players": {
+      "label": "McLaren F1 · Fahrer",
+      "group": "formula_1",
+      "accent": "#FF8700",
+      "family": true
+    },
+    "f1_mclaren__legends": {
+      "label": "McLaren F1 · Legenden",
+      "group": "formula_1",
+      "accent": "#FF8700",
+      "family": true
+    },
+    "f1_aston_martin__players": {
+      "label": "Aston Martin F1 · Fahrer",
+      "group": "formula_1",
+      "accent": "#006F62",
+      "family": true
+    },
+    "f1_aston_martin__legends": {
+      "label": "Aston Martin F1 · Team-Historie",
+      "group": "formula_1",
+      "accent": "#006F62",
+      "family": true
+    },
+    "f1_alpine__players": {
+      "label": "Alpine F1 · Fahrer",
+      "group": "formula_1",
+      "accent": "#2293D1",
+      "family": true
+    },
+    "f1_alpine__legends": {
+      "label": "Alpine F1 · Team-Historie",
+      "group": "formula_1",
+      "accent": "#2293D1",
+      "family": true
+    },
+    "f1_haas__players": {
+      "label": "Haas F1 · Fahrer",
+      "group": "formula_1",
+      "accent": "#B6BABD",
+      "family": true
+    },
+    "f1_haas__legends": {
+      "label": "Haas F1 · Legenden",
+      "group": "formula_1",
+      "accent": "#B6BABD",
+      "family": true
+    },
+    "f1_racing_bulls__players": {
+      "label": "Racing Bulls · Fahrer",
+      "group": "formula_1",
+      "accent": "#6692FF",
+      "family": true
+    },
+    "f1_racing_bulls__legends": {
+      "label": "Racing Bulls · Team-Historie",
+      "group": "formula_1",
+      "accent": "#6692FF",
+      "family": true
+    },
+    "f1_williams__players": {
+      "label": "Williams F1 · Fahrer",
+      "group": "formula_1",
+      "accent": "#005AFF",
+      "family": true
+    },
+    "f1_williams__legends": {
+      "label": "Williams F1 · Legenden",
+      "group": "formula_1",
+      "accent": "#005AFF",
+      "family": true
+    },
+    "f1_audi__players": {
+      "label": "Audi F1 · Fahrer",
+      "group": "formula_1",
+      "accent": "#F50537",
+      "family": true
+    },
+    "f1_audi__legends": {
+      "label": "Audi F1 · Team-Historie",
+      "group": "formula_1",
+      "accent": "#F50537",
+      "family": true
+    },
+    "f1_cadillac__players": {
+      "label": "Cadillac F1 · Fahrer",
+      "group": "formula_1",
+      "accent": "#D4AF37",
+      "family": true
+    },
+    "f1_cadillac__legends": {
+      "label": "Cadillac F1 · US-Motorsport-Ikonen",
+      "group": "formula_1",
+      "accent": "#D4AF37",
+      "family": true
+    },
+    "nba_atlanta_hawks": {
+      "label": "Atlanta Hawks",
+      "group": "nba",
+      "accent": "#c8102e",
+      "background": "nba_atlanta_hawks.png",
+      "family": true
+    },
+    "nba_atlanta_hawks__players": {
+      "label": "Atlanta Hawks · Spieler",
+      "group": "nba",
+      "accent": "#c8102e",
+      "background": "nba_atlanta_hawks.png",
+      "family": true
+    },
+    "nba_atlanta_hawks__legends": {
+      "label": "Atlanta Hawks · Legenden",
+      "group": "nba",
+      "accent": "#c8102e",
+      "background": "nba_atlanta_hawks.png",
+      "family": true
+    },
+    "nba_boston_celtics": {
+      "label": "Boston Celtics",
+      "group": "nba",
+      "accent": "#008348",
+      "background": "nba_boston_celtics.png",
+      "family": true
+    },
+    "nba_boston_celtics__players": {
+      "label": "Boston Celtics · Spieler",
+      "group": "nba",
+      "accent": "#008348",
+      "background": "nba_boston_celtics.png",
+      "family": true
+    },
+    "nba_boston_celtics__legends": {
+      "label": "Boston Celtics · Legenden",
+      "group": "nba",
+      "accent": "#008348",
+      "background": "nba_boston_celtics.png",
+      "family": true
+    },
+    "nba_brooklyn_nets": {
+      "label": "Brooklyn Nets",
+      "group": "nba",
+      "accent": "#000000",
+      "background": "nba_brooklyn_nets.png",
+      "family": true
+    },
+    "nba_brooklyn_nets__players": {
+      "label": "Brooklyn Nets · Spieler",
+      "group": "nba",
+      "accent": "#000000",
+      "background": "nba_brooklyn_nets.png",
+      "family": true
+    },
+    "nba_brooklyn_nets__legends": {
+      "label": "Brooklyn Nets · Legenden",
+      "group": "nba",
+      "accent": "#000000",
+      "background": "nba_brooklyn_nets.png",
+      "family": true
+    },
+    "nba_charlotte_hornets": {
+      "label": "Charlotte Hornets",
+      "group": "nba",
+      "accent": "#008ca8",
+      "background": "nba_charlotte_hornets.png",
+      "family": true
+    },
+    "nba_charlotte_hornets__players": {
+      "label": "Charlotte Hornets · Spieler",
+      "group": "nba",
+      "accent": "#008ca8",
+      "background": "nba_charlotte_hornets.png",
+      "family": true
+    },
+    "nba_charlotte_hornets__legends": {
+      "label": "Charlotte Hornets · Legenden",
+      "group": "nba",
+      "accent": "#008ca8",
+      "background": "nba_charlotte_hornets.png",
+      "family": true
+    },
+    "nba_chicago_bulls": {
+      "label": "Chicago Bulls",
+      "group": "nba",
+      "accent": "#ce1141",
+      "background": "nba_chicago_bulls.png",
+      "family": true
+    },
+    "nba_chicago_bulls__players": {
+      "label": "Chicago Bulls · Spieler",
+      "group": "nba",
+      "accent": "#ce1141",
+      "background": "nba_chicago_bulls.png",
+      "family": true
+    },
+    "nba_chicago_bulls__legends": {
+      "label": "Chicago Bulls · Legenden",
+      "group": "nba",
+      "accent": "#ce1141",
+      "background": "nba_chicago_bulls.png",
+      "family": true
+    },
+    "nba_cleveland_cavaliers": {
+      "label": "Cleveland Cavaliers",
+      "group": "nba",
+      "accent": "#860038",
+      "background": "nba_cleveland_cavaliers.png",
+      "family": true
+    },
+    "nba_cleveland_cavaliers__players": {
+      "label": "Cleveland Cavaliers · Spieler",
+      "group": "nba",
+      "accent": "#860038",
+      "background": "nba_cleveland_cavaliers.png",
+      "family": true
+    },
+    "nba_cleveland_cavaliers__legends": {
+      "label": "Cleveland Cavaliers · Legenden",
+      "group": "nba",
+      "accent": "#860038",
+      "background": "nba_cleveland_cavaliers.png",
+      "family": true
+    },
+    "nba_dallas_mavericks": {
+      "label": "Dallas Mavericks",
+      "group": "nba",
+      "accent": "#0064b1",
+      "background": "nba_dallas_mavericks.png",
+      "family": true
+    },
+    "nba_dallas_mavericks__players": {
+      "label": "Dallas Mavericks · Spieler",
+      "group": "nba",
+      "accent": "#0064b1",
+      "background": "nba_dallas_mavericks.png",
+      "family": true
+    },
+    "nba_dallas_mavericks__legends": {
+      "label": "Dallas Mavericks · Legenden",
+      "group": "nba",
+      "accent": "#0064b1",
+      "background": "nba_dallas_mavericks.png",
+      "family": true
+    },
+    "nba_denver_nuggets": {
+      "label": "Denver Nuggets",
+      "group": "nba",
+      "accent": "#0e2240",
+      "background": "nba_denver_nuggets.png",
+      "family": true
+    },
+    "nba_denver_nuggets__players": {
+      "label": "Denver Nuggets · Spieler",
+      "group": "nba",
+      "accent": "#0e2240",
+      "background": "nba_denver_nuggets.png",
+      "family": true
+    },
+    "nba_denver_nuggets__legends": {
+      "label": "Denver Nuggets · Legenden",
+      "group": "nba",
+      "accent": "#0e2240",
+      "background": "nba_denver_nuggets.png",
+      "family": true
+    },
+    "nba_detroit_pistons": {
+      "label": "Detroit Pistons",
+      "group": "nba",
+      "accent": "#1d428a",
+      "background": "nba_detroit_pistons.png",
+      "family": true
+    },
+    "nba_detroit_pistons__players": {
+      "label": "Detroit Pistons · Spieler",
+      "group": "nba",
+      "accent": "#1d428a",
+      "background": "nba_detroit_pistons.png",
+      "family": true
+    },
+    "nba_detroit_pistons__legends": {
+      "label": "Detroit Pistons · Legenden",
+      "group": "nba",
+      "accent": "#1d428a",
+      "background": "nba_detroit_pistons.png",
+      "family": true
+    },
+    "nba_golden_state_warriors": {
+      "label": "Golden State Warriors",
+      "group": "nba",
+      "accent": "#fdb927",
+      "background": "nba_golden_state_warriors.png",
+      "family": true
+    },
+    "nba_golden_state_warriors__players": {
+      "label": "Golden State Warriors · Spieler",
+      "group": "nba",
+      "accent": "#fdb927",
+      "background": "nba_golden_state_warriors.png",
+      "family": true
+    },
+    "nba_golden_state_warriors__legends": {
+      "label": "Golden State Warriors · Legenden",
+      "group": "nba",
+      "accent": "#fdb927",
+      "background": "nba_golden_state_warriors.png",
+      "family": true
+    },
+    "nba_houston_rockets": {
+      "label": "Houston Rockets",
+      "group": "nba",
+      "accent": "#ce0e2d",
+      "background": "nba_houston_rockets.png",
+      "family": true
+    },
+    "nba_houston_rockets__players": {
+      "label": "Houston Rockets · Spieler",
+      "group": "nba",
+      "accent": "#ce0e2d",
+      "background": "nba_houston_rockets.png",
+      "family": true
+    },
+    "nba_houston_rockets__legends": {
+      "label": "Houston Rockets · Legenden",
+      "group": "nba",
+      "accent": "#ce0e2d",
+      "background": "nba_houston_rockets.png",
+      "family": true
+    },
+    "nba_indiana_pacers": {
+      "label": "Indiana Pacers",
+      "group": "nba",
+      "accent": "#0c2340",
+      "background": "nba_indiana_pacers.png",
+      "family": true
+    },
+    "nba_indiana_pacers__players": {
+      "label": "Indiana Pacers · Spieler",
+      "group": "nba",
+      "accent": "#0c2340",
+      "background": "nba_indiana_pacers.png",
+      "family": true
+    },
+    "nba_indiana_pacers__legends": {
+      "label": "Indiana Pacers · Legenden",
+      "group": "nba",
+      "accent": "#0c2340",
+      "background": "nba_indiana_pacers.png",
+      "family": true
+    },
+    "nba_los_angeles_clippers": {
+      "label": "Los Angeles Clippers",
+      "group": "nba",
+      "accent": "#12173f",
+      "background": "nba_los_angeles_clippers.png",
+      "family": true
+    },
+    "nba_los_angeles_clippers__players": {
+      "label": "Los Angeles Clippers · Spieler",
+      "group": "nba",
+      "accent": "#12173f",
+      "background": "nba_los_angeles_clippers.png",
+      "family": true
+    },
+    "nba_los_angeles_clippers__legends": {
+      "label": "Los Angeles Clippers · Legenden",
+      "group": "nba",
+      "accent": "#12173f",
+      "background": "nba_los_angeles_clippers.png",
+      "family": true
+    },
+    "nba_los_angeles_lakers": {
+      "label": "Los Angeles Lakers",
+      "group": "nba",
+      "accent": "#552583",
+      "background": "nba_los_angeles_lakers.png",
+      "family": true
+    },
+    "nba_los_angeles_lakers__players": {
+      "label": "Los Angeles Lakers · Spieler",
+      "group": "nba",
+      "accent": "#552583",
+      "background": "nba_los_angeles_lakers.png",
+      "family": true
+    },
+    "nba_los_angeles_lakers__legends": {
+      "label": "Los Angeles Lakers · Legenden",
+      "group": "nba",
+      "accent": "#552583",
+      "background": "nba_los_angeles_lakers.png",
+      "family": true
+    },
+    "nba_memphis_grizzlies": {
+      "label": "Memphis Grizzlies",
+      "group": "nba",
+      "accent": "#5d76a9",
+      "background": "nba_memphis_grizzlies.png",
+      "family": true
+    },
+    "nba_memphis_grizzlies__players": {
+      "label": "Memphis Grizzlies · Spieler",
+      "group": "nba",
+      "accent": "#5d76a9",
+      "background": "nba_memphis_grizzlies.png",
+      "family": true
+    },
+    "nba_memphis_grizzlies__legends": {
+      "label": "Memphis Grizzlies · Legenden",
+      "group": "nba",
+      "accent": "#5d76a9",
+      "background": "nba_memphis_grizzlies.png",
+      "family": true
+    },
+    "nba_miami_heat": {
+      "label": "Miami Heat",
+      "group": "nba",
+      "accent": "#98002e",
+      "background": "nba_miami_heat.png",
+      "family": true
+    },
+    "nba_miami_heat__players": {
+      "label": "Miami Heat · Spieler",
+      "group": "nba",
+      "accent": "#98002e",
+      "background": "nba_miami_heat.png",
+      "family": true
+    },
+    "nba_miami_heat__legends": {
+      "label": "Miami Heat · Legenden",
+      "group": "nba",
+      "accent": "#98002e",
+      "background": "nba_miami_heat.png",
+      "family": true
+    },
+    "nba_milwaukee_bucks": {
+      "label": "Milwaukee Bucks",
+      "group": "nba",
+      "accent": "#00471b",
+      "background": "nba_milwaukee_bucks.png",
+      "family": true
+    },
+    "nba_milwaukee_bucks__players": {
+      "label": "Milwaukee Bucks · Spieler",
+      "group": "nba",
+      "accent": "#00471b",
+      "background": "nba_milwaukee_bucks.png",
+      "family": true
+    },
+    "nba_milwaukee_bucks__legends": {
+      "label": "Milwaukee Bucks · Legenden",
+      "group": "nba",
+      "accent": "#00471b",
+      "background": "nba_milwaukee_bucks.png",
+      "family": true
+    },
+    "nba_minnesota_timberwolves": {
+      "label": "Minnesota Timberwolves",
+      "group": "nba",
+      "accent": "#266092",
+      "background": "nba_minnesota_timberwolves.png",
+      "family": true
+    },
+    "nba_minnesota_timberwolves__players": {
+      "label": "Minnesota Timberwolves · Spieler",
+      "group": "nba",
+      "accent": "#266092",
+      "background": "nba_minnesota_timberwolves.png",
+      "family": true
+    },
+    "nba_minnesota_timberwolves__legends": {
+      "label": "Minnesota Timberwolves · Legenden",
+      "group": "nba",
+      "accent": "#266092",
+      "background": "nba_minnesota_timberwolves.png",
+      "family": true
+    },
+    "nba_new_orleans_pelicans": {
+      "label": "New Orleans Pelicans",
+      "group": "nba",
+      "accent": "#0a2240",
+      "background": "nba_new_orleans_pelicans.png",
+      "family": true
+    },
+    "nba_new_orleans_pelicans__players": {
+      "label": "New Orleans Pelicans · Spieler",
+      "group": "nba",
+      "accent": "#0a2240",
+      "background": "nba_new_orleans_pelicans.png",
+      "family": true
+    },
+    "nba_new_orleans_pelicans__legends": {
+      "label": "New Orleans Pelicans · Legenden",
+      "group": "nba",
+      "accent": "#0a2240",
+      "background": "nba_new_orleans_pelicans.png",
+      "family": true
+    },
+    "nba_new_york_knicks": {
+      "label": "New York Knicks",
+      "group": "nba",
+      "accent": "#1d428a",
+      "background": "nba_new_york_knicks.png",
+      "family": true
+    },
+    "nba_new_york_knicks__players": {
+      "label": "New York Knicks · Spieler",
+      "group": "nba",
+      "accent": "#1d428a",
+      "background": "nba_new_york_knicks.png",
+      "family": true
+    },
+    "nba_new_york_knicks__legends": {
+      "label": "New York Knicks · Legenden",
+      "group": "nba",
+      "accent": "#1d428a",
+      "background": "nba_new_york_knicks.png",
+      "family": true
+    },
+    "nba_oklahoma_city_thunder": {
+      "label": "Oklahoma City Thunder",
+      "group": "nba",
+      "accent": "#007ac1",
+      "background": "nba_oklahoma_city_thunder.png",
+      "family": true
+    },
+    "nba_oklahoma_city_thunder__players": {
+      "label": "Oklahoma City Thunder · Spieler",
+      "group": "nba",
+      "accent": "#007ac1",
+      "background": "nba_oklahoma_city_thunder.png",
+      "family": true
+    },
+    "nba_oklahoma_city_thunder__legends": {
+      "label": "Oklahoma City Thunder · Legenden",
+      "group": "nba",
+      "accent": "#007ac1",
+      "background": "nba_oklahoma_city_thunder.png",
+      "family": true
+    },
+    "nba_orlando_magic": {
+      "label": "Orlando Magic",
+      "group": "nba",
+      "accent": "#0150b5",
+      "background": "nba_orlando_magic.png",
+      "family": true
+    },
+    "nba_orlando_magic__players": {
+      "label": "Orlando Magic · Spieler",
+      "group": "nba",
+      "accent": "#0150b5",
+      "background": "nba_orlando_magic.png",
+      "family": true
+    },
+    "nba_orlando_magic__legends": {
+      "label": "Orlando Magic · Legenden",
+      "group": "nba",
+      "accent": "#0150b5",
+      "background": "nba_orlando_magic.png",
+      "family": true
+    },
+    "nba_philadelphia_76ers": {
+      "label": "Philadelphia 76ers",
+      "group": "nba",
+      "accent": "#1d428a",
+      "background": "nba_philadelphia_76ers.png",
+      "family": true
+    },
+    "nba_philadelphia_76ers__players": {
+      "label": "Philadelphia 76ers · Spieler",
+      "group": "nba",
+      "accent": "#1d428a",
+      "background": "nba_philadelphia_76ers.png",
+      "family": true
+    },
+    "nba_philadelphia_76ers__legends": {
+      "label": "Philadelphia 76ers · Legenden",
+      "group": "nba",
+      "accent": "#1d428a",
+      "background": "nba_philadelphia_76ers.png",
+      "family": true
+    },
+    "nba_phoenix_suns": {
+      "label": "Phoenix Suns",
+      "group": "nba",
+      "accent": "#29127a",
+      "background": "nba_phoenix_suns.png",
+      "family": true
+    },
+    "nba_phoenix_suns__players": {
+      "label": "Phoenix Suns · Spieler",
+      "group": "nba",
+      "accent": "#29127a",
+      "background": "nba_phoenix_suns.png",
+      "family": true
+    },
+    "nba_phoenix_suns__legends": {
+      "label": "Phoenix Suns · Legenden",
+      "group": "nba",
+      "accent": "#29127a",
+      "background": "nba_phoenix_suns.png",
+      "family": true
+    },
+    "nba_portland_trail_blazers": {
+      "label": "Portland Trail Blazers",
+      "group": "nba",
+      "accent": "#e03a3e",
+      "background": "nba_portland_trail_blazers.png",
+      "family": true
+    },
+    "nba_portland_trail_blazers__players": {
+      "label": "Portland Trail Blazers · Spieler",
+      "group": "nba",
+      "accent": "#e03a3e",
+      "background": "nba_portland_trail_blazers.png",
+      "family": true
+    },
+    "nba_portland_trail_blazers__legends": {
+      "label": "Portland Trail Blazers · Legenden",
+      "group": "nba",
+      "accent": "#e03a3e",
+      "background": "nba_portland_trail_blazers.png",
+      "family": true
+    },
+    "nba_sacramento_kings": {
+      "label": "Sacramento Kings",
+      "group": "nba",
+      "accent": "#5a2d81",
+      "background": "nba_sacramento_kings.png",
+      "family": true
+    },
+    "nba_sacramento_kings__players": {
+      "label": "Sacramento Kings · Spieler",
+      "group": "nba",
+      "accent": "#5a2d81",
+      "background": "nba_sacramento_kings.png",
+      "family": true
+    },
+    "nba_sacramento_kings__legends": {
+      "label": "Sacramento Kings · Legenden",
+      "group": "nba",
+      "accent": "#5a2d81",
+      "background": "nba_sacramento_kings.png",
+      "family": true
+    },
+    "nba_san_antonio_spurs": {
+      "label": "San Antonio Spurs",
+      "group": "nba",
+      "accent": "#000000",
+      "background": "nba_san_antonio_spurs.png",
+      "family": true
+    },
+    "nba_san_antonio_spurs__players": {
+      "label": "San Antonio Spurs · Spieler",
+      "group": "nba",
+      "accent": "#000000",
+      "background": "nba_san_antonio_spurs.png",
+      "family": true
+    },
+    "nba_san_antonio_spurs__legends": {
+      "label": "San Antonio Spurs · Legenden",
+      "group": "nba",
+      "accent": "#000000",
+      "background": "nba_san_antonio_spurs.png",
+      "family": true
+    },
+    "nba_toronto_raptors": {
+      "label": "Toronto Raptors",
+      "group": "nba",
+      "accent": "#d91244",
+      "background": "nba_toronto_raptors.png",
+      "family": true
+    },
+    "nba_toronto_raptors__players": {
+      "label": "Toronto Raptors · Spieler",
+      "group": "nba",
+      "accent": "#d91244",
+      "background": "nba_toronto_raptors.png",
+      "family": true
+    },
+    "nba_toronto_raptors__legends": {
+      "label": "Toronto Raptors · Legenden",
+      "group": "nba",
+      "accent": "#d91244",
+      "background": "nba_toronto_raptors.png",
+      "family": true
+    },
+    "nba_utah_jazz": {
+      "label": "Utah Jazz",
+      "group": "nba",
+      "accent": "#4e008e",
+      "background": "nba_utah_jazz.png",
+      "family": true
+    },
+    "nba_utah_jazz__players": {
+      "label": "Utah Jazz · Spieler",
+      "group": "nba",
+      "accent": "#4e008e",
+      "background": "nba_utah_jazz.png",
+      "family": true
+    },
+    "nba_utah_jazz__legends": {
+      "label": "Utah Jazz · Legenden",
+      "group": "nba",
+      "accent": "#4e008e",
+      "background": "nba_utah_jazz.png",
+      "family": true
+    },
+    "nba_washington_wizards": {
+      "label": "Washington Wizards",
+      "group": "nba",
+      "accent": "#e31837",
+      "background": "nba_washington_wizards.png",
+      "family": true
+    },
+    "nba_washington_wizards__players": {
+      "label": "Washington Wizards · Spieler",
+      "group": "nba",
+      "accent": "#e31837",
+      "background": "nba_washington_wizards.png",
+      "family": true
+    },
+    "nba_washington_wizards__legends": {
+      "label": "Washington Wizards · Legenden",
+      "group": "nba",
+      "accent": "#e31837",
+      "background": "nba_washington_wizards.png",
+      "family": true
+    },
+    "nfl_arizona_cardinals": {
+      "label": "Arizona Cardinals",
+      "group": "nfl",
+      "accent": "#a40227",
+      "background": "nfl_arizona_cardinals.png",
+      "family": true
+    },
+    "nfl_arizona_cardinals__players": {
+      "label": "Arizona Cardinals · Spieler",
+      "group": "nfl",
+      "accent": "#a40227",
+      "background": "nfl_arizona_cardinals.png",
+      "family": true
+    },
+    "nfl_arizona_cardinals__legends": {
+      "label": "Arizona Cardinals · Legenden",
+      "group": "nfl",
+      "accent": "#a40227",
+      "background": "nfl_arizona_cardinals.png",
+      "family": true
+    },
+    "nfl_atlanta_falcons": {
+      "label": "Atlanta Falcons",
+      "group": "nfl",
+      "accent": "#a71930",
+      "background": "nfl_atlanta_falcons.png",
+      "family": true
+    },
+    "nfl_atlanta_falcons__players": {
+      "label": "Atlanta Falcons · Spieler",
+      "group": "nfl",
+      "accent": "#a71930",
+      "background": "nfl_atlanta_falcons.png",
+      "family": true
+    },
+    "nfl_atlanta_falcons__legends": {
+      "label": "Atlanta Falcons · Legenden",
+      "group": "nfl",
+      "accent": "#a71930",
+      "background": "nfl_atlanta_falcons.png",
+      "family": true
+    },
+    "nfl_baltimore_ravens": {
+      "label": "Baltimore Ravens",
+      "group": "nfl",
+      "accent": "#29126f",
+      "background": "nfl_baltimore_ravens.png",
+      "family": true
+    },
+    "nfl_baltimore_ravens__players": {
+      "label": "Baltimore Ravens · Spieler",
+      "group": "nfl",
+      "accent": "#29126f",
+      "background": "nfl_baltimore_ravens.png",
+      "family": true
+    },
+    "nfl_baltimore_ravens__legends": {
+      "label": "Baltimore Ravens · Legenden",
+      "group": "nfl",
+      "accent": "#29126f",
+      "background": "nfl_baltimore_ravens.png",
+      "family": true
+    },
+    "nfl_buffalo_bills": {
+      "label": "Buffalo Bills",
+      "group": "nfl",
+      "accent": "#00338d",
+      "background": "nfl_buffalo_bills.png",
+      "family": true
+    },
+    "nfl_buffalo_bills__players": {
+      "label": "Buffalo Bills · Spieler",
+      "group": "nfl",
+      "accent": "#00338d",
+      "background": "nfl_buffalo_bills.png",
+      "family": true
+    },
+    "nfl_buffalo_bills__legends": {
+      "label": "Buffalo Bills · Legenden",
+      "group": "nfl",
+      "accent": "#00338d",
+      "background": "nfl_buffalo_bills.png",
+      "family": true
+    },
+    "nfl_carolina_panthers": {
+      "label": "Carolina Panthers",
+      "group": "nfl",
+      "accent": "#0085ca",
+      "background": "nfl_carolina_panthers.png",
+      "family": true
+    },
+    "nfl_carolina_panthers__players": {
+      "label": "Carolina Panthers · Spieler",
+      "group": "nfl",
+      "accent": "#0085ca",
+      "background": "nfl_carolina_panthers.png",
+      "family": true
+    },
+    "nfl_carolina_panthers__legends": {
+      "label": "Carolina Panthers · Legenden",
+      "group": "nfl",
+      "accent": "#0085ca",
+      "background": "nfl_carolina_panthers.png",
+      "family": true
+    },
+    "nfl_chicago_bears": {
+      "label": "Chicago Bears",
+      "group": "nfl",
+      "accent": "#0b1c3a",
+      "background": "nfl_chicago_bears.png",
+      "family": true
+    },
+    "nfl_chicago_bears__players": {
+      "label": "Chicago Bears · Spieler",
+      "group": "nfl",
+      "accent": "#0b1c3a",
+      "background": "nfl_chicago_bears.png",
+      "family": true
+    },
+    "nfl_chicago_bears__legends": {
+      "label": "Chicago Bears · Legenden",
+      "group": "nfl",
+      "accent": "#0b1c3a",
+      "background": "nfl_chicago_bears.png",
+      "family": true
+    },
+    "nfl_cincinnati_bengals": {
+      "label": "Cincinnati Bengals",
+      "group": "nfl",
+      "accent": "#fb4f14",
+      "background": "nfl_cincinnati_bengals.png",
+      "family": true
+    },
+    "nfl_cincinnati_bengals__players": {
+      "label": "Cincinnati Bengals · Spieler",
+      "group": "nfl",
+      "accent": "#fb4f14",
+      "background": "nfl_cincinnati_bengals.png",
+      "family": true
+    },
+    "nfl_cincinnati_bengals__legends": {
+      "label": "Cincinnati Bengals · Legenden",
+      "group": "nfl",
+      "accent": "#fb4f14",
+      "background": "nfl_cincinnati_bengals.png",
+      "family": true
+    },
+    "nfl_cleveland_browns": {
+      "label": "Cleveland Browns",
+      "group": "nfl",
+      "accent": "#472a08",
+      "background": "nfl_cleveland_browns.png",
+      "family": true
+    },
+    "nfl_cleveland_browns__players": {
+      "label": "Cleveland Browns · Spieler",
+      "group": "nfl",
+      "accent": "#472a08",
+      "background": "nfl_cleveland_browns.png",
+      "family": true
+    },
+    "nfl_cleveland_browns__legends": {
+      "label": "Cleveland Browns · Legenden",
+      "group": "nfl",
+      "accent": "#472a08",
+      "background": "nfl_cleveland_browns.png",
+      "family": true
+    },
+    "nfl_dallas_cowboys": {
+      "label": "Dallas Cowboys",
+      "group": "nfl",
+      "accent": "#002a5c",
+      "background": "nfl_dallas_cowboys.png",
+      "family": true
+    },
+    "nfl_dallas_cowboys__players": {
+      "label": "Dallas Cowboys · Spieler",
+      "group": "nfl",
+      "accent": "#002a5c",
+      "background": "nfl_dallas_cowboys.png",
+      "family": true
+    },
+    "nfl_dallas_cowboys__legends": {
+      "label": "Dallas Cowboys · Legenden",
+      "group": "nfl",
+      "accent": "#002a5c",
+      "background": "nfl_dallas_cowboys.png",
+      "family": true
+    },
+    "nfl_denver_broncos": {
+      "label": "Denver Broncos",
+      "group": "nfl",
+      "accent": "#0a2343",
+      "background": "nfl_denver_broncos.png",
+      "family": true
+    },
+    "nfl_denver_broncos__players": {
+      "label": "Denver Broncos · Spieler",
+      "group": "nfl",
+      "accent": "#0a2343",
+      "background": "nfl_denver_broncos.png",
+      "family": true
+    },
+    "nfl_denver_broncos__legends": {
+      "label": "Denver Broncos · Legenden",
+      "group": "nfl",
+      "accent": "#0a2343",
+      "background": "nfl_denver_broncos.png",
+      "family": true
+    },
+    "nfl_detroit_lions": {
+      "label": "Detroit Lions",
+      "group": "nfl",
+      "accent": "#0076b6",
+      "background": "nfl_detroit_lions.png",
+      "family": true
+    },
+    "nfl_detroit_lions__players": {
+      "label": "Detroit Lions · Spieler",
+      "group": "nfl",
+      "accent": "#0076b6",
+      "background": "nfl_detroit_lions.png",
+      "family": true
+    },
+    "nfl_detroit_lions__legends": {
+      "label": "Detroit Lions · Legenden",
+      "group": "nfl",
+      "accent": "#0076b6",
+      "background": "nfl_detroit_lions.png",
+      "family": true
+    },
+    "nfl_green_bay_packers": {
+      "label": "Green Bay Packers",
+      "group": "nfl",
+      "accent": "#204e32",
+      "background": "nfl_green_bay_packers.png",
+      "family": true
+    },
+    "nfl_green_bay_packers__players": {
+      "label": "Green Bay Packers · Spieler",
+      "group": "nfl",
+      "accent": "#204e32",
+      "background": "nfl_green_bay_packers.png",
+      "family": true
+    },
+    "nfl_green_bay_packers__legends": {
+      "label": "Green Bay Packers · Legenden",
+      "group": "nfl",
+      "accent": "#204e32",
+      "background": "nfl_green_bay_packers.png",
+      "family": true
+    },
+    "nfl_houston_texans": {
+      "label": "Houston Texans",
+      "group": "nfl",
+      "accent": "#021018",
+      "background": "nfl_houston_texans.png",
+      "family": true
+    },
+    "nfl_houston_texans__players": {
+      "label": "Houston Texans · Spieler",
+      "group": "nfl",
+      "accent": "#021018",
+      "background": "nfl_houston_texans.png",
+      "family": true
+    },
+    "nfl_houston_texans__legends": {
+      "label": "Houston Texans · Legenden",
+      "group": "nfl",
+      "accent": "#021018",
+      "background": "nfl_houston_texans.png",
+      "family": true
+    },
+    "nfl_indianapolis_colts": {
+      "label": "Indianapolis Colts",
+      "group": "nfl",
+      "accent": "#003b75",
+      "background": "nfl_indianapolis_colts.png",
+      "family": true
+    },
+    "nfl_indianapolis_colts__players": {
+      "label": "Indianapolis Colts · Spieler",
+      "group": "nfl",
+      "accent": "#003b75",
+      "background": "nfl_indianapolis_colts.png",
+      "family": true
+    },
+    "nfl_indianapolis_colts__legends": {
+      "label": "Indianapolis Colts · Legenden",
+      "group": "nfl",
+      "accent": "#003b75",
+      "background": "nfl_indianapolis_colts.png",
+      "family": true
+    },
+    "nfl_jacksonville_jaguars": {
+      "label": "Jacksonville Jaguars",
+      "group": "nfl",
+      "accent": "#007487",
+      "background": "nfl_jacksonville_jaguars.png",
+      "family": true
+    },
+    "nfl_jacksonville_jaguars__players": {
+      "label": "Jacksonville Jaguars · Spieler",
+      "group": "nfl",
+      "accent": "#007487",
+      "background": "nfl_jacksonville_jaguars.png",
+      "family": true
+    },
+    "nfl_jacksonville_jaguars__legends": {
+      "label": "Jacksonville Jaguars · Legenden",
+      "group": "nfl",
+      "accent": "#007487",
+      "background": "nfl_jacksonville_jaguars.png",
+      "family": true
+    },
+    "nfl_kansas_city_chiefs": {
+      "label": "Kansas City Chiefs",
+      "group": "nfl",
+      "accent": "#e31837",
+      "background": "nfl_kansas_city_chiefs.png",
+      "family": true
+    },
+    "nfl_kansas_city_chiefs__players": {
+      "label": "Kansas City Chiefs · Spieler",
+      "group": "nfl",
+      "accent": "#e31837",
+      "background": "nfl_kansas_city_chiefs.png",
+      "family": true
+    },
+    "nfl_kansas_city_chiefs__legends": {
+      "label": "Kansas City Chiefs · Legenden",
+      "group": "nfl",
+      "accent": "#e31837",
+      "background": "nfl_kansas_city_chiefs.png",
+      "family": true
+    },
+    "nfl_las_vegas_raiders": {
+      "label": "Las Vegas Raiders",
+      "group": "nfl",
+      "accent": "#000000",
+      "background": "nfl_las_vegas_raiders.png",
+      "family": true
+    },
+    "nfl_las_vegas_raiders__players": {
+      "label": "Las Vegas Raiders · Spieler",
+      "group": "nfl",
+      "accent": "#000000",
+      "background": "nfl_las_vegas_raiders.png",
+      "family": true
+    },
+    "nfl_las_vegas_raiders__legends": {
+      "label": "Las Vegas Raiders · Legenden",
+      "group": "nfl",
+      "accent": "#000000",
+      "background": "nfl_las_vegas_raiders.png",
+      "family": true
+    },
+    "nfl_los_angeles_chargers": {
+      "label": "Los Angeles Chargers",
+      "group": "nfl",
+      "accent": "#0080c6",
+      "background": "nfl_los_angeles_chargers.png",
+      "family": true
+    },
+    "nfl_los_angeles_chargers__players": {
+      "label": "Los Angeles Chargers · Spieler",
+      "group": "nfl",
+      "accent": "#0080c6",
+      "background": "nfl_los_angeles_chargers.png",
+      "family": true
+    },
+    "nfl_los_angeles_chargers__legends": {
+      "label": "Los Angeles Chargers · Legenden",
+      "group": "nfl",
+      "accent": "#0080c6",
+      "background": "nfl_los_angeles_chargers.png",
+      "family": true
+    },
+    "nfl_los_angeles_rams": {
+      "label": "Los Angeles Rams",
+      "group": "nfl",
+      "accent": "#003594",
+      "background": "nfl_los_angeles_rams.png",
+      "family": true
+    },
+    "nfl_los_angeles_rams__players": {
+      "label": "Los Angeles Rams · Spieler",
+      "group": "nfl",
+      "accent": "#003594",
+      "background": "nfl_los_angeles_rams.png",
+      "family": true
+    },
+    "nfl_los_angeles_rams__legends": {
+      "label": "Los Angeles Rams · Legenden",
+      "group": "nfl",
+      "accent": "#003594",
+      "background": "nfl_los_angeles_rams.png",
+      "family": true
+    },
+    "nfl_miami_dolphins": {
+      "label": "Miami Dolphins",
+      "group": "nfl",
+      "accent": "#008e97",
+      "background": "nfl_miami_dolphins.png",
+      "family": true
+    },
+    "nfl_miami_dolphins__players": {
+      "label": "Miami Dolphins · Spieler",
+      "group": "nfl",
+      "accent": "#008e97",
+      "background": "nfl_miami_dolphins.png",
+      "family": true
+    },
+    "nfl_miami_dolphins__legends": {
+      "label": "Miami Dolphins · Legenden",
+      "group": "nfl",
+      "accent": "#008e97",
+      "background": "nfl_miami_dolphins.png",
+      "family": true
+    },
+    "nfl_minnesota_vikings": {
+      "label": "Minnesota Vikings",
+      "group": "nfl",
+      "accent": "#4f2683",
+      "background": "nfl_minnesota_vikings.png",
+      "family": true
+    },
+    "nfl_minnesota_vikings__players": {
+      "label": "Minnesota Vikings · Spieler",
+      "group": "nfl",
+      "accent": "#4f2683",
+      "background": "nfl_minnesota_vikings.png",
+      "family": true
+    },
+    "nfl_minnesota_vikings__legends": {
+      "label": "Minnesota Vikings · Legenden",
+      "group": "nfl",
+      "accent": "#4f2683",
+      "background": "nfl_minnesota_vikings.png",
+      "family": true
+    },
+    "nfl_new_england_patriots": {
+      "label": "New England Patriots",
+      "group": "nfl",
+      "accent": "#002a5c",
+      "background": "nfl_new_england_patriots.png",
+      "family": true
+    },
+    "nfl_new_england_patriots__players": {
+      "label": "New England Patriots · Spieler",
+      "group": "nfl",
+      "accent": "#002a5c",
+      "background": "nfl_new_england_patriots.png",
+      "family": true
+    },
+    "nfl_new_england_patriots__legends": {
+      "label": "New England Patriots · Legenden",
+      "group": "nfl",
+      "accent": "#002a5c",
+      "background": "nfl_new_england_patriots.png",
+      "family": true
+    },
+    "nfl_new_orleans_saints": {
+      "label": "New Orleans Saints",
+      "group": "nfl",
+      "accent": "#d3bc8d",
+      "background": "nfl_new_orleans_saints.png",
+      "family": true
+    },
+    "nfl_new_orleans_saints__players": {
+      "label": "New Orleans Saints · Spieler",
+      "group": "nfl",
+      "accent": "#d3bc8d",
+      "background": "nfl_new_orleans_saints.png",
+      "family": true
+    },
+    "nfl_new_orleans_saints__legends": {
+      "label": "New Orleans Saints · Legenden",
+      "group": "nfl",
+      "accent": "#d3bc8d",
+      "background": "nfl_new_orleans_saints.png",
+      "family": true
+    },
+    "nfl_new_york_giants": {
+      "label": "New York Giants",
+      "group": "nfl",
+      "accent": "#003c7f",
+      "background": "nfl_new_york_giants.png",
+      "family": true
+    },
+    "nfl_new_york_giants__players": {
+      "label": "New York Giants · Spieler",
+      "group": "nfl",
+      "accent": "#003c7f",
+      "background": "nfl_new_york_giants.png",
+      "family": true
+    },
+    "nfl_new_york_giants__legends": {
+      "label": "New York Giants · Legenden",
+      "group": "nfl",
+      "accent": "#003c7f",
+      "background": "nfl_new_york_giants.png",
+      "family": true
+    },
+    "nfl_new_york_jets": {
+      "label": "New York Jets",
+      "group": "nfl",
+      "accent": "#115740",
+      "background": "nfl_new_york_jets.png",
+      "family": true
+    },
+    "nfl_new_york_jets__players": {
+      "label": "New York Jets · Spieler",
+      "group": "nfl",
+      "accent": "#115740",
+      "background": "nfl_new_york_jets.png",
+      "family": true
+    },
+    "nfl_new_york_jets__legends": {
+      "label": "New York Jets · Legenden",
+      "group": "nfl",
+      "accent": "#115740",
+      "background": "nfl_new_york_jets.png",
+      "family": true
+    },
+    "nfl_philadelphia_eagles": {
+      "label": "Philadelphia Eagles",
+      "group": "nfl",
+      "accent": "#06424d",
+      "background": "nfl_philadelphia_eagles.png",
+      "family": true
+    },
+    "nfl_philadelphia_eagles__players": {
+      "label": "Philadelphia Eagles · Spieler",
+      "group": "nfl",
+      "accent": "#06424d",
+      "background": "nfl_philadelphia_eagles.png",
+      "family": true
+    },
+    "nfl_philadelphia_eagles__legends": {
+      "label": "Philadelphia Eagles · Legenden",
+      "group": "nfl",
+      "accent": "#06424d",
+      "background": "nfl_philadelphia_eagles.png",
+      "family": true
+    },
+    "nfl_pittsburgh_steelers": {
+      "label": "Pittsburgh Steelers",
+      "group": "nfl",
+      "accent": "#000000",
+      "background": "nfl_pittsburgh_steelers.png",
+      "family": true
+    },
+    "nfl_pittsburgh_steelers__players": {
+      "label": "Pittsburgh Steelers · Spieler",
+      "group": "nfl",
+      "accent": "#000000",
+      "background": "nfl_pittsburgh_steelers.png",
+      "family": true
+    },
+    "nfl_pittsburgh_steelers__legends": {
+      "label": "Pittsburgh Steelers · Legenden",
+      "group": "nfl",
+      "accent": "#000000",
+      "background": "nfl_pittsburgh_steelers.png",
+      "family": true
+    },
+    "nfl_san_francisco_49ers": {
+      "label": "San Francisco 49ers",
+      "group": "nfl",
+      "accent": "#aa0000",
+      "background": "nfl_san_francisco_49ers.png",
+      "family": true
+    },
+    "nfl_san_francisco_49ers__players": {
+      "label": "San Francisco 49ers · Spieler",
+      "group": "nfl",
+      "accent": "#aa0000",
+      "background": "nfl_san_francisco_49ers.png",
+      "family": true
+    },
+    "nfl_san_francisco_49ers__legends": {
+      "label": "San Francisco 49ers · Legenden",
+      "group": "nfl",
+      "accent": "#aa0000",
+      "background": "nfl_san_francisco_49ers.png",
+      "family": true
+    },
+    "nfl_seattle_seahawks": {
+      "label": "Seattle Seahawks",
+      "group": "nfl",
+      "accent": "#002a5c",
+      "background": "nfl_seattle_seahawks.png",
+      "family": true
+    },
+    "nfl_seattle_seahawks__players": {
+      "label": "Seattle Seahawks · Spieler",
+      "group": "nfl",
+      "accent": "#002a5c",
+      "background": "nfl_seattle_seahawks.png",
+      "family": true
+    },
+    "nfl_seattle_seahawks__legends": {
+      "label": "Seattle Seahawks · Legenden",
+      "group": "nfl",
+      "accent": "#002a5c",
+      "background": "nfl_seattle_seahawks.png",
+      "family": true
+    },
+    "nfl_tampa_bay_buccaneers": {
+      "label": "Tampa Bay Buccaneers",
+      "group": "nfl",
+      "accent": "#bd1c36",
+      "background": "nfl_tampa_bay_buccaneers.png",
+      "family": true
+    },
+    "nfl_tampa_bay_buccaneers__players": {
+      "label": "Tampa Bay Buccaneers · Spieler",
+      "group": "nfl",
+      "accent": "#bd1c36",
+      "background": "nfl_tampa_bay_buccaneers.png",
+      "family": true
+    },
+    "nfl_tampa_bay_buccaneers__legends": {
+      "label": "Tampa Bay Buccaneers · Legenden",
+      "group": "nfl",
+      "accent": "#bd1c36",
+      "background": "nfl_tampa_bay_buccaneers.png",
+      "family": true
+    },
+    "nfl_tennessee_titans": {
+      "label": "Tennessee Titans",
+      "group": "nfl",
+      "accent": "#4495d2",
+      "background": "nfl_tennessee_titans.png",
+      "family": true
+    },
+    "nfl_tennessee_titans__players": {
+      "label": "Tennessee Titans · Spieler",
+      "group": "nfl",
+      "accent": "#4495d2",
+      "background": "nfl_tennessee_titans.png",
+      "family": true
+    },
+    "nfl_tennessee_titans__legends": {
+      "label": "Tennessee Titans · Legenden",
+      "group": "nfl",
+      "accent": "#4495d2",
+      "background": "nfl_tennessee_titans.png",
+      "family": true
+    },
+    "nfl_washington_commanders": {
+      "label": "Washington Commanders",
+      "group": "nfl",
+      "accent": "#5a1414",
+      "background": "nfl_washington_commanders.png",
+      "family": true
+    },
+    "nfl_washington_commanders__players": {
+      "label": "Washington Commanders · Spieler",
+      "group": "nfl",
+      "accent": "#5a1414",
+      "background": "nfl_washington_commanders.png",
+      "family": true
+    },
+    "nfl_washington_commanders__legends": {
+      "label": "Washington Commanders · Legenden",
+      "group": "nfl",
+      "accent": "#5a1414",
+      "background": "nfl_washington_commanders.png",
+      "family": true
+    }
+  }
+}
