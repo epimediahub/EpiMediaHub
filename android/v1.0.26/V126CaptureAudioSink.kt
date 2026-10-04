@@ -12,7 +12,7 @@ import java.nio.ByteBuffer
 /** Tap only bytes actually consumed by the real sink. ExoPlayer may retry one
  * partially consumed buffer; its original timestamp must not be counted twice. */
 internal class V126CaptureAudioSink(sink: AudioSink, private val capture: V126PcmTap) : ForwardingAudioSink(sink) {
-    private var format = Format.EMPTY
+    private var format = Format.Builder().build()
     private var streamOffsetUs = 0L
     private var lastBuffer: ByteBuffer? = null
     private var firstPosition = 0
