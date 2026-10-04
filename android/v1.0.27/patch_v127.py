@@ -40,6 +40,25 @@ assert text.count('if (segment.kind == V115SegmentKind.INTRO) Modifier.focusRequ
 text = text.replace('if (segment.kind == V115SegmentKind.INTRO) Modifier.focusRequester(segmentFocus)',
                     'if (segment == focusSegment) Modifier.focusRequester(segmentFocus)')
 chrome.write_text(text)
+replace_once(chrome,
+    '    var focusedSegment by remember(item.resumeKey) { mutableStateOf<String?>(null) }',
+    '''    var focusedSegment by remember(item.resumeKey) { mutableStateOf<String?>(null) }
+    var segmentHasFocus by remember(item.resumeKey) { mutableStateOf(false) }''')
+replace_once(chrome,
+    '''            delay(120L)
+            if (runCatching { segmentFocus.requestFocus(); true }.getOrDefault(false)) focusedSegment = segmentKey''',
+    '''            // Dialog windows may still return native focus after their Compose nodes disappear.
+            // A request alone is not an acknowledgement; retry until the button reports focus.
+            repeat(4) { attempt ->
+                delay(if (attempt == 0) 120L else 80L)
+                runCatching { segmentFocus.requestFocus() }
+                withFrameNanos { }
+                if (segmentHasFocus) { focusedSegment = segmentKey; return@LaunchedEffect }
+            }''')
+replace_once(chrome,
+    'if (segment == focusSegment) Modifier.focusRequester(segmentFocus) else Modifier',
+    '''if (segment == focusSegment) Modifier.focusRequester(segmentFocus)
+                                .onFocusChanged { segmentHasFocus = it.isFocused } else Modifier''')
 
 hub = java / 'ui/V060CinematicHub.kt'
 replace_once(hub,
