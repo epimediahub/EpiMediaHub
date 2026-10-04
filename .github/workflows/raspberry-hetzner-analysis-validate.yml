@@ -1,0 +1,46 @@
+name: Validate private Hetzner analysis offload
+on:
+  workflow_dispatch:
+  push:
+    branches: [raspberry-hetzner-analysis]
+    paths:
+      - 'server/epimediahub_provisioning/**'
+      - '.github/workflows/raspberry-hetzner-analysis-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install backend, audio and private network dependencies
+        run: |
+          python -m pip install -r server/epimediahub_provisioning/requirements.txt
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg libchromaprint1 libchromaprint-tools wireguard-tools
+      - name: Validate Python, installers and actual detector
+        run: |
+          python -m compileall -q server/epimediahub_provisioning
+          bash -n server/epimediahub_provisioning/deploy/install_skip_hetzner.sh
+          bash -n server/epimediahub_provisioning/deploy/install_skip_remote_client.sh
+          bash -n server/epimediahub_provisioning/deploy/activate_skip_remote.sh
+          python server/epimediahub_provisioning/skip_detector_v3.py --selftest
+      - name: Verify existing API, licenses, private marker playback and credit system
+        env:
+          EPIMEDIAHUB_EXPECTED_API_VERSION: '0.8.2'
+        run: |
+          python server/epimediahub_provisioning/tests/smoke_v080.py
+          python server/epimediahub_provisioning/tests/smoke_v082.py
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_markers.py' -v
+      - name: Verify catalogue, language order, audio and publication criteria
+        run: |
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_analysis*.py' -v
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_progress*.py' -v
+      - name: Verify remote computation, cancellation, real PCM and installer rollback
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_remote*.py' -v
+      - name: Verify actual encrypted peer connection in isolated namespaces
+        run: sudo bash server/epimediahub_provisioning/tests/check_skip_wireguard.sh "$(command -v python)"

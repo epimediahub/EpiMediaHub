@@ -655,6 +655,9 @@ def consensus(votes, online, duration, kind):
 
 def matching_boundaries(reference, target, step, offset):
     """Check both ends around the unique full match, allowing repeated short motifs."""
+    from skip_remote_client import configured, boundaries as remote_boundaries
+    if configured():
+        return remote_boundaries(reference, target, step, offset)
     cut = max(40, len(reference) // 3)
     radius = ceil(BOUNDARY_TOLERANCE / step)
     anchor = round(offset / step)
@@ -833,7 +836,11 @@ def bootstrap(con, asset, kind, busy=lambda: False):
     if busy():
         raise ValueError('analysis_deferred')
 
-    decision = detector_detect(windows[0], windows[1:], kind, DetectorConfig(), PairCache())
+    from skip_remote_client import configured, detect as remote_detect
+    if configured():
+        decision = remote_detect(windows[0], windows[1:], kind, DetectorConfig(), busy)
+    else:
+        decision = detector_detect(windows[0], windows[1:], kind, DetectorConfig(), PairCache())
     if not decision.found:
         return False
 

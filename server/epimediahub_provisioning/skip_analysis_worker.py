@@ -236,7 +236,7 @@ def process_one(db, *, exclude_job_ids=(), on_claim=None, deadline=None):
             status, detail = analyze(db, job, busy_factory=bounded_busy)
     except ValueError as error:
         if str(error) == "analysis_deferred":
-            status, detail = "queued", "Wartet, bis die Wiedergabe beendet ist"
+            status, detail = "queued", getattr(error, 'reason', "Wartet, bis die Wiedergabe beendet ist")
         else:
             status, detail = "failed", failure_detail(error)
     except (OSError, KeyError, TypeError, json.JSONDecodeError, sqlite3.Error, OverflowError):

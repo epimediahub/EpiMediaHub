@@ -261,6 +261,14 @@ def pinned_connection(cls, host, addresses, **kwargs):
 
 @contextmanager
 def provider_proxy(url, busy=lambda: False):
+    from skip_remote_client import configured, RemoteSource
+    if configured():
+        if busy():
+            raise ValueError('analysis_deferred')
+        # Hetzner validates and pins the real upstream. Do not create a local
+        # proxy or stream on the Pi when computation has been offloaded.
+        yield RemoteSource(url, busy)
+        return
     host = urllib.parse.urlsplit(url).hostname
     public_address(url, host)
     budget = [MAX_INPUT_BYTES]
@@ -379,6 +387,9 @@ def input_options(source):
 
 
 def probe(source, busy=lambda: False):
+    from skip_remote_client import configured, probe as remote_probe
+    if configured():
+        return remote_probe(source, busy)
     raw = run(["ffprobe", "-v", "error", *input_options(source), "-show_entries", "format=duration:chapter=start_time,end_time:chapter_tags=title", "-of", "json", source], max_bytes=200_000, timeout=35, busy=busy)
     data = json.loads(raw)
     duration = round(float(data.get("format", {}).get("duration", 0)) * 1000)
@@ -405,6 +416,10 @@ def chapter_candidates(chapters, duration):
 def fingerprint(source, start_ms, length_ms, busy=lambda: False, *, require_complete=False, with_coverage=False):
     if not 15_000 <= length_ms <= 720_000 or start_ms < 0:
         raise ValueError("fingerprint_window")
+    from skip_remote_client import configured, fingerprint as remote_fingerprint
+    if configured():
+        return remote_fingerprint(source, start_ms, length_ms, busy,
+                                  require_complete=require_complete, with_coverage=with_coverage)
     pcm = run(["ffmpeg", "-nostdin", "-v", "error", "-threads", "1", *input_options(source), "-ss", str(start_ms / 1000), "-i", source, "-t", str(length_ms / 1000), "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "11025", "-f", "s16le", "pipe:1"], busy=busy)
     if require_complete and len(pcm) / (2 * 11025) * 1000 < length_ms - 250:
         raise ValueError("fingerprint_incomplete")
@@ -447,6 +462,9 @@ def fingerprint(source, start_ms, length_ms, busy=lambda: False, *, require_comp
 
 def matching_offset(reference, target, step_ms):
     """Reject low information, weak matches and repeated/ambiguous occurrences."""
+    from skip_remote_client import configured, match as remote_match
+    if configured():
+        return remote_match(reference, target, step_ms)
     if not 40 <= len(reference) <= len(target) <= 10_000 or len(set(reference)) < max(15, len(reference) // 5):
         return None
     candidates = []
