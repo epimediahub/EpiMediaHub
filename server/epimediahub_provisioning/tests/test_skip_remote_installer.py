@@ -75,7 +75,7 @@ args=sys.argv[1:]; out=Path(args[args.index('-o')+1]); url=next(x for x in args 
 mode=os.environ.get('FIXTURE_MODE','success')
 if '10.87.26.1' in url or '127.0.0.1:8787' in url:
     broken=mode=='bad-health' or (mode=='dashboard-failure' and '127.0.0.1' in url)
-    out.write_text(json.dumps({'status':'broken' if broken else 'ok','features':{'skip_playlist_order':not broken}}))
+    out.write_text(json.dumps({'status':'broken' if broken else 'ok','features':{'skip_playlist_order':not broken,'skip_fingerprint_capture':not broken and mode!='missing-app-capture'}}))
 else:
     name=url.rsplit('/',1)[-1]
     source=Path(os.environ['FIXTURE_SOURCE'],name)
@@ -283,6 +283,16 @@ if os.environ['FIXTURE_MODE']=='provider-denied': raise SystemExit('provider_htt
         backups = list((self.base / 'backups').glob('*/provisioning.db'))
         self.assertEqual(len(backups), 1)
         self.assertEqual(backups[0].stat().st_mode & 0o077, 0)
+        self.preserve()
+
+    def test_missing_app_capture_capability_rolls_back_code_and_resumes_timer(self):
+        self.staged_client()
+        original=(self.base/'skip_app_capture.py').read_bytes()+b'\n# prior capture code\n'
+        (self.base/'skip_app_capture.py').write_bytes(original)
+        result=self.run_script('activate_skip_remote.sh',mode='missing-app-capture')
+        self.assertNotEqual(result.returncode,0)
+        self.assertEqual((self.base/'skip_app_capture.py').read_bytes(),original)
+        self.assertTrue(json.loads(self.state.read_text())['active'])
         self.preserve()
 
     def test_dashboard_failure_restores_templates_timer_order_code_and_remote_role(self):

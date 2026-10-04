@@ -180,6 +180,9 @@ def analyze(db, job, busy_factory=busy_check):
 
 
 def process_one(db, *, exclude_job_ids=(), on_claim=None, deadline=None):
+    from skip_app_capture import process_one as process_capture
+    if process_capture(db, lambda: deadline is not None and time.monotonic() >= deadline):
+        return 'app_compared'
     from skip_catalogue import advance as catalogue_advance, daily_limit
     from skip_schedule import current_playlist, ready, select_job, remember, legacy_discovery_pending
     from skip_automation import refresh_online_one

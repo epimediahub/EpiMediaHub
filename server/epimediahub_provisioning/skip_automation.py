@@ -769,7 +769,7 @@ def migrate_detector(con):
     con.execute('INSERT INTO skip_auto_maintenance VALUES(?,?)', (DETECTOR_POLICY, now()))
 
 def detector_windows(con, asset, kind):
-    return con.execute("""SELECT w.*,a.episode,a.source_key,a.season,a.playlist_id FROM skip_auto_windows w
+    rows = con.execute("""SELECT w.*,a.episode,a.source_key,a.season,a.playlist_id,'server' origin FROM skip_auto_windows w
       JOIN skip_assets a ON a.asset_key=w.asset_key
       JOIN skip_auto_settings x ON x.playlist_id=a.playlist_id AND x.enabled=1
       JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id AND s.enabled=1
@@ -782,6 +782,15 @@ def detector_windows(con, asset, kind):
         AND ABS(b.duration_ms-a.duration_ms)<=2000)
       ORDER BY ABS(a.episode-?),w.created_at DESC,w.asset_key LIMIT 32""",
       (asset['source_key'], asset['season'], kind, asset['episode'])).fetchall()
+    from skip_app_capture import windows as app_windows
+    # Keep the longest contiguous section of a file. Repeated device uploads
+    # and multiple audio tracks of one episode never count as extra partners.
+    chosen = {r['asset_key']: r for r in rows}
+    for row in app_windows(con, asset, kind):
+        previous = chosen.get(row['asset_key'])
+        if previous is None or row['length_ms'] > previous['length_ms']:
+            chosen[row['asset_key']] = row
+    return sorted(chosen.values(), key=lambda r: (abs(r['episode']-asset['episode']),r['asset_key']))[:32]
 
 
 def _trusted_window(con, row, kind):
@@ -873,6 +882,7 @@ def bootstrap(con, asset, kind, busy=lambda: False):
         episodes=[r['episode'] for r in selected],
         trusted_episodes=[r['episode'] for r, w in zip(selected[1:], windows[1:]) if w.trusted],
         windows=[dict(asset_key=r['asset_key'], episode=r['episode'], duration_ms=r['duration_ms'],
+                      origin=r['origin'],
                       offset_ms=r['offset_ms'], length_ms=r['length_ms'], step_ms=r['step_ms'],
                       fingerprint_sha256=hashlib.sha256(r['words_json'].encode()).hexdigest())
                  for r in selected],
@@ -910,6 +920,10 @@ def save_window(con, asset, kind, words, step, offset, length):
 
 def cached_window(con, asset, kind, offset, length):
     """Reuse a recent complete window only after the file runtime is rechecked."""
+    from skip_app_capture import complete_window
+    captured = complete_window(con, asset, kind, offset, length)
+    if captured is not None:
+        return captured
     row = con.execute("SELECT * FROM skip_auto_windows WHERE asset_key=? AND kind=?",
                       (asset['asset_key'], kind)).fetchone()
     if (not row or row['duration_ms'] != asset['duration_ms'] or row['offset_ms'] != offset

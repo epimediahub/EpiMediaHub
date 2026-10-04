@@ -11,7 +11,7 @@ DROPIN="$UNIT_ROOT/epimediahub-skip-analysis.service.d/remote.conf"
 TIMER_DROPIN="$UNIT_ROOT/epimediahub-skip-analysis.timer.d/remote.conf"
 REMOTE_URL=http://10.87.26.1:8790
 BACKUP="$BASE/backups/remote-analysis-$(date +%Y%m%d-%H%M%S)"
-FILES=(skip_analysis.py skip_automation.py skip_analysis_worker.py skip_detector_v2.py skip_detector_v3.py skip_remote_client.py skip_remote_protocol.py skip_remote_verify.py skip_catalogue.py skip_schedule.py skip_markers.py templates/skip_markers.html templates/skip_schedule.html)
+FILES=(skip_analysis.py skip_automation.py skip_analysis_worker.py skip_detector_v2.py skip_detector_v3.py skip_remote_client.py skip_remote_protocol.py skip_remote_verify.py skip_catalogue.py skip_schedule.py skip_app_capture.py skip_release.py skip_markers.py templates/skip_markers.html templates/skip_schedule.html)
 TIMER_ACTIVE=0
 TIMER_STOPPED=0
 INSTALLED=0
@@ -140,8 +140,8 @@ curl -fsS --retry 5 --retry-delay 2 --retry-connrefused http://127.0.0.1:8787/he
 import json,sys
 with open(sys.argv[1]) as source:
     health=json.load(source)
-assert health.get('status')=='ok' and health.get('features',{}).get('skip_playlist_order')
-print('Dashboard gesund; Playlist- und Serienreihenfolge verfügbar')
+assert health.get('status')=='ok' and all(health.get('features',{}).get(name) for name in ('skip_playlist_order','skip_fingerprint_capture'))
+print('Dashboard gesund; Playlist-Reihenfolge und App-Fingerprints verfügbar')
 PY
 flock -u 9
 exec 9>&-

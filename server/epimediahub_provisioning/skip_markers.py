@@ -80,6 +80,8 @@ def migrate(con):
     migrate_automation(con)
     from skip_progress import migrate as migrate_progress
     migrate_progress(con)
+    from skip_app_capture import migrate as migrate_capture
+    migrate_capture(con)
 
 
 def integer(body, key, low, high, default=None):
@@ -276,9 +278,11 @@ def install(app, db):
             abort(401)
         return row
 
-    def body():
-        if not request.is_json or (request.content_length or 0) > 16_000:
-            abort(413 if (request.content_length or 0) > 16_000 else 415)
+    def body(limit=16_000):
+        if not request.is_json or (request.content_length or 0) > limit:
+            abort(413 if (request.content_length or 0) > limit else 415)
+        if len(request.get_data(cache=True)) > limit:
+            abort(413)
         return request.get_json(silent=True)
 
     def rate(con, row, action, limit):
@@ -333,6 +337,7 @@ def install(app, db):
               (data["asset_key"], data["media_type"], data["season"], data["episode"], data["duration_ms"])).fetchall()
             identity = con.execute("SELECT imdb_id,tmdb_id FROM skip_identities WHERE source_key=?", (data["source_key"],)).fetchone()
             registered = register_asset(con, raw, data, row)
+            from skip_automation import enabled as capture_enabled
             seen = set(); segments = []
             for record in records:
                 if record["segment_type"] in seen:
@@ -340,7 +345,24 @@ def install(app, db):
                 seen.add(record["segment_type"])
                 segments.append({k: record[k] for k in ("segment_type", "start_ms", "end_ms", "duration_ms", "status", "source") } | {"disabled": bool(record["disabled"])})
             return jsonify(asset_key=data["asset_key"], source_key=data["source_key"], duration_ms=data["duration_ms"],
-                           segments=segments, identity=dict(identity) if identity else {}, analysis="available" if registered else "unavailable")
+                           segments=segments, identity=dict(identity) if identity else {}, analysis="available" if registered else "unavailable",
+                           fingerprint_capture=bool(registered and data['media_type']=='episode' and capture_enabled(con, raw.get('playlist_id'))))
+
+    @app.post('/v1/device/skip/fingerprint')
+    def v126_skip_fingerprint():
+        from skip_app_capture import MAX_UPLOAD, validate, receive
+        raw = body(MAX_UPLOAD)
+        try:
+            data = descriptor(raw)
+            validate(raw)
+        except (ValueError, TypeError, KeyError):
+            return jsonify(error='invalid_fingerprint'), 400
+        with db() as con:
+            row = device(con)
+            if not rate(con, row, 'fingerprint', 6):
+                return jsonify(error='rate_limited'), 429
+            status = receive(con, row, raw, data)
+        return jsonify(status=status)
 
     @app.post("/v1/device/skip/presence")
     def v082_skip_presence():
@@ -633,6 +655,6 @@ def install(app, db):
         data = response.get_json()
         data["api_version"] = "0.8.2"
         data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True, "skip_high_audio_approval": True, "skip_proposal_dedup": True, "skip_online_error_details": True, "skip_language_priority": True, "skip_bulk_review": True, "skip_network_address_fallback": True, "skip_automatic_acceptance": True, "skip_series_progress": True, "skip_database_concurrency": True, "skip_progress_cache": True, "skip_detector_v2": True, "skip_detector_v3_1": True}
-        data['features'].update(skip_playlist_order=True, skip_series_order=True)
+        data['features'].update(skip_playlist_order=True, skip_series_order=True, skip_fingerprint_capture=True)
         return jsonify(data)
     app.view_functions["health"] = health

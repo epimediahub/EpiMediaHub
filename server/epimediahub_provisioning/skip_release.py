@@ -202,7 +202,12 @@ def detector_release_ready(con, row):
     for item in windows:
         if not isinstance(item, dict):
             return False
-        cached = con.execute('''SELECT w.*,a.source_key,a.season,a.episode,a.duration_ms current_duration
+        if item.get('origin') == 'app' and policy == v3_policy:
+            from skip_app_capture import windows as app_windows
+            cached = next((w for w in app_windows(con, row, row['segment_type'])
+                           if w['asset_key'] == item.get('asset_key')), None)
+        elif item.get('origin', 'server') == 'server':
+            cached = con.execute('''SELECT w.*,a.source_key,a.season,a.episode,a.duration_ms current_duration
           FROM skip_auto_windows w JOIN skip_assets a ON a.asset_key=w.asset_key
           JOIN skip_auto_settings x ON x.playlist_id=a.playlist_id AND x.enabled=1
           JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id AND s.enabled=1
@@ -210,6 +215,8 @@ def detector_release_ready(con, row):
           WHERE w.asset_key=? AND w.kind=? AND NOT EXISTS (
             SELECT 1 FROM skip_auto_blocks b WHERE b.asset_key=a.asset_key AND b.kind=w.kind
             AND ABS(b.duration_ms-a.duration_ms)<=2000)''', (item.get('asset_key'), row['segment_type'])).fetchone()
+        else:
+            return False
         if (not cached or cached['source_key'] != row['source_key'] or cached['season'] != row['season']
                 or cached['episode'] in used or abs(cached['duration_ms'] - cached['current_duration']) > 2000
                 or any(cached[k] != item.get(k) for k in ('episode','duration_ms','offset_ms','length_ms','step_ms'))
