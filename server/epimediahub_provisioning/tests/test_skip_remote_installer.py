@@ -38,6 +38,20 @@ class InstallerTests(unittest.TestCase):
         self.script('apt-get', '')
         self.script('getent', "print('fixture-user')")
         self.script('ufw', "print('firewall configured')")
+        # Hosted CI is unprivileged. Validate requested production ownership,
+        # then let the real install utility check paths, copies and modes.
+        self.script('install', '''
+args=sys.argv[1:]; requested={}
+for flag in ('-o','-g'):
+    if flag in args:
+        index=args.index(flag); requested[flag]=args[index+1]
+        assert args[index+1]=='root', 'Installer must request root ownership'
+        if os.geteuid()!=0: del args[index:index+2]
+if requested:
+    log=Path(os.environ['FIXTURE_OWNERSHIP'])
+    with log.open('a') as stream: stream.write(json.dumps(requested)+'\\n')
+os.execv(os.environ['FIXTURE_INSTALL'],[os.environ['FIXTURE_INSTALL']]+args)
+''')
         self.script('systemctl', '''
 p=Path(os.environ['FIXTURE_STATE']); data=json.loads(p.read_text()); args=sys.argv[1:]
 if args[0]=='is-active': raise SystemExit(0 if data['active'] else 3)
@@ -72,6 +86,7 @@ else:
             EPIMEDIAHUB_SYSTEMD_DIR=str(self.units), EPIMEDIAHUB_WIREGUARD_DIR=str(self.wg),
             EPIMEDIAHUB_ADMIN_BIN_DIR=str(self.bin), EPIMEDIAHUB_ENV_FILE=str(self.envfile),
             FIXTURE_STATE=str(self.state), FIXTURE_SOURCE=str(self.source), FIXTURE_ROOT=str(ROOT),
+            FIXTURE_INSTALL=shutil.which('install'), FIXTURE_OWNERSHIP=str(self.root / 'ownership.jsonl'),
             FIXTURE_PYTHON=sys.executable, FIXTURE_PRIVATE=PRIVATE, FIXTURE_PUBLIC=PUBLIC,
             PATH=str(self.bin) + os.pathsep + os.environ['PATH'])
 
@@ -120,6 +135,9 @@ if os.environ['FIXTURE_MODE']=='provider-denied': raise SystemExit('provider_htt
         self.assertIn('MemoryMax=3G', unit)
         self.assertNotIn('0.0.0.0', unit)
         self.assertTrue((self.bin / 'epimediahub-allow-raspberry').is_file())
+        requests = [json.loads(line) for line in (self.root / 'ownership.jsonl').read_text().splitlines()]
+        self.assertTrue(requests)
+        self.assertTrue(all(item == {'-o': 'root', '-g': 'root'} for item in requests))
         self.preserve()
 
     def test_server_corrupt_download_keeps_existing_code_and_worker(self):
