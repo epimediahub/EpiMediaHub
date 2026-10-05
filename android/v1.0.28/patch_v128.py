@@ -61,8 +61,8 @@ replace(client, '                    kind = MediaKind.EPISODE,',
                     categoryName = seriesInfo.optString("category_name"),''')
 
 parser = java / 'data/M3uParser.kt'
-replace(parser, '                            categoryId = group,',
-    '''                            categoryId = group,
+replace(parser, 'categoryId = group,',
+    '''categoryId = group,
                             categoryName = group,
                             adult = V128AdultContent.marked(group) || V128AdultContent.marked(name) ||
                                 attr(meta, "is_adult").lowercase() in setOf("1", "true", "yes"),
