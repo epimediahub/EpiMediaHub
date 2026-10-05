@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   build-android-v1032-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 70
     env:
       ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
@@ -423,7 +423,7 @@ jobs:
 
   publish-android-v1032:
     needs: build-android-v1032-release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
