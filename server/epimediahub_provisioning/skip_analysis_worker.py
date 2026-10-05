@@ -179,30 +179,85 @@ def analyze(db, job, busy_factory=busy_check):
     return ("review", "Vorschläge im Dashboard prüfen") if proposals else ("no_match", "Kein ausreichend eindeutiges Intro erkannt")
 
 
+def learn_requested_reference(db, job, busy_factory):
+    """Learn just the reviewed excerpt before scanning the requested season."""
+    with db() as con:
+        asset = con.execute('SELECT * FROM skip_assets WHERE asset_key=?', (job['asset_key'],)).fetchone()
+        request = con.execute("""SELECT 1 FROM skip_schedule_requests WHERE playlist_id=? AND source_key=?
+          AND reason='reference' AND reference_asset=? AND expires_at>?""",
+          (asset['playlist_id'],asset['source_key'],asset['asset_key'],int(time.time()))).fetchone()
+        if not request:
+            return None
+        records = con.execute("""SELECT * FROM skip_records WHERE asset_key=? AND status='approved'
+          AND disabled=0 AND segment_type='intro' AND end_ms-start_ms BETWEEN 19000 AND 300000
+          AND source_key=? AND season=? AND episode=? AND media_type='episode'
+          AND ABS(duration_ms-?)<=2000 ORDER BY reviewed_at DESC,id DESC LIMIT 1""",
+          (asset['asset_key'],asset['source_key'],asset['season'],asset['episode'],asset['duration_ms'])).fetchall()
+        playlist = con.execute('SELECT * FROM customer_playlists WHERE id=?', (asset['playlist_id'],)).fetchone()
+    if not records:
+        return None
+    with db() as con:
+        learned = []
+        for record in records:
+            stored = con.execute('SELECT * FROM skip_fingerprints WHERE record_id=?', (record['id'],)).fetchone()
+            checked = con.execute('SELECT * FROM skip_auto_reference_checks WHERE record_id=?', (record['id'],)).fetchone()
+            if not (reusable_fingerprint(stored,record) and checked
+                    and checked['fingerprint_created_at']==stored['created_at']
+                    and int(time.time())-checked['checked_at']<3600):
+                learned.append(record)
+        records = learned
+    if not records:
+        return 'done', 'Geprüfte Introreferenz bereits gelernt'
+    busy = busy_factory(db, [playlist])
+    if busy():
+        raise ValueError('analysis_deferred')
+    with provider_proxy(source_url(playlist, asset), busy) as source:
+        duration, _ = probe(source, busy)
+        if abs(duration-asset['duration_ms'])>2000:
+            return 'unmatched', 'Laufzeit der Referenzfolge stimmt nicht mit dem Marker überein'
+        for record in records:
+            words, step = fingerprint(source,record['start_ms']+2000,
+              record['end_ms']-record['start_ms']-4000,busy,require_complete=True)
+            with db() as con:
+                store_fingerprint(con,record,words,step)
+                con.execute("""INSERT OR REPLACE INTO skip_auto_reference_checks
+                  SELECT record_id,created_at,? FROM skip_fingerprints WHERE record_id=?
+                    AND words_json=? AND step_ms=?""", (int(time.time()),record['id'],json.dumps(words),step))
+                if not con.execute('SELECT 1 FROM skip_fingerprints WHERE record_id=? AND words_json=? AND step_ms=?',
+                                   (record['id'],json.dumps(words),step)).fetchone():
+                    return 'queued', 'Referenz während des Lernens geändert; aktuelle Markierung wird erneut gelernt'
+    return 'done', 'Neue Introreferenz gelernt; passende Folgen der Staffel folgen zuerst'
+
+
 def process_one(db, *, exclude_job_ids=(), on_claim=None, deadline=None):
     from skip_app_capture import process_one as process_capture
     if process_capture(db, lambda: deadline is not None and time.monotonic() >= deadline):
         return 'app_compared'
     from skip_catalogue import advance as catalogue_advance, daily_limit
-    from skip_schedule import current_playlist, ready, select_job, remember, legacy_discovery_pending
+    from skip_schedule import (current_playlist, ready, select_job, remember,
+                               legacy_discovery_pending, blocked_playlists, should_pause, language_stage)
     from skip_automation import refresh_online_one
     with db() as con:
         # Limit aggregate traffic and processing on a Raspberry, irrespective of clients.
-        count = con.execute("SELECT COUNT(*) FROM skip_jobs WHERE status NOT IN ('queued','disabled') AND substr(updated_at,1,10)=substr(?,1,10)", (now(),)).fetchone()[0]
+        count = con.execute("SELECT COUNT(*) FROM skip_jobs WHERE status NOT IN ('queued','running','disabled') AND substr(updated_at,1,10)=substr(?,1,10)", (now(),)).fetchone()[0]
         day = now()[:10]
         con.execute("INSERT OR IGNORE INTO skip_analysis_budget VALUES(?,?)", (day, count))
         con.execute("UPDATE skip_analysis_budget SET count=MAX(count,?) WHERE day=?", (count, day))
         budget = con.execute("SELECT count FROM skip_analysis_budget WHERE day=?", (day,)).fetchone()[0]
         limited = budget >= daily_limit(con)
         con.execute("UPDATE skip_jobs SET status='queued' WHERE status='running' AND updated_at<?", (time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 1800)),))
-        playlist_id = current_playlist(con)
-        audio_ready = playlist_id is not None and ready(con, playlist_id)
+        stage=language_stage(con)
+        playlist_id = current_playlist(con, blocked_playlists(con),stage=stage)
+        audio_ready = playlist_id is not None and ready(con, playlist_id,stage=stage)
     if limited:
         # Inventory and online retries can progress after the daily audio quota.
         catalogue_advance(db, busy_check, playlist_id=playlist_id)
         refresh_online_one(db, busy_check, playlist_id=playlist_id)
         return 'daily_limit'
     if playlist_id is None:
+        with db() as con:
+            if current_playlist(con) is not None:
+                return 'queued'
         status = refresh_online_one(db, busy_check)
         return 'online_checked' if status == 'online_checked' else 'idle'
     if not audio_ready:
@@ -214,8 +269,9 @@ def process_one(db, *, exclude_job_ids=(), on_claim=None, deadline=None):
         discover_one(db, busy_check, playlist_id=playlist_id)
     with db() as con:
         # Re-read after provider metadata and explicit dashboard order changes.
-        playlist_id = current_playlist(con)
-        job, waiting = select_job(con, playlist_id, tuple(exclude_job_ids))
+        stage=language_stage(con)
+        playlist_id = current_playlist(con, blocked_playlists(con),stage=stage)
+        job, waiting = select_job(con, playlist_id, tuple(exclude_job_ids),stage=stage)
         if job is None:
             return waiting
         remember(con, job)
@@ -223,18 +279,22 @@ def process_one(db, *, exclude_job_ids=(), on_claim=None, deadline=None):
     if on_claim is not None:
         on_claim(job["id"])
     try:
-        if deadline is None:
-            status, detail = analyze(db, job)
-        else:
-            def bounded_busy(db, playlists):
-                playback_busy = busy_check(db, playlists)
-                def check():
-                    return time.monotonic() >= deadline or playback_busy()
-                return check
-            status, detail = analyze(db, job, busy_factory=bounded_busy)
+        def bounded_busy(db, playlists):
+            playback_busy = busy_check(db, playlists)
+            cache = [0.0,False]
+            def check():
+                if deadline is not None and time.monotonic() >= deadline:
+                    return True
+                if time.monotonic()-cache[0]>=2:
+                    with db() as con:
+                        cache[:] = [time.monotonic(), should_pause(con,job['asset_key'])]
+                return cache[1] or playback_busy()
+            return check
+        learned = learn_requested_reference(db, job, bounded_busy)
+        status, detail = learned if learned else analyze(db, job, busy_factory=bounded_busy)
     except ValueError as error:
         if str(error) == "analysis_deferred":
-            status, detail = "queued", getattr(error, 'reason', "Wartet, bis die Wiedergabe beendet ist")
+            status, detail = "queued", getattr(error, 'reason', "Pausiert wegen Wiedergabe oder vorrangigem Auftrag; vorhandene Audiofenster bleiben erhalten")
         else:
             status, detail = "failed", failure_detail(error)
     except (OSError, KeyError, TypeError, json.JSONDecodeError, sqlite3.Error, OverflowError):

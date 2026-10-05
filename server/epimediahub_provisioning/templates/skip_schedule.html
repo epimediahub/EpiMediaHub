@@ -1,5 +1,6 @@
 <section class="card" id="analysis-order" style="margin:20px 0" aria-label="Reihenfolge der Hintergrundanalyse">
 <h2>Aktuelle Analyse & Reihenfolge</h2>
+<p>Aktive Sprachgruppe: <strong>{{ ['Deutsch / Italienisch', 'Türkisch', 'Übrige Sprachen'][schedule.language_stage] }}</strong></p>
 {% if schedule.current %}
 <p><strong>Aktuelle Playlist: {{ schedule.current.playlist_name }}</strong></p>
 {% if schedule.current.title %}
@@ -10,12 +11,12 @@
 {% if schedule.playlists %}
 <form method="post" action="{{ url_for('v082_skip_order') }}">
 <input type="hidden" name="csrf" value="{{ csrf }}">
-<p>Eine Playlist wird abgearbeitet, bevor die nächste beginnt. Kleinere Nummern kommen zuerst. Jede Nummer einmal vergeben.</p>
+<p>Kleinere Nummern kommen innerhalb derselben Sprachgruppe zuerst. Gestartete Serien und neue Introreferenzen haben Vorrang. Jede Nummer einmal vergeben.</p>
 <div class="tools">{% for playlist in schedule.playlists %}
 <label>{{ playlist.name }}<input type="number" name="position_{{ playlist.id }}" min="1" max="999" value="{{ playlist.position }}" required></label>
 {% endfor %}</div>
 <button type="submit">Reihenfolge speichern</button>
 </form>
 {% endif %}
-<p>Deutsch und Italienisch haben innerhalb der aktuellen Playlist Vorrang. Wiedergabepausen und Neustarts behalten die aktuelle Serie bei. „Bearbeitet“ umfasst auch Vorschläge und erfolglose Prüfungen; freigegebene Intros und offene Probleme bleiben in der Serienübersicht sichtbar.</p>
+<p>Zuerst Deutsch und Italienisch, danach Türkisch, anschließend übrige und unbekannte Sprachen. Neue Referenzen werden zuerst gelernt; gestartete Serien beginnen bei der aktuellen Staffel und Folge. Folgen laufen nacheinander. Beim gleichen Anbieterzugang wartet der Dateiabruf auf das Wiedergabeende; bereits aus der App gelieferte Audio-Fingerprints können währenddessen verglichen werden. „Bearbeitet“ umfasst auch Vorschläge und erfolglose Prüfungen.</p>
 </section>

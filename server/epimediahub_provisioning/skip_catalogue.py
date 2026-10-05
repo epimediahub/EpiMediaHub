@@ -20,7 +20,7 @@ ZONE = ZoneInfo("Europe/Berlin")
 MAX_SERIES = 20_000
 MAX_EPISODES = 10_000
 DEFAULT_DAILY_LIMIT = 96
-LANGUAGE_POLICY = "language_de_it_v1"
+LANGUAGE_POLICY = "language_de_it_tr_v2"
 LANGUAGE_FIELDS = ("audio_language", "audio_languages", "language", "languages")
 LANGUAGE_ALIASES = {
     "de": "de", "deu": "de", "ger": "de", "german": "de", "deutsch": "de",
@@ -30,7 +30,9 @@ LANGUAGE_ALIASES = {
     "en": "en", "eng": "en", "english": "en", "englisch": "en",
     "fr": "fr", "fra": "fr", "fre": "fr", "french": "fr", "francais": "fr",
     "es": "es", "spa": "es", "spanish": "es", "espanol": "es",
-    "tr": "tr", "tur": "tr", "turkish": "tr", "türkisch": "tr",
+    "tr": "tr", "tur": "tr", "turkish": "tr", "türkisch": "tr", "türkische": "tr",
+    "türkçe": "tr", "turkce": "tr", "turkish series": "tr",
+    "el": "el", "ell": "el", "gre": "el", "gr": "el", "greek": "el", "griechisch": "el",
     "pt": "pt", "por": "pt", "ru": "ru", "rus": "ru", "ar": "ar", "ara": "ar",
     "us": "en", "uk": "en",
 }
@@ -85,7 +87,7 @@ def label_languages(value, category=False):
         codes |= found
         text = text[:match.start()]
     if category:
-        prefix = re.match(r"^(de|deu|ger|it|ita|en|eng|fr|fra|es|spa|tr|tur)(?=\s)", value.strip(), re.I)
+        prefix = re.match(r"^(de|deu|ger|it|ita|en|eng|fr|fra|es|spa|tr|tur|ar|ara|el|ell|gre|gr)(?=\s)", value.strip(), re.I)
         if prefix:
             codes |= language_codes(prefix[1])
         for token in re.findall(r"\w+(?:[-_]\w+)?", value):
@@ -107,17 +109,17 @@ def category_ids(row):
             if (n := number(value)) is not None}
 
 
-def language_priority(row, categories=None, fallback=1):
+def language_priority(row, categories=None, fallback=2):
     if not isinstance(row, dict):
         return fallback
     declared = set().union(*(language_codes(row.get(field)) for field in LANGUAGE_FIELDS))
     tagged = label_languages(row.get("name", ""))
     codes = declared or tagged
     if codes:
-        return 0 if codes & PREFERRED_LANGUAGES else 1
+        return 0 if codes & PREFERRED_LANGUAGES else (1 if 'tr' in codes else 2)
     codes = label_languages(row.get("category_name", ""), category=True)
     if codes:
-        return 0 if codes & PREFERRED_LANGUAGES else 1
+        return 0 if codes & PREFERRED_LANGUAGES else (1 if 'tr' in codes else 2)
     ranks = [(categories or {})[key] for key in category_ids(row) if key in (categories or {})]
     return min(ranks) if ranks else fallback
 
@@ -224,15 +226,27 @@ def migrate(con):
         priority INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS skip_catalogue_languages(
         playlist_id INTEGER NOT NULL REFERENCES customer_playlists(id) ON DELETE CASCADE,
-        series_id TEXT NOT NULL,priority INTEGER NOT NULL CHECK(priority IN (0,1)),
+        series_id TEXT NOT NULL,priority INTEGER NOT NULL CHECK(priority IN (0,1,2)),
         PRIMARY KEY(playlist_id,series_id));
       CREATE TABLE IF NOT EXISTS skip_language_priority(
         asset_key TEXT PRIMARY KEY REFERENCES skip_assets(asset_key) ON DELETE CASCADE,
-        priority INTEGER NOT NULL CHECK(priority IN (0,1)));
+        priority INTEGER NOT NULL CHECK(priority IN (0,1,2)));
       CREATE TABLE IF NOT EXISTS skip_catalogue_language_refresh(
         playlist_id INTEGER PRIMARY KEY REFERENCES customer_playlists(id) ON DELETE CASCADE,
         checked_at INTEGER NOT NULL DEFAULT 0,retry_at INTEGER NOT NULL DEFAULT 0);
     """)
+    # Widen the two old CHECK constraints without modifying jobs or markers.
+    for table, keys, foreign in (
+            ('skip_catalogue_languages', 'playlist_id,series_id',
+             'playlist_id INTEGER NOT NULL REFERENCES customer_playlists(id) ON DELETE CASCADE,series_id TEXT NOT NULL'),
+            ('skip_language_priority', 'asset_key',
+             'asset_key TEXT NOT NULL REFERENCES skip_assets(asset_key) ON DELETE CASCADE')):
+        sql = con.execute('SELECT sql FROM sqlite_master WHERE name=?', (table,)).fetchone()[0]
+        if 'IN(0,1)' in re.sub(r'\s+', '', sql).upper():
+            con.execute(f'ALTER TABLE {table} RENAME TO {table}_old_language')
+            con.execute(f'CREATE TABLE {table}({foreign},priority INTEGER NOT NULL CHECK(priority IN (0,1,2)),PRIMARY KEY({keys}))')
+            con.execute(f'INSERT INTO {table} SELECT {keys},CASE WHEN priority=0 THEN 0 ELSE 2 END FROM {table}_old_language')
+            con.execute(f'DROP TABLE {table}_old_language')
     if not con.execute("SELECT 1 FROM skip_auto_maintenance WHERE name=?", (LANGUAGE_POLICY,)).fetchone():
         con.execute("""INSERT OR IGNORE INTO skip_catalogue_language_refresh
           SELECT DISTINCT playlist_id,0,0 FROM skip_catalogue_series""")
@@ -241,16 +255,22 @@ def migrate(con):
         for row in con.execute("SELECT playlist_id,series_id,payload_json FROM skip_catalogue_series").fetchall():
             try:
                 metadata = json.loads(row["payload_json"])
-                rank = metadata.get("language_priority")
-                rank = rank if type(rank) is int and rank in (0, 1) else language_priority(metadata)
+                rank = language_priority(metadata)
+                # Old sanitized metadata retained the confirmed DE/IT rank,
+                # including languages known only through provider categories.
+                if metadata.get('language_priority') == 0:
+                    rank = 0
+                metadata['language_priority'] = rank
+                con.execute('UPDATE skip_catalogue_series SET payload_json=? WHERE playlist_id=? AND series_id=?',
+                            (json.dumps(metadata, ensure_ascii=False), row['playlist_id'], row['series_id']))
             except (ValueError, TypeError, AttributeError):
-                rank = 1
+                rank = 2
             set_series_language(con, row["playlist_id"], row["series_id"], rank)
-        for row in con.execute("""SELECT a.asset_key,a.title FROM skip_assets a
+        for row in con.execute("""SELECT a.asset_key,a.title,l.priority FROM skip_assets a
           LEFT JOIN skip_language_priority l ON l.asset_key=a.asset_key
-          WHERE a.media_type='episode' AND l.asset_key IS NULL""").fetchall():
-            if label_languages(row["title"]) & PREFERRED_LANGUAGES:
-                set_asset_language(con, row["asset_key"], 0)
+          WHERE a.media_type='episode'""").fetchall():
+            if row['priority'] != 0:
+                set_asset_language(con, row['asset_key'], language_priority({'name': row['title']}, fallback=row['priority'] if row['priority'] is not None else 2))
         con.execute("INSERT INTO skip_auto_maintenance VALUES(?,?)", (LANGUAGE_POLICY, now()))
     from skip_schedule import migrate as schedule_migrate
     schedule_migrate(con)
@@ -407,7 +427,7 @@ def register_episodes(con, playlist, series, body, entries, run):
         return 0
     metadata = json.loads(series["payload_json"])
     info = body.get("info") if isinstance(body.get("info"), dict) else {}
-    rank = language_priority(info, fallback=metadata.get("language_priority", 1))
+    rank = language_priority(info, fallback=metadata.get("language_priority", 2))
     set_series_language(con, playlist["id"], series["series_id"], rank)
     title = player_title(first(info.get("name"), metadata["name"]))
     release = first(info.get("releaseDate"), info.get("releasedate"), metadata["release"])
@@ -473,9 +493,9 @@ def step(db, busy_factory, timestamp, playlist_id=None):
           WHERE (? IS NULL OR r.playlist_id=?) AND r.retry_at<=?
           AND (r.phase<>'idle' OR r.next_due<=? OR (f.checked_at=0 AND f.retry_at<=?))
           ORDER BY CASE WHEN r.phase='idle' OR (f.checked_at=0 AND f.retry_at<=?) THEN -1 ELSE COALESCE((
-            SELECT MIN(COALESCE(l.priority,1)) FROM skip_catalogue_series z
+            SELECT MIN(COALESCE(l.priority,2)) FROM skip_catalogue_series z
             LEFT JOIN skip_catalogue_languages l ON l.playlist_id=z.playlist_id AND l.series_id=z.series_id
-            WHERE z.playlist_id=r.playlist_id AND z.pending_generation=r.generation),1) END,
+            WHERE z.playlist_id=r.playlist_id AND z.pending_generation=r.generation),2) END,
           r.last_touch,r.playlist_id""", (playlist_id, playlist_id, timestamp, timestamp, timestamp, timestamp)).fetchall()
     if not runs:
         return "idle"
@@ -520,7 +540,7 @@ def step(db, busy_factory, timestamp, playlist_id=None):
                 series = con.execute("""SELECT s.* FROM skip_catalogue_series s
                   LEFT JOIN skip_catalogue_languages l ON l.playlist_id=s.playlist_id AND l.series_id=s.series_id
                   WHERE s.playlist_id=? AND s.pending_generation=?
-                  ORDER BY COALESCE(l.priority,1),s.modified DESC,CAST(s.series_id AS INTEGER) LIMIT 1""",
+                  ORDER BY COALESCE(l.priority,2),s.modified DESC,CAST(s.series_id AS INTEGER) LIMIT 1""",
                   (playlist["id"], run["generation"])).fetchone()
             if series is None:
                 with db() as con:

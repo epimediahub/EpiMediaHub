@@ -23,15 +23,15 @@ class LanguageLabels(unittest.TestCase):
         for name in ('It', 'It Takes Two', 'German Crime Story', 'Deutschland 83',
                      'Digital Show', '[HD] Story', 'DEAD - Show', 'Unknown', '[EN] Dark'):
             with self.subTest(name=name):
-                self.assertEqual(catalogue.language_priority({'name': name}), 1)
+                self.assertEqual(catalogue.language_priority({'name': name}), 2)
 
     def test_declared_audio_language_overrides_title_category_and_original_language(self):
         self.assertEqual(catalogue.language_priority({'audio_language': 'en', 'name': '[DE] Show',
-                                                     'category_name': 'DE SERIES'}), 1)
+                                                     'category_name': 'DE SERIES'}), 2)
         self.assertEqual(catalogue.language_priority({'audio_languages': ['en', {'iso_639_1': 'it'}]}), 0)
         self.assertEqual(catalogue.language_priority({'language': 'de-DE', 'original_language': 'en'}), 0)
-        self.assertEqual(catalogue.language_priority({'original_language': 'it', 'country': 'DE'}), 1)
-        self.assertEqual(catalogue.language_priority({'language': False, 'audio_languages': ['not-a-language']}), 1)
+        self.assertEqual(catalogue.language_priority({'original_language': 'it', 'country': 'DE'}), 2)
+        self.assertEqual(catalogue.language_priority({'language': False, 'audio_languages': ['not-a-language']}), 2)
 
     def test_provider_category_labels_and_ambiguous_categories(self):
         rows = [{'category_id': 1, 'category_name': 'DE | Serien'},
@@ -41,9 +41,9 @@ class LanguageLabels(unittest.TestCase):
                 {'category_id': 5, 'category_name': 'DEUTSCHE SERIEN'},
                 {'category_id': 5, 'category_name': 'English series'}]
         ranks = catalogue.category_priorities(rows)
-        self.assertEqual(ranks, {'1': 0, '2': 0, '3': 1, '4': 1})
+        self.assertEqual(ranks, {'1': 0, '2': 0, '3': 2, '4': 2})
         self.assertEqual(catalogue.language_priority({'category_ids': ['2', '3']}, ranks), 0)
-        self.assertEqual(catalogue.language_priority({'category_id': 999}, ranks), 1)
+        self.assertEqual(catalogue.language_priority({'category_id': 999}, ranks), 2)
 
     def test_country_prefixes_include_the_users_lowercase_and_netflix_category_examples(self):
         for name in ('de Serien', 'deutsche Seiten', 'DE: Netflix Serien', 'it Serie',
@@ -52,7 +52,7 @@ class LanguageLabels(unittest.TestCase):
                 self.assertEqual(catalogue.language_priority({'category_name': name}), 0)
         for name in ('Series de España', 'Séries de France', 'en Netflix Serien'):
             with self.subTest(name=name):
-                self.assertEqual(catalogue.language_priority({'category_name': name}), 1)
+                self.assertEqual(catalogue.language_priority({'category_name': name}), 2)
 
     def test_storage_retains_only_priority_and_existing_safe_metadata(self):
         row = {'series_id': 7, 'name': 'Show', 'audio_languages': [{'iso_639_1': 'de', 'secret': 'PRIVATE'}],
@@ -94,7 +94,7 @@ class LanguageQueueTests(CatalogueFixture, unittest.TestCase):
         self.assertEqual(ids, ['501', '503', '502'])
         with self.db() as con:
             rows = con.execute('SELECT stream_id,priority FROM skip_assets JOIN skip_language_priority USING(asset_key)').fetchall()
-            self.assertEqual(dict(rows), {'101': 0, '102': 0, '103': 0, '110': 0, '301': 0, '201': 1})
+            self.assertEqual(dict(rows), {'101': 0, '102': 0, '103': 0, '110': 0, '301': 0, '201': 2})
 
     def test_both_preferred_languages_run_before_new_other_language_and_rest_is_not_excluded(self):
         self.advance()
@@ -162,7 +162,7 @@ class LanguageQueueTests(CatalogueFixture, unittest.TestCase):
         self.advance(catalogue.next_night(START))
         with self.db() as con:
             self.assertEqual([tuple(row) for row in con.execute('SELECT * FROM skip_jobs ORDER BY id')], before)
-            self.assertEqual(con.execute("SELECT priority FROM skip_language_priority JOIN skip_assets USING(asset_key) WHERE stream_id='101'").fetchone()[0], 1)
+            self.assertEqual(con.execute("SELECT priority FROM skip_language_priority JOIN skip_assets USING(asset_key) WHERE stream_id='101'").fetchone()[0], 2)
 
     def test_existing_catalogue_refreshes_categories_without_resetting_cursor_schedule_jobs_or_markers(self):
         self.advance(); jobs = self.finish_jobs(); self.marker()

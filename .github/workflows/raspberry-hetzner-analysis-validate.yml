@@ -31,6 +31,7 @@ jobs:
           bash -n server/epimediahub_provisioning/deploy/install_skip_hetzner.sh
           bash -n server/epimediahub_provisioning/deploy/install_skip_remote_client.sh
           bash -n server/epimediahub_provisioning/deploy/activate_skip_remote.sh
+          bash -n server/epimediahub_provisioning/deploy/install_skip_interactive_priority.sh
           python server/epimediahub_provisioning/skip_detector_v3.py --selftest
       - name: Verify existing API, licenses, private marker playback and credit system
         env:
@@ -47,3 +48,4 @@ jobs:
         run: python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_remote*.py' -v
       - name: Verify actual encrypted peer connection in isolated namespaces
         run: sudo bash server/epimediahub_provisioning/tests/check_skip_wireguard.sh "$(command -v python)"
+

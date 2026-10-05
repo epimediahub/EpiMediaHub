@@ -58,7 +58,7 @@ class ScheduleFixture(fixtures.AutomationFixture):
 
 
 class ScheduleTests(ScheduleFixture, unittest.TestCase):
-    def test_named_playlists_finish_in_requested_order_with_language_inside_each_playlist(self):
+    def test_language_stages_apply_globally_with_playlist_order_inside_each_stage(self):
         self.add(3, 'FE preferred', 1, 1)
         self.add(1, 'Best preferred', 1, 1)
         self.add(2, '4K other', 1, 1, language=1)
@@ -66,7 +66,7 @@ class ScheduleTests(ScheduleFixture, unittest.TestCase):
         self.add(2, '4K preferred', 1, 1)
         seen, _ = self.run_jobs()
         self.assertEqual(seen, [(2,'4K preferred',1,1),(2,'4K preferred',1,2),
-                                (2,'4K other',1,1),(1,'Best preferred',1,1),(3,'FE preferred',1,1)])
+                                (1,'Best preferred',1,1),(3,'FE preferred',1,1),(2,'4K other',1,1)])
 
     def test_series_is_finished_in_numeric_season_episode_order_across_batches(self):
         self.add(2, 'First', 10, 2)
@@ -130,11 +130,11 @@ class ScheduleTests(ScheduleFixture, unittest.TestCase):
             con.execute('UPDATE skip_analysis_sources SET enabled=0 WHERE playlist_id=3')
         self.assertEqual(self.run_jobs()[0], [(1,'Best',1,1)])
 
-    def test_new_preferred_series_waits_for_active_series_completion(self):
+    def test_new_preferred_series_preempts_lower_language_stage(self):
         self.add(2, 'Other', 1, 1, language=1); self.add(2, 'Other', 1, 2, language=1)
         self.run_jobs(1)
         self.add(2, 'Preferred', 1, 1)
-        self.assertEqual([r[1] for r in self.run_jobs()[0]], ['Other','Preferred'])
+        self.assertEqual([r[1] for r in self.run_jobs()[0]], ['Preferred','Other'])
 
     def test_new_jobs_in_an_earlier_playlist_do_not_interrupt_active_playlist(self):
         self.add(1,'Best',1,1); self.add(1,'Best',1,2)
@@ -165,16 +165,18 @@ class ScheduleTests(ScheduleFixture, unittest.TestCase):
             self.assertEqual(con.execute('SELECT count FROM skip_analysis_budget').fetchone()[0],0)
             self.assertEqual(schedule.current_playlist(con),2)
 
-    def test_other_playlist_inventory_does_not_hold_up_current_playlist_jobs(self):
+    def test_preferred_inventory_in_other_playlist_holds_lower_language_jobs(self):
         self.add(2, '4K other', 1, 1, language=1)
         with self.db() as con:
             catalogue.start(con,1)
             con.execute("INSERT INTO skip_catalogue_series VALUES(1,'501','{}','sig',0,1,1,0,'','')")
             catalogue.set_series_language(con,1,'501',0)
             con.execute("UPDATE skip_catalogue_runs SET phase='full',generation=1 WHERE playlist_id=1")
-        self.assertEqual(self.run_jobs(1)[0], [(2,'4K other',1,1)])
+        with mock.patch.object(catalogue,'advance',return_value='queued'), mock.patch('skip_analysis_worker.analyze') as analyze:
+            self.assertEqual(process_one(self.db),'preferred_pending')
+            analyze.assert_not_called()
 
-    def test_current_playlist_inventory_is_completed_before_switching_to_later_jobs(self):
+    def test_queued_preferred_jobs_run_before_fetching_another_playlist_inventory(self):
         self.add(1, 'Best', 1, 1)
         with self.db() as con:
             catalogue.start(con,2)
@@ -191,11 +193,14 @@ class ScheduleTests(ScheduleFixture, unittest.TestCase):
         with mock.patch.object(auto,'provider_api',side_effect=provider), \
              mock.patch('skip_analysis_worker.analyze',side_effect=analyze):
             self.assertEqual(process_one(self.db),'no_match')
-            self.assertEqual(calls,[(2,'get_series'),(2,'get_series_info')])
+            self.assertEqual(calls,[])
             self.assertEqual(process_one(self.db),'no_match')
+            self.assertEqual(calls,[(2,'get_series'),(2,'get_series_info')])
             self.assertEqual(len(calls),2)
             self.assertEqual(process_one(self.db),'no_match')
-        self.assertEqual(analyzed,[2,2,1])
+        self.assertEqual(analyzed,[1,2,2])
+        with mock.patch.object(auto,'provider_api',side_effect=provider):
+            self.assertEqual(process_one(self.db),'idle')
         with self.db() as con:
             self.assertEqual(con.execute('SELECT full_done FROM skip_catalogue_runs WHERE playlist_id=2').fetchone()[0],1)
 

@@ -255,6 +255,9 @@ def review_record(con, row, decision, start, end, disabled, wake=True):
     else:
         con.execute('DELETE FROM skip_auto_blocks WHERE asset_key=? AND kind=? AND ABS(duration_ms-?)<=2000',
                     (row['asset_key'], row['segment_type'], row['duration_ms']))
+    if decision == 'approve' and not disabled and row['segment_type'] == 'intro':
+        from skip_schedule import request_series
+        request_series(con, row['asset_key'], 'reference')
 
 
 def approve_pending_scope(con, source_key, season=None):
@@ -337,6 +340,14 @@ def install(app, db):
               (data["asset_key"], data["media_type"], data["season"], data["episode"], data["duration_ms"])).fetchall()
             identity = con.execute("SELECT imdb_id,tmdb_id FROM skip_identities WHERE source_key=?", (data["source_key"],)).fetchone()
             registered = register_asset(con, raw, data, row)
+            if registered:
+                from skip_schedule import request_series
+                human_reference = con.execute("""SELECT 1 FROM skip_records r
+                  LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
+                  WHERE r.asset_key=? AND r.status='approved' AND r.disabled=0
+                    AND r.segment_type='intro' AND (r.source='device' OR e.human_review=1)
+                    AND ABS(r.duration_ms-?)<=2000 LIMIT 1""", (data['asset_key'],data['duration_ms'])).fetchone()
+                request_series(con, data['asset_key'], 'reference' if human_reference else 'playback')
             from skip_automation import enabled as capture_enabled
             seen = set(); segments = []
             for record in records:
@@ -655,6 +666,7 @@ def install(app, db):
         data = response.get_json()
         data["api_version"] = "0.8.2"
         data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True, "skip_high_audio_approval": True, "skip_proposal_dedup": True, "skip_online_error_details": True, "skip_language_priority": True, "skip_bulk_review": True, "skip_network_address_fallback": True, "skip_automatic_acceptance": True, "skip_series_progress": True, "skip_database_concurrency": True, "skip_progress_cache": True, "skip_detector_v2": True, "skip_detector_v3_1": True}
-        data['features'].update(skip_playlist_order=True, skip_series_order=True, skip_fingerprint_capture=True)
+        data['features'].update(skip_playlist_order=True, skip_series_order=True, skip_fingerprint_capture=True,
+                                skip_interactive_priority=True, skip_language_stages=True)
         return jsonify(data)
     app.view_functions["health"] = health

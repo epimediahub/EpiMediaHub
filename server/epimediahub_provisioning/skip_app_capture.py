@@ -74,6 +74,8 @@ def receive(con, device, raw, data):
             return 'unavailable'
     elif not register_asset(con, raw, data, device):
         return 'unavailable'
+    from skip_schedule import request_series
+    request_series(con, data['asset_key'])
     previous = con.execute('SELECT * FROM skip_app_windows WHERE asset_key=?', (data['asset_key'],)).fetchone()
     if previous and previous['duration_ms'] == data['duration_ms']:
         if previous['revision'] == revision or previous['length_ms'] > length:
@@ -120,21 +122,37 @@ def process_one(db, cancelled=lambda: False):
     """Compare uploads even during playback. This never reads from the provider."""
     from skip_automation import bootstrap, detector_windows, enabled
     from skip_release import accept_pending
+    from skip_schedule import language_stage, should_pause
     with db() as con:
         row = con.execute('''SELECT t.*,a.playlist_id FROM skip_app_tasks t
-          JOIN skip_assets a USING(asset_key) WHERE t.attempts<3 ORDER BY t.rowid LIMIT 1''').fetchone()
+          JOIN skip_assets a USING(asset_key)
+          JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id AND s.enabled=1
+          JOIN skip_auto_settings x ON x.playlist_id=a.playlist_id AND x.enabled=1
+          JOIN customer_playlists p ON p.id=a.playlist_id
+          JOIN customers c ON c.id=p.customer_id AND c.enabled=1
+          LEFT JOIN skip_language_priority l USING(asset_key)
+          WHERE t.attempts<3 AND COALESCE(l.priority,2)=? ORDER BY t.rowid LIMIT 1''',
+          (language_stage(con),)).fetchone()
         if not row:
             return False
         asset = con.execute('SELECT * FROM skip_assets WHERE asset_key=?', (row['asset_key'],)).fetchone()
         keys = [asset['asset_key']] + [w['asset_key'] for w in detector_windows(con, asset, 'intro')
                                      if w['asset_key'] != asset['asset_key']][:4]
+    cache = [0.0,False]
+    def paused():
+        if cancelled():
+            return True
+        if time.monotonic()-cache[0]>=2:
+            with db() as con:
+                cache[:] = [time.monotonic(),should_pause(con,asset['asset_key'])]
+        return cache[1]
     try:
         for key in keys:
-            if cancelled():
+            if paused():
                 raise ValueError('analysis_deferred')
             with db() as con:
                 current = con.execute('SELECT * FROM skip_assets WHERE asset_key=?', (key,)).fetchone()
-                if current and enabled(con, current['playlist_id']) and bootstrap(con, current, 'intro', cancelled):
+                if current and enabled(con, current['playlist_id']) and bootstrap(con, current, 'intro', paused):
                     accept_pending(con, asset_key=key)
         with db() as con:
             con.execute('DELETE FROM skip_app_tasks WHERE asset_key=? AND revision=?',
