@@ -5,7 +5,7 @@ Inputs are the reviewed recovered PNG atlases, authentic photographs, and their
 role mappings. Display windows crop source photographs at the waist; no facial
 detection or generated replacement is used for the critical player photographs.
 """
-import argparse, base64, gzip, hashlib, io, json, tarfile
+import argparse, hashlib, io, json
 from pathlib import Path
 from PIL import Image
 
@@ -15,7 +15,7 @@ args=ap.parse_args()
 inputs=args.inputs.resolve()
 repo=Path(__file__).resolve().parent.parent
 out=repo/'android/v1.0.32'
-staging=inputs/'artwork-v132'
+staging=out/'artwork'
 staging.mkdir(exist_ok=True)
 original=inputs/'artwork-v131'
 meta=json.loads((original/'assets/skin_variants_v131.json').read_text())
@@ -47,7 +47,8 @@ def asset_image(path, name, atlas=False):
     name='skin_portraits_v132/'+name+'.webp'
     target=staging/'assets'/name
     target.parent.mkdir(parents=True,exist_ok=True)
-    im.save(target,format='WEBP',quality=87,method=4)
+    encoded=io.BytesIO();im.save(encoded,format='WEBP',quality=87,method=4)
+    temporary=target.with_name(target.name+'.tmp');temporary.write_bytes(encoded.getvalue());temporary.replace(target)
     # Window geometry is measured on the actual encoded image.
     result=Image.open(target).convert('RGBA')
     assert result.width*result.height*4<=5_242_880
@@ -91,7 +92,7 @@ for raw_index, entries in mapping.items():
         if ref is not None:
             assign(ref,asset,im,cell,columns,rows,
                    .96 if index==0 else 1.0,
-                   {'type':'reviewed_generated_upper_body','libraryFileId':item['id']})
+                   {'type':'reviewed_generated_upper_body','referenceAtlas':index})
 
 # Preserve the three genuine existing upper-body pairs.
 for variant, source in [
@@ -128,23 +129,23 @@ authentic=[
  ('inter__players',1,'barella_inter',1.0),
  ('national_it__players',1,'barella_italy',1.0),
  ('barcelona__legends',1,'ronaldinho_barcelona',1.0),
- ('real_madrid__legends',0,'zidane_real',.50),
+ ('real_madrid__legends',0,'zidane_real',.45),
  ('national_tr__players',0,'arda_guler',.65),
- ('national_en__legends',0,'beckham_england',.48),
- ('national_de__legends',1,'schweinsteiger_germany',.52),
+ ('national_en__legends',0,'beckham_england',.55),
+ ('national_de__legends',1,'schweinsteiger_germany',.50),
  ('galatasaray__players',1,'icardi_galatasaray',1.0),
- ('fenerbahce__legends',1,'roberto_fenerbahce',.48),
- ('basaksehir__legends',1,'visca_basaksehir',.49),
- ('national_fr__players',0,'mbappe_france',.49),
+ ('fenerbahce__legends',1,'roberto_fenerbahce',.47),
+ ('basaksehir__legends',1,'visca_basaksehir',.485),
+ ('national_fr__players',0,'mbappe_france',.46),
  ('national_ar__players',0,'messi_argentina',.52),
- ('napoli__legends',1,'hamsik_napoli',.53),
+ ('napoli__legends',1,'hamsik_napoli',.50),
  ('real_madrid__legends',1,'ronaldo_real',.83),
  ('national_hr__legends',0,'suker_croatia',.85),
  ('atletico__legends',1,'godin_atletico',1.0),
- ('sevilla__legends',0,'kanoute_sevilla',.52),
- ('national_ma__players',0,'hakimi_morocco',.51),
+ ('sevilla__legends',0,'kanoute_sevilla',.49),
+ ('national_ma__players',0,'hakimi_morocco',.45),
  ('barcelona__legends',0,'messi_barcelona',.57),
- ('leipzig__legends',1,'poulsen_leipzig',.69),
+ ('leipzig__legends',1,'poulsen_leipzig',.67),
 ]
 for variant,index,name,bottom in authentic:
     info=key[name]
@@ -156,7 +157,7 @@ for variant,index,name,bottom in authentic:
 
 # Preserve authentic Schneider and Forsberg rather than retrying an unavailable
 # generated replacement. Schneider's source is framed at the waist.
-for index,bottom in [(46,.56),(50,1.0)]:
+for index,bottom in [(46,.90),(50,1.0)]:
     row=remaining[index]
     asset,im=asset_image(original/'assets'/row['asset'],'authentic_original_%03d'%index)
     assign(role_ref(row),asset,im,bottom_fraction=bottom,
@@ -171,11 +172,13 @@ names={
  ('juventus__players',0):'Kenan Yıldız',('juventus__players',1):'Gleison Bremer',
  ('national_es__players',1):'Pedri',('national_tr__players',0):'Arda Güler',
  ('f1_mercedes__legends',1):'Lewis Hamilton',
+ ('national_pt__legends',1):'Eusébio',
 }
 missing=[]
 for team in meta['teams']:
     for variant in team['variants']:
         variant.pop('pairAsset',None)
+        if variant['id']=='f1_cadillac__legends':variant['label']='US-Legenden'
         for index,portrait in enumerate(variant['portraits']):
             ref=(variant['id'],index)
             if ref not in roles:
@@ -194,34 +197,25 @@ for team,info in marks.items():
     im.thumbnail((512,512),Image.Resampling.LANCZOS)
     target=staging/'res/drawable-nodpi'/('historical_'+team+'.webp')
     target.parent.mkdir(parents=True,exist_ok=True)
-    im.save(target,format='WEBP',lossless=True,method=4)
+    encoded=io.BytesIO();im.save(encoded,format='WEBP',lossless=True,method=4)
+    temporary=target.with_name(target.name+'.tmp');temporary.write_bytes(encoded.getvalue());temporary.replace(target)
     files['res/drawable-nodpi/'+target.name]=target.read_bytes()
     credits.append({'historicalTeam':team,'url':info['source'],'sourceSha256':hashlib.sha256(png_path(info['file']).read_bytes()).hexdigest()})
 
 def add_json(name,value):
     data=(json.dumps(value,ensure_ascii=False,indent=2)+'\n').encode()
-    target=staging/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data);files[name]=data
+    target=staging/name;target.parent.mkdir(parents=True,exist_ok=True)
+    temporary=target.with_name(target.name+'.tmp');temporary.write_bytes(data);temporary.replace(target);files[name]=data
 add_json('assets/skin_variants_v131.json',meta)
 add_json('assets/licenses/skin_artwork_v132_sources.json',{
     'version':'1.0.32',
     'notes':'Private sport skins. Existing source credits remain bundled. Generated upper-body portraits were reviewed for identity, kit and era; authentic corrections use the recorded team photographs. Logo and photograph ownership is retained by their respective owners.',
     'entries':credits,
 })
-tar_buffer=io.BytesIO()
-with tarfile.open(fileobj=tar_buffer,mode='w')as tar:
-    for name,data in sorted(files.items()):
-        info=tarfile.TarInfo(name);info.size=len(data);info.mtime=0;info.mode=0o644
-        tar.addfile(info,io.BytesIO(data))
-packed=gzip.compress(tar_buffer.getvalue(),compresslevel=9,mtime=0)
-parts=out/'artwork_parts';parts.mkdir(exist_ok=True)
-for p in parts.glob('part_*'):p.unlink()
-encoded=base64.b64encode(packed).decode()
-for number,start in enumerate(range(0,len(encoded),65536)):
-    (parts/('part_%04d'%number)).write_text(encoded[start:start+65536])
 manifest={
- 'version':'1.0.32','bytes':len(packed),'sha256':hashlib.sha256(packed).hexdigest(),
+ 'version':'1.0.32','storage':'git_assets',
  'teamCount':134,'portraitCount':536,'historicalMarkCount':len(marks),
  'files':{n:hashlib.sha256(d).hexdigest()for n,d in sorted(files.items())},'imageSizes':sizes,
 }
 (out/'artwork_manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
-print(json.dumps({'portraitWindows':536,'historicalMarks':len(marks),'bytes':len(packed),'parts':len(list(parts.glob('part_*')))},indent=2))
+print(json.dumps({'portraitWindows':536,'historicalMarks':len(marks),'bytes':sum(map(len,files.values())),'assets':len(files)},indent=2))
