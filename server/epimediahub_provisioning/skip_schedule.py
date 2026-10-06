@@ -92,8 +92,20 @@ ACTIVE_JOBS = """ FROM skip_jobs j JOIN skip_assets a USING(asset_key)
 
 def language_stage(con):
     """Global DE/IT, then Turkish, then remaining/unknown audio languages."""
-    ranks = [con.execute('SELECT MIN(COALESCE(l.priority,2))' + ACTIVE_JOBS +
-                         " WHERE (j.status='queued' AND j.attempts<3) OR j.status='running'").fetchone()[0]]
+    # The first available rank is enough. MIN used to join every queued asset,
+    # even when the first row already proved that DE/IT is active.
+    known_jobs = ACTIVE_JOBS.replace('LEFT JOIN skip_language_priority l USING(asset_key)',
+                                     'JOIN skip_language_priority l USING(asset_key)')
+    job_rank = next((rank for rank in (0,1) if con.execute('SELECT 1' + known_jobs +
+        " WHERE ((j.status='queued' AND j.attempts<3) OR j.status='running')"
+        " AND l.priority=? LIMIT 1", (rank,)).fetchone()), None)
+    if job_rank == 0:
+        return 0
+    if job_rank is None and con.execute('SELECT 1' + ACTIVE_JOBS.replace(
+            'LEFT JOIN skip_language_priority l USING(asset_key)','') +
+            " WHERE (j.status='queued' AND j.attempts<3) OR j.status='running' LIMIT 1").fetchone():
+        job_rank = 2
+    ranks = [job_rank]
     ranks.append(con.execute("""SELECT MIN(COALESCE(l.priority,2)) FROM skip_app_tasks t
       JOIN skip_assets a USING(asset_key)
       JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id AND s.enabled=1
@@ -101,6 +113,8 @@ def language_stage(con):
       JOIN customer_playlists p ON p.id=a.playlist_id
       JOIN customers c ON c.id=p.customer_id AND c.enabled=1
       LEFT JOIN skip_language_priority l USING(asset_key) WHERE t.attempts<3""").fetchone()[0])
+    if ranks[-1] == 0:
+        return 0
     ranks.append(con.execute("""SELECT MIN(CASE WHEN (r.phase='idle' AND r.full_done=0) OR COALESCE(f.checked_at,1)=0
         THEN 0 ELSE COALESCE(l.priority,2) END) FROM skip_catalogue_runs r
       JOIN skip_catalogue_settings x ON x.playlist_id=r.playlist_id AND x.enabled=1
@@ -303,7 +317,9 @@ def overview(con):
     current = None
     if playlist_id is not None:
         current = dict(playlist_id=playlist_id, playlist_name=next(r['name'] for r in rows if r['id']==playlist_id))
-        job, _ = select_job(con, playlist_id,stage=stage)
+        # A running job already identifies the actual series. Do not sort the
+        # entire remaining queue merely to render a job that is not next yet.
+        job = None if running else select_job(con, playlist_id,stage=stage)[0]
         asset = running or (con.execute('SELECT * FROM skip_assets WHERE asset_key=?',
                                        (job['asset_key'],)).fetchone() if job else None)
         if asset:

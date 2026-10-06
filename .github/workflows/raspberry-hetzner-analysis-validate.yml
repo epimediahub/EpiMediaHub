@@ -33,6 +33,7 @@ jobs:
           bash -n server/epimediahub_provisioning/deploy/activate_skip_remote.sh
           bash -n server/epimediahub_provisioning/deploy/install_skip_interactive_priority.sh
           bash -n server/epimediahub_provisioning/deploy/install_skip_optimization.sh
+          bash -n server/epimediahub_provisioning/deploy/install_skip_dashboard.sh
           node --check server/epimediahub_provisioning/static/skip_dashboard.js
           python server/epimediahub_provisioning/skip_detector_v3.py --selftest
       - name: Verify existing API, licenses, private marker playback and credit system

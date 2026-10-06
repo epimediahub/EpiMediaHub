@@ -1,12 +1,13 @@
 <section class="card" id="analysis-order" style="margin:20px 0" aria-label="Reihenfolge der Hintergrundanalyse">
 <h2>Aktuelle Analyse & Reihenfolge</h2>
-<p>Aktive Sprachgruppe: <strong>{{ ['Deutsch / Italienisch', 'Türkisch', 'Übrige Sprachen'][schedule.language_stage] }}</strong></p>
+{% if schedule.language_stage in [0,1,2] %}<p>Aktive Sprachgruppe: <strong>{{ ['Deutsch / Italienisch', 'Türkisch', 'Übrige Sprachen'][schedule.language_stage] }}</strong></p>{% endif %}
 {% if schedule.current %}
 <p><strong>Aktuelle Playlist: {{ schedule.current.playlist_name }}</strong></p>
 {% if schedule.current.title %}
 <p>Serie: <strong>{{ schedule.current.title }}</strong> · Staffel {{ schedule.current.season }} · Folge {{ schedule.current.episode }}</p>
 <p>Bearbeitet: {{ schedule.current.processed or 0 }} / {{ schedule.current.files }} Videofassungen dieser Serie{% if schedule.current.review %} · {{ schedule.current.review }} Vorschläge zur Prüfung{% endif %}{% if schedule.current.problems %} · {{ schedule.current.problems }} Zugriffs-/Referenzprobleme{% endif %}</p>
 {% else %}<p>Die Folgenliste dieser Playlist wird abgeglichen; die nächste Serie wird anschließend eingeplant.</p>{% endif %}
+{% elif schedule.statistics_pending %}<p>Die Analyseübersicht wird aktualisiert. Laufende Aufträge werden bereits angezeigt.</p>
 {% else %}<p>Aktuell sind keine weiteren Analyseaufträge oder fälligen Katalogabgleiche eingeplant.</p>{% endif %}
 {% if schedule.playlists %}
 <form method="post" action="{{ url_for('v082_skip_order') }}">

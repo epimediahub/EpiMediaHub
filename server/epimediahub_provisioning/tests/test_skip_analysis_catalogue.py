@@ -399,6 +399,8 @@ class CatalogueApiTests(AutomationFixture, unittest.TestCase):
             catalogue.start(con, 1)
             key = "0123456789abcdef" * 2
             con.execute("INSERT INTO skip_auto_metadata_config VALUES('tmdb_api_key',?,?)", (key, now()))
+        from skip_dashboard_stats import refresh
+        with self.db() as con:refresh(con,force=True)
         body = self.client.get("/admin/skip").get_data(as_text=True)
         for text in ("Gesamtkatalog", "03:00", "Erfasste Folgen", "Noch zu analysieren", "Weitere Katalogprüfungen ausschalten"):
             self.assertIn(text, body)

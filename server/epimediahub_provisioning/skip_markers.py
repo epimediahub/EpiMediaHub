@@ -82,6 +82,32 @@ def migrate(con):
     migrate_progress(con)
     from skip_app_capture import migrate as migrate_capture
     migrate_capture(con)
+    from skip_dashboard_stats import migrate as migrate_dashboard_stats
+    migrate_dashboard_stats(con)
+    # These covering indexes avoid random reads of full job, provider payload
+    # and asset rows for the read-only dashboard. No marker/queue data changes.
+    con.executescript('''
+      CREATE INDEX IF NOT EXISTS idx_skip_marker_summary
+        ON skip_records(status,source_key,title,year,media_type,season,episode);
+      CREATE INDEX IF NOT EXISTS idx_skip_job_status_display
+        ON skip_jobs(status,attempts,asset_key,id,updated_at);
+      CREATE INDEX IF NOT EXISTS idx_skip_job_asset_status
+        ON skip_jobs(asset_key,status);
+      CREATE INDEX IF NOT EXISTS idx_skip_language_rank
+        ON skip_language_priority(priority,asset_key);
+      CREATE INDEX IF NOT EXISTS idx_skip_asset_queue_lookup
+        ON skip_assets(asset_key,playlist_id,source_key,media_type,season,episode);
+      CREATE INDEX IF NOT EXISTS idx_skip_asset_queue_series
+        ON skip_assets(playlist_id,source_key,media_type,season,episode,asset_key);
+      CREATE INDEX IF NOT EXISTS idx_skip_online_recent
+        ON skip_auto_online(checked_at DESC,asset_key);
+      CREATE INDEX IF NOT EXISTS idx_skip_catalogue_series_status
+        ON skip_catalogue_series(playlist_id,seen_generation,status);
+      CREATE INDEX IF NOT EXISTS idx_skip_catalogue_series_pending
+        ON skip_catalogue_series(playlist_id,pending_generation,series_id);
+      CREATE INDEX IF NOT EXISTS idx_skip_catalogue_episode_count
+        ON skip_catalogue_episodes(playlist_id,asset_key);
+    ''')
 
 
 def integer(body, key, low, high, default=None):
@@ -417,6 +443,13 @@ def install(app, db):
         if guard:
             return guard
         started = time.perf_counter()
+        phases = []
+        previous = started
+        def measured(name):
+            nonlocal previous
+            current = time.perf_counter()
+            phases.append(f'{name};dur={(current-previous)*1000:.2f}')
+            previous = current
         session.setdefault("skip_csrf", secrets.token_urlsafe(32))
         state = request.args.get("state", "pending")
         if state not in ("pending", "approved", "rejected", "superseded"):
@@ -426,21 +459,29 @@ def install(app, db):
             season = int(raw_season) if re.fullmatch(r"\d{1,4}", raw_season) and int(raw_season) <= 1000 else None
             browser = marker_browser(con, state, request.args.get("series", ""), season,
                                      request.args.get("page", "1"), request.args.get("episode_page", "1"))
+            measured('markers')
             sources = con.execute("SELECT p.id,p.name,c.name customer_name,COALESCE(s.enabled,0) enabled,COALESCE(a.enabled,0) automatic,COALESCE(a.online_enabled,0) online_enabled,COALESCE(r.enabled,1) auto_accept FROM customer_playlists p JOIN customers c ON c.id=p.customer_id LEFT JOIN skip_analysis_sources s ON s.playlist_id=p.id LEFT JOIN skip_auto_settings a ON a.playlist_id=p.id LEFT JOIN skip_release_settings r ON r.playlist_id=p.id ORDER BY c.name,p.name LIMIT 200").fetchall()
+            measured('sources')
             jobs = con.execute("SELECT j.*,a.title,a.year,a.source_key,a.media_type,a.season,a.episode FROM skip_jobs j JOIN skip_assets a ON a.asset_key=j.asset_key ORDER BY j.id DESC LIMIT 20").fetchall()
+            measured('jobs')
             online_status = con.execute("SELECT o.detail,a.title,a.year,a.source_key,a.media_type,a.season,a.episode FROM skip_auto_online o JOIN skip_assets a ON a.asset_key=o.asset_key ORDER BY o.checked_at DESC LIMIT 10").fetchall()
+            measured('online')
             tmdb_ready = bool(con.execute("SELECT 1 FROM skip_auto_metadata_config WHERE name='tmdb_api_key'").fetchone() or os.environ.get("EPIMEDIAHUB_TMDB_API_KEY"))
-            from skip_catalogue import dashboard as catalogue_dashboard, daily_limit
-            catalogues = catalogue_dashboard(con)
+            from skip_catalogue import daily_limit
+            from skip_dashboard_stats import read as read_statistics, catalogue_view, schedule_view
+            statistics = read_statistics(con)
+            catalogues = catalogue_view(con,statistics)
             audio_limit = daily_limit(con)
+            measured('catalogue')
             from skip_progress import overview
             progress = overview(con, request.args.get('progress_filter','all'), request.args.get('progress_search',''), request.args.get('progress_page','1'), refresh_cache=False)
-            from skip_schedule import overview as schedule_overview
-            schedule = schedule_overview(con)
+            measured('progress')
+            schedule = schedule_view(con,statistics)
+            measured('schedule')
         selected_episode = page_number(request.args.get("episode", ""), 0)
         loaded = time.perf_counter()
         response = app.make_response(render_template("skip_markers.html", browser=browser, sources=sources, job_groups=media_groups(jobs), online_groups=media_groups(online_status), tmdb_ready=tmdb_ready, catalogues=catalogues, audio_limit=audio_limit, progress=progress, schedule=schedule, state=state, selected_episode=selected_episode, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", "")))
-        response.headers['Server-Timing'] = f'database;dur={(loaded-started)*1000:.2f}, render;dur={(time.perf_counter()-loaded)*1000:.2f}'
+        response.headers['Server-Timing'] = ', '.join(phases + [f'database;dur={(loaded-started)*1000:.2f}', f'render;dur={(time.perf_counter()-loaded)*1000:.2f}'])
         response.headers['Cache-Control'] = 'no-store'
         return response
 
@@ -700,6 +741,6 @@ def install(app, db):
         data['features'].update(skip_playlist_order=True, skip_series_order=True, skip_fingerprint_capture=True,
                                 skip_interactive_priority=True, skip_language_stages=True,
                                 skip_dashboard_async=True, skip_progress_readonly=True,
-                                skip_detection_precision=True)
+                                skip_detection_precision=True,skip_dashboard_cached_statistics=True)
         return jsonify(data)
     app.view_functions["health"] = health

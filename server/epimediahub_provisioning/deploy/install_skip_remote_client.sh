@@ -40,7 +40,7 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends wireguard-tools curl
-FILES=(skip_analysis.py skip_automation.py skip_analysis_worker.py skip_detector_v2.py skip_detector_v3.py skip_remote_client.py skip_remote_protocol.py skip_remote_verify.py skip_catalogue.py skip_schedule.py skip_app_capture.py skip_release.py skip_markers.py templates/skip_markers.html templates/skip_schedule.html skip_database.py skip_progress.py skip_progress_worker.py templates/skip_progress.html static/skip_dashboard.js deploy/epimediahub-skip-progress.service deploy/epimediahub-skip-progress.timer deploy/check_skip_latency.py)
+FILES=(skip_analysis.py skip_automation.py skip_analysis_worker.py skip_detector_v2.py skip_detector_v3.py skip_remote_client.py skip_remote_protocol.py skip_remote_verify.py skip_catalogue.py skip_schedule.py skip_app_capture.py skip_release.py skip_markers.py templates/skip_markers.html templates/skip_schedule.html skip_database.py skip_progress.py skip_progress_worker.py skip_dashboard_stats.py templates/skip_progress.html static/skip_dashboard.js deploy/epimediahub-skip-progress.service deploy/epimediahub-skip-progress.timer deploy/check_skip_latency.py)
 install -d -m 0700 "$WORK/templates" "$WORK/static" "$WORK/deploy"
 for file in "${FILES[@]}"; do curl -fsSL --connect-timeout 15 --max-time 90 "$RAW/$file" -o "$WORK/$file"; done
 curl -fsSL --connect-timeout 15 --max-time 90 "$RAW/deploy/activate_skip_remote.sh" -o "$WORK/activate.sh"

@@ -13,5 +13,5 @@ PrivateTmp=true
 ProtectSystem=full
 MemoryMax=128M
 CPUQuota=25%
-TimeoutStartSec=10
+TimeoutStartSec=120
 UMask=0077

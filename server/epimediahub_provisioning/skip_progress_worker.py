@@ -11,7 +11,10 @@ from skip_progress import refresh
 def update(path, *, budget=.2, limit=64):
     try:
         with connect(path, timeout=.05) as con:
-            return refresh(con, limit=limit, budget=budget)
+            updated=refresh(con, limit=limit, budget=budget)
+            from skip_dashboard_stats import refresh as refresh_dashboard
+            refresh_dashboard(con)
+            return updated
     except sqlite3.OperationalError as error:
         if 'locked' not in str(error).lower() and 'busy' not in str(error).lower():
             raise

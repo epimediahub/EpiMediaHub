@@ -603,7 +603,7 @@ def advance(db, busy_factory, timestamp=None, max_steps=8, playlist_id=None, sto
     return outcome
 
 
-def dashboard(con):
+def dashboard(con, *, counts_cache=None):
     rows = con.execute("""SELECT p.id,p.name,c.name customer_name,x.enabled,
       COALESCE(r.phase,'idle') phase,COALESCE(r.full_done,0) full_done,
       COALESCE(r.checked,0) checked,COALESCE(r.total,0) total,COALESCE(r.queued,0) queued,
@@ -613,12 +613,18 @@ def dashboard(con):
       ORDER BY c.name,p.name""").fetchall()
     result = []
     for row in rows:
-        failed = con.execute("SELECT COUNT(*) FROM skip_catalogue_series WHERE playlist_id=? AND status='failed' AND seen_generation=(SELECT generation FROM skip_catalogue_runs WHERE playlist_id=?)", (row["id"], row["id"])).fetchone()[0]
-        counts = con.execute("""SELECT COUNT(DISTINCT e.asset_key) total,
+        if counts_cache is not None:
+            cached=counts_cache.get(row['id'],{})
+            failed=cached.get('failed_series',0)
+            counts=dict(total=cached.get('episodes',0),waiting=cached.get('waiting',0),checked=cached.get('analyzed',0))
+        else:
+            failed = con.execute("SELECT COUNT(*) FROM skip_catalogue_series WHERE playlist_id=? AND status='failed' AND seen_generation=(SELECT generation FROM skip_catalogue_runs WHERE playlist_id=?)", (row["id"], row["id"])).fetchone()[0]
+            counts = con.execute("""SELECT COUNT(DISTINCT e.asset_key) total,
           COUNT(DISTINCT CASE WHEN j.status IN ('queued','running') THEN e.asset_key END) waiting,
           COUNT(DISTINCT CASE WHEN j.status NOT IN ('queued','running','disabled') THEN e.asset_key END) checked
           FROM skip_catalogue_episodes e LEFT JOIN skip_jobs j ON j.asset_key=e.asset_key WHERE e.playlist_id=?""", (row["id"],)).fetchone()
         result.append(dict(row) | dict(episodes=counts["total"], waiting=counts["waiting"], analyzed=counts["checked"], failed_series=failed,
+                                      statistics_pending=counts_cache is not None and row['id'] not in counts_cache,
                                       next_text=stamp_display(row["next_due"]), last_text=stamp_display(row["started_at"]),
                                       active=active(con, row["id"])))
     return result

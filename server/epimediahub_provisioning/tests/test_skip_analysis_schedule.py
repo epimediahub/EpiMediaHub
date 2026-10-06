@@ -242,9 +242,14 @@ class ScheduleApiTests(ScheduleFixture, unittest.TestCase):
         self.client=site.test_client()
         with self.client.session_transaction() as session: session['skip_csrf']='fixture-csrf'
 
+    def refreshed_view(self):
+        from skip_dashboard_stats import refresh
+        with self.db() as con:refresh(con,force=True)
+        return self.client.get('/admin/skip')
+
     def test_dashboard_shows_playlist_series_episode_and_editable_order(self):
         self.add(2,'First',2,1)
-        response=self.client.get('/admin/skip')
+        response=self.refreshed_view()
         self.assertEqual(response.status_code,200)
         text=response.get_data(as_text=True)
         self.assertIn('Aktuelle Playlist: 4K',text)
@@ -266,7 +271,7 @@ class ScheduleApiTests(ScheduleFixture, unittest.TestCase):
         self.add(2,'First',1,1); self.add(2,'First',1,2); self.add(2,'First',1,3)
         self.run_jobs(1,result=('failed','provider'))
         self.run_jobs(1,result=('review','proposal'))
-        response=self.client.get('/admin/skip')
+        response=self.refreshed_view()
         self.assertEqual(response.status_code,200)
         text=response.get_data(as_text=True)
         self.assertIn('Bearbeitet: 2 / 3',text)

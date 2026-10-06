@@ -78,6 +78,59 @@ class DashboardLatencyTests(ReferenceFixture, unittest.TestCase):
         self.assertNotIn('player_api.php', value)
         self.assertNotIn('source_url', value)
 
+    def test_page_uses_only_cached_catalogue_counts_and_never_plans_the_queue(self):
+        import skip_schedule as schedule
+        import skip_catalogue as catalogue
+        from skip_dashboard_stats import refresh as refresh_statistics
+        original=catalogue.dashboard
+        def cached_only(con,**kwargs):
+            self.assertIsInstance(kwargs.get('counts_cache'),dict)
+            return original(con,**kwargs)
+        for warmed in (False,True):
+            if warmed:
+                with self.db() as con:refresh_statistics(con,force=True)
+            with mock.patch.object(catalogue,'dashboard',side_effect=cached_only), \
+                 mock.patch.object(schedule,'select_job',side_effect=AssertionError('No queue planning in GET')), \
+                 mock.patch.object(schedule,'current_playlist',side_effect=AssertionError('No queue planning in GET')), \
+                 mock.patch.object(schedule,'language_stage',side_effect=AssertionError('No global queue scan in GET')):
+                response=self.client.get('/admin/skip')
+                self.assertEqual(response.status_code,200)
+                self.assertIn('catalogue;dur=',response.headers['Server-Timing'])
+                self.assertIn('schedule;dur=',response.headers['Server-Timing'])
+
+    def test_running_job_and_playlist_order_stay_live_when_statistics_are_stale(self):
+        from skip_dashboard_stats import refresh as refresh_statistics,schedule_view,read
+        with self.db() as con:
+            refresh_statistics(con,force=True)
+            con.execute("UPDATE skip_jobs SET status='running'")
+            con.execute("UPDATE customer_playlists SET name='Renamed' WHERE id=1")
+            value=schedule_view(con,read(con))
+            self.assertEqual(value['current']['asset_key'],self.target['asset_key'])
+            self.assertEqual(value['current']['playlist_name'],'Renamed')
+
+    def test_running_schedule_snapshot_does_not_sort_the_remaining_queue(self):
+        import skip_schedule as schedule
+        with self.db() as con:
+            con.execute("UPDATE skip_jobs SET status='running'")
+            with mock.patch.object(schedule,'select_job',side_effect=AssertionError('Already running')):
+                self.assertEqual(schedule.overview(con)['current']['asset_key'],self.target['asset_key'])
+
+    def test_background_statistics_keep_unique_catalogue_assets_and_job_states(self):
+        from skip_dashboard_stats import refresh as refresh_statistics,catalogue_view,read
+        with self.db() as con:
+            con.execute("INSERT INTO skip_catalogue_settings VALUES(1,1,'now')")
+            con.execute("INSERT INTO skip_catalogue_series VALUES(1,'501','{}','sig',0,1,0,0,'ok','')")
+            con.execute("INSERT INTO skip_catalogue_series VALUES(1,'502','{}','sig',0,1,0,0,'ok','')")
+            con.executemany('INSERT INTO skip_catalogue_episodes VALUES(1,?,?,?,1)',
+                [(series,self.target['asset_key'],'sig') for series in ('501','502')])
+            refresh_statistics(con,force=True)
+            value=catalogue_view(con,read(con))[0]
+            self.assertEqual((value['episodes'],value['analyzed'],value['waiting']),(1,1,0))
+            con.execute("UPDATE skip_jobs SET status='queued'")
+            refresh_statistics(con,force=True)
+            value=catalogue_view(con,read(con))[0]
+            self.assertEqual((value['episodes'],value['analyzed'],value['waiting']),(1,0,1))
+
     def test_background_refresh_defers_on_writer_then_updates_the_series(self):
         with self.db() as con:
             con.execute("UPDATE skip_jobs SET status='failed'")
