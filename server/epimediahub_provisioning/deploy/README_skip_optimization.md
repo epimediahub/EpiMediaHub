@@ -35,7 +35,7 @@ der Komponenten bleibt aktiv. Die drei Schritte in dieser Reihenfolge ausführen
 1. Auf dem Raspberry vorbereiten:
 
 ```bash
-COMMIT=VOLLSTAENDIGER_COMMIT
+COMMIT=82c6588b006b63b30581d102247570f16700592e
 curl -fsSL "https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$COMMIT/server/epimediahub_provisioning/deploy/install_skip_optimization.sh" -o /tmp/epimediahub-optimization.sh
 sudo bash /tmp/epimediahub-optimization.sh prepare "$COMMIT"
 ```
@@ -43,7 +43,7 @@ sudo bash /tmp/epimediahub-optimization.sh prepare "$COMMIT"
 2. Auf Hetzner die Berechnung aktualisieren:
 
 ```bash
-COMMIT=DERSELBE_VOLLSTAENDIGE_COMMIT
+COMMIT=82c6588b006b63b30581d102247570f16700592e
 curl -fsSL "https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$COMMIT/server/epimediahub_provisioning/deploy/install_skip_optimization.sh" -o /tmp/epimediahub-optimization.sh
 sudo bash /tmp/epimediahub-optimization.sh compute "$COMMIT"
 ```
