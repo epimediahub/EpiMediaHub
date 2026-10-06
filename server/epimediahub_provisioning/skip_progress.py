@@ -31,6 +31,8 @@ def migrate(con):
       CREATE INDEX IF NOT EXISTS idx_skip_progress_intro
         ON skip_records(asset_key,media_type,season,episode,status,reviewed_at DESC,id DESC,duration_ms,disabled)
         WHERE segment_type='intro';
+      CREATE INDEX IF NOT EXISTS idx_skip_progress_title
+        ON skip_progress_series(LOWER(title),playlist_id,source_key);
     ''')
     # Pure SQL triggers also observe writes from another Gunicorn process,
     # the worker, and older command-line helpers. Never modify the markers.
@@ -169,15 +171,35 @@ def populate(con):
     return total
 
 
-def overview(con, selected='all', search='', page=1, preferred_source=''):
+def overview(con, selected='all', search='', page=1, preferred_source='', *, refresh_cache=True):
     selected = selected if selected in FILTERS else 'all'
     search = str(search).strip()[:120]
-    refresh(con, preferred_source=preferred_source)
+    if refresh_cache:
+        refresh(con, preferred_source=preferred_source)
+    # Web requests read this materialized snapshot; a separate worker refreshes
+    # it. Never wait for the audio/catalogue writer merely to display a filter.
+    con.create_function('epi_casefold', 1, lambda value: str(value or '').casefold(), deterministic=True)
+    complete = '(f.analyzed=f.files AND f.inventory_pending=0 AND f.pending=0)'
+    base = ''' FROM skip_progress_series f
+      JOIN customer_playlists p ON p.id=f.playlist_id JOIN customers c ON c.id=p.customer_id
+      LEFT JOIN skip_analysis_sources s ON s.playlist_id=p.id'''
+    filters = {'all': '1', 'completed': complete, 'with_intro': 'f.intros>0',
+               'missing_intro': 'f.files>f.intros', 'open': 'NOT ' + complete}
+    where, params = ' WHERE ' + filters[selected], []
+    if search:
+        where += " AND INSTR(epi_casefold(f.title||' '||p.name),?)>0"
+        params.append(search.casefold())
+    totals = dict(con.execute('''SELECT COUNT(*) series,
+        COALESCE(SUM(''' + complete + '''),0) completed,
+        COALESCE(SUM(f.intros>0),0) with_intro,COALESCE(SUM(f.files>f.intros),0) missing_intro,
+        COALESCE(SUM(f.files),0) files,COALESCE(SUM(f.intros),0) intros''' + base).fetchone())
+    total = con.execute('SELECT COUNT(*)' + base + where, params).fetchone()[0]
+    pages = max(1, (total + 19) // 20)
+    page = min(page_number(page), pages)
     rows = con.execute('''SELECT f.*,p.name playlist_name,c.name customer_name,
-        COALESCE(s.enabled,0) analysis_enabled,c.enabled customer_enabled
-      FROM skip_progress_series f JOIN customer_playlists p ON p.id=f.playlist_id JOIN customers c ON c.id=p.customer_id
-      LEFT JOIN skip_analysis_sources s ON s.playlist_id=p.id
-      ORDER BY LOWER(f.title),f.playlist_id,f.source_key''').fetchall()
+        COALESCE(s.enabled,0) analysis_enabled,c.enabled customer_enabled''' + base + where + '''
+      ORDER BY LOWER(f.title),f.playlist_id,f.source_key LIMIT 20 OFFSET ?''',
+      (*params, (page - 1) * 20)).fetchall()
     series = []
     for raw in rows:
         row = dict(raw)
@@ -185,7 +207,7 @@ def overview(con, selected='all', search='', page=1, preferred_source=''):
             row[name] = row[name] or 0
         row['missing'] = row['files'] - row['intros']
         row['complete'] = row['analyzed'] == row['files'] and not row['inventory_pending'] and not row['pending']
-        row['percent'] = row['analyzed'] * 100 // row['files']
+        row['percent'] = row['analyzed'] * 100 // max(row['files'], 1)
         if row['complete']:
             row['status'] = 'Analyse abgeschlossen'
         elif not row['analysis_enabled'] or not row['customer_enabled'] or row['paused']:
@@ -201,19 +223,10 @@ def overview(con, selected='all', search='', page=1, preferred_source=''):
         else:
             row['status'] = 'Analyse offen'
         series.append(row)
-    totals = dict(series=len(series), completed=sum(r['complete'] for r in series),
-                  with_intro=sum(r['intros']>0 for r in series), missing_intro=sum(r['missing']>0 for r in series),
-                  files=sum(r['files'] for r in series), intros=sum(r['intros'] for r in series))
-    visible = [r for r in series if (not search or search.casefold() in (r['title']+' '+r['playlist_name']).casefold())
-               and (selected=='all' or selected=='completed' and r['complete']
-                    or selected=='with_intro' and r['intros']>0 or selected=='missing_intro' and r['missing']>0
-                    or selected=='open' and not r['complete'])]
-    pages = max(1,(len(visible)+19)//20)
-    page = min(page_number(page),pages)
     budget = con.execute('SELECT count FROM skip_analysis_budget WHERE day=?', (now()[:10],)).fetchone()
     inventory_pending = con.execute('''SELECT COUNT(*) FROM skip_catalogue_series s
       JOIN skip_catalogue_runs r ON r.playlist_id=s.playlist_id
       WHERE s.seen_generation=r.generation AND (s.pending_generation>0 OR s.status<>'ok')''').fetchone()[0]
-    return dict(rows=visible[(page-1)*20:page*20],total=len(visible),totals=totals,page=page,pages=pages,
+    return dict(rows=series,total=total,totals=totals,page=page,pages=pages,
                 selected=selected,search=search,used_today=budget[0] if budget else 0,inventory_pending=inventory_pending,
                 updating=con.execute('SELECT COUNT(*) FROM skip_progress_dirty').fetchone()[0])

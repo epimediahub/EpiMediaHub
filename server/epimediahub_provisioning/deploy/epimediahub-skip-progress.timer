@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh EpiMediaHub series progress independently of audio jobs
+[Timer]
+OnBootSec=10s
+OnUnitInactiveSec=10s
+AccuracySec=1s
+Unit=epimediahub-skip-progress.service
+[Install]
+WantedBy=timers.target

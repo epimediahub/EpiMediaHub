@@ -1,4 +1,4 @@
-<section class="card" id="series-progress" style="margin:20px 0" aria-label="Analysefortschritt aller erfassten Serien">
+<section class="card" id="series-progress" data-progress-url="{{ url_for('v132_skip_progress_data') }}" style="margin:20px 0" aria-label="Analysefortschritt aller erfassten Serien">
 <h2>Serienfortschritt</h2>
 {% if progress.updating %}<p>Der Fortschritt für {{ progress.updating }} geänderte Serien wird gerade aktualisiert. Die Übersicht wird laufend ergänzt.</p>{% endif %}
 <p>{{ progress.totals.series }} erfasste Serien · {{ progress.totals.completed }} Analysen abgeschlossen · {{ progress.totals.with_intro }} Serien mit Intros · {{ progress.totals.missing_intro }} Serien mit fehlenden Intros</p>
@@ -9,6 +9,7 @@
 <label>Serie oder Playlist suchen<input name="progress_search" value="{{ progress.search }}" maxlength="120"></label>
 <label>Ansicht<select name="progress_filter">{% for value,label in [('all','Alle Serien'),('completed','Analyse abgeschlossen'),('with_intro','Mit erkannten Intros'),('missing_intro','Intros fehlen'),('open','Analyse noch offen')] %}<option value="{{ value }}" {% if progress.selected==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
 <button type="submit">Übersicht filtern</button></form>
+<p class="progress-feedback" role="status" aria-live="polite"></p>
 <div class="cards">{% for item in progress.rows %}<article class="card marker-card">
 <h3 style="margin:0">{{ item.title }}{% if item.year %} ({{ item.year }}){% endif %}</h3>
 <p>{{ item.customer_name }} · {{ item.playlist_name }} · <strong>{{ item.status }}</strong></p>

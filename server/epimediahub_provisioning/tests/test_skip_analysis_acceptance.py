@@ -182,6 +182,10 @@ class AutomaticPlayerTests(BulkReviewFixture, unittest.TestCase):
 
     def test_dashboard_renders_all_series_progress_filters_and_automatic_acceptance(self):
         self.registered(self.target)
+        # Progress is now refreshed by its own timer, never by a page GET.
+        from skip_progress import populate
+        with self.db() as con:
+            populate(con)
         body=self.client.get('/admin/skip').get_data(as_text=True)
         self.assertIn('Serienfortschritt',body)
         self.assertIn('Intro vorhanden: 0 / 1',body)

@@ -416,6 +416,7 @@ def install(app, db):
         guard = web_auth()
         if guard:
             return guard
+        started = time.perf_counter()
         session.setdefault("skip_csrf", secrets.token_urlsafe(32))
         state = request.args.get("state", "pending")
         if state not in ("pending", "approved", "rejected", "superseded"):
@@ -433,11 +434,41 @@ def install(app, db):
             catalogues = catalogue_dashboard(con)
             audio_limit = daily_limit(con)
             from skip_progress import overview
-            progress = overview(con, request.args.get('progress_filter','all'), request.args.get('progress_search',''), request.args.get('progress_page','1'), preferred_source=browser['source_key'])
+            progress = overview(con, request.args.get('progress_filter','all'), request.args.get('progress_search',''), request.args.get('progress_page','1'), refresh_cache=False)
             from skip_schedule import overview as schedule_overview
             schedule = schedule_overview(con)
         selected_episode = page_number(request.args.get("episode", ""), 0)
-        return render_template("skip_markers.html", browser=browser, sources=sources, job_groups=media_groups(jobs), online_groups=media_groups(online_status), tmdb_ready=tmdb_ready, catalogues=catalogues, audio_limit=audio_limit, progress=progress, schedule=schedule, state=state, selected_episode=selected_episode, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", ""))
+        loaded = time.perf_counter()
+        response = app.make_response(render_template("skip_markers.html", browser=browser, sources=sources, job_groups=media_groups(jobs), online_groups=media_groups(online_status), tmdb_ready=tmdb_ready, catalogues=catalogues, audio_limit=audio_limit, progress=progress, schedule=schedule, state=state, selected_episode=selected_episode, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", "")))
+        response.headers['Server-Timing'] = f'database;dur={(loaded-started)*1000:.2f}, render;dur={(time.perf_counter()-loaded)*1000:.2f}'
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
+    @app.get('/admin/skip/progress')
+    def v132_skip_progress_data():
+        # This bounded, authenticated view is also the data contract for a
+        # separately hosted dashboard. It contains no provider URLs/passwords.
+        guard = web_auth()
+        if guard:
+            return guard
+        started = time.perf_counter()
+        from skip_progress import overview
+        from skip_catalogue import daily_limit
+        state = request.args.get('state', 'pending')
+        if state not in ('pending', 'approved', 'rejected', 'superseded'):
+            state = 'pending'
+        with db() as con:
+            progress = overview(con, request.args.get('progress_filter', 'all'),
+                                request.args.get('progress_search', ''),
+                                request.args.get('progress_page', '1'), refresh_cache=False)
+            audio_limit = daily_limit(con)
+        response = jsonify(progress=progress, audio_limit=audio_limit,
+                           html=render_template('skip_progress.html', progress=progress,
+                                                audio_limit=audio_limit, state=state))
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Vary'] = 'Cookie'
+        response.headers['Server-Timing'] = f'progress;dur={(time.perf_counter()-started)*1000:.2f}'
+        return response
 
     def return_to_marker(row, notice):
         state = request.form.get("return_state", "pending")
@@ -667,6 +698,8 @@ def install(app, db):
         data["api_version"] = "0.8.2"
         data["features"] = {"reviewed_skip_markers": True, "skip_analysis_queue": True, "skip_season_automation": True, "skip_online_candidates": True, "skip_full_catalogue": True, "skip_nightly_catalogue": True, "skip_high_audio_approval": True, "skip_proposal_dedup": True, "skip_online_error_details": True, "skip_language_priority": True, "skip_bulk_review": True, "skip_network_address_fallback": True, "skip_automatic_acceptance": True, "skip_series_progress": True, "skip_database_concurrency": True, "skip_progress_cache": True, "skip_detector_v2": True, "skip_detector_v3_1": True}
         data['features'].update(skip_playlist_order=True, skip_series_order=True, skip_fingerprint_capture=True,
-                                skip_interactive_priority=True, skip_language_stages=True)
+                                skip_interactive_priority=True, skip_language_stages=True,
+                                skip_dashboard_async=True, skip_progress_readonly=True,
+                                skip_detection_precision=True)
         return jsonify(data)
     app.view_functions["health"] = health

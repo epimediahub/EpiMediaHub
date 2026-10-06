@@ -514,10 +514,16 @@ def matching_offset(reference, target, step_ms):
     if not 40 <= len(reference) <= len(target) <= 10_000 or len(set(reference)) < max(15, len(reference) // 5):
         return None
     candidates = []
-    for offset in range(len(target) - len(reference) + 1):
-        distance = sum((a ^ b).bit_count() for a, b in zip(reference, target[offset:offset + len(reference)])) / (32 * len(reference))
-        if distance <= .10:
-            candidates.append((distance, offset))
+    # Correlating all 32 bit tracks gives exactly the sum of Hamming distances
+    # at every offset. Round back to integers to avoid FFT boundary/tie noise.
+    # Keep *all* offsets for the original repeated-occurrence rejection.
+    import numpy as np
+    from skip_detector_v3 import _xcorr_lags
+    lags, values, _ = _xcorr_lags(np.asarray(reference, dtype=np.uint32),
+                                np.asarray(target, dtype=np.uint32))
+    full = (lags >= 0) & (lags <= len(target) - len(reference))
+    distances = np.rint((32 * len(reference) - values[full].astype(np.float64)) / 2).astype(np.int64) / (32 * len(reference))
+    candidates = [(float(distance), int(offset)) for distance, offset in zip(distances, lags[full]) if distance <= .10]
     if not candidates:
         return None
     score, best = min(candidates)

@@ -19,6 +19,8 @@ def connect(path, *, timeout=10.0):
     try:
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA foreign_keys=ON")
+        # Match the dashboard's Unicode search without materializing every row.
+        con.create_function("epi_casefold", 1, lambda value: str(value or '').casefold(), deterministic=True)
         return con
     except BaseException:
         con.close()

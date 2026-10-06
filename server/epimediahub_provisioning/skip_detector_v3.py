@@ -34,6 +34,7 @@ Beispiel
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
 import re
@@ -44,6 +45,8 @@ import tempfile
 import time
 import wave
 import zlib
+from collections import OrderedDict
+from threading import RLock
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -115,13 +118,15 @@ class FpWindow:
     episode_id: str = ""
     duration_sec: Optional[float] = None
     trusted: bool = False
-    _sig: int = field(init=False, repr=False)
+    trusted_ranges: Sequence[Tuple[float, float]] = ()
+    _sig: str = field(init=False, repr=False)
 
     def __post_init__(self):
         self.fp = np.ascontiguousarray(np.asarray(self.fp, dtype=np.uint64) & 0xFFFFFFFF,
                                        dtype=np.uint32)
         # Verhindert PairCache-Kollisionen, auch wenn episode_id leer oder doppelt ist.
-        self._sig = zlib.crc32(self.fp.tobytes()) & 0xFFFFFFFF
+        self.fp.flags.writeable = False
+        self._sig = hashlib.sha256(self.fp.tobytes()).hexdigest()
 
     def __len__(self):
         return int(self.fp.shape[0])
@@ -144,11 +149,11 @@ class FpWindow:
     def key(self) -> Tuple:
         return (
             self.episode_id,
-            round(self.start_sec, 3),
+            self.start_sec,
             len(self),
-            round(self.item_sec, 9),
-            round(self.time_offset_sec, 4),
-            round(self.duration_sec, 3) if self.duration_sec is not None else None,
+            self.item_sec,
+            self.time_offset_sec,
+            self.duration_sec,
             self._sig,
         )
 
@@ -205,13 +210,13 @@ def _bit_matrix(fp: np.ndarray) -> np.ndarray:
     return bits.astype(np.float32) * 2.0 - 1.0
 
 
-def _xcorr_lags(a: np.ndarray, b: np.ndarray):
+def _xcorr_lags(a: np.ndarray, b: np.ndarray, cache=None):
     """corr[k] = sum_i sum_bit sa[i]*sb[i+k]  =  sum_i (32 - 2*hamming(a[i], b[i+k]))."""
     na, nb = len(a), len(b)
     n = na + nb - 1
     nfft = 1 << (n - 1).bit_length()
-    A = np.fft.rfft(_bit_matrix(a), nfft, axis=0)
-    B = np.fft.rfft(_bit_matrix(b), nfft, axis=0)
+    A = cache.transform(a, nfft) if cache is not None else np.fft.rfft(_bit_matrix(a), nfft, axis=0)
+    B = cache.transform(b, nfft) if cache is not None else np.fft.rfft(_bit_matrix(b), nfft, axis=0)
     s = (np.conj(A) * B).sum(axis=1)
     c = np.fft.irfft(s, nfft)
     lags = np.arange(-(na - 1), nb)
@@ -220,9 +225,9 @@ def _xcorr_lags(a: np.ndarray, b: np.ndarray):
     return lags, vals, overlap
 
 
-def _select_offsets(a: FpWindow, b: FpWindow, kind: str, cfg: Config):
+def _select_offsets(a: FpWindow, b: FpWindow, kind: str, cfg: Config, cache=None):
     min_items = max(8, int(cfg.min_seconds / a.item_sec))
-    lags, vals, overlap = _xcorr_lags(a.fp, b.fp)
+    lags, vals, overlap = _xcorr_lags(a.fp, b.fp, cache)
     z = vals / np.sqrt(32.0 * np.maximum(overlap, 1))
     ok = overlap >= min_items
     # erlaubter Zeitversatz des Segments
@@ -298,6 +303,10 @@ def _segments_thr(a: FpWindow, b: FpWindow, k: int, z: float, kind: str, cfg: Co
         ratio = float((seg <= thr).mean())
         if ratio < cfg.min_match_ratio:
             continue
+        # Silence, drones and tiny repeating loops carry too little information
+        # to identify a title sequence, even if their Hamming score is perfect.
+        if min(len(np.unique(a.fp[i0+s:i0+e])), len(np.unique(b.fp[i0+s+k:i0+e+k]))) < max(15, (e-s)//5):
+            continue
         mh = float(seg.mean())
         q = 0.65 * ratio + 0.35 * (1.0 - mh / 32.0)
         out.append(Cand(i0 + s, i0 + e, i0 + s + k, i0 + e + k, q, ratio, mh, z, truncated))
@@ -307,19 +316,52 @@ def _segments_thr(a: FpWindow, b: FpWindow, k: int, z: float, kind: str, cfg: Co
 class PairCache:
     """Cache fuer Paarvergleiche; Gegenrichtung wird aus demselben Eintrag abgeleitet."""
 
-    def __init__(self):
-        self._d: Dict[Tuple, List[Cand]] = {}
+    def __init__(self, max_pairs=128, max_fft_bytes=16 * 1024 * 1024):
+        self._d = OrderedDict()
+        self._fft = OrderedDict()
+        self.max_pairs, self.max_fft_bytes = max_pairs, max_fft_bytes
+        self.fft_bytes = self.pair_hits = self.fft_hits = 0
+        self._lock = RLock()
 
-    def get(self, a: FpWindow, b: FpWindow, kind: str):
+    def get(self, a: FpWindow, b: FpWindow, kind: str, cfg=Config()):
         ka, kb = a.key, b.key
-        if (ka, kb, kind) in self._d:
-            return self._d[(ka, kb, kind)]
-        if (kb, ka, kind) in self._d:
-            return [c.swapped() for c in self._d[(kb, ka, kind)]]
+        with self._lock:
+            for key, reverse in (((ka, kb, kind, cfg), False), ((kb, ka, kind, cfg), True)):
+                if key in self._d:
+                    self._d.move_to_end(key)
+                    self.pair_hits += 1
+                    return [c.swapped() for c in self._d[key]] if reverse else list(self._d[key])
         return None
 
-    def put(self, a: FpWindow, b: FpWindow, kind: str, cands: List[Cand]):
-        self._d[(a.key, b.key, kind)] = cands
+    def put(self, a: FpWindow, b: FpWindow, kind: str, cands: List[Cand], cfg=Config()):
+        with self._lock:
+            key = (a.key, b.key, kind, cfg)
+            self._d[key] = list(cands)
+            self._d.move_to_end(key)
+            while len(self._d) > self.max_pairs:
+                self._d.popitem(last=False)
+
+    def transform(self, fp, nfft):
+        key = (hashlib.sha256(fp.tobytes()).digest(), len(fp), nfft)
+        with self._lock:
+            if key in self._fft:
+                self._fft.move_to_end(key)
+                self.fft_hits += 1
+                return self._fft[key]
+        value = np.fft.rfft(_bit_matrix(fp), nfft, axis=0)
+        value.flags.writeable = False
+        with self._lock:
+            if key not in self._fft and value.nbytes <= self.max_fft_bytes:
+                while self._fft and self.fft_bytes + value.nbytes > self.max_fft_bytes:
+                    self.fft_bytes -= self._fft.popitem(last=False)[1].nbytes
+                self._fft[key] = value
+                self.fft_bytes += value.nbytes
+        return value
+
+    def stats(self):
+        with self._lock:
+            return dict(pairs=len(self._d), pair_hits=self.pair_hits,
+                        fft_entries=len(self._fft), fft_bytes=self.fft_bytes, fft_hits=self.fft_hits)
 
 
 def pair_candidates(a: FpWindow, b: FpWindow, kind: str, cfg: Config = Config(),
@@ -327,16 +369,16 @@ def pair_candidates(a: FpWindow, b: FpWindow, kind: str, cfg: Config = Config(),
     if abs(a.item_sec - b.item_sec) > 1e-9:
         raise ValueError("unterschiedliche item_sec")
     if cache is not None:
-        hit = cache.get(a, b, kind)
+        hit = cache.get(a, b, kind, cfg)
         if hit is not None:
             return hit
     cands: List[Cand] = []
-    for k, z in _select_offsets(a, b, kind, cfg):
+    for k, z in _select_offsets(a, b, kind, cfg, cache):
         cands.extend(_segments_at(a, b, k, z, kind, cfg))
     cands.sort(key=lambda c: -(c.quality * math.sqrt(c.a_e - c.a_s)))
     cands = cands[:cfg.cands_per_partner]
     if cache is not None:
-        cache.put(a, b, kind, cands)
+        cache.put(a, b, kind, cands, cfg)
     return cands
 
 
@@ -409,7 +451,12 @@ def detect(target: FpWindow, partners: Sequence[FpWindow], kind: str,
     allc: List[_C] = []
     for pid, p in enumerate(valid):
         for c in pair_candidates(target, p, kind, cfg, cache):
-            allc.append(_C(target.t(c.a_s), target.t(c.a_e), c.quality, pid, p.trusted, c.truncated))
+            # Trust belongs to the approved segment, not every recurring song
+            # anywhere in the same episode's twelve-minute window.
+            trusted = p.trusted and (not p.trusted_ranges or any(
+                abs(p.t(c.b_s)-start) <= cfg.snap_sec and abs(p.t(c.b_e)-end) <= cfg.snap_sec
+                for start, end in p.trusted_ranges))
+            allc.append(_C(target.t(c.a_s), target.t(c.a_e), c.quality, pid, trusted, c.truncated))
     if not allc:
         det.details["reason"] = "keine Kandidaten"
         return det
@@ -433,6 +480,7 @@ def detect(target: FpWindow, partners: Sequence[FpWindow], kind: str,
     det.details.update(raw_start=start, raw_end=end,
                        truncated=any(m.trunc for m in members),
                        clusters=len(clusters))
+    det.details['trusted_episode_ids'] = [valid[m.pid].episode_id for m in members if m.trusted]
 
     mean_q = float(np.mean([m.q for m in members]))
     spread = (float(np.std(starts)) + float(np.std(ends))) / 2.0
@@ -441,6 +489,17 @@ def detect(target: FpWindow, partners: Sequence[FpWindow], kind: str,
     conf = (0.45 * mean_q + 0.30 * (support / len(valid)) + 0.15 * consistency + 0.10 * pos)
     det.confidence = round(conf, 4)
     det.details.update(mean_quality=mean_q, spread_sec=spread, position=pos)
+
+    # An equally plausible recurring recap/song is a competing interpretation,
+    # not another vote for the chosen title. Preserve it for human inspection.
+    rivals = [_best_per_partner(cl) for cl in clusters if cl is not best_cl]
+    ambiguous = any(len(rival) >= support and
+                    float(np.mean([m.q for m in rival])) >= mean_q - .025
+                    for rival in rivals)
+    det.details['ambiguous'] = ambiguous
+    if ambiguous:
+        det.details['reason'] = 'mehrere gleichwertige wiederkehrende Abschnitte'
+        return det
 
     if support < cfg.min_consensus_partners:
         det.details["reason"] = "kein Konsens"
@@ -453,7 +512,9 @@ def detect(target: FpWindow, partners: Sequence[FpWindow], kind: str,
 
     has_trusted = any(m.trusted for m in members)
     enough = support >= cfg.auto_partners or (has_trusted and support >= cfg.auto_partners_with_trusted)
-    if conf >= cfg.auto_confirm_threshold and enough:
+    bounds_consistent = float(np.ptp(starts)) <= 2.0 and float(np.ptp(ends)) <= 2.0
+    det.details['boundaries_consistent'] = bounds_consistent
+    if conf >= cfg.auto_confirm_threshold and enough and spread <= 1.0 and bounds_consistent and not det.details['truncated']:
         det.status = AUTO
     elif conf >= cfg.review_threshold:
         det.status = REVIEW

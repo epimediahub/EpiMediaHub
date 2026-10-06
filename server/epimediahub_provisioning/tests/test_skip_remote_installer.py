@@ -78,7 +78,9 @@ if '10.87.26.1' in url or '127.0.0.1:8787' in url:
     out.write_text(json.dumps({'status':'broken' if broken else 'ok','features':{'skip_playlist_order':not broken,'skip_fingerprint_capture':not broken and mode!='missing-app-capture'}}))
 else:
     name=url.rsplit('/',1)[-1]
-    source=Path(os.environ['FIXTURE_SOURCE'],name)
+    relative=url.split('/server/epimediahub_provisioning/',1)[1]
+    source=Path(os.environ['FIXTURE_SOURCE'],relative)
+    if not source.is_file():source=Path(os.environ['FIXTURE_ROOT'],relative)
     if name=='activate_skip_remote.sh': source=Path(os.environ['FIXTURE_ROOT'],'deploy',name)
     if name.endswith('.html'): source=Path(os.environ['FIXTURE_ROOT'],'templates',name)
     shutil.copyfile(source,out)
@@ -107,9 +109,10 @@ else:
 
     def staged_client(self):
         stage = self.base / 'remote-analysis-stage'; stage.mkdir()
-        (stage/'templates').mkdir()
-        for source in (ROOT/'templates').glob('skip_*.html'):
-            shutil.copyfile(source,stage/'templates'/source.name)
+        for directory in ('templates','static','deploy'):
+            (stage/directory).mkdir()
+            for source in (ROOT/directory).glob('*'):
+                if source.is_file():shutil.copyfile(source,stage/directory/source.name)
         for source in ROOT.glob('*.py'):
             shutil.copyfile(source, stage / source.name)
         (stage / 'skip_remote_client.py').write_text('''

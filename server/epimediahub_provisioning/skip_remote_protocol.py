@@ -55,4 +55,5 @@ def window_payload(window):
     return dict(fp=[int(word) for word in window.fp], start_sec=window.start_sec,
                 item_sec=window.item_sec, delay_sec=window.delay_sec,
                 time_offset_sec=window.time_offset_sec, episode_id=window.episode_id,
-                duration_sec=window.duration_sec, trusted=window.trusted)
+                duration_sec=window.duration_sec, trusted=window.trusted,
+                trusted_ranges=[list(value) for value in window.trusted_ranges])

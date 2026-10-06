@@ -17,8 +17,13 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from skip_remote_client import local_execution
+from skip_detector_v3 import PairCache
 from skip_remote_protocol import (CLIENT_IP, LEASE_SECONDS, MAX_BODY, PORT, PROTOCOL,
                                   SERVER_IP, TASK_SECONDS, RelayInput, relay_url, number, versions, words)
+
+# Repeated neighbour updates reuse comparisons across RPCs; bounded and keyed
+# by immutable content, exact timebase and detector configuration.
+DETECTION_CACHE = PairCache(max_pairs=256, max_fft_bytes=64 * 1024 * 1024)
 
 
 def parse_window(value):
@@ -26,7 +31,7 @@ def parse_window(value):
     from skip_detector_v3 import FpWindow
     if not isinstance(value, dict) or set(value) != {
             'fp', 'start_sec', 'item_sec', 'delay_sec', 'time_offset_sec',
-            'episode_id', 'duration_sec', 'trusted'}:
+            'episode_id', 'duration_sec', 'trusted', 'trusted_ranges'}:
         raise ValueError('invalid_request')
     words(value['fp'])
     number(value['start_sec'], 0, 86_400)
@@ -38,7 +43,15 @@ def parse_window(value):
     if (type(value['trusted']) is not bool or not isinstance(value['episode_id'], str)
             or len(value['episode_id']) > 128):
         raise ValueError('invalid_request')
-    return FpWindow(**(value | {'fp': np.array(value['fp'], dtype=np.uint32)}))
+    ranges = value['trusted_ranges']
+    if not isinstance(ranges, list) or len(ranges) > 3:
+        raise ValueError('invalid_request')
+    for pair in ranges:
+        if not isinstance(pair, list) or len(pair) != 2:
+            raise ValueError('invalid_request')
+        number(pair[0], 0, 86_400); number(pair[1], pair[0], 86_400)
+    return FpWindow(**(value | {'fp': np.array(value['fp'], dtype=np.uint32),
+                              'trusted_ranges': tuple(tuple(pair) for pair in ranges)}))
 
 
 def validate(operation, payload):
@@ -97,9 +110,9 @@ def execute(operation, payload, busy):
         if operation == 'boundaries':
             from skip_automation import matching_boundaries
             return matching_boundaries(payload['reference'], payload['target'], payload['step_ms'], payload['offset'])
-        from skip_detector_v3 import Config, PairCache, detect
+        from skip_detector_v3 import Config, detect
         return dataclasses.asdict(detect(parse_window(payload['target']),
-            [parse_window(item) for item in payload['partners']], payload['kind'], Config(), PairCache()))
+            [parse_window(item) for item in payload['partners']], payload['kind'], Config(), DETECTION_CACHE))
 
 
 class Busy(Exception):
@@ -205,7 +218,7 @@ class Handler(BaseHTTPRequestHandler):
                 active = self.server.tasks.active is not None
                 completed = sum(item['state'] == 'done' for item in self.server.tasks.items.values())
             self.reply(200, status='ok', versions=self.server.component_versions,
-                       active=active, completed=completed)
+                       active=active, completed=completed, detection_cache=DETECTION_CACHE.stats())
             return
         self.task_status()
 

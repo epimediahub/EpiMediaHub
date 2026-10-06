@@ -132,8 +132,23 @@ def accept_pending(con, asset_key=None, playlist_id=None):
     for row in con.execute(sql, params).fetchall():
         if row['playlist_id'] not in settings:
             settings[row['playlist_id']] = enabled(con, row['playlist_id'])
-        if settings[row['playlist_id']] and current_reference(con, row) and detector_release_ready(con, row):
+        if settings[row['playlist_id']] and current_reference(con, row) and reviewed_release_ready(row) and detector_release_ready(con, row):
             rows.append(row)
+    # Do not bypass consensus() by independently accepting two disagreeing
+    # strong reference matches after the consensus deliberately returned None.
+    reviewed = defaultdict(list)
+    for row in rows:
+        try:
+            evidence = json.loads(row['evidence_json'] or '{}')
+        except (ValueError, TypeError):
+            continue
+        if isinstance(evidence, dict) and evidence.get('method') == 'reviewed_audio_match':
+            reviewed[(row['asset_key'], row['segment_type'])].append(row)
+    from skip_automation import BOUNDARY_TOLERANCE
+    disputed = {key for key, versions in reviewed.items()
+                if max(r['start_ms'] for r in versions)-min(r['start_ms'] for r in versions)>BOUNDARY_TOLERANCE
+                or max(r['end_ms'] for r in versions)-min(r['end_ms'] for r in versions)>BOUNDARY_TOLERANCE}
+    rows = [r for r in rows if (r['asset_key'], r['segment_type']) not in disputed]
     # A device proposal represents a correction in progress, not a machine competitor.
     rows = [r for r in rows if not con.execute('''SELECT 1 FROM skip_records d
       LEFT JOIN skip_auto_evidence e ON e.record_id=d.id WHERE d.asset_key=? AND d.segment_type=?
@@ -141,6 +156,21 @@ def accept_pending(con, asset_key=None, playlist_id=None):
       AND (d.source='device' OR e.human_review=1) LIMIT 1''',
       (r['asset_key'], r['segment_type'], r['duration_ms'])).fetchone()]
     return approve_rows(con, rows)['approved']
+
+
+def reviewed_release_ready(row):
+    try:
+        evidence = json.loads(row['evidence_json'] or '{}')
+    except (ValueError, TypeError):
+        return True
+    if not isinstance(evidence, dict) or evidence.get('method') != 'reviewed_audio_match':
+        return True
+    from skip_automation import AUTO_CONFIDENCE
+    vote = evidence.get('vote')
+    return (isinstance(vote, dict) and vote.get('boundaries_confirmed') is True
+            and type(vote.get('confidence')) in (float, int)
+            and AUTO_CONFIDENCE <= vote['confidence'] <= 1
+            and AUTO_CONFIDENCE <= row['confidence'] <= 1)
 
 
 def detector_release_ready(con, row):
@@ -177,6 +207,23 @@ def detector_release_ready(con, row):
         if (method != 'episode_consensus_v3' or evidence.get('status') != 'AUTO_CONFIRMED'
                 or not .92 <= row['confidence'] <= 1 or evidence.get('truncated') is True):
             return False
+        if evidence.get('precision_policy') == 'audio_consensus_precision_v1':
+            if evidence.get('ambiguous') is not False or evidence.get('boundaries_consistent') is not True:
+                return False
+            markers=evidence.get('trusted_markers')
+            if not isinstance(markers,list):
+                return False
+            for marker in markers:
+                if not isinstance(marker, dict):
+                    return False
+                if not con.execute('''SELECT 1 FROM skip_records r
+                  LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
+                  WHERE r.id=? AND r.asset_key=? AND r.start_ms=? AND r.end_ms=?
+                  AND r.reviewed_at IS ? AND r.status='approved' AND r.disabled=0
+                  AND (r.source='device' OR COALESCE(e.human_review,0)=1)''',
+                  (marker.get('id'),marker.get('asset_key'),marker.get('start_ms'),
+                   marker.get('end_ms'),marker.get('reviewed_at'))).fetchone():
+                    return False
         mean_q = evidence.get('mean_pair_quality')
         spread = evidence.get('boundary_spread_sec')
         position = evidence.get('position_plausibility')
@@ -230,6 +277,9 @@ def detector_release_ready(con, row):
         for episode in evidence.get('trusted_episodes', []):
             cached = cached_by_episode.get(episode)
             if not cached:
+                return False
+            if evidence.get('precision_policy') == 'audio_consensus_precision_v1' and not any(
+                    item['asset_key']==cached['asset_key'] for item in evidence['trusted_markers']):
                 return False
             human = con.execute('''SELECT 1 FROM skip_records r
               LEFT JOIN skip_auto_evidence e ON e.record_id=r.id

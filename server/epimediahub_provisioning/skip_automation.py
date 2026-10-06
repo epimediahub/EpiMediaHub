@@ -6,6 +6,7 @@ take precedence, and machine approvals cannot become independent human evidence.
 from __future__ import annotations
 
 from math import ceil
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -802,6 +803,16 @@ def _trusted_window(con, row, kind):
       LIMIT 1""", (row['asset_key'], kind, row['duration_ms'])).fetchone())
 
 
+def _trusted_markers(con, row, kind):
+    return [dict(r) for r in con.execute('''SELECT r.id,r.asset_key,r.start_ms,r.end_ms,r.reviewed_at
+      FROM skip_records r LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
+      WHERE r.asset_key=? AND r.segment_type=? AND r.status='approved' AND r.disabled=0
+      AND r.source_key=? AND r.season=? AND r.episode=? AND ABS(r.duration_ms-?)<=2000
+      AND (r.source='device' OR COALESCE(e.human_review,0)=1)
+      ORDER BY r.reviewed_at DESC,r.id DESC LIMIT 3''',
+      (row['asset_key'], kind, row['source_key'], row['season'], row['episode'], row['duration_ms']))]
+
+
 def bootstrap(con, asset, kind, busy=lambda: False):
     """Run V3.1 episode consensus entirely from the bounded cached windows."""
     if not enabled(con, asset['playlist_id']) or protected(con, asset, kind):
@@ -815,7 +826,7 @@ def bootstrap(con, asset, kind, busy=lambda: False):
     if not own or not 0 < own['step_ms'] <= 1000:
         return False
 
-    selected, windows, used = [], [], set()
+    selected, windows, used, trusted_markers = [], [], set(), []
     for row in [own] + [r for r in rows if r['asset_key'] != own['asset_key']]:
         if row['episode'] in used or abs(row['step_ms'] - own['step_ms']) > .001:
             continue
@@ -827,7 +838,8 @@ def bootstrap(con, asset, kind, busy=lambda: False):
                 or len(words) * row['step_ms'] > row['length_ms'] + 250
                 or any(type(w) is not int or not -(1 << 31) <= w < (1 << 32) for w in words)):
             continue
-        trusted = row['asset_key'] != own['asset_key'] and _trusted_window(con, row, kind)
+        markers = _trusted_markers(con, row, kind) if row['asset_key'] != own['asset_key'] else []
+        trusted = bool(markers)
         try:
             win = FpWindow(
                 np.asarray(words, dtype=np.uint64),
@@ -836,11 +848,13 @@ def bootstrap(con, asset, kind, busy=lambda: False):
                 episode_id=row['asset_key'],
                 duration_sec=row['duration_ms'] / 1000.0,
                 trusted=trusted,
+                trusted_ranges=[(r['start_ms']/1000, r['end_ms']/1000) for r in markers],
             )
         except (ValueError, TypeError, OverflowError):
             continue
         selected.append(row)
         windows.append(win)
+        trusted_markers.extend(markers)
         used.add(row['episode'])
         if len(selected) == 5:
             break
@@ -879,8 +893,13 @@ def bootstrap(con, asset, kind, busy=lambda: False):
         boundary_spread_sec=round(float(details.get('spread_sec', 999.0)), 6),
         position_plausibility=round(float(details.get('position', 0.0)), 6),
         truncated=bool(details.get('truncated', False)),
+        precision_policy='audio_consensus_precision_v1',
+        ambiguous=bool(details.get('ambiguous', False)),
+        boundaries_consistent=bool(details.get('boundaries_consistent', False)),
         episodes=[r['episode'] for r in selected],
-        trusted_episodes=[r['episode'] for r, w in zip(selected[1:], windows[1:]) if w.trusted],
+        trusted_episodes=[r['episode'] for r in selected[1:]
+                          if r['asset_key'] in details.get('trusted_episode_ids', [])],
+        trusted_markers=[r for r in trusted_markers if r['asset_key'] in details.get('trusted_episode_ids', [])],
         windows=[dict(asset_key=r['asset_key'], episode=r['episode'], duration_ms=r['duration_ms'],
                       origin=r['origin'],
                       offset_ms=r['offset_ms'], length_ms=r['length_ms'], step_ms=r['step_ms'],
@@ -943,8 +962,94 @@ def cached_window(con, asset, kind, offset, length):
     return words, row['step_ms'], offset, row['length_ms']
 
 
-def analyze(db, job, busy_factory):
+@contextmanager
+def analysis_phase(name):
+    started=time.perf_counter()
+    try:
+        yield
+    finally:
+        if os.environ.get('SKIP_ANALYSIS_TIMING')=='1':
+            print('skip_phase='+name+' elapsed_seconds='+str(round(time.perf_counter()-started,3)),flush=True)
+
+
+def _analyze_window(db, asset, kind, window, refs, playlists, online, busy):
     from skip_analysis_worker import store_fingerprint, reusable_fingerprint
+    duration = asset['duration_ms']
+    target, target_step, window_offset, coverage = window
+    proposals, approvals = 0, 0
+    votes = []
+    for record in refs[kind]:
+        with db() as con:
+            reference_asset = con.execute("SELECT * FROM skip_assets WHERE asset_key=?", (record["asset_key"],)).fetchone()
+        # Reuse only a recently validated, complete fingerprint of this
+        # exact reviewed marker. Older/unvalidated caches are read again.
+        with db() as con:
+            stored = con.execute('SELECT * FROM skip_fingerprints WHERE record_id=?', (record['id'],)).fetchone()
+            checked = con.execute('SELECT * FROM skip_auto_reference_checks WHERE record_id=?', (record['id'],)).fetchone()
+        reusable = (reference_asset and abs(reference_asset['duration_ms']-record['duration_ms'])<=2000
+                    and reusable_fingerprint(stored, record) and checked
+                    and checked['fingerprint_created_at']==stored['created_at']
+                    and int(time.time())-checked['checked_at']<3600)
+        try:
+            if reusable:
+                words, step = json.loads(stored['words_json']), stored['step_ms']
+            else:
+                with provider_proxy(source_url(playlists[record["playlist_id"]], reference_asset), busy) as source:
+                    measured, _ = probe(source, busy)
+                    if abs(measured - record["duration_ms"]) > 2000:
+                        continue
+                    words, step = fingerprint(source, record["start_ms"] + 2000, record["end_ms"] - record["start_ms"] - 4000, busy, require_complete=True)
+        except ValueError as error:
+            if str(error) == "analysis_deferred":
+                raise
+            last_error = error
+            continue
+        except OSError:
+            last_error = ValueError("analysis_failed")
+            continue
+        if not reusable:
+            with db() as con:
+                store_fingerprint(con, record, words, step)
+                con.execute('''INSERT OR REPLACE INTO skip_auto_reference_checks
+                  SELECT record_id,created_at,? FROM skip_fingerprints WHERE record_id=?
+                  AND words_json=? AND step_ms=?''', (int(time.time()), record['id'], json.dumps(words), step))
+        match = matching_offset(words, target, step) if abs(step - target_step) <= .001 else None
+        if not match:
+            continue
+        offset, confidence = match
+        start = window_offset + offset - 2000
+        end = start + record["end_ms"] - record["start_ms"]
+        if -target_step / 2 <= start < 0:
+            start = 0
+        if duration < end <= duration + target_step / 2:
+            end = duration
+        if not valid_range(kind, start, end, duration) or end > window_offset + coverage + 250:
+            continue
+        # Confirm the first and last musical portions independently so a
+        # coincidental central match cannot authorize a complete segment.
+        boundaries = matching_boundaries(words, target, step, offset)
+        vote = dict(start=start, end=end, confidence=confidence if boundaries else 0,
+                    boundaries_confirmed=bool(boundaries),
+                    asset_key=record["asset_key"], episode=record["episode"], record_id=record["id"],
+                    reviewed_at=record["reviewed_at"], ref_start=record["start_ms"], ref_end=record["end_ms"])
+        votes.append(vote)
+        with db() as con:
+            proposals += bool(store_proposal(con, asset, kind, start, end, 'audio', confidence,
+                                             {'method':'reviewed_audio_match','vote':vote}))
+    decision = consensus(votes, online, duration, kind)
+    with db() as con:
+        if decision and publish(con, asset, kind, decision):
+            approvals += 1
+        elif bootstrap(con, asset, kind, busy):
+            proposals += 1
+    from skip_release import accept_pending
+    with db() as con:
+        approvals += accept_pending(con, asset_key=asset["asset_key"])
+    refresh_neighbour_consensus(db, asset, kind, busy)
+    return proposals, approvals
+
+
+def analyze(db, job, busy_factory):
     with db() as con:
         asset = con.execute("SELECT * FROM skip_assets WHERE asset_key=?", (job["asset_key"],)).fetchone()
         if not asset or not enabled(con, asset["playlist_id"]):
@@ -959,7 +1064,8 @@ def analyze(db, job, busy_factory):
     asset = dict(asset)
     windows, proposals, approvals = {}, 0, 0
     with provider_proxy(source_url(playlist, asset), busy) as source:
-        duration, chapters = probe(source, busy)
+        with analysis_phase("probe"):
+            duration, chapters = probe(source, busy)
         if asset["duration_ms"] == 0 and discovered:
             with db() as con:
                 con.execute("UPDATE skip_assets SET duration_ms=? WHERE asset_key=? AND duration_ms=0", (duration, asset["asset_key"]))
@@ -970,11 +1076,7 @@ def analyze(db, job, busy_factory):
         with db() as con:
             for kind, start, end in chapter_candidates(chapters, duration):
                 proposals += bool(store_proposal(con, asset, kind, start, end, 'chapter'))
-    online = online_segments(db, asset, busy)
-    with db() as con:
-        for candidate in online:
-            proposals += bool(store_proposal(con, asset, candidate['kind'], candidate['start'], candidate['end'],
-                                             'theintrodb', evidence={'method':'online_suggestion'}))
+    online = []  # Verified audio can publish before optional external metadata.
     last_error = None
     if duration >= 19_000:
         for kind in ("intro", "outro"):
@@ -989,86 +1091,31 @@ def analyze(db, job, busy_factory):
                 cached = cached_window(con, asset, kind, offset, length)
             if cached is not None:
                 windows[kind] = cached
-                continue
-            try:
-                with provider_proxy(source_url(playlist, asset), busy) as source:
-                    words, step, coverage = fingerprint(source, offset, length, busy, with_coverage=True)
-                windows[kind] = (words, step, offset, coverage)
-                with db() as con:
-                    save_window(con, asset, kind, words, step, offset, round(coverage))
-            except ValueError as error:
-                if str(error) == "analysis_deferred":
-                    raise
-                last_error = error
-            except OSError:
-                last_error = ValueError("analysis_failed")
-    for kind, (target, target_step, window_offset, coverage) in windows.items():
-        votes = []
-        for record in refs[kind]:
-            with db() as con:
-                reference_asset = con.execute("SELECT * FROM skip_assets WHERE asset_key=?", (record["asset_key"],)).fetchone()
-            # Reuse only a recently validated, complete fingerprint of this
-            # exact reviewed marker. Older/unvalidated caches are read again.
-            with db() as con:
-                stored = con.execute('SELECT * FROM skip_fingerprints WHERE record_id=?', (record['id'],)).fetchone()
-                checked = con.execute('SELECT * FROM skip_auto_reference_checks WHERE record_id=?', (record['id'],)).fetchone()
-            reusable = (reference_asset and abs(reference_asset['duration_ms']-record['duration_ms'])<=2000
-                        and reusable_fingerprint(stored, record) and checked
-                        and checked['fingerprint_created_at']==stored['created_at']
-                        and int(time.time())-checked['checked_at']<3600)
-            try:
-                if reusable:
-                    words, step = json.loads(stored['words_json']), stored['step_ms']
-                else:
-                    with provider_proxy(source_url(playlists[record["playlist_id"]], reference_asset), busy) as source:
-                        measured, _ = probe(source, busy)
-                        if abs(measured - record["duration_ms"]) > 2000:
-                            continue
-                        words, step = fingerprint(source, record["start_ms"] + 2000, record["end_ms"] - record["start_ms"] - 4000, busy, require_complete=True)
-            except ValueError as error:
-                if str(error) == "analysis_deferred":
-                    raise
-                last_error = error
-                continue
-            except OSError:
-                last_error = ValueError("analysis_failed")
-                continue
-            if not reusable:
-                with db() as con:
-                    store_fingerprint(con, record, words, step)
-                    con.execute('''INSERT OR REPLACE INTO skip_auto_reference_checks
-                      SELECT record_id,created_at,? FROM skip_fingerprints WHERE record_id=?
-                      AND words_json=? AND step_ms=?''', (int(time.time()), record['id'], json.dumps(words), step))
-            match = matching_offset(words, target, step) if abs(step - target_step) <= .001 else None
-            if not match:
-                continue
-            offset, confidence = match
-            start = window_offset + offset - 2000
-            end = start + record["end_ms"] - record["start_ms"]
-            if -target_step / 2 <= start < 0:
-                start = 0
-            if duration < end <= duration + target_step / 2:
-                end = duration
-            if not valid_range(kind, start, end, duration) or end > window_offset + coverage + 250:
-                continue
-            # Confirm the first and last musical portions independently so a
-            # coincidental central match cannot authorize a complete segment.
-            boundaries = matching_boundaries(words, target, step, offset)
-            vote = dict(start=start, end=end, confidence=confidence if boundaries else 0,
-                        boundaries_confirmed=bool(boundaries),
-                        asset_key=record["asset_key"], episode=record["episode"], record_id=record["id"],
-                        reviewed_at=record["reviewed_at"], ref_start=record["start_ms"], ref_end=record["end_ms"])
-            votes.append(vote)
-            with db() as con:
-                proposals += bool(store_proposal(con, asset, kind, start, end, 'audio', confidence,
-                                                 {'method':'reviewed_audio_match','vote':vote}))
-        decision = consensus(votes, online, duration, kind)
-        with db() as con:
-            if decision and publish(con, asset, kind, decision):
-                approvals += 1
-            elif bootstrap(con, asset, kind, busy):
-                proposals += 1
-        refresh_neighbour_consensus(db, asset, kind, busy)
+            else:
+                try:
+                    with provider_proxy(source_url(playlist, asset), busy) as source:
+                        with analysis_phase("fingerprint_"+kind):
+                            words, step, coverage = fingerprint(source, offset, length, busy, with_coverage=True)
+                    windows[kind] = (words, step, offset, coverage)
+                    with db() as con:
+                        save_window(con, asset, kind, words, step, offset, round(coverage))
+                except ValueError as error:
+                    if str(error) == "analysis_deferred":
+                        raise
+                    last_error = error
+                except OSError:
+                    last_error = ValueError("analysis_failed")
+            if kind in windows:
+                with analysis_phase("comparison_"+kind):
+                    added, accepted = _analyze_window(db, asset, kind, windows[kind], refs, playlists, online, busy)
+                proposals += added
+                approvals += accepted
+    with analysis_phase("online_metadata"):
+        online = online_segments(db, asset, busy)
+    with db() as con:
+        for candidate in online:
+            proposals += bool(store_proposal(con, asset, candidate['kind'], candidate['start'], candidate['end'],
+                                             'theintrodb', evidence={'method':'online_suggestion'}))
     with db() as con:
         from skip_release import accept_pending
         approvals += accept_pending(con, asset_key=asset['asset_key'])
