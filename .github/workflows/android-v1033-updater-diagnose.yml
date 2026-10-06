@@ -1,39 +1,41 @@
-name: Android 1.0.33 updater diagnostics
+name: Verify Android 1.0.33 public updater
 on:
   push:
     branches: [android-v1.0.33-updater-diagnose]
     paths: [.github/workflows/android-v1033-updater-diagnose.yml]
 permissions:
   contents: read
+  actions: read
+concurrency:
+  group: epimediahub-android-v1033-final-verification
+  cancel-in-progress: true
 jobs:
-  inspect-public-mirror:
+  verify-public-updater:
     runs-on: ubuntu-22.04
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
-      - name: Read public updater and sync status
-        run: |
-          python3 - <<'PY'
-          import json, urllib.request, urllib.error
-          from datetime import datetime, timezone
-          base = 'https://download.epimediahub.com/android/'
-          print('CHECKED AT', datetime.now(timezone.utc).isoformat(), flush=True)
-          for filename in ('sync-status.json', 'latest.json', 'android-latest.json'):
-              url = base + filename
-              for bust in (False, True):
-                  request = urllib.request.Request(url + ('?v133check=' + str(int(datetime.now(timezone.utc).timestamp())) if bust else ''),
-                      headers={'Cache-Control':'no-cache', 'User-Agent':'EpiMediaHub-Updater-Diagnostic/1.0.33'})
-                  try:
-                      with urllib.request.urlopen(request, timeout=25) as response:
-                          data = json.load(response)
-                          print(filename, 'cache_bust', bust, 'HTTP', response.status,
-                              'headers', {k:response.headers.get(k) for k in ('Cache-Control','Age','Server','Last-Modified','CF-Cache-Status')},
-                              'data', json.dumps(data, ensure_ascii=False), flush=True)
-                  except Exception as error:
-                      print(filename, 'cache_bust', bust, type(error).__name__, str(error), flush=True)
-          request = urllib.request.Request(base+'EpiMediaHub_Android_v1.0.33-arm64-v8a.apk', method='HEAD')
-          try:
-              with urllib.request.urlopen(request, timeout=25) as response:
-                  print('APK HEAD', response.status, response.headers.get('Content-Length'), flush=True)
-          except Exception as error:
-              print('APK HEAD', type(error).__name__, str(error), flush=True)
-          PY
+      - uses: actions/checkout@v4
+        with:
+          ref: 2f521c96aaafcbb58b5ebbbf18b8cf943e05c0d0
+      - name: Read original signed build assets
+        uses: actions/download-artifact@v4
+        with:
+          name: EpiMediaHub-Android-v1.0.33-signed-test-release
+          path: dist
+          run-id: 37489592470
+          github-token: ${{ github.token }}
+      - name: Read original completed regression reports
+        uses: actions/download-artifact@v4
+        with:
+          name: android-v1033-release-test-reports
+          path: reports
+          run-id: 37489592470
+          github-token: ${{ github.token }}
+      - name: Verify updater and all three public APKs against signed build
+        run: python3 build_tools/verify_android_release_v133.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-v1033-live-verification
+          path: android-v1033-live-verification.json
+          retention-days: 90
+          if-no-files-found: error
