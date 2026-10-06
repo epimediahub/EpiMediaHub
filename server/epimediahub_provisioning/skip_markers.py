@@ -477,10 +477,12 @@ def install(app, db):
             progress = overview(con, request.args.get('progress_filter','all'), request.args.get('progress_search',''), request.args.get('progress_page','1'), refresh_cache=False)
             measured('progress')
             schedule = schedule_view(con,statistics)
+            scene_setting = con.execute("SELECT value FROM skip_auto_metadata_config WHERE name='episcene_enabled'").fetchone()
+            episcene_enabled = bool(scene_setting and scene_setting[0]=='1')
             measured('schedule')
         selected_episode = page_number(request.args.get("episode", ""), 0)
         loaded = time.perf_counter()
-        response = app.make_response(render_template("skip_markers.html", browser=browser, sources=sources, job_groups=media_groups(jobs), online_groups=media_groups(online_status), tmdb_ready=tmdb_ready, catalogues=catalogues, audio_limit=audio_limit, progress=progress, schedule=schedule, state=state, selected_episode=selected_episode, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", "")))
+        response = app.make_response(render_template("skip_markers.html", browser=browser, sources=sources, job_groups=media_groups(jobs), online_groups=media_groups(online_status), tmdb_ready=tmdb_ready, catalogues=catalogues, audio_limit=audio_limit, progress=progress, schedule=schedule, episcene_enabled=episcene_enabled, state=state, selected_episode=selected_episode, csrf=session["skip_csrf"], timecode=timecode, notice=request.args.get("notice", "")))
         response.headers['Server-Timing'] = ', '.join(phases + [f'database;dur={(loaded-started)*1000:.2f}', f'render;dur={(time.perf_counter()-loaded)*1000:.2f}'])
         response.headers['Cache-Control'] = 'no-store'
         return response
@@ -741,6 +743,7 @@ def install(app, db):
         data['features'].update(skip_playlist_order=True, skip_series_order=True, skip_fingerprint_capture=True,
                                 skip_interactive_priority=True, skip_language_stages=True,
                                 skip_dashboard_async=True, skip_progress_readonly=True,
-                                skip_detection_precision=True,skip_dashboard_cached_statistics=True)
+                                skip_detection_precision=True,skip_dashboard_cached_statistics=True,
+                                skip_episcene=True)
         return jsonify(data)
     app.view_functions["health"] = health

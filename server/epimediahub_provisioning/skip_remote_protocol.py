@@ -16,7 +16,8 @@ LEASE_SECONDS = 12
 TASK_SECONDS = 230
 MAX_BODY = 2_000_000
 COMPONENTS = ('skip_analysis.py', 'skip_automation.py', 'skip_detector_v2.py',
-              'skip_detector_v3.py', 'skip_remote_client.py', 'skip_remote_protocol.py')
+              'skip_detector_v3.py', 'skip_remote_client.py', 'skip_remote_protocol.py',
+              'skip_visual.py', 'skip_scene.py', 'skip_release.py')
 
 
 def relay_url(value):

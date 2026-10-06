@@ -207,25 +207,39 @@ def learn_requested_reference(db, job, busy_factory):
                 learned.append(record)
         records = learned
     if not records:
+        from skip_scene import learn_reference
+        learn_reference(db, asset, 'intro', busy_factory(db, [playlist]))
         return 'done', 'Geprüfte Introreferenz bereits gelernt'
     busy = busy_factory(db, [playlist])
     if busy():
         raise ValueError('analysis_deferred')
-    with provider_proxy(source_url(playlist, asset), busy) as source:
-        duration, _ = probe(source, busy)
-        if abs(duration-asset['duration_ms'])>2000:
-            return 'unmatched', 'Laufzeit der Referenzfolge stimmt nicht mit dem Marker überein'
-        for record in records:
-            words, step = fingerprint(source,record['start_ms']+2000,
-              record['end_ms']-record['start_ms']-4000,busy,require_complete=True)
-            with db() as con:
-                store_fingerprint(con,record,words,step)
-                con.execute("""INSERT OR REPLACE INTO skip_auto_reference_checks
-                  SELECT record_id,created_at,? FROM skip_fingerprints WHERE record_id=?
-                    AND words_json=? AND step_ms=?""", (int(time.time()),record['id'],json.dumps(words),step))
-                if not con.execute('SELECT 1 FROM skip_fingerprints WHERE record_id=? AND words_json=? AND step_ms=?',
-                                   (record['id'],json.dumps(words),step)).fetchone():
-                    return 'queued', 'Referenz während des Lernens geändert; aktuelle Markierung wird erneut gelernt'
+    try:
+        with provider_proxy(source_url(playlist, asset), busy) as source:
+            duration, _ = probe(source, busy)
+            if abs(duration-asset['duration_ms'])>2000:
+                return 'unmatched', 'Laufzeit der Referenzfolge stimmt nicht mit dem Marker überein'
+            for record in records:
+                words, step = fingerprint(source,record['start_ms']+2000,
+                  record['end_ms']-record['start_ms']-4000,busy,require_complete=True)
+                with db() as con:
+                    store_fingerprint(con,record,words,step)
+                    con.execute("""INSERT OR REPLACE INTO skip_auto_reference_checks
+                      SELECT record_id,created_at,? FROM skip_fingerprints WHERE record_id=?
+                        AND words_json=? AND step_ms=?""", (int(time.time()),record['id'],json.dumps(words),step))
+                    if not con.execute('SELECT 1 FROM skip_fingerprints WHERE record_id=? AND words_json=? AND step_ms=?',
+                                       (record['id'],json.dumps(words),step)).fetchone():
+                        return 'queued', 'Referenz während des Lernens geändert; aktuelle Markierung wird erneut gelernt'
+    except ValueError as error:
+        # Close the old provider relay before attempting a video-only reference.
+        # Provider failures and cancellations retain their original retry policy.
+        if str(error) not in ('analysis_failed','fingerprint_failed','fingerprint_incomplete'):
+            raise
+        from skip_scene import learn_reference
+        if learn_reference(db,asset,'intro',busy):
+            return 'done','EpiScene: Introreferenz visuell gelernt; passende Folgen der Staffel folgen zuerst'
+        raise
+    from skip_scene import learn_reference
+    learn_reference(db, asset, 'intro', busy)
     return 'done', 'Neue Introreferenz gelernt; passende Folgen der Staffel folgen zuerst'
 
 

@@ -252,3 +252,33 @@ def detect(target, partners, kind, config, busy=lambda: False):
         return result
     except (TypeError, ValueError, KeyError):
         raise RemoteDeferred('Hetzner hat ungültige Detektor-Daten geliefert') from None
+
+
+def visual_fingerprint(source, start_ms, length_ms, step_ms=500, busy=lambda: False):
+    """Always use the private compute host; never decode video on the Raspberry."""
+    from skip_visual import POLICY, VisualWindow
+    if not configured():
+        raise RemoteDeferred('EpiScene benötigt die private Hetzner-Verbindung')
+    check = _busy(source, busy)
+    value = call('visual_fingerprint', dict(url=source.url, via_pi=source.via_pi,
+                    start_ms=start_ms, length_ms=length_ms, step_ms=step_ms), check)
+    try:
+        if not isinstance(value, dict) or value.get('policy') != POLICY:
+            raise ValueError()
+        window = VisualWindow(value['frames'], start_ms, step_ms, length_ms,
+                              start_ms + length_ms, 'validation', 1)
+        return window.frames
+    except (KeyError, TypeError, ValueError):
+        raise RemoteDeferred('Hetzner hat unvollständige EpiScene-Fingerabdrücke geliefert') from None
+
+
+def visual_detect(target, partners, kind, busy=lambda: False):
+    from skip_visual import POLICY, validate_result
+    if not configured():
+        raise RemoteDeferred('EpiScene benötigt die private Hetzner-Verbindung')
+    value = call('visual_detect', dict(policy=POLICY, kind=kind, target=target.payload(),
+                                      partners=[p.payload() for p in partners]), busy)
+    try:
+        return validate_result(value, target, partners, kind)
+    except (KeyError, TypeError, ValueError):
+        raise RemoteDeferred('Hetzner hat ungültige EpiScene-Ergebnisse geliefert') from None

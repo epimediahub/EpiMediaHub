@@ -7,7 +7,7 @@ from collections import defaultdict
 
 from skip_markers import now, valid_range
 
-MACHINE_SOURCES = ('audio', 'chapter', 'theintrodb', 'audio_repetition', 'auto_audio')
+MACHINE_SOURCES = ('audio', 'chapter', 'theintrodb', 'audio_repetition', 'auto_audio', 'episcene')
 POLICY = 'automatic_acceptance_v1'
 
 
@@ -117,7 +117,7 @@ def accept_pending(con, asset_key=None, playlist_id=None):
     sql = '''SELECT r.*,COALESCE(e.human_review,0) human_review,e.evidence_json,a.playlist_id
       FROM skip_records r JOIN skip_assets a ON a.asset_key=r.asset_key
       LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
-      WHERE r.status='pending' AND r.source IN ('audio','chapter','theintrodb','audio_repetition','auto_audio')
+      WHERE r.status='pending' AND r.source IN ('audio','chapter','theintrodb','audio_repetition','auto_audio','episcene')
       AND COALESCE(e.human_review,0)=0 AND a.source_key=r.source_key AND a.media_type=r.media_type
       AND a.season=r.season AND a.episode=r.episode AND a.duration_ms>0 AND ABS(a.duration_ms-r.duration_ms)<=2000'''
     params = []
@@ -132,7 +132,8 @@ def accept_pending(con, asset_key=None, playlist_id=None):
     for row in con.execute(sql, params).fetchall():
         if row['playlist_id'] not in settings:
             settings[row['playlist_id']] = enabled(con, row['playlist_id'])
-        if settings[row['playlist_id']] and current_reference(con, row) and reviewed_release_ready(row) and detector_release_ready(con, row):
+        if (settings[row['playlist_id']] and scene_release_ready(con, row) and current_reference(con, row)
+                and reviewed_release_ready(row) and detector_release_ready(con, row)):
             rows.append(row)
     # Do not bypass consensus() by independently accepting two disagreeing
     # strong reference matches after the consensus deliberately returned None.
@@ -156,6 +157,15 @@ def accept_pending(con, asset_key=None, playlist_id=None):
       AND (d.source='device' OR e.human_review=1) LIMIT 1''',
       (r['asset_key'], r['segment_type'], r['duration_ms'])).fetchone()]
     return approve_rows(con, rows)['approved']
+
+
+def scene_release_ready(con, row):
+    try:
+        evidence = json.loads(row['evidence_json'] or '{}')
+    except (ValueError, TypeError):
+        evidence = {}
+    from skip_scene import release_ready
+    return release_ready(con, row, evidence)
 
 
 def reviewed_release_ready(row):

@@ -50,7 +50,8 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 import numpy as np
 import skip_analysis as audio
-from skip_remote_client import RemoteDeferred,health,local_execution,match
+from skip_remote_client import RemoteDeferred,health,local_execution,match,visual_detect
+from skip_visual import VisualWindow
 for attempt in range(10):
     try:
         health(); break
@@ -62,6 +63,14 @@ fp=[rng.getrandbits(32) for _ in range(100)]
 target=[rng.getrandbits(32) for _ in range(11)]+fp
 assert match(fp,target,125)==(1375,1.0)
 print('Encrypted WireGuard RPC and exact-version matching OK')
+def visual_frames(n): return [[rng.getrandbits(63),rng.getrandbits(64),45,120] for _ in range(n)]
+common=visual_frames(48)
+a=visual_frames(120);a[20:68]=common
+b=visual_frames(120);b[30:78]=common
+result=visual_detect(VisualWindow(a,0,500,60000,180000,'visual-target',2),
+                    [VisualWindow(b,0,500,60000,180000,'visual-reference',1,[[15000,39000]])],'intro')
+assert result['status']=='AUTO_CONFIRMED' and result['start_ms']==10000 and result['end_ms']==33750
+print('Encrypted EpiScene visual comparison and exact boundaries OK')
 
 # The fixture exists only on the Pi namespace's loopback; the compute namespace
 # cannot reach it. The decoder must read the fixed private relay through WireGuard.

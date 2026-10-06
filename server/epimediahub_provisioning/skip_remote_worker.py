@@ -18,12 +18,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from skip_remote_client import local_execution
 from skip_detector_v3 import PairCache
+from skip_visual import POLICY as VISUAL_POLICY, STEPS, VisualCache, VisualWindow
 from skip_remote_protocol import (CLIENT_IP, LEASE_SECONDS, MAX_BODY, PORT, PROTOCOL,
                                   SERVER_IP, TASK_SECONDS, RelayInput, relay_url, number, versions, words)
 
 # Repeated neighbour updates reuse comparisons across RPCs; bounded and keyed
 # by immutable content, exact timebase and detector configuration.
 DETECTION_CACHE = PairCache(max_pairs=256, max_fft_bytes=64 * 1024 * 1024)
+VISUAL_CACHE = VisualCache(capacity=128)
 
 
 def parse_window(value):
@@ -58,7 +60,7 @@ def validate(operation, payload):
     from skip_detector_v3 import Config
     if not isinstance(payload, dict):
         raise ValueError('invalid_request')
-    if operation in ('probe', 'fingerprint'):
+    if operation in ('probe', 'fingerprint', 'visual_fingerprint'):
         if not isinstance(payload.get('url'), str) or not 1 <= len(payload['url']) <= 8192:
             raise ValueError('invalid_request')
         if type(payload.get('via_pi', False)) is not bool:
@@ -69,6 +71,12 @@ def validate(operation, payload):
             number(payload.get('start_ms'), 0, 86_400_000)
             number(payload.get('length_ms'), 15_000, 720_000)
             if type(payload.get('require_complete')) is not bool:
+                raise ValueError('invalid_request')
+        if operation == 'visual_fingerprint':
+            number(payload.get('start_ms'), 0, 86_400_000)
+            number(payload.get('length_ms'), 5000, 60_000)
+            if (type(payload.get('start_ms')) is not int or type(payload.get('length_ms')) is not int
+                    or type(payload.get('step_ms')) is not int or payload['step_ms'] not in STEPS):
                 raise ValueError('invalid_request')
     elif operation in ('match', 'boundaries'):
         words(payload.get('reference')); words(payload.get('target'))
@@ -83,6 +91,14 @@ def validate(operation, payload):
             raise ValueError('invalid_request')
         for item in payload['partners']:
             parse_window(item)
+    elif operation == 'visual_detect':
+        if payload.get('kind') not in ('intro', 'outro') or payload.get('policy') != VISUAL_POLICY:
+            raise ValueError('invalid_request')
+        VisualWindow.parse(payload.get('target'))
+        if not isinstance(payload.get('partners'), list) or not 0 <= len(payload['partners']) <= 4:
+            raise ValueError('invalid_request')
+        for item in payload['partners']:
+            VisualWindow.parse(item)
     else:
         raise ValueError('invalid_request')
 
@@ -92,7 +108,7 @@ def execute(operation, payload, busy):
     # integration test or in an inherited client environment on the server.
     with local_execution():
         from skip_analysis import provider_proxy, probe, fingerprint, matching_offset
-        if operation in ('probe', 'fingerprint'):
+        if operation in ('probe', 'fingerprint', 'visual_fingerprint'):
             # A fixed, authenticated private peer supplies the compressed bytes.
             # The compute host never contacts or resolves the original provider.
             from contextlib import nullcontext
@@ -102,6 +118,10 @@ def execute(operation, payload, busy):
                 if operation == 'probe':
                     duration, chapters = probe(source, busy)
                     return dict(duration_ms=duration, chapters=chapters)
+                if operation == 'visual_fingerprint':
+                    from skip_visual import extract
+                    return dict(policy=VISUAL_POLICY, frames=extract(source, payload['start_ms'],
+                                payload['length_ms'], payload['step_ms'], busy))
                 fp, step, coverage = fingerprint(source, payload['start_ms'], payload['length_ms'], busy,
                     require_complete=payload['require_complete'], with_coverage=True)
                 return dict(words=fp, step_ms=step, coverage_ms=coverage)
@@ -110,6 +130,10 @@ def execute(operation, payload, busy):
         if operation == 'boundaries':
             from skip_automation import matching_boundaries
             return matching_boundaries(payload['reference'], payload['target'], payload['step_ms'], payload['offset'])
+        if operation == 'visual_detect':
+            from skip_visual import detect as visual_detect
+            return visual_detect(VisualWindow.parse(payload['target']),
+                [VisualWindow.parse(item) for item in payload['partners']], payload['kind'], busy, VISUAL_CACHE)
         from skip_detector_v3 import Config, detect
         return dataclasses.asdict(detect(parse_window(payload['target']),
             [parse_window(item) for item in payload['partners']], payload['kind'], Config(), DETECTION_CACHE))
@@ -218,7 +242,8 @@ class Handler(BaseHTTPRequestHandler):
                 active = self.server.tasks.active is not None
                 completed = sum(item['state'] == 'done' for item in self.server.tasks.items.values())
             self.reply(200, status='ok', versions=self.server.component_versions,
-                       active=active, completed=completed, detection_cache=DETECTION_CACHE.stats())
+                       active=active, completed=completed, detection_cache=DETECTION_CACHE.stats(),
+                       episcene=dict(policy=VISUAL_POLICY, cache=VISUAL_CACHE.stats()))
             return
         self.task_status()
 

@@ -35,8 +35,8 @@ WINDOW_MS = 720_000
 AUTO_CONFIDENCE = .92
 BOUNDARY_TOLERANCE = 500
 MAX_SEASON_EPISODES = 200
-PROPOSAL_SOURCES = ('audio', 'chapter', 'theintrodb', 'audio_repetition')
-PROPOSAL_RANK = {'audio': 4, 'chapter': 3, 'theintrodb': 2, 'audio_repetition': 1}
+PROPOSAL_SOURCES = ('audio', 'chapter', 'theintrodb', 'audio_repetition', 'episcene')
+PROPOSAL_RANK = {'audio': 4, 'chapter': 3, 'theintrodb': 2, 'audio_repetition': 1, 'episcene': 6}
 POLICY_VERSION = 'high_audio_v2'
 LEGACY_ONLINE_ERROR = 'Online-Datenbank derzeit nicht erreichbar; Audioanalyse bleibt nutzbar'
 ONLINE_RECHECK_LIMIT = 96
@@ -88,6 +88,8 @@ def migrate(con):
     """)
     from skip_catalogue import migrate as catalogue_migrate
     catalogue_migrate(con)
+    from skip_scene import migrate as scene_migrate
+    scene_migrate(con)
     maintain_proposals(con)
     from skip_release import migrate as release_migrate
     release_migrate(con)
@@ -521,7 +523,7 @@ def pending_proposals(con, asset, kind):
       LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
       WHERE r.asset_key=? AND r.source_key=? AND r.media_type=? AND r.season=? AND r.episode=?
       AND r.duration_ms=? AND r.segment_type=? AND r.status='pending' AND r.disabled=0
-      AND r.source IN ('audio','chapter','theintrodb','audio_repetition')
+      AND r.source IN ('audio','chapter','theintrodb','audio_repetition','episcene')
       AND COALESCE(e.human_review,0)=0""",
       (*(asset[key] for key in ('asset_key','source_key','media_type','season','episode','duration_ms')), kind)).fetchall()
 
@@ -546,7 +548,7 @@ def retire_proposals(con, asset, kind, keep=None):
     """Archive generated alternatives after a decision, preserving human records."""
     con.execute("""UPDATE skip_records SET status='superseded' WHERE asset_key=? AND source_key=?
       AND media_type=? AND season=? AND episode=? AND ABS(duration_ms-?)<=2000 AND segment_type=?
-      AND status='pending' AND source IN ('audio','chapter','theintrodb','audio_repetition')
+      AND status='pending' AND source IN ('audio','chapter','theintrodb','audio_repetition','episcene')
       AND id<>? AND NOT EXISTS(SELECT 1 FROM skip_auto_evidence e WHERE e.record_id=skip_records.id AND e.human_review=1)""",
       (*(asset[key] for key in ('asset_key','source_key','media_type','season','episode','duration_ms')), kind, keep or -1))
 
@@ -567,6 +569,9 @@ def store_proposal(con, asset, kind, start, end, source, confidence=0, evidence=
     asset = dict(asset)
     if protected(con, asset, kind):
         return None
+    from skip_scene import enabled as scene_enabled
+    if scene_enabled(con):
+        evidence = dict(evidence or {}, episcene_required=True)
     candidate = {'start_ms': start, 'end_ms': end}
     matches = [row for row in pending_proposals(con, asset, kind) if same_boundaries(row, candidate)]
     update_evidence = True
@@ -574,6 +579,8 @@ def store_proposal(con, asset, kind, start, end, source, confidence=0, evidence=
         saved = max(matches, key=proposal_rank)
         update_evidence = proposal_rank(dict(source=source, confidence=confidence, id=0,
                                              evidence_json=json.dumps(evidence)))[:2] >= proposal_rank(saved)[:2]
+        if source == 'episcene' and saved['source'] == 'episcene':
+            update_evidence = True  # A fresh consensus can have more independent support.
         if update_evidence:
             con.execute("UPDATE skip_records SET start_ms=?,end_ms=?,source=?,confidence=? WHERE id=? AND status='pending'",
                         (start, end, source, confidence, saved['id']))
@@ -582,7 +589,7 @@ def store_proposal(con, asset, kind, start, end, source, confidence=0, evidence=
                            kind, start, end, False, source=source, confidence=confidence)
         # A prior machine alternative may have been archived before a fresh retry.
         con.execute("""UPDATE skip_records SET status='pending',confidence=? WHERE id=? AND status IN ('pending','superseded')
-          AND source IN ('audio','chapter','theintrodb','audio_repetition')
+          AND source IN ('audio','chapter','theintrodb','audio_repetition','episcene')
           AND NOT EXISTS(SELECT 1 FROM skip_auto_evidence e WHERE e.record_id=skip_records.id AND e.human_review=1)""",
           (confidence, saved['id']))
     if evidence and update_evidence:
@@ -678,6 +685,9 @@ def matching_boundaries(reference, target, step, offset):
 
 
 def publish(con, asset, kind, evidence):
+    from skip_scene import enabled as scene_enabled
+    if scene_enabled(con):
+        return False  # The image stage validates and publishes the combined result.
     if (not evidence or evidence.get('policy') != POLICY_VERSION
             or evidence['confidence'] < AUTO_CONFIDENCE or not evidence['votes']
             or not valid_range(kind, evidence['start'], evidence['end'], asset['duration_ms'])):
@@ -1046,6 +1056,15 @@ def _analyze_window(db, asset, kind, window, refs, playlists, online, busy):
     with db() as con:
         approvals += accept_pending(con, asset_key=asset["asset_key"])
     refresh_neighbour_consensus(db, asset, kind, busy)
+    from skip_scene import analyze as scene_analyze
+    with db() as con:
+        from skip_scene import enabled as scene_enabled
+        use_scene = scene_enabled(con)
+    if use_scene:
+        with analysis_phase('episcene_'+kind):
+            added, accepted = scene_analyze(db, asset, kind, refs[kind], busy)
+        proposals += added
+        approvals += accepted
     return proposals, approvals
 
 
@@ -1071,7 +1090,15 @@ def analyze(db, job, busy_factory):
                 con.execute("UPDATE skip_assets SET duration_ms=? WHERE asset_key=? AND duration_ms=0", (duration, asset["asset_key"]))
             asset["duration_ms"] = duration
         elif abs(duration - asset["duration_ms"]) > 2000:
+            with db() as con:
+                con.execute('DELETE FROM skip_scene_windows WHERE asset_key=?',(asset['asset_key'],))
             return "unmatched", "Videolaufzeit stimmt nicht mit der gemeldeten Folge überein"
+        else:
+            from skip_scene import enabled as scene_enabled
+            with db() as con:
+                if scene_enabled(con):
+                    con.execute('UPDATE skip_assets SET duration_ms=? WHERE asset_key=? AND duration_ms=?',
+                                (duration,asset['asset_key'],asset['duration_ms']))
         asset["duration_ms"] = duration
         with db() as con:
             for kind, start, end in chapter_candidates(chapters, duration):
@@ -1110,6 +1137,15 @@ def analyze(db, job, busy_factory):
                     added, accepted = _analyze_window(db, asset, kind, windows[kind], refs, playlists, online, busy)
                 proposals += added
                 approvals += accepted
+            else:
+                from skip_scene import analyze as scene_analyze, enabled as scene_enabled
+                with db() as con:
+                    use_scene = scene_enabled(con)
+                if use_scene:
+                    with analysis_phase('episcene_'+kind):
+                        added, accepted = scene_analyze(db, asset, kind, refs[kind], busy)
+                    proposals += added
+                    approvals += accepted
     with analysis_phase("online_metadata"):
         online = online_segments(db, asset, busy)
     with db() as con:
@@ -1124,5 +1160,9 @@ def analyze(db, job, busy_factory):
     if proposals:
         return "review", "Vorschläge vorhanden; Zeitgrenzen im Dashboard prüfen"
     if not windows and last_error:
+        from skip_scene import has_completed_visual
+        with db() as con:
+            if has_completed_visual(con,asset['asset_key']):
+                return 'no_match','EpiScene: Bilder gespeichert; weitere unabhängige Folgen oder eine Referenz benötigt'
         raise last_error
     return "no_match", "Noch keine ausreichend eindeutigen Abschnittszeiten erkannt"
