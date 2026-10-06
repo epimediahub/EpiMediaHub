@@ -1,0 +1,508 @@
+name: Build and publish signed EpiMediaHub Android v1.0.33 bounded update cleanup and unobstructed home controls
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [android-v1.0.33-storage-controls]
+    paths:
+      - '.github/workflows/android-v1033-release.yml'
+      - 'android/v1.0.33/**'
+      - 'android/v1.0.28/patch_v128.py'
+      - 'build_tools/generate_intro_sound_v128.py'
+      - 'build_tools/verify_intro_sound_v128.py'
+      - 'build_tools/install_android_v1033_source.sh'
+      - 'build_tools/build_android_audio_v123.sh'
+      - 'build_tools/generate_audio_fixtures_v123.py'
+      - 'build_tools/package_android_audio_sources_v126.py'
+      - 'build_tools/prepare_chromaprint_v126.sh'
+      - 'build_tools/generate_fingerprint_fixtures_v126.py'
+      - 'android/release_notes/v1.0.33.md'
+      - 'build_tools/install_skin_assets_v132.py'
+      - 'build_tools/verify_skin_assets_v132.py'
+      - 'build_tools/verify_android_release_v133.py'
+
+concurrency:
+  group: epimediahub-android-v1033-release
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-android-v1033-release:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 70
+    env:
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require permanent signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+
+      - name: Reconstruct project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* > .ci-android/source.b64
+          base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
+          EXPECTED="192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          ACTUAL="$(sha256sum .ci-android/source.tar.gz | awk '{print $1}')"
+          test "$ACTUAL" = "$EXPECTED"
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+
+      - name: Pin Gradle toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+
+      - name: Install v1.0.33 source
+        run: |
+          bash build_tools/install_android_v1033_source.sh
+          python3 build_tools/verify_intro_sound_v128.py "$PROJECT_ROOT/app/src/main/res/raw/epimedia_intro_heartbeat_cinema.wav"
+
+      - name: Install permanent release signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/epimediahub-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias epimediahub >/dev/null
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_ROOT'])/'app/build.gradle.kts'
+          s=p.read_text()
+          anchor='    buildTypes {\n'
+          signing='''    signingConfigs {
+              create("release") {
+                  storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))
+                  storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                  keyAlias = "epimediahub"
+                  keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+              }
+          }
+
+          '''
+          if anchor not in s: raise SystemExit('buildTypes anchor missing')
+          s=s.replace(anchor, signing+anchor, 1)
+          release='        release {\n'
+          if release not in s: raise SystemExit('release build type missing')
+          s=s.replace(release, release+'            signingConfig = signingConfigs.getByName("release")\n', 1)
+          p.write_text(s)
+          PY
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+          cache-read-only: false
+
+      - name: Cache audio native libraries
+        id: audio-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.PROJECT_ROOT }}/ffmpeg-audio/src/main/jni/ffmpeg/android-libs
+            ${{ env.PROJECT_ROOT }}/ffmpeg-6.1.6.tar.xz
+          key: audio-ffmpeg-6.1.6-ndk26b-api25-${{ runner.os }}-${{ hashFiles('build_tools/build_android_audio_v123.sh', 'android/v1.0.23/upstream.json') }}
+
+      - name: Build audio-only FFmpeg for all Android architectures
+        run: bash build_tools/build_android_audio_v123.sh
+
+      - name: Preserve successful native build independently of app tests
+        if: steps.audio-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.PROJECT_ROOT }}/ffmpeg-audio/src/main/jni/ffmpeg/android-libs
+            ${{ env.PROJECT_ROOT }}/ffmpeg-6.1.6.tar.xz
+          key: ${{ steps.audio-cache.outputs.cache-primary-key }}
+
+      - name: Generate original audio test fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y ffmpeg
+          fi
+          python3 build_tools/generate_audio_fixtures_v123.py
+          python3 build_tools/generate_fingerprint_fixtures_v126.py
+
+      - name: Build signed v1.0.33 APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          for attempt in 1 2 3 4; do
+            set +e
+            gradle :app:testDebugUnitTest :app:assembleRelease :ffmpeg-audio:assembleDebugAndroidTest --stacktrace --no-daemon -Dorg.gradle.workers.max=2 2>&1 | tee "$RUNNER_TEMP/android-release-build.log"
+            build_exit=${PIPESTATUS[0]}
+            set -e
+            if [ "$build_exit" -eq 0 ]; then break; fi
+            if [ "$attempt" -eq 4 ] || ! grep -Eq 'Received status code 429|HTTP 429' "$RUNNER_TEMP/android-release-build.log"; then
+              exit "$build_exit"
+            fi
+            echo "Build-Abhängigkeiten vorübergehend gedrosselt; erneuter Versuch ($attempt/4)."
+            if [ "$attempt" -eq 1 ]; then sleep 30; else sleep 60; fi
+          done
+
+      - name: Preserve skin UI previews before native decoder checks
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-v1033-ui-preview
+          path: ${{ env.PROJECT_ROOT }}/app/build/reports/ui
+          if-no-files-found: error
+
+      - name: Preserve focused home control previews
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-v1033-home-controls
+          path: ${{ env.PROJECT_ROOT }}/app/build/reports/ui/v133-*.png
+          if-no-files-found: error
+
+      - name: Enable KVM for Android decoder tests
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Decode audio and play transport stream on Android 11
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: gradle -p "$PROJECT_ROOT" :ffmpeg-audio:connectedDebugAndroidTest --stacktrace --no-daemon -Dorg.gradle.workers.max=2
+
+      - name: Preserve regression and playback UI test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-v1033-release-test-reports
+          path: |
+            ${{ env.PROJECT_ROOT }}/app/build/reports/tests/testDebugUnitTest
+            ${{ env.PROJECT_ROOT }}/app/build/test-results/testDebugUnitTest
+            ${{ env.PROJECT_ROOT }}/app/build/reports/ui
+            ${{ env.PROJECT_ROOT }}/ffmpeg-audio/build/reports/androidTests
+            ${{ env.PROJECT_ROOT }}/ffmpeg-audio/build/outputs/androidTest-results
+            ${{ env.PROJECT_ROOT }}/.audio-build/*/ffbuild/config.log
+          if-no-files-found: ignore
+
+      - name: Verify Android 1.0.33 release
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'versionName = "1.0.33"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 1033' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'V133UpdateStorage.cleanupInstalled(applicationContext)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainActivity.kt"
+          grep -Fq 'V133UpdateStorage.cleanupDirectory(dir, BuildConfig.VERSION_NAME, setOf(target.name, partial.name))' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+          grep -Fq 'home-center-toolbar' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'v120RememberLicenseState' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -Fq 'https://api.epimediahub.com/v1/license/status' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V120LicenseManager.kt"
+          grep -Fq 'RadioHomeActions(showPlaylistSwitch' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'RadioScreen(isTv, accent' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'foregroundServiceType="mediaPlayback"' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
+          grep -Fq 'pauseForVideo()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'stopForExit()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -Fq 'SmartTube-Core:' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeCore.kt"
+          grep -Fq '.filter { it.categoryId !in u.hiddenCategoryIds }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          grep -Fq 'minSdk = 25' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'https://download.epimediahub.com/android/latest.json' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+          grep -Fq 'internal object V100SmartTubeCore' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeCore.kt"
+          grep -Fq 'YouTubeServiceManager.instance()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeCore.kt"
+          grep -Fq 'V100BroadcasterLogo' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
+          grep -Fq 'delay(4_000L)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          test -f "$PROJECT_ROOT/app/src/main/assets/licenses/SmartTube-MIT.txt"
+          grep -Fq 'V106SmartTubePlayer(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V104SmartTubeShell.kt"
+          grep -Fq 'DefaultDataSource.Factory(context, http)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V106SmartTubePlayer.kt"
+          grep -Fq 'val playerResult = remember' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V106SmartTubePlayer.kt"
+          grep -Fq 'DashMediaSource.Factory(dataSource)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V106SmartTubePlayer.kt"
+          grep -Fq 'V129SmartTubeGate(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'filterNot { it == V108SmartTubeSection.TRENDING }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V112SmartTubeShell.kt"
+          grep -Fq 'v112NeedsLegacyFireTvKeyboard()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V112SmartTubeShell.kt"
+          grep -Fq 'V110TvKeyboardDialog(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V035Screens.kt"
+          grep -Fq 'Player.STATE_ENDED' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V112SmartTubePlayer.kt"
+          grep -Fq 'Key.DirectionLeft' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V124SmartTubeBrowseLayer.kt"
+          grep -Fq 'Key.DirectionRight' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V124SmartTubeBrowseLayer.kt"
+
+          grep -Fq 'isTv: Boolean' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V112SmartTubePlayer.kt"
+          grep -Fq 'fontSize = if (isTv) 30.sp' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V112SmartTubePlayer.kt"
+          grep -Fq 'V097SkinEnvironment(smartTubeSkinWorld, accent)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V112SmartTubeShell.kt"
+          grep -Fq 'menuStates.SaveableStateProvider(menuStateKey)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -Fq 'memoryKey = V113LiveTvKeys.channels(playlistId, selectedCategory?.id.orEmpty())' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"
+          grep -Fq 'val state = v111RememberLazyListState(memoryKey)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"
+          grep -Fq 'V111MenuMemory.ownsFocus(memoryKey, focusScope)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"
+          if grep -Fq 'v111RememberLazyListState("livetv-channels:" + selectedId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V076LiveTv.kt"; then exit 1; fi
+          grep -Fq 'rememberV112PlaylistHealth(u.playlists)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Playlists.kt"
+          grep -Fq 'V112PlaylistStatusLight(status)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Playlists.kt"
+          grep -Fq 'repeatOnLifecycle(Lifecycle.State.STARTED)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V112PlaylistHealth.kt"
+          grep -Fq 'V112SmartTubeWatchHistory.mark' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V112SmartTubeShell.kt"
+          grep -Fq 'reportProgress(video, historyAccountKey' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V112SmartTubePlayer.kt"
+          grep -Fq 'service.continueGroupObserve' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V108SmartTubeCore.kt"
+          if grep -Fq 'getShortsObserve' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V108SmartTubeCore.kt"; then exit 1; fi
+          grep -Fq 'V114DetailLayout(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V043Details.kt"
+          grep -Fq 'TextAlign.Justify' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V114DetailLayout.kt"
+          grep -Fq '.onPreviewKeyEvent' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V114DetailLayout.kt"
+          grep -Fq '.v114FocusRing()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
+          grep -Fq '"App-Update"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+          grep -Fq 'V116VodPlayer(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'FOCUS_BLOCK_DESCENDANTS' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V121VodSurface.kt"
+          grep -Fq 'V116Playback.skip(player, segment)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V116VodPlayer.kt"
+          grep -Fq 'v118NextWindow(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V115PlayerChrome.kt"
+          grep -Fq 'V118Names.subtitle(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V115PlayerChrome.kt"
+          grep -Fq '.focusRequester(nextCardFocus)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V115PlayerChrome.kt"
+          grep -Fq 'durationMs - 40_000L' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V118NextEpisode.kt"
+          grep -Fq 'vod-settings-actions' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V115PlayerChrome.kt"
+          grep -Fq 'Color(0xF50B111C)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          grep -Fq 'player.play()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V116VodPlayer.kt"
+          grep -Fq 'skipRepository.presence(item, presenceId, active)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'v125KeepSkipPresence' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'V126RadioKeyboard(title' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/RadioScreen.kt"
+          grep -Fq 'presenceCapabilities.release(presenceId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V116SkipRepository.kt"
+          grep -Fq 'list_versions=true' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V115SkipRepository.kt"
+          grep -Fq 'clearOverridesOfType' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V115Tracks.kt"
+
+          grep -Fq 'setEnableComposeSurfaceSyncWorkaround(true)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V121VodSurface.kt"
+          grep -Fq 'V121VodSurface(player, isTv, modifier)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V116VodPlayer.kt"
+          grep -Fq 'V121VodSurface(player, isTv, Modifier.fillMaxSize())' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'setVideoFrameMetadataListener(metadata)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V121VodSurface.kt"
+          grep -Fq 'V123AudioRenderers(context, capture)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'V122PlaybackInfoDialog' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
+          grep -Fq 'V124SmartTubeBrowseLayer(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V112SmartTubePlayer.kt"
+          grep -Fq 'getMetadataObserve(videoId)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V108SmartTubeCore.kt"
+          grep -Fq 'The whole world' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Intro.kt"
+          grep -Fq 'One App' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Intro.kt"
+          python3 - <<'PYAUDIO'
+          import os, wave
+          from pathlib import Path
+          path = Path(os.environ['PROJECT_ROOT'])/'app/src/main/res/raw/epimedia_intro_heartbeat_cinema.wav'
+          with wave.open(str(path), 'rb') as sound:
+              assert sound.getnchannels() == 2
+              assert sound.getframerate() == 48000
+              assert sound.getnframes() == 278400
+          print('Stereo intro timing verified: 5.8 seconds')
+          PYAUDIO
+
+          for APK in "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk"
+          do
+            test -s "$APK"
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > /tmp/apk-badging.txt
+            grep -F "versionCode='1033'" /tmp/apk-badging.txt
+            grep -F "versionName='1.0.33'" /tmp/apk-badging.txt
+            grep -F "sdkVersion:'25'" /tmp/apk-badging.txt
+            "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" dex packages --defined-only "$APK" > /tmp/media3-packages.txt
+            grep -F 'androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer' /tmp/media3-packages.txt
+            if grep -Fq 'ExperimentalFfmpegVideoRenderer' /tmp/media3-packages.txt; then exit 1; fi
+            grep -F 'androidx.media3.exoplayer.dash.DashMediaSource$Factory' /tmp/media3-packages.txt
+            grep -F 'androidx.media3.exoplayer.hls.HlsMediaSource$Factory' /tmp/media3-packages.txt
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apk-signature.txt
+            CERT="$(grep -i 'certificate SHA-256 digest:' /tmp/apk-signature.txt | head -n1 | awk -F': ' '{print $2}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+            test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+          done
+
+          python3 - <<'PYNATIVE'
+          import os, struct, zipfile
+          from pathlib import Path
+          root = Path(os.environ['PROJECT_ROOT']) / 'app/build/outputs/apk/release'
+          expected = {'armeabi-v7a': (1,40), 'arm64-v8a': (2,183), 'x86': (1,3), 'x86_64': (2,62)}
+          for variant, abis in [('arm64-v8a',['arm64-v8a']), ('armeabi-v7a',['armeabi-v7a']), ('universal',list(expected))]:
+              with zipfile.ZipFile(root / f'app-{variant}-release.apk') as apk:
+                  for abi in abis:
+                      data=apk.read(f'lib/{abi}/libffmpegJNI.so')
+                      capture=apk.read(f'lib/{abi}/libepiChromaprint.so')
+                      assert capture[:4] == b'\x7fELF'
+                      assert (capture[4], struct.unpack_from('<H',capture,18)[0]) == expected[abi]
+                      assert data[:4] == b'\x7fELF'
+                      assert (data[4], struct.unpack_from('<H',data,18)[0]) == expected[abi]
+                      assert len(data) > 100000
+                  assert apk.read('assets/licenses/FFmpeg-COPYING.LGPLv2.1.txt')
+                  assert apk.read('assets/licenses/Chromaprint-LICENSE.md')
+                  assert apk.read('assets/licenses/KissFFT-COPYING.txt')
+          print('Audio JNI packaged for every release ABI; hardware video renderer retained')
+          PYNATIVE
+
+      - name: Prepare signed updater assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" dist/EpiMediaHub_Android_v1.0.33-arm64-v8a.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" dist/EpiMediaHub_Android_v1.0.33-armeabi-v7a.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk" dist/EpiMediaHub_Android_v1.0.33-universal.apk
+
+          cp dist/EpiMediaHub_Android_v1.0.33-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+
+          SHA_ARM64="$(sha256sum dist/EpiMediaHub_Android_v1.0.33-arm64-v8a.apk | awk '{print $1}')"
+          SHA_ARMV7="$(sha256sum dist/EpiMediaHub_Android_v1.0.33-armeabi-v7a.apk | awk '{print $1}')"
+          SHA_UNIVERSAL="$(sha256sum dist/EpiMediaHub_Android_v1.0.33-universal.apk | awk '{print $1}')"
+          SIZE_ARM64="$(stat -c %s dist/EpiMediaHub_Android_v1.0.33-arm64-v8a.apk)"
+          SIZE_ARMV7="$(stat -c %s dist/EpiMediaHub_Android_v1.0.33-armeabi-v7a.apk)"
+          SIZE_UNIVERSAL="$(stat -c %s dist/EpiMediaHub_Android_v1.0.33-universal.apk)"
+
+          cat > dist/android-latest.json <<EOF
+          {
+            "version": "1.0.33",
+            "versionCode": 1033,
+            "notes": "Android 1.0.33: Alte installierte Update-Dateien werden automatisch bereinigt. Radio und Playlist-Wechsel stehen neben der Uhr zwischen den Porträts. Skins, Playlists, Favoriten und Aktivierung bleiben erhalten.",
+            "apks": {
+              "arm64-v8a": {
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v1.0.33-arm64-v8a.apk",
+                "sha256": "$SHA_ARM64",
+                "size": $SIZE_ARM64
+              },
+              "armeabi-v7a": {
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v1.0.33-armeabi-v7a.apk",
+                "sha256": "$SHA_ARMV7",
+                "size": $SIZE_ARMV7
+              },
+              "universal": {
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v1.0.33-universal.apk",
+                "sha256": "$SHA_UNIVERSAL",
+                "size": $SIZE_UNIVERSAL
+              }
+            }
+          }
+          EOF
+
+          python3 - <<'PYVERIFY'
+          import hashlib, json, os, re
+          from pathlib import Path
+          build = (Path(os.environ['PROJECT_ROOT']) / 'app/build.gradle.kts').read_text()
+          manifest = json.loads(Path('dist/android-latest.json').read_text())
+          assert manifest['version'] == re.search(r'versionName = "([^"]+)"', build).group(1)
+          assert manifest['versionCode'] == int(re.search(r'versionCode = (\d+)', build).group(1))
+          for apk in manifest['apks'].values():
+              path = Path('dist') / apk['url'].rsplit('/', 1)[-1]
+              assert path.stat().st_size == apk['size']
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == apk['sha256']
+          print('Updater version, APK sizes and SHA-256 verified')
+          PYVERIFY
+
+          cp dist/android-latest.json dist/latest.json
+          APP_VERSION=1.0.33 python3 build_tools/package_android_audio_sources_v126.py
+          (cd dist && sha256sum *.apk *.tar.xz > SHA256SUMS.txt)
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-Android-v1.0.33-signed-test-release
+          path: dist/
+          retention-days: 30
+
+  publish-android-v1033:
+    needs: build-android-v1033-release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require deployed license backend before updating clients
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error
+          base = "https://api.epimediahub.com/v1/license/"
+          req = urllib.request.Request(base + "capabilities", headers={"User-Agent": "EpiMediaHub-Release/1.0.33", "Cache-Control": "no-cache"})
+          try:
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  policy = json.load(response)
+              assert policy.get("licensing_ready") is True
+              assert policy.get("trial_days") == 7
+              assert policy.get("activation_credits") == 1
+              assert policy.get("retail_price_eur_cents") == 1000
+              assert policy.get("manual_reseller_prices") is True
+              probe = urllib.request.Request(base + "status", data=b"{}", headers={"Content-Type": "application/json", "User-Agent": "EpiMediaHub-Release/1.0.33", "Cache-Control": "no-cache"})
+              try:
+                  urllib.request.urlopen(probe, timeout=20)
+                  raise AssertionError("Invalid status request was unexpectedly accepted")
+              except urllib.error.HTTPError as error:
+                  assert error.code == 400, f"License status endpoint returned {error.code}"
+          except Exception as error:
+              raise SystemExit(f"Raspberry license backend is not ready; signed APK artifacts are preserved. Install the verified credit backend first, then rerun this publish job. {type(error).__name__}: {error}")
+          print("Live license backend and pricing policy verified")
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: EpiMediaHub-Android-v1.0.33-signed-test-release
+          path: dist
+
+      - name: Publish rolling updater prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYVERSION'
+          import json, re, urllib.request
+          req = urllib.request.Request('https://api.github.com/repos/epimediahub/EpiMediaHub/releases/tags/v0.7.0-test', headers={'User-Agent':'EpiMediaHub-Release/1.0.33','Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=25) as response: current=json.load(response)
+          version=re.search(r'(\d+\.\d+\.\d+)',current.get('name',''))
+          if version and tuple(map(int,version.group(1).split('.'))) > (1,0,33):
+              raise SystemExit('A newer release already exists; refusing to replace it.')
+          PYVERSION
+          TAG="v0.7.0-test"
+          TITLE="EpiMediaHub Android v1.0.33 Test"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TITLE" --notes-file android/release_notes/v1.0.33.md --prerelease --draft --target "${GITHUB_SHA}"
+          fi
+          for file in dist/*.apk dist/*.tar.xz dist/SHA256SUMS.txt; do
+            timeout 15m gh release upload "$TAG" "$file" --clobber
+          done
+          timeout 15m gh release upload "$TAG" dist/android-latest.json dist/latest.json --clobber
+          gh release edit "$TAG" --title "$TITLE" --notes-file android/release_notes/v1.0.33.md --prerelease --draft=false
+
+      - name: Read completed regression reports
+        uses: actions/download-artifact@v4
+        with:
+          name: android-v1033-release-test-reports
+          path: reports
+
+      - name: Verify live updater and all three public APK downloads
+        run: python3 build_tools/verify_android_release_v133.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-v1033-live-verification
+          path: android-v1033-live-verification.json
+
