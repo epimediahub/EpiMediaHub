@@ -43,7 +43,7 @@ Fortschrittsdienst. Hetzner benötigt kein weiteres Update: Die sechs geprüften
 Komponenten des Berechnungsprotokolls werden nicht verändert.
 
 ```bash
-COMMIT=VOLLSTAENDIGER_COMMIT
+COMMIT=bb45877a86b81359c440ef4275646b7001612a45
 curl -fsSL "https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$COMMIT/server/epimediahub_provisioning/deploy/install_skip_dashboard.sh" -o /tmp/epimediahub-dashboard.sh && sudo bash /tmp/epimediahub-dashboard.sh "$COMMIT"
 ```
 
