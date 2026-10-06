@@ -61,4 +61,3 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
 report = {'version': '1.0.33', 'versionCode': 1033, 'tests': counts, 'downloads': verified}
 Path('android-v1033-live-verification.json').write_text(json.dumps(report, indent=2) + '\n')
 print('LIVE UPDATER VERIFIED:', json.dumps(report), flush=True)
-
