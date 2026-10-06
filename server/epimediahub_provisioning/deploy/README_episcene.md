@@ -27,21 +27,21 @@ Voraussetzung ist die bestehende private Hetzner-Verbindung mit dem bereits opti
 Auf dem Raspberry:
 
 ```bash
-COMMIT=EPISCENE_RELEASE_COMMIT
+COMMIT=f0eb89e24fc1b9ebd554bd0bb3a29017ea87278d
 curl -fsSL "https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$COMMIT/server/epimediahub_provisioning/deploy/install_skip_scene.sh" -o /tmp/epimediahub-episcene.sh && sudo bash /tmp/epimediahub-episcene.sh prepare "$COMMIT"
 ```
 
 Auf Hetzner:
 
 ```bash
-COMMIT=EPISCENE_RELEASE_COMMIT
+COMMIT=f0eb89e24fc1b9ebd554bd0bb3a29017ea87278d
 curl -fsSL "https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$COMMIT/server/epimediahub_provisioning/deploy/install_skip_scene.sh" -o /tmp/epimediahub-episcene.sh && sudo bash /tmp/epimediahub-episcene.sh compute "$COMMIT"
 ```
 
 Anschließend auf dem Raspberry:
 
 ```bash
-sudo bash /tmp/epimediahub-episcene.sh control EPISCENE_RELEASE_COMMIT
+sudo bash /tmp/epimediahub-episcene.sh control f0eb89e24fc1b9ebd554bd0bb3a29017ea87278d
 ```
 
 Vor der Aktivierung prüft das Skript einen tatsächlichen visuellen Vergleich über die private Verbindung. Es sichert die Datenbank und den bisherigen Code. Bei einem Fehler wird der Code zurückgenommen; die Kundendatenbank wird niemals durch ein altes Backup überschrieben. Ein fehlgeschlagenes Aktivieren lässt die Analyse bis zu passenden Versionen auf beiden Geräten pausiert. Die vorherigen Timerzustände werden bei erfolgreichem Aktivieren erhalten.

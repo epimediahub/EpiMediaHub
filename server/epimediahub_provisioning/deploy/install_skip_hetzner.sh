@@ -2,7 +2,7 @@
 # Install/update a dedicated Hetzner analysis host. No customer database is copied.
 set -Eeuo pipefail
 umask 0077
-SOURCE_REF="bb45877a86b81359c440ef4275646b7001612a45"
+SOURCE_REF="f0eb89e24fc1b9ebd554bd0bb3a29017ea87278d"
 CLIENT_INSTALLER_REF="bbb2eddfad69443639e61ef577755a5fe7fd4936"
 RAW="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$SOURCE_REF/server/epimediahub_provisioning"
 CLIENT_INSTALLER="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$CLIENT_INSTALLER_REF/server/epimediahub_provisioning/deploy/install_skip_remote_client.sh"
