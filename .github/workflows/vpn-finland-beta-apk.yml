@@ -234,7 +234,10 @@ jobs:
           grep -Fq 'Nein, VPN beibehalten' "$VPN_SRC/V134VpnRouteUi.kt"
           grep -Fq 'onClick = { showConfirmation = true }' "$VPN_SRC/V134VpnRouteUi.kt"
           grep -Fq 'V134VpnSession.allowDirectOnce(context, playlistId)' "$VPN_SRC/V134VpnRouteUi.kt"
-          grep -Fq 'context, u.active!!.id.toString(), u.active?.name' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          # The Compose call uses named arguments across multiple lines now.
+          # Assert the fallback callback exists rather than one fragile formatting line.
+          grep -Fq 'onDirectApproved = {' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -Fq 'u.active!!.id.toString()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
           test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnSession.kt"
           grep -Fq 'V134VpnSession.routeTo(context, playlist.id.toString())' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Playlists.kt"
           # Explicit remote focus: parent row MUST NOT consume D-pad navigation.
