@@ -83,6 +83,7 @@ jobs:
         run: |
           bash build_tools/install_android_v1033_source.sh
           python3 android/v1.0.34-vpn/patch_wireguard_spike.py
+          python3 android/v1.0.34-vpn/patch_playlist_routing.py
           python3 build_tools/verify_intro_sound_v128.py "$PROJECT_ROOT/app/src/main/res/raw/epimedia_intro_heartbeat_cinema.wav"
 
       - name: Install permanent release signing key
@@ -194,6 +195,9 @@ jobs:
           done
           test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134WireGuardDeviceTunnel.kt"
           test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnDiagnosticActivity.kt"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnSession.kt"
+          grep -Fq 'V134VpnSession.routeTo(context, playlist.id.toString())' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Playlists.kt"
+          grep -Fq 'v134RouteReady(context, u.active?.id?.toString())' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
           grep -Fq 'V134VpnDiagnosticActivity' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
           grep -Fq 'GoBackend$VpnService' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
           grep -Fq 'com.wireguard.android:tunnel:1.0.20260102' "$PROJECT_ROOT/app/build.gradle.kts"
@@ -205,7 +209,9 @@ jobs:
           EpiMediaHub VPN Finland 1.0.34 - INTEGRATION COMPILE BETA
           This APK has a SEPARATE Android package ID and will NOT overwrite the daily EpiMediaHub app.
           An explicit VPN diagnostics screen supports manual test-profile import and connection checks.
-          Automatic per-playlist switching and commercial VPN licensing are NOT ready.
+          Playlist mode can be configured separately and verified on change in this beta.
+          VPN keys must be supplied privately on device. NOT FOR CUSTOMERS.
+          Commercial VPN licensing, full tunnel-loss protection and Fire TV hardware tests are pending.
           DO NOT distribute to customers. Does NOT deploy to the in-app updater.
           EOF
       - uses: actions/upload-artifact@v4
@@ -244,7 +250,8 @@ jobs:
               workflow_sha: context.sha,
               updated_at: new Date().toISOString(),
               vpn_diagnostic_ui: true,
-              automatic_per_playlist_routing: false,
+              automatic_per_playlist_routing: true,
+              player_network_fail_closed_hardware_verified: false,
               production_updater_modified: false
             }, null, 2) + '\n';
             await github.rest.repos.createOrUpdateFileContents({
