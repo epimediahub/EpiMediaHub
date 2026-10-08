@@ -1,4 +1,4 @@
-name: EpiMediaHub VPN Finland 1.0.36 signed Fire TV beta
+name: EpiMediaHub VPN Finland 1.0.37 signed Fire TV beta
 
 on:
   workflow_dispatch:
@@ -184,8 +184,8 @@ jobs:
             APK="$RELEASE/app-${ABI}-release.apk"
             test -s "$APK"
             "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/apk-${ABI}-badging.txt"
-            grep -F "versionCode='1036'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
-            grep -F "versionName='1.0.36'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            grep -F "versionCode='1037'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            grep -F "versionName='1.0.37'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
             grep -F "package: name='de.epimediahub.app.vpnbeta'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
             if grep -Fq "package: name='de.epimediahub.app'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"; then echo "Refusing production appId"; exit 1; fi
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-${ABI}-signer.txt"
@@ -199,16 +199,25 @@ jobs:
           grep -Fq 'getExternalMediaDirs()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnDiagnosticActivity.kt"
           test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnSession.kt"
           grep -Fq 'V134VpnSession.routeTo(context, playlist.id.toString())' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Playlists.kt"
+          # Explicit remote focus: parent row MUST NOT consume D-pad navigation.
+          PLAYLIST_SOURCE="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Playlists.kt"
+          grep -Fq 'TextButton(onClick = onVpnToggle,' "$PLAYLIST_SOURCE"
+          grep -Fq 'onClick = onSelect,' "$PLAYLIST_SOURCE"
+          grep -Fq 'TextButton(onClick = onDelete,' "$PLAYLIST_SOURCE"
+          grep -Fq 'modifier = modifier.v070TvFocus(accent).v114FocusRing()' "$PLAYLIST_SOURCE"
+          if grep -Fq '.clickable(onClick = onSelect)' "$PLAYLIST_SOURCE"; then
+            echo 'Unsafe nested focusable playlist card'; exit 1
+          fi
           grep -Fq 'v134RouteReady(context, u.active?.id?.toString())' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
           grep -Fq 'V134VpnDiagnosticActivity' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
           grep -Fq 'GoBackend$VpnService' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
           grep -Fq 'com.wireguard.android:tunnel:1.0.20260102' "$PROJECT_ROOT/app/build.gradle.kts"
           mkdir -p vpn-beta-artifacts
-          cp "$RELEASE/app-arm64-v8a-release.apk" vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.36-ARM64-BETA.apk
-          cp "$RELEASE/app-armeabi-v7a-release.apk" vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.36-ARMv7-BETA.apk
+          cp "$RELEASE/app-arm64-v8a-release.apk" vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.37-ARM64-BETA.apk
+          cp "$RELEASE/app-armeabi-v7a-release.apk" vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.37-ARMv7-BETA.apk
           (cd vpn-beta-artifacts && sha256sum *.apk > SHA256SUMS.txt)
           cat > vpn-beta-artifacts/README.txt <<'EOF'
-          EpiMediaHub VPN Finland 1.0.36 - ADB IMPORT FIRE TV BETA
+          EpiMediaHub VPN Finland 1.0.37 - ADB IMPORT FIRE TV BETA
           This APK has a SEPARATE Android package ID and will NOT overwrite the daily EpiMediaHub app.
           An explicit VPN diagnostics screen supports app-scoped ADB profile import on Fire TV.
           Playlist mode can be configured separately and verified on change in this beta.
@@ -216,21 +225,21 @@ jobs:
           Commercial VPN licensing, full tunnel-loss protection and Fire TV hardware tests are pending.
           DO NOT distribute to customers. Does NOT deploy to the in-app updater.
           EOF
-      - name: Publish separate Fire TV Downloader APK (1.0.36 beta only)
+      - name: Publish separate Fire TV Downloader APK (1.0.37 beta only)
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG=vpnfi36
+          TAG=vpnfi37
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             echo "Refusing to overwrite an existing VPN beta prerelease" >&2
             exit 1
           fi
-          cp vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.36-ARMv7-BETA.apk vpn-beta-artifacts/EpiFI.apk
+          cp vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.37-ARMv7-BETA.apk vpn-beta-artifacts/EpiFI.apk
           cat > /tmp/epi-vpn-fi35-notes.md <<'EOF'
-          EpiMediaHub VPN Finland v1.0.36 Fire TV testing build.
+          EpiMediaHub VPN Finland v1.0.37 Fire TV testing build.
           Separate Android package: de.epimediahub.app.vpnbeta.
           Adds Fire TV ADB-import fallback from Android/media app folder, as Android/data can deny adb push.
           This is a testing prerelease, not an update to the standard app.
@@ -239,7 +248,7 @@ jobs:
           EOF
           gh release create "$TAG" vpn-beta-artifacts/EpiFI.apk \
             --repo "$GH_REPO" --target "$GITHUB_SHA" \
-            --title "EpiMediaHub VPN Finland 1.0.36 - Fire TV media handoff beta" \
+            --title "EpiMediaHub VPN Finland 1.0.37 - Fire TV media handoff beta" \
             --notes-file /tmp/epi-vpn-fi35-notes.md --prerelease
           URL="https://github.com/$GH_REPO/releases/download/$TAG/EpiFI.apk"
           STATUS="$(curl --location --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 90 "$URL")"
@@ -248,7 +257,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-VPN-Finland-v1.0.36-adb-import-beta
+          name: EpiMediaHub-VPN-Finland-v1.0.37-adb-import-beta
           path: vpn-beta-artifacts/
           retention-days: 14
           if-no-files-found: error
