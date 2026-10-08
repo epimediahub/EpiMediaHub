@@ -186,11 +186,15 @@ jobs:
             "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/apk-${ABI}-badging.txt"
             grep -F "versionCode='1034'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
             grep -F "versionName='1.0.34'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            grep -F "package: name='de.epimediahub.app.vpnbeta'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            if grep -Fq "package: name='de.epimediahub.app'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"; then echo "Refusing production appId"; exit 1; fi
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-${ABI}-signer.txt"
             CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-${ABI}-signer.txt" | tr '[:lower:]' '[:upper:]')
             test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
           done
           test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134WireGuardDeviceTunnel.kt"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnDiagnosticActivity.kt"
+          grep -Fq 'V134VpnDiagnosticActivity' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
           grep -Fq 'GoBackend$VpnService' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
           grep -Fq 'com.wireguard.android:tunnel:1.0.20260102' "$PROJECT_ROOT/app/build.gradle.kts"
           mkdir -p vpn-beta-artifacts
@@ -199,8 +203,9 @@ jobs:
           (cd vpn-beta-artifacts && sha256sum *.apk > SHA256SUMS.txt)
           cat > vpn-beta-artifacts/README.txt <<'EOF'
           EpiMediaHub VPN Finland 1.0.34 - INTEGRATION COMPILE BETA
-          The WireGuard tunnel adapter is packaged but not enabled in the app.
-          There is NO VPN user interface, playlist toggle or device licensing in this beta.
+          This APK has a SEPARATE Android package ID and will NOT overwrite the daily EpiMediaHub app.
+          An explicit VPN diagnostics screen supports manual test-profile import and connection checks.
+          Automatic per-playlist switching and commercial VPN licensing are NOT ready.
           DO NOT distribute to customers. Does NOT deploy to the in-app updater.
           EOF
       - uses: actions/upload-artifact@v4
@@ -238,7 +243,8 @@ jobs:
               run_url: `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`,
               workflow_sha: context.sha,
               updated_at: new Date().toISOString(),
-              functional_vpn_ui: false,
+              vpn_diagnostic_ui: true,
+              automatic_per_playlist_routing: false,
               production_updater_modified: false
             }, null, 2) + '\n';
             await github.rest.repos.createOrUpdateFileContents({
