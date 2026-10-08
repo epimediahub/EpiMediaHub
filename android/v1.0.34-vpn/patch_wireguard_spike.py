@@ -107,9 +107,14 @@ files = [
     (src/"V139VpnEncryptedProfileStore.kt",java/"V139VpnEncryptedProfileStore.kt"),
     (src/"V134VpnRouteUi.kt",java/"V134VpnRouteUi.kt"),
     (src/"V140SpeedTest.kt",java/"V140SpeedTest.kt"),
+    (src/"V140SpeedTransfer.kt",java/"V140SpeedTransfer.kt"),
     (src/"V140VpnLossMonitor.kt",java/"V140VpnLossMonitor.kt"),
     (src/"V134VpnRoutingPolicyTest.kt",
         root/"app/src/test/java/de/epimediahub/app/vpn/V134VpnRoutingPolicyTest.kt"),
+    (src/"V140SpeedTransferTest.kt",
+        root/"app/src/test/java/de/epimediahub/app/vpn/V140SpeedTransferTest.kt"),
+    (src/"V140VpnLossMonitorTest.kt",
+        root/"app/src/test/java/de/epimediahub/app/vpn/V140VpnLossMonitorTest.kt"),
 ]
 for old, new in files:
     if not old.is_file() or new.exists():

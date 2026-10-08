@@ -169,16 +169,11 @@ _home = _home[:_line_end] + """    var v140SpeedOpen by remember { mutableStateO
 """ + _home[_line_end:]
 home.write_text(_home)
 replace(home,
-    """            V083Header(
-                playlist = u.active?.name ?: "EpiMediaHub",""",
-    """            V083Header(
-                onSpeedtest = { v140SpeedOpen = true },
-                playlist = u.active?.name ?: "EpiMediaHub",""")
-_home = home.read_text()
-_header = _home.index("private fun V083Header(")
-_param = _home.index("    playlist: String,", _header)
-_home = _home[:_param] + "    onSpeedtest: () -> Unit,\n" + _home[_param:]
-home.write_text(_home)
+    "                onRadio = { radioOpen = true },",
+    "                onRadio = { radioOpen = true },\n                onSpeedtest = { v140SpeedOpen = true },")
+replace(home,
+    "    onRadio: () -> Unit,",
+    "    onRadio: () -> Unit,\n    onSpeedtest: () -> Unit,")
 replace(home,
     """                    RadioHomeActions(showPlaylistSwitch, isTv, accent, onPlaylistSwitch, onRadio)
                 }""",
@@ -186,3 +181,24 @@ replace(home,
                     de.epimediahub.app.vpn.V140SpeedShortcutButton(accent, isTv, onSpeedtest)
                 }""")
 print("V140 beta: added real speed test screen and focusable speed button to central home shortcuts")
+
+# Extend the existing geometry tests so the new shortcut also has to keep every
+# sports portrait unobstructed on TV and mobile. Do not weaken existing checks.
+home_tests = root/"app/src/test/java/de/epimediahub/app/ui/V133HomeControlsUiTest.kt"
+replace(home_tests,
+    'listOf("home-radio","home-playlist-switch") else listOf("home-radio")',
+    'listOf("home-radio","home-playlist-switch","home-speedtest") else listOf("home-radio","home-speedtest")')
+_tests = home_tests.read_text()
+_end = _tests.rfind("}")
+home_tests.write_text(_tests[:_end] + '''
+    @Test fun speedShortcutOpensRealTestScreenAndReturnsHome() {
+        home(true)
+        compose.onNodeWithTag("home-speedtest").performClick()
+        settle()
+        compose.onNodeWithTag("speedtest-screen").assertIsDisplayed()
+        compose.onNodeWithTag("speedtest-start").assertIsDisplayed().assertIsFocused()
+        compose.onNodeWithTag("speedtest-back").performClick()
+        settle()
+        compose.onNodeWithTag("home-speedtest").assertIsDisplayed()
+    }
+''' + _tests[_end:])

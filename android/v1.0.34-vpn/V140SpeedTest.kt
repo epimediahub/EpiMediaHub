@@ -16,6 +16,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -29,10 +34,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Real, finite HTTP throughput test. Cloudflare speed.cloudflare.com/__down and
@@ -46,111 +48,44 @@ internal object V140SpeedTest {
     private const val HOST = "https://speed.cloudflare.com"
     private const val DOWNLOAD_BYTES = 8 * 1024 * 1024
     private const val UPLOAD_BYTES = 2 * 1024 * 1024
-    private const val CHUNK = 64 * 1024
 
     private fun verifyRoute(context: Context, playlistId: String, vpn: Boolean,
-                            cancelled: AtomicBoolean) {
-        if (cancelled.get()) throw CancellationException("Messung abgebrochen")
-        check(V134VpnSession.mode(context, playlistId) == vpn) {
+                            transfer: V140SpeedTransfer) {
+        transfer.checkActive()
+        check(V134VpnSession.usesVpn(context, playlistId) == vpn) {
             "Playlist-Routing wurde geändert. Messung abgebrochen."
         }
-        check(V134VpnSession.routeReady(context, playlistId)) {
+        check(V134VpnSession.routeReady(context, playlistId, checkExit = false)) {
             "VPN-Verbindung nicht bestätigt. Kein automatischer Direkt-Fallback."
         }
     }
 
-    private fun connection(url: String): HttpURLConnection {
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 8_000
-        conn.readTimeout = 8_000
-        conn.instanceFollowRedirects = false
-        conn.useCaches = false
-        conn.setRequestProperty("Cache-Control", "no-store")
-        return conn
-    }
-
-    private fun download(context: Context, playlistId: String, vpn: Boolean,
-                         cancelled: AtomicBoolean, bytes: Int): Pair<Long, Long> {
-        verifyRoute(context, playlistId, vpn, cancelled)
-        val conn = connection("$HOST/__down?bytes=$bytes")
-        try {
-            val started = SystemClock.elapsedRealtimeNanos()
-            check(conn.responseCode == 200) { "Download-Testserver: HTTP ${conn.responseCode}" }
-            var received = 0L
-            conn.inputStream.use { stream ->
-                val buffer = ByteArray(CHUNK)
-                while (true) {
-                    verifyRoute(context, playlistId, vpn, cancelled)
-                    val n = stream.read(buffer)
-                    if (n < 0) break
-                    received += n
-                    check(received <= bytes.toLong()) { "Unerwartete Downloadgröße" }
-                }
-            }
-            check(received == bytes.toLong()) { "Unvollständiger Download ($received / $bytes)" }
-            val elapsed = (SystemClock.elapsedRealtimeNanos() - started).coerceAtLeast(1L)
-            verifyRoute(context, playlistId, vpn, cancelled)
-            return received to elapsed
-        } finally { conn.disconnect() }
-    }
-
-    private fun upload(context: Context, playlistId: String, vpn: Boolean,
-                       cancelled: AtomicBoolean): Pair<Long, Long> {
-        verifyRoute(context, playlistId, vpn, cancelled)
-        val conn = connection("$HOST/__up")
-        try {
-            conn.requestMethod = "POST"
-            conn.doOutput = true
-            conn.setRequestProperty("Content-Type", "application/octet-stream")
-            conn.setFixedLengthStreamingMode(UPLOAD_BYTES)
-            val started = SystemClock.elapsedRealtimeNanos()
-            conn.outputStream.use { stream ->
-                val buffer = ByteArray(CHUNK) // empty bytes, never VPN keys or user media
-                var sent = 0
-                while (sent < UPLOAD_BYTES) {
-                    verifyRoute(context, playlistId, vpn, cancelled)
-                    val n = minOf(buffer.size, UPLOAD_BYTES - sent)
-                    stream.write(buffer, 0, n)
-                    sent += n
-                }
-                stream.flush()
-            }
-            check(conn.responseCode in 200..299) { "Upload-Testserver: HTTP ${conn.responseCode}" }
-            conn.inputStream.use { input ->
-                val buffer = ByteArray(256)
-                while (input.read(buffer) != -1) { /* drain server response */ }
-            }
-            val elapsed = (SystemClock.elapsedRealtimeNanos() - started).coerceAtLeast(1L)
-            verifyRoute(context, playlistId, vpn, cancelled)
-            return UPLOAD_BYTES.toLong() to elapsed
-        } finally { conn.disconnect() }
-    }
-
-    fun measure(context: Context, playlistId: String, cancelled: AtomicBoolean,
+    fun measure(context: Context, playlistId: String, transfer: V140SpeedTransfer,
                 progress: (String) -> Unit): Result {
-        val vpn = V134VpnSession.mode(context, playlistId)
-        verifyRoute(context, playlistId, vpn, cancelled)
+        val vpn = V134VpnSession.usesVpn(context, playlistId)
+        verifyRoute(context, playlistId, vpn, transfer)
+        val verify = { verifyRoute(context, playlistId, vpn, transfer) }
         val before = V134VpnSession.publicIpv4()
         check(if (vpn) before == "37.27.42.215" else before != "37.27.42.215") {
             "IP stimmt nicht mit dem gewählten Routing überein"
         }
-        verifyRoute(context, playlistId, vpn, cancelled)
+        verifyRoute(context, playlistId, vpn, transfer)
         progress("HTTP-Latenz wird gemessen …")
         // Small transaction including HTTPS setup: not an ICMP ping.
         val latencyStart = SystemClock.elapsedRealtimeNanos()
-        download(context, playlistId, vpn, cancelled, 32)
+        transfer.download("$HOST/__down?bytes=32", 32, verify)
         val latencyMs = ((SystemClock.elapsedRealtimeNanos() - latencyStart) / 1_000_000).coerceAtLeast(1L)
         progress("Download: 8 MiB über aktive Verbindung …")
-        val (received, downloadTime) = download(context, playlistId, vpn, cancelled, DOWNLOAD_BYTES)
+        val down = transfer.download("$HOST/__down?bytes=$DOWNLOAD_BYTES", DOWNLOAD_BYTES, verify)
         progress("Upload: 2 MiB über aktive Verbindung …")
-        val (sent, uploadTime) = upload(context, playlistId, vpn, cancelled)
+        val up = transfer.upload("$HOST/__up", UPLOAD_BYTES, verify)
         progress("Öffentliche IP wird abschließend geprüft …")
-        verifyRoute(context, playlistId, vpn, cancelled)
+        verifyRoute(context, playlistId, vpn, transfer)
         val after = V134VpnSession.publicIpv4()
         check(before == after) { "Öffentliche IP hat sich während des Tests geändert" }
-        verifyRoute(context, playlistId, vpn, cancelled)
+        verifyRoute(context, playlistId, vpn, transfer)
         return Result(if (vpn) "VPN FINNLAND" else "DIREKT", after, latencyMs,
-            received * 8_000.0 / downloadTime, sent * 8_000.0 / uploadTime, received + sent)
+            down.mbps, up.mbps, down.bytes + up.bytes)
     }
 }
 
@@ -183,13 +118,29 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Bereit. Misst die aktuell ausgewählte Netzwerkroute.") }
     var result by remember { mutableStateOf<V140SpeedTest.Result?>(null) }
-    val cancelled = remember { AtomicBoolean(false) }
+    var transfer by remember { mutableStateOf<V140SpeedTransfer?>(null) }
+    val firstFocus = remember { FocusRequester() }
+    val lifecycleOwner = LocalLifecycleOwner.current
     var job by remember { mutableStateOf<Job?>(null) }
     fun stop() {
-        cancelled.set(true)
+        if (!busy) return
+        transfer?.cancel()
         job?.cancel()
-        busy = false
+        // Keep start disabled until the old worker actually exits.
+        status = "Messung abgebrochen."
     }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) stop()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            transfer?.cancel()
+            job?.cancel()
+        }
+    }
+    LaunchedEffect(Unit) { if (playlistId != null) firstFocus.requestFocus() }
     BackHandler { stop(); onBack() }
     Column(
         Modifier.fillMaxSize().background(Color(0xFF07111D))
@@ -218,29 +169,31 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
             Button(
                 onClick = {
                     if (busy || playlistId == null) return@Button
-                    cancelled.set(false)
+                    val current = V140SpeedTransfer()
+                    transfer = current
                     busy = true
                     result = null
                     job = scope.launch {
                         try {
                             val measured = withContext(Dispatchers.IO) {
-                                V140SpeedTest.measure(context, playlistId, cancelled) { progress ->
-                                    // Compose state must be updated on the UI dispatcher.
-                                    // Progress is informational; never modify routing from this screen.
-                                    status = progress
+                                V140SpeedTest.measure(context, playlistId, current) { progress ->
+                                    scope.launch {
+                                        if (transfer === current && busy && !current.isCancelled()) status = progress
+                                    }
                                 }
                             }
-                            if (!cancelled.get()) {
+                            if (!current.isCancelled()) {
                                 result = measured
                                 status = "Messung erfolgreich abgeschlossen."
                             }
                         } catch (e: CancellationException) {
                             status = "Messung abgebrochen."
                         } catch (e: Exception) {
-                            status = "Fehler: ${e.message ?: "Netzwerk nicht verfügbar"}"
-                        } finally { busy = false }
+                            status = if (current.isCancelled()) "Messung abgebrochen."
+                                else "Fehler: ${e.message ?: "Netzwerk nicht verfügbar"}"
+                        } finally { if (transfer === current) busy = false }
                     }
-                }, enabled = !busy && playlistId != null, modifier = Modifier.testTag("speedtest-start")
+                }, enabled = !busy && playlistId != null, modifier = Modifier.focusRequester(firstFocus).testTag("speedtest-start")
             ) { Text(if (busy) "Messung läuft …" else "Speedtest starten") }
             if (busy) OutlinedButton(onClick = {
                 stop()

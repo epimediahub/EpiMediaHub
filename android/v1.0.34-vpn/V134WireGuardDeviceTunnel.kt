@@ -20,12 +20,14 @@ import java.io.StringReader
  * playlist playback must also check an authenticated tunnel/exit probe and the
  * V134VpnRoutingPolicy state before starting a stream.
  */
-internal class V134WireGuardDeviceTunnel(context: Context) {
+internal class V134WireGuardDeviceTunnel(context: Context, private val onDown: () -> Unit = {}) {
     private val appContext = context.applicationContext
     private val backend by lazy { GoBackend(appContext) }
     private val tunnel = object : Tunnel {
         override fun getName(): String = "EpiMediaHubFI"
-        override fun onStateChange(newState: Tunnel.State) = Unit
+        override fun onStateChange(newState: Tunnel.State) {
+            if (newState == Tunnel.State.DOWN) onDown()
+        }
     }
 
     /** Launch the returned intent from the foreground Activity before calling connect(). */
@@ -50,6 +52,12 @@ internal class V134WireGuardDeviceTunnel(context: Context) {
             "Excluded applications are not supported"
         }
         require(config.getPeers().size == 1) { "Only one VPN peer is permitted" }
+        val routes = config.getPeers().single().getAllowedIps()
+        require(routes.any { it.getMask() == 0 && it.getAddress() is java.net.Inet4Address } &&
+            routes.any { it.getMask() == 0 && it.getAddress() is java.net.Inet6Address }) {
+            "VPN requires full IPv4 and IPv6 routes"
+        }
+        require(settings.getDnsServers().isNotEmpty()) { "VPN requires explicit tunnel DNS" }
 
         // No implicit launch, retries or persistence; the caller handles a
         // playlist switch and retains playback stopped until route verified.
