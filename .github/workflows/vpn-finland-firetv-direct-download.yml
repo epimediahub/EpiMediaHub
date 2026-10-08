@@ -1,0 +1,125 @@
+name: Publish VPN Finland Fire TV beta direct APK (isolated)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/vpn-finland-foundation]
+    paths:
+      - '.github/workflows/vpn-finland-firetv-direct-download.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: epimediahub-vpn-fi34-direct-download
+  cancel-in-progress: false
+
+jobs:
+  publish-firetv-beta:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch only the already validated beta APK artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vpn-fi-download
+          gh run download 37781111985 --repo "$GH_REPO" --name EpiMediaHub-VPN-Finland-v1.0.34-integration-beta --dir vpn-fi-download
+          cd vpn-fi-download
+          sha256sum --check SHA256SUMS.txt
+          test -s EpiMediaHub-VPN-Finland-v1.0.34-ARMv7-BETA.apk
+
+      - name: Reverify package identity, version and signing certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE=vpn-fi-download/EpiMediaHub-VPN-Finland-v1.0.34-ARMv7-BETA.apk
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          SIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -x "$AAPT"
+          test -x "$SIGNER"
+          "$AAPT" dump badging "$SOURCE" > vpn-fi-download/badging.txt
+          grep -F "package: name='de.epimediahub.app.vpnbeta'" vpn-fi-download/badging.txt
+          grep -F "versionCode='1034'" vpn-fi-download/badging.txt
+          grep -F "versionName='1.0.34'" vpn-fi-download/badging.txt
+          "$SIGNER" verify --print-certs "$SOURCE" > vpn-fi-download/signature.txt
+          CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' vpn-fi-download/signature.txt | tr '[:lower:]' '[:upper:]')"
+          test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+          mkdir -p out
+          cp "$SOURCE" out/EpiFI.apk
+          (cd out && sha256sum EpiFI.apk > SHA256SUMS.txt)
+          echo "Verified separate beta installation package and release certificate."
+
+      - name: Publish ONLY a separate prerelease beta asset, never the app updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=vpnfi34
+          if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "Refusing to alter existing public beta release: $TAG" >&2
+            exit 1
+          fi
+          cat > /tmp/vpnfi34-notes.md <<'EOF'
+          EpiMediaHub VPN Finland v1.0.34 - Fire TV tester APK.
+          **Beta for voluntary device testing only; NOT a production update.**
+          Installs separately as de.epimediahub.app.vpnbeta and does not replace
+          the everyday EpiMediaHub app. Includes an experimental per-playlist VPN
+          selector, manual profile import and route diagnostics.
+          VPN handover/leak protection, player compatibility and Fire OS behavior
+          still require real-device verification. No device private keys are bundled.
+          EOF
+          gh release create "$TAG" out/EpiFI.apk out/SHA256SUMS.txt \
+            --repo "$GH_REPO" \
+            --target "$GITHUB_SHA" \
+            --title "VPN Finland v1.0.34 - Fire TV beta only" \
+            --notes-file /tmp/vpnfi34-notes.md \
+            --prerelease
+          gh release view "$TAG" --repo "$GH_REPO" --json tagName,isPrerelease,assets --jq '{tag: .tagName, prerelease: .isPrerelease, files: [.assets[].name]}'
+
+      - name: Confirm public direct download responds as APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://github.com/$GH_REPO/releases/download/vpnfi34/EpiFI.apk"
+          STATUS="$(curl -L -sS -o /dev/null --write-out '%{http_code}' --max-time 90 "$URL")"
+          test "$STATUS" = 200
+          echo "Direct Fire TV Downloader URL: $URL"
+
+      - name: Record public beta URL and deployment result
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        env:
+          RESULT: ${{ job.status }}
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const path = 'build_status/vpn-finland-firetv-direct-download.json';
+            const branch = context.ref.replace('refs/heads/', '');
+            let sha;
+            try {
+              const f = await github.rest.repos.getContent({owner, repo, path, ref: branch});
+              if (!Array.isArray(f.data)) sha = f.data.sha;
+            } catch (e) {
+              if (e.status !== 404) throw e;
+            }
+            const data = {
+              kind: 'firetv-vpn-beta-direct-download',
+              status: process.env.RESULT,
+              run_id: context.runId,
+              run_url: `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`,
+              apk_url: `https://github.com/${owner}/${repo}/releases/download/vpnfi34/EpiFI.apk`,
+              production_updater_changed: false,
+              uploaded_at: new Date().toISOString()
+            };
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `CI: VPN beta Fire TV public URL ${data.status}`,
+              content: Buffer.from(JSON.stringify(data, null, 2) + '\n').toString('base64'),
+              ...(sha ? {sha} : {})
+            });
