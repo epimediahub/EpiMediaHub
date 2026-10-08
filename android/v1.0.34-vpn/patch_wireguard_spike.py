@@ -103,6 +103,8 @@ files = [
     (src/"V134VpnRoutingPolicy.kt",java/"V134VpnRoutingPolicy.kt"),
     (src/"V134WireGuardDeviceTunnel.kt",java/"V134WireGuardDeviceTunnel.kt"),
     (src/"V134VpnDiagnosticActivity.kt",java/"V134VpnDiagnosticActivity.kt"),
+    (src/"V134VpnSession.kt",java/"V134VpnSession.kt"),
+    (src/"V134VpnRouteUi.kt",java/"V134VpnRouteUi.kt"),
     (src/"V134VpnRoutingPolicyTest.kt",
         root/"app/src/test/java/de/epimediahub/app/vpn/V134VpnRoutingPolicyTest.kt"),
 ]
