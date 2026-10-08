@@ -236,9 +236,9 @@ jobs:
           Firewall, tunnel failure behavior and real Fire TV playback have NOT been
           independently verified. Never distribute test WireGuard keys.
           EOF
-          gh release create "$TAG" vpn-beta-artifacts/EpiFI.apk \\
-            --repo "$GH_REPO" --target "$GITHUB_SHA" \\
-            --title "EpiMediaHub VPN Finland 1.0.35 - Fire TV ADB import beta" \\
+          gh release create "$TAG" vpn-beta-artifacts/EpiFI.apk \
+            --repo "$GH_REPO" --target "$GITHUB_SHA" \
+            --title "EpiMediaHub VPN Finland 1.0.35 - Fire TV ADB import beta" \
             --notes-file /tmp/epi-vpn-fi35-notes.md --prerelease
           URL="https://github.com/$GH_REPO/releases/download/$TAG/EpiFI.apk"
           STATUS="$(curl --location --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 90 "$URL")"
