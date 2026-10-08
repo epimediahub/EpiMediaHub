@@ -61,7 +61,7 @@ class V134VpnDiagnosticActivity : Activity() {
             }
         }
         label("EPIMEDIAHUB · FINLAND VPN BETA", 23f)
-        label("Separate Testinstallation. ADB-Import aus Android/media. Danach Finnland-VPN und Playlists prüfen.", 15f)
+        label("Separate Testinstallation. WireGuard-Profil wird nach dem ersten Import verschlüsselt und gerätegebunden gespeichert.", 15f)
         status = TextView(this).apply {
             textSize = 17f
             setTextColor(Color.WHITE)
@@ -69,6 +69,21 @@ class V134VpnDiagnosticActivity : Activity() {
         }
         layout.addView(status)
         action("VPN-Profil vom Fire TV laden (ADB)") { importLocalProfile() }
+        action("Gespeichertes VPN-Profil löschen") {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Gespeichertes VPN-Profil löschen?")
+                .setMessage("Der verschlüsselte WireGuard-Schlüssel wird auf diesem Fire TV entfernt. Für eine erneute Finnland-Verbindung ist ein neuer Import nötig.")
+                .setNegativeButton("Abbrechen", null)
+                .setPositiveButton("Profil löschen") { _, _ ->
+                    work({
+                        V134VpnSession.eraseProfile(applicationContext)
+                        "Profil gelöscht"
+                    }, {
+                        route = "blocked"
+                        setStatus("VPN-Profil gelöscht. Für Finnland erneut importieren.")
+                    })
+                }.show()
+        }
         action("Anderes VPN-Profil auswählen") {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -94,7 +109,9 @@ class V134VpnDiagnosticActivity : Activity() {
         runCatching { getExternalFilesDir(null) }
         runCatching { getExternalMediaDirs().firstOrNull()?.mkdirs() }
         setContentView(ScrollView(this).apply { addView(layout) })
-        setStatus("Noch keine bestätigte Route. Bitte VPN oder Direktverbindung prüfen.")
+        setStatus(if (V134VpnSession.hasProfile(applicationContext))
+            "Verschlüsseltes Finnland-Profil vorhanden. Bitte VPN verbinden und prüfen."
+        else "Noch kein VPN-Profil gespeichert. Bitte einmal per ADB importieren.")
     }
 
     private fun setStatus(text: String) {
@@ -138,20 +155,21 @@ class V134VpnDiagnosticActivity : Activity() {
             require(file.length() in 150L..12_000L) { "Ungültige Profildateigröße" }
             file.inputStream().buffered().use { input ->
                 val buffer = input.readBytes()
-                betaProfile(buffer.toString(Charsets.UTF_8))
+                betaProfile(buffer.toString(Charsets.UTF_8)).also { config ->
+                    V134VpnSession.storeProfile(applicationContext, config)
+                }
             }
-        }, { vpnConfig ->
-            V134VpnSession.storeProfile(vpnConfig)
+        }, {
             val erased = file.delete()
             route = "blocked"
             setStatus(if (erased)
-                "Finnland-Testprofil importiert und temporäre Datei gelöscht. VPN jetzt verbinden."
-            else "Finnland-Testprofil importiert. Bitte temporäre Datei per ADB sofort löschen.")
+                "Finnland-Testprofil verschlüsselt gespeichert und temporäre Datei gelöscht. VPN jetzt verbinden."
+            else "Finnland-Testprofil verschlüsselt gespeichert. Bitte temporäre Importdatei per ADB löschen.")
         })
     }
 
     private fun startVpn() {
-        if (!V134VpnSession.hasProfile()) {
+        if (!V134VpnSession.hasProfile(applicationContext)) {
             setStatus("Bitte zuerst ein eigenes Finnland-Testprofil importieren.")
             return
         }
@@ -186,11 +204,12 @@ class V134VpnDiagnosticActivity : Activity() {
                 val bytes = contentResolver.openInputStream(uri)?.use { stream ->
                     stream.readBytes().also { require(it.size in 150..12000) }
                 } ?: error("Datei nicht lesbar")
-                betaProfile(bytes.toString(Charsets.UTF_8))
+                betaProfile(bytes.toString(Charsets.UTF_8)).also { config ->
+                    V134VpnSession.storeProfile(applicationContext, config)
+                }
             }, {
-                V134VpnSession.storeProfile(it)
                 route = "blocked"
-                setStatus("Finnland-Profil eingelesen. Noch keine Verbindung aktiv.")
+                setStatus("Finnland-Profil verschlüsselt gespeichert. Bitte VPN verbinden.")
             })
         } else if (requestCode == REQUEST_CONSENT) {
             if (resultCode == RESULT_OK) connectAndCheck()
@@ -214,7 +233,9 @@ class V134VpnDiagnosticActivity : Activity() {
         if (::status.isInitialized && !busy) {
             V134VpnSession.block()
             route = "blocked"
-            setStatus("Vor jeder Wiedergabe VPN oder Direktverbindung neu prüfen.")
+            setStatus(if (V134VpnSession.hasProfile(applicationContext))
+                "Finnland-Profil verschlüsselt gespeichert. VPN bitte verbinden und prüfen."
+            else "Kein gespeichertes Finnland-Profil. Bitte einmalig importieren.")
         }
     }
 }
