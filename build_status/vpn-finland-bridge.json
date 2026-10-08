@@ -1,9 +1,9 @@
 {
   "kind": "isolated-wireguard-android-aar",
-  "conclusion": "failure",
-  "run_id": 37768926585,
-  "run_url": "https://github.com/epimediahub/EpiMediaHub/actions/runs/37768926585",
-  "workflow_sha": "e4b6806cf4501e11118a7e8602a53c0347af9fd8",
-  "updated_at": "2026-10-08T11:17:15.482Z",
+  "conclusion": "success",
+  "run_id": 37770875921,
+  "run_url": "https://github.com/epimediahub/EpiMediaHub/actions/runs/37770875921",
+  "workflow_sha": "faa6b9459fa2567f6d9dac096b6d470ff37de0ef",
+  "updated_at": "2026-10-08T11:35:07.661Z",
   "note": "This build only compiles an isolated Android bridge AAR. No EpiMediaHub test APK is produced."
 }
