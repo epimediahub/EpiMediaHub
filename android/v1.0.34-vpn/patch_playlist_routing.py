@@ -174,14 +174,11 @@ replace(home,
     """            V083Header(
                 onSpeedtest = { v140SpeedOpen = true },
                 playlist = u.active?.name ?: "EpiMediaHub",""")
-replace(home,
-    """    weather: V070WeatherSnapshot?,
-    modifier: Modifier = Modifier
-) {""",
-    """    weather: V070WeatherSnapshot?,
-    onSpeedtest: () -> Unit,
-    modifier: Modifier = Modifier
-) {""")
+_home = home.read_text()
+_header = _home.index("private fun V083Header(")
+_param = _home.index("    playlist: String,", _header)
+_home = _home[:_param] + "    onSpeedtest: () -> Unit,\n" + _home[_param:]
+home.write_text(_home)
 replace(home,
     """                    RadioHomeActions(showPlaylistSwitch, isTv, accent, onPlaylistSwitch, onRadio)
                 }""",
