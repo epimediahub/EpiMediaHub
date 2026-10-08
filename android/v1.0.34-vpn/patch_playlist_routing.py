@@ -75,13 +75,49 @@ replace(playlist, "vm.selectPlaylist(playlist.id)",
                         }""")
 replace(playlist, "private fun V070PlaylistCard(name: String, type: String, status: V112PlaylistStatus, active: Boolean",
     "private fun V070PlaylistCard(name: String, type: String, status: V112PlaylistStatus, active: Boolean, vpnEnabled: Boolean, onVpnToggle: () -> Unit")
-replace(playlist, "        TextButton(onClick = onDelete,",
-    """        TextButton(onClick = onVpnToggle, modifier = Modifier.v070TvFocus(accent)) {
-            Text(if (vpnEnabled) "VPN · FINNLAND" else "DIREKT", color = if (vpnEnabled) accent else Color.White,
-                fontWeight = FontWeight.Bold)
+# A focusable, clickable ROW captures Fire TV D-pad traversal in the original
+# playlist screen, leaving both VPN and LÖSCHEN inaccessible. Make the row only a
+# visual container and provide THREE sibling actions: AUSWÄHLEN, VPN and LÖSCHEN.
+# The caller-provided FocusRequester + remembered menu index must belong to the
+# AUSWÄHLEN action, not the row, so resume and remote Up/Down also still work.
+replace(playlist, "    Row(\n        modifier.fillMaxWidth().heightIn(min = 104.dp)",
+    "    Row(\n        Modifier.fillMaxWidth().heightIn(min = 104.dp)")
+replace(playlist, ".onFocusChanged { focused = it.isFocused }",
+    ".onFocusChanged { focused = it.hasFocus }")
+replace(playlist,
+    ".v114FocusRing().clickable(onClick = onSelect).padding(horizontal = 20.dp, vertical = 15.dp),",
+    ".padding(horizontal = 20.dp, vertical = 15.dp),")
+replace(playlist,
+    """        Surface(shape = RoundedCornerShape(99.dp), color = if (active) accent else if (focused) Color.White else Color.White.copy(.10f)) {
+            Text(if (active) "AKTIV" else if (focused) "OK · AUSWÄHLEN" else "AUSWÄHLEN", color = if (active || focused) Color.Black else Color.White.copy(.82f), fontSize = 12.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp))
+        }
+        Spacer(Modifier.width(10.dp))
+        TextButton(onClick = onDelete,""",
+    """        TextButton(
+            onClick = onSelect,
+            modifier = modifier.v070TvFocus(accent).v114FocusRing(),
+            colors = ButtonDefaults.textButtonColors(
+                containerColor = if (active) accent else Color.White.copy(.14f)
+            )
+        ) {
+            Text(if (active) "AKTIV · AUSWÄHLEN" else "AUSWÄHLEN",
+                color = if (active) Color.Black else Color.White, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.width(10.dp))
+        TextButton(onClick = onVpnToggle,
+            modifier = Modifier.v070TvFocus(accent).v114FocusRing(),
+            colors = ButtonDefaults.textButtonColors(
+                containerColor = if (vpnEnabled) accent.copy(.26f) else Color.White.copy(.12f)
+            )
+        ) {
+            Text(if (vpnEnabled) "VPN · FINNLAND" else "DIREKT",
+                color = Color.White, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.width(10.dp))
         TextButton(onClick = onDelete,""")
+# Flag that the expected three sibling controls really exist in reconstructed source.
+# The separate beta build script checks this before signing.
+
 
 app=java/"EpiMediaHubApp.kt"
 replace(app, "    MaterialTheme(colorScheme = scheme, shapes = shapes) {",
