@@ -21,6 +21,8 @@ internal object V134VpnSession {
         return requireNotNull(tunnel)
     }
 
+    fun hasProfile(): Boolean = profile != null
+
     fun storeProfile(value: String) {
         profile = value
         route = Route.BLOCKED
