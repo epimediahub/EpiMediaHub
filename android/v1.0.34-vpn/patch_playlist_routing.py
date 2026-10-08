@@ -147,3 +147,41 @@ replace(app, "        } else if (kidsSessionActive) {",
             )
         } else if (kidsSessionActive) {""")
 print("V134 beta routing UI installed: per-playlist toggle and guarded playlist selection")
+
+# v1.0.40: A real, on-demand bandwidth test beside Radio and Playlist wechseln.
+# Keep the main menu tiles and all regular production resources untouched.
+home = java/"ui/V083Home.kt"
+replace(home,
+    """    val context = LocalContext.current
+    val firstFocus = remember { FocusRequester() }""",
+    """    val context = LocalContext.current
+    var v140SpeedOpen by remember { mutableStateOf(false) }
+    if (v140SpeedOpen) {
+        de.epimediahub.app.vpn.V140SpeedTestScreen(
+            context, u.active?.id?.toString(), isTv, accent,
+            onBack = { v140SpeedOpen = false }
+        )
+        return
+    }
+    val firstFocus = remember { FocusRequester() }""")
+replace(home,
+    """                weather = weather,
+                modifier = Modifier.fillMaxWidth().height(headerHeight)""",
+    """                weather = weather,
+                onSpeedtest = { v140SpeedOpen = true },
+                modifier = Modifier.fillMaxWidth().height(headerHeight)""")
+replace(home,
+    """    weather: V070WeatherSnapshot?,
+    modifier: Modifier = Modifier
+) {""",
+    """    weather: V070WeatherSnapshot?,
+    onSpeedtest: () -> Unit,
+    modifier: Modifier = Modifier
+) {""")
+replace(home,
+    """                    RadioHomeActions(showPlaylistSwitch, isTv, accent, onPlaylistSwitch, onRadio)
+                }""",
+    """                    RadioHomeActions(showPlaylistSwitch, isTv, accent, onPlaylistSwitch, onRadio)
+                    de.epimediahub.app.vpn.V140SpeedShortcutButton(accent, isTv, onSpeedtest)
+                }""")
+print("V140 beta: added real speed test screen and focusable speed button to central home shortcuts")
