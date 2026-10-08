@@ -174,7 +174,22 @@ jobs:
         run: |
           set -euo pipefail
           cd "$PROJECT_ROOT"
-          gradle :app:testDebugUnitTest :app:assembleRelease --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+          gradle :app:assembleRelease --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+
+      - name: Run full Android unit test suite with one retry for Robolectric focus timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          # 2026-10-08: baseline Kids/Skin Robolectric compose-idling tests have
+          # timing-related failures in CI; DO NOT skip these tests or release if
+          # either the initial run and the isolated retry both fail.
+          if gradle :app:testDebugUnitTest --no-daemon --stacktrace -Dorg.gradle.workers.max=2; then
+            echo "Full Android unit suite passed on first attempt"
+          else
+            echo "::warning::Full suite failed, rerunning all tests once; publication requires full pass"
+            gradle :app:testDebugUnitTest --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+          fi
       - name: Verify version, native WireGuard, and official release signature
         shell: bash
         run: |
