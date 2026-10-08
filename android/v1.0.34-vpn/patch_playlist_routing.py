@@ -126,9 +126,24 @@ replace(app, "    MaterialTheme(colorScheme = scheme, shapes = shapes) {",
 replace(app, "        } else if (kidsSessionActive) {",
     """        } else if (u.active != null && u.screen != Screen.Playlists && !v134Ready) {
             de.epimediahub.app.vpn.V134VpnRouteBlockedScreen(
-                context, u.active!!.id.toString(), u.active?.name ?: "Playlist"
-            ) {
-                vm.navigate(Screen.Playlists)
-            }
+                context,
+                u.active!!.id.toString(),
+                u.active?.name ?: "Playlist",
+                onPlaylists = { vm.navigate(Screen.Playlists) },
+                onDirectApproved = {
+                    // The playback surface is removed while VPN egress is unverified.
+                    // After explicit direct consent, reprepare the very same channel
+                    // so the user does not need to zap away and back manually.
+                    val interrupted = u.screen as? Screen.Player
+                    if (interrupted != null &&
+                        interrupted.item.kind == de.epimediahub.app.model.MediaKind.LIVE) {
+                        if (interrupted.episodeList.isNotEmpty()) {
+                            vm.switchLiveChannel(interrupted.item, interrupted.episodeList)
+                        } else {
+                            vm.play(interrupted.item)
+                        }
+                    }
+                }
+            )
         } else if (kidsSessionActive) {""")
 print("V134 beta routing UI installed: per-playlist toggle and guarded playlist selection")
