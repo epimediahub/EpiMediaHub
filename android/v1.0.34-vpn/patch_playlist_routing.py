@@ -60,21 +60,19 @@ replace(playlist, "                        active = active,",
                             V134VpnSession.setMode(context, playlist.id.toString(), !vpnEnabled)
                             routingRevision++
                         },""")
-replace(playlist, "                        onSelect = { vm.selectPlaylist(playlist.id) },",
-    """                        onSelect = {
-                            if (!routeBusy) {
-                                routeBusy = true
-                                scope.launch {
-                                    // Do not change the active IPTV source until route verification succeeds.
-                                    val ready = withContext(Dispatchers.IO) {
-                                        V134VpnSession.routeTo(context, playlist.id.toString())
-                                    }
-                                    routeBusy = false
-                                    if (ready) vm.selectPlaylist(playlist.id)
-                                    else routeFailed = true
+replace(playlist, "vm.selectPlaylist(playlist.id)",
+    """if (!routeBusy) {
+                            routeBusy = true
+                            scope.launch {
+                                // Never switch the IPTV source until the selected transport is verified.
+                                val ready = withContext(Dispatchers.IO) {
+                                    V134VpnSession.routeTo(context, playlist.id.toString())
                                 }
+                                routeBusy = false
+                                if (ready) vm.selectPlaylist(playlist.id)
+                                else routeFailed = true
                             }
-                        },""")
+                        }""")
 replace(playlist, "private fun V070PlaylistCard(name: String, type: String, status: V112PlaylistStatus, active: Boolean",
     "private fun V070PlaylistCard(name: String, type: String, status: V112PlaylistStatus, active: Boolean, vpnEnabled: Boolean, onVpnToggle: () -> Unit")
 replace(playlist, "        TextButton(onClick = onDelete,",
