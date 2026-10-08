@@ -39,6 +39,17 @@ if new_gradle.count("versionCode = 1033") != 1 or new_gradle.count('versionName 
     raise SystemExit("Refusing: expected 1.0.33 version")
 new_gradle = new_gradle.replace("versionCode = 1033", "versionCode = 1034", 1)
 new_gradle = new_gradle.replace('versionName = "1.0.33"', 'versionName = "1.0.34"', 1)
+# This beta MUST install beside the user's daily production app.
+import re
+matches = re.findall(r'applicationId\s*=\s*"([^"]+)"', new_gradle)
+if len(matches) != 1:
+    raise SystemExit("Refusing: cannot reliably locate exactly one Android applicationId")
+production_id = matches[0]
+if production_id != "de.epimediahub.app":
+    raise SystemExit("Refusing: unexpected production applicationId " + production_id)
+new_gradle = re.sub(r'applicationId\s*=\s*"[^"]+"',
+                    'applicationId = "de.epimediahub.app.vpnbeta"', new_gradle, count=1)
+
 
 service = '''        <!-- WireGuard internal beta: Android user consent required, no auto-connect. -->
         <service
@@ -51,6 +62,36 @@ service = '''        <!-- WireGuard internal beta: Android user consent required
         </service>
 '''
 xml = manifest.read_text()
+# For beta testing, only the VPN diagnostics may be launched from the TV home screen.
+# Keep MainActivity itself available for explicit launch AFTER route verification.
+activity_pattern = re.compile(
+    r'(<activity\b[^>]*android:name="(?:\.MainActivity|de\.epimediahub\.app\.MainActivity)"[^>]*>)(.*?)(</activity>)',
+    re.S
+)
+m = activity_pattern.search(xml)
+if m is None:
+    raise SystemExit("Refusing: MainActivity manifest declaration not found")
+body = m.group(2)
+intent_filters = re.findall(r'<intent-filter\b[^>]*>.*?</intent-filter>', body, re.S)
+launch_filters = [i for i in intent_filters if 'android.intent.action.MAIN' in i]
+if len(launch_filters) != 1:
+    raise SystemExit("Refusing: MainActivity must have exactly one launch filter")
+new_body = body.replace(launch_filters[0], "")
+xml = xml[:m.start()] + m.group(1) + new_body + m.group(3) + xml[m.end():]
+beta_launcher = """        <activity
+            android:name="de.epimediahub.app.vpn.V134VpnDiagnosticActivity"
+            android:label="EpiMediaHub VPN Beta"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+"""
+if "V134VpnDiagnosticActivity" in xml:
+    raise SystemExit("Refusing: VPN launcher already exists")
+xml = xml.replace("</application>", beta_launcher + "    </application>", 1)
 if "GoBackend$VpnService" in xml:
     raise SystemExit("Refusing: VPN service already configured")
 if xml.count("</application>") != 1:
@@ -59,6 +100,7 @@ new_manifest = xml.replace("</application>",service+"    </application>",1)
 files = [
     (src/"V134VpnRoutingPolicy.kt",java/"V134VpnRoutingPolicy.kt"),
     (src/"V134WireGuardDeviceTunnel.kt",java/"V134WireGuardDeviceTunnel.kt"),
+    (src/"V134VpnDiagnosticActivity.kt",java/"V134VpnDiagnosticActivity.kt"),
     (src/"V134VpnRoutingPolicyTest.kt",
         root/"app/src/test/java/de/epimediahub/app/vpn/V134VpnRoutingPolicyTest.kt"),
 ]
