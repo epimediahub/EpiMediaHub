@@ -6,8 +6,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * BETA ONLY. Serialized route changes; profile held in process memory, never
- * persisted or logged. Uses a dedicated, per-device WireGuard test peer.
+ * BETA ONLY. Serialized route changes; profile cached in memory and stored
+ * only as AES-GCM ciphertext in no-backup internal storage using AndroidKeyStore.
+ * Uses a dedicated, per-device WireGuard test peer.
  */
 internal object V134VpnSession {
     enum class Route { BLOCKED, DIRECT, FINLAND }
@@ -26,15 +27,27 @@ internal object V134VpnSession {
         return requireNotNull(tunnel)
     }
 
-    fun hasProfile(): Boolean = profile != null
+    @Synchronized
+    fun hasProfile(context: Context): Boolean =
+        profile != null || V139VpnEncryptedProfileStore.exists(context)
 
     @Synchronized
-    fun storeProfile(value: String) {
+    fun storeProfile(context: Context, value: String) {
+        // Fail closed: never mark the profile imported before encryption succeeded.
+        V139VpnEncryptedProfileStore.save(context, value)
         profile = value
         route = Route.BLOCKED
         temporaryDirectPlaylist = null
         lastExitOk = false
         lastExitCheckMs = 0
+    }
+
+    @Synchronized
+    fun eraseProfile(context: Context) {
+        route = Route.BLOCKED
+        temporaryDirectPlaylist = null
+        profile = null
+        V139VpnEncryptedProfileStore.erase(context)
     }
 
     fun mode(context: Context, playlistId: String): Boolean =
@@ -116,7 +129,9 @@ internal object V134VpnSession {
         temporaryDirectPlaylist = null
         lastExitOk = false
         lastExitCheckMs = 0
-        val cfg = profile ?: error("Bitte Finnland-Profil neu importieren")
+        val cfg = profile
+            ?: V139VpnEncryptedProfileStore.load(context)?.also { profile = it }
+            ?: error("Bitte Finnland-Profil importieren")
         check(VpnService.prepare(context) == null) { "VPN-Einwilligung fehlt" }
         check(tunnel(context).connect(cfg)) { "WireGuard konnte nicht verbunden werden" }
         return try {
