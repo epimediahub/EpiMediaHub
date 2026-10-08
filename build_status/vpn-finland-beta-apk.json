@@ -1,11 +1,12 @@
 {
   "kind": "signed-epimediahub-android-vpn-integration-beta",
-  "conclusion": "cancelled",
-  "run_id": 37780641726,
-  "run_url": "https://github.com/epimediahub/EpiMediaHub/actions/runs/37780641726",
-  "workflow_sha": "927b11f65f9f48c26b7a52bbaaa02a4e17270e99",
-  "updated_at": "2026-10-08T12:59:24.025Z",
+  "conclusion": "failure",
+  "run_id": 37780816965,
+  "run_url": "https://github.com/epimediahub/EpiMediaHub/actions/runs/37780816965",
+  "workflow_sha": "53bed358688cfc5d6b4fa254b16add715dd9895b",
+  "updated_at": "2026-10-08T13:00:19.421Z",
   "vpn_diagnostic_ui": true,
-  "automatic_per_playlist_routing": false,
+  "automatic_per_playlist_routing": true,
+  "player_network_fail_closed_hardware_verified": false,
   "production_updater_modified": false
 }
