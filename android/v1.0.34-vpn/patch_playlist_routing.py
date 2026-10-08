@@ -152,10 +152,8 @@ print("V134 beta routing UI installed: per-playlist toggle and guarded playlist 
 # Keep the main menu tiles and all regular production resources untouched.
 home = java/"ui/V083Home.kt"
 replace(home,
-    """    val context = LocalContext.current
-    val firstFocus = remember { FocusRequester() }""",
-    """    val context = LocalContext.current
-    var v140SpeedOpen by remember { mutableStateOf(false) }
+    """    val firstFocus = remember { FocusRequester() }""",
+    """    var v140SpeedOpen by remember { mutableStateOf(false) }
     if (v140SpeedOpen) {
         de.epimediahub.app.vpn.V140SpeedTestScreen(
             context, u.active?.id?.toString(), isTv, accent,
