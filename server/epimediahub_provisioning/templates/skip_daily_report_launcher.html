@@ -1,0 +1,13 @@
+<section class="card" id="episcene-daily" style="margin:20px 0">
+  <h2>EpiScene · Tagesbericht</h2>
+  <p id="episcene-report-state" role="status">Täglich um 07:00 Uhr · Europe/Berlin · Verlauf und Analyseprotokoll</p>
+  <a class="button" href="{{ url_for('episcene_report_page') }}">Tagesbericht &amp; Archiv öffnen</a>
+</section>
+<dialog id="episcene-report-dialog" aria-labelledby="episcene-report-title" style="padding:0;width:min(1100px,96vw);height:90vh;border:1px solid #526688;border-radius:16px;background:#0b1018;color:#f5f7fa">
+  <header style="padding:12px 20px;display:flex;justify-content:space-between;gap:16px;align-items:center">
+    <strong id="episcene-report-title">Dein EpiScene-Tagesbericht</strong>
+    <button type="button" id="episcene-report-close" autofocus>Schließen</button>
+  </header>
+  <iframe title="EpiScene Tagesbericht mit Analyseprotokoll" id="episcene-report-frame" style="border:0;width:100%;height:calc(100% - 70px)"></iframe>
+</dialog>
+<script defer src="{{ url_for('static',filename='skip_daily_reports.js') }}"></script>

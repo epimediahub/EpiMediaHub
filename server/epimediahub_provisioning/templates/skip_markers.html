@@ -8,6 +8,7 @@ button,a.button{background:#26364c;color:#f5f7fa;border:1px solid #72839b;border
 </style></head><body><main>
 <header><div><h1>{% if episcene_enabled %}EpiScene · {% endif %}Intro, Rückblick & Abspann</h1><p>{% if episcene_enabled %}Intros und Abspänne durch Audio- und Bildvergleiche erkennen. Rückblicke können im Player markiert werden.{% else %}Erkannte Zeitmarken automatisch nutzen und bei Bedarf nachträglich korrigieren.{% endif %}</p></div><a class="button" href="{{ url_for('dashboard') }}">Zurück zur Kundenübersicht</a></header>
 {% if notice %}<p class="card" id="review-result" role="status" tabindex="-1">{{ notice }}</p>{% endif %}
+{% if episcene_reports_enabled|default(false) %}{% include "skip_daily_report_launcher.html" %}{% endif %}
 {% include "skip_schedule.html" %}
 {% include "skip_progress.html" %}
 <nav class="tools">{% for value,label in [('pending','Zur Prüfung'),('approved','Freigegeben'),('rejected','Abgelehnt'),('superseded','Ersetzt')] %}<a class="button" href="{{ url_for('v082_skip_dashboard',state=value) }}">{{ label }}</a>{% endfor %}</nav>

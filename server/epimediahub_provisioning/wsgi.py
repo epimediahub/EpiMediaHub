@@ -47,3 +47,6 @@ install_dashboard_v080(app, db)
 
 from skip_markers import install as install_skip_markers
 install_skip_markers(app, db)
+
+from skip_daily_reports import install as install_skip_daily_reports
+install_skip_daily_reports(app, db)
