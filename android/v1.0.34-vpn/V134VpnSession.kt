@@ -19,12 +19,22 @@ internal object V134VpnSession {
     @Volatile private var temporaryDirectPlaylist: String? = null
     private var lastExitCheckMs: Long = 0
     private var lastExitOk: Boolean = false
-    private const val EXIT_CHECK_INTERVAL_MS = 10_000L
+    private const val EXIT_CHECK_INTERVAL_MS = 3_000L
     private const val FINLAND_IP = "37.27.42.215"
 
     @Synchronized private fun tunnel(context: Context): V134WireGuardDeviceTunnel {
         if (tunnel == null) tunnel = V134WireGuardDeviceTunnel(context.applicationContext)
         return requireNotNull(tunnel)
+    }
+
+    /** Best-effort early VPN loss notification. Never authorizes DIRECT. */
+    @Synchronized
+    fun onVpnTransportLost() {
+        if (route == Route.FINLAND) {
+            route = Route.BLOCKED
+            lastExitOk = false
+            lastExitCheckMs = 0
+        }
     }
 
     @Synchronized
@@ -35,6 +45,7 @@ internal object V134VpnSession {
     fun storeProfile(context: Context, value: String) {
         // Fail closed: never mark the profile imported before encryption succeeded.
         V139VpnEncryptedProfileStore.save(context, value)
+        V140VpnLossMonitor.stop()
         profile = value
         route = Route.BLOCKED
         temporaryDirectPlaylist = null
@@ -44,6 +55,7 @@ internal object V134VpnSession {
 
     @Synchronized
     fun eraseProfile(context: Context) {
+        V140VpnLossMonitor.stop()
         route = Route.BLOCKED
         temporaryDirectPlaylist = null
         // Never remove the only saved connection details while leaving a tunnel up.
@@ -104,6 +116,7 @@ internal object V134VpnSession {
     @Synchronized
     fun allowDirectOnce(context: Context, playlistId: String): Boolean {
         if (!mode(context, playlistId)) return false
+        V140VpnLossMonitor.stop()
         temporaryDirectPlaylist = null
         route = Route.BLOCKED
         return runCatching {
@@ -132,6 +145,7 @@ internal object V134VpnSession {
     /** Called in a worker thread. Never change playlist until this returns true. */
     @Synchronized
     fun connectAndVerify(context: Context): String {
+        V140VpnLossMonitor.stop()
         route = Route.BLOCKED
         temporaryDirectPlaylist = null
         lastExitOk = false
@@ -145,10 +159,14 @@ internal object V134VpnSession {
             val ip = publicIpv4()
             check(ip == FINLAND_IP) { "Finnland-Ausgang nicht bestätigt" }
             route = Route.FINLAND
+            // Additional rapid Android VPN network-loss signal. Failure to register
+            // does not turn on DIRECT; the 750ms UI + exit-IP checks remain.
+            runCatching { V140VpnLossMonitor.start(context) }
             lastExitOk = true
             lastExitCheckMs = android.os.SystemClock.elapsedRealtime()
             ip
         } catch (error: Exception) {
+            V140VpnLossMonitor.stop()
             runCatching { tunnel(context).disconnect() }
             route = Route.BLOCKED
             throw error
@@ -157,6 +175,7 @@ internal object V134VpnSession {
 
     @Synchronized
     fun disconnectAndVerify(context: Context): String {
+        V140VpnLossMonitor.stop()
         route = Route.BLOCKED
         temporaryDirectPlaylist = null
         lastExitOk = false
