@@ -1,0 +1,9 @@
+{
+  "kind": "firetv-vpn-beta-direct-download",
+  "status": "success",
+  "run_id": 37784888817,
+  "run_url": "https://github.com/epimediahub/EpiMediaHub/actions/runs/37784888817",
+  "apk_url": "https://github.com/epimediahub/EpiMediaHub/releases/download/vpnfi34/EpiFI.apk",
+  "production_updater_changed": false,
+  "uploaded_at": "2026-10-08T13:31:05.767Z"
+}
