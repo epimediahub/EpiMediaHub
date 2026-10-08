@@ -107,6 +107,7 @@ files = [
     (src/"V139VpnEncryptedProfileStore.kt",java/"V139VpnEncryptedProfileStore.kt"),
     (src/"V134VpnRouteUi.kt",java/"V134VpnRouteUi.kt"),
     (src/"V140SpeedTest.kt",java/"V140SpeedTest.kt"),
+    (src/"V140VpnLossMonitor.kt",java/"V140VpnLossMonitor.kt"),
     (src/"V134VpnRoutingPolicyTest.kt",
         root/"app/src/test/java/de/epimediahub/app/vpn/V134VpnRoutingPolicyTest.kt"),
 ]
