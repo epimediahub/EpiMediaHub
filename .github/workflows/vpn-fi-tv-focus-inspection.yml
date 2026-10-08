@@ -1,0 +1,30 @@
+name: Inspect Fire TV playlist focus (isolated, read-only)
+on:
+  push:
+    branches: [feature/vpn-finland-foundation]
+    paths: ['.github/workflows/vpn-fi-tv-focus-inspection.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct v1.0.33 playlist source and inspect D-pad navigation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat android/source_parts/source_* | base64 -d > /tmp/source.tar.gz
+          mkdir -p /tmp/src
+          tar -xzf /tmp/source.tar.gz -C /tmp/src
+          echo '=== FILES ==='
+          find /tmp/src -type f \( -name 'V070Playlists.kt' -o -name '*Focus*.kt' \)
+          echo '=== FOCUS DECLARATIONS ==='
+          rg -n -C 10 'fun .*v070TvFocus|fun V070PlaylistCard|V070PlaylistCard\(|onDelete|onClick|focusGroup|focusProperties|focusRequester|focusable|selectPlaylist|requestFocus|focusTarget|TVFocus' /tmp/src --glob 'V070Playlists.kt' | head -550
+          echo '=== FULL PLAYLIST SOURCE ==='
+          FILE="$(find /tmp/src -name V070Playlists.kt | head -1)"
+          test -f "$FILE"
+          wc -l "$FILE"
+          cat "$FILE"
