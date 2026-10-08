@@ -37,8 +37,8 @@ if "isCoreLibraryDesugaringEnabled = true" not in new_gradle and "coreLibraryDes
         "compileOptions {\n        isCoreLibraryDesugaringEnabled = true", 1)
 if new_gradle.count("versionCode = 1033") != 1 or new_gradle.count('versionName = "1.0.33"') != 1:
     raise SystemExit("Refusing: expected 1.0.33 version")
-new_gradle = new_gradle.replace("versionCode = 1033", "versionCode = 1038", 1)
-new_gradle = new_gradle.replace('versionName = "1.0.33"', 'versionName = "1.0.38"', 1)
+new_gradle = new_gradle.replace("versionCode = 1033", "versionCode = 1039", 1)
+new_gradle = new_gradle.replace('versionName = "1.0.33"', 'versionName = "1.0.39"', 1)
 # This beta MUST install beside the user's daily production app.
 import re
 matches = re.findall(r'applicationId\s*=\s*"([^"]+)"', new_gradle)
@@ -104,6 +104,7 @@ files = [
     (src/"V134WireGuardDeviceTunnel.kt",java/"V134WireGuardDeviceTunnel.kt"),
     (src/"V134VpnDiagnosticActivity.kt",java/"V134VpnDiagnosticActivity.kt"),
     (src/"V134VpnSession.kt",java/"V134VpnSession.kt"),
+    (src/"V139VpnEncryptedProfileStore.kt",java/"V139VpnEncryptedProfileStore.kt"),
     (src/"V134VpnRouteUi.kt",java/"V134VpnRouteUi.kt"),
     (src/"V134VpnRoutingPolicyTest.kt",
         root/"app/src/test/java/de/epimediahub/app/vpn/V134VpnRoutingPolicyTest.kt"),
