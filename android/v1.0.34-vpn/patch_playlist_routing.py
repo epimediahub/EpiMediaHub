@@ -202,3 +202,50 @@ home_tests.write_text(_tests[:_end] + '''
         compose.onNodeWithTag("home-speedtest").assertIsDisplayed()
     }
 ''' + _tests[_end:])
+
+# Adding a third shortcut changes Compose's geometric Up target from FILME.
+# Preserve the established Radio <-> FILME route with an explicit focus target;
+# keep Left/Right traversal free to reach the new speed shortcut.
+replace(home, "import androidx.compose.ui.focus.focusRequester",
+    "import androidx.compose.ui.focus.focusRequester\nimport androidx.compose.ui.focus.focusProperties")
+replace(home, "    var v140SpeedOpen by remember { mutableStateOf(false) }",
+    "    val v140RadioFocus = remember { FocusRequester() }\n    var v140SpeedOpen by remember { mutableStateOf(false) }")
+replace(home, "                onSpeedtest = { v140SpeedOpen = true },",
+    "                onSpeedtest = { v140SpeedOpen = true },\n                radioFocus = v140RadioFocus,")
+replace(home, "    onSpeedtest: () -> Unit,",
+    "    onSpeedtest: () -> Unit,\n    radioFocus: FocusRequester,")
+replace(home,
+    "                                    modifier = Modifier.weight(1f).fillMaxHeight(),",
+    """                                    modifier = Modifier.weight(1f).fillMaxHeight()
+                                        .focusProperties {
+                                            if (isTv && tile.title == "FILME") up = v140RadioFocus
+                                        },""")
+replace(home,
+    "RadioHomeActions(showPlaylistSwitch, isTv, accent, onPlaylistSwitch, onRadio)",
+    "RadioHomeActions(showPlaylistSwitch, isTv, accent, onPlaylistSwitch, onRadio, radioModifier = Modifier.focusRequester(radioFocus))")
+
+radio = java/"ui/RadioScreen.kt"
+replace(radio,
+    "    onPlaylistSwitch: () -> Unit, onRadio: () -> Unit, modifier: Modifier = Modifier) {",
+    "    onPlaylistSwitch: () -> Unit, onRadio: () -> Unit, modifier: Modifier = Modifier, radioModifier: Modifier = Modifier) {")
+replace(radio,
+    'RadioHomeButton("radio", "Radio", isTv, accent, onRadio) {',
+    'RadioHomeButton("radio", "Radio", isTv, accent, onRadio, modifier = radioModifier) {')
+replace(radio,
+    "    onClick: () -> Unit, content: @Composable () -> Unit) {",
+    "    onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {")
+replace(radio,
+    "        modifier = Modifier.size(if (isTv) 44.dp else 40.dp)",
+    "        modifier = modifier.size(if (isTv) 44.dp else 40.dp)")
+
+# Exercise the added sibling without removing the existing Radio/tiles checks.
+replace(home_tests,
+    """        settle(); radio.assertIsFocused()
+        radio.performKeyInput { keyDown(Key.DirectionDown); keyUp(Key.DirectionDown) }""",
+    """        settle(); radio.assertIsFocused()
+        radio.performKeyInput { keyDown(Key.DirectionRight); keyUp(Key.DirectionRight) }
+        settle(); compose.onNodeWithTag("home-speedtest").assertIsFocused()
+        compose.onNodeWithTag("home-speedtest").performKeyInput { keyDown(Key.DirectionLeft); keyUp(Key.DirectionLeft) }
+        settle(); radio.assertIsFocused()
+        radio.performKeyInput { keyDown(Key.DirectionDown); keyUp(Key.DirectionDown) }""")
+print("V140 beta: preserved Radio/Filme remote navigation and checked speed shortcut traversal")
