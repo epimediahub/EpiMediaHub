@@ -11,6 +11,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,10 +46,18 @@ fun V134VpnRouteBlockedScreen(
     onPlaylists: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val declineFocus = remember(playlistId) { FocusRequester() }
     var showConfirmation by remember(playlistId) { mutableStateOf(false) }
     var busy by remember(playlistId) { mutableStateOf(false) }
     var failed by remember(playlistId) { mutableStateOf(false) }
     val canOfferDirect = V134VpnSession.needsDirectFallbackPrompt(context, playlistId)
+    // Never default Fire TV D-pad focus to the privacy-exposing confirmation.
+    LaunchedEffect(showConfirmation) {
+        if (showConfirmation) {
+            delay(120)
+            runCatching { declineFocus.requestFocus() }
+        }
+    }
     Box(
         Modifier.fillMaxSize().background(Color(0xFF07111D)),
         contentAlignment = Alignment.Center
@@ -97,7 +107,7 @@ fun V134VpnRouteBlockedScreen(
             }
             Text(
                 "Keine automatische Direktverbindung. Entscheidung nur für diese " +
-                    "Wiedergabe; „VPN Finnland“ bleibt gespeichert.",
+                    "Sitzung; „VPN Finnland“ bleibt für den nächsten Playlist-Wechsel gespeichert.",
                 color = Color.LightGray, fontSize = 13.sp
             )
         }
@@ -111,7 +121,7 @@ fun V134VpnRouteBlockedScreen(
                             "verbindet sich „" + playlistName + "“ direkt mit deinem " +
                             "Internetprovider. Dein IPTV-Anbieter kann deine normale " +
                             "öffentliche IP-Adresse erkennen. Nur für diese " +
-                            "Wiedergabe; die Playlist bleibt auf VPN Finnland."
+                            "Sitzung, bis die Playlist neu gewählt wird; die Einstellung bleibt VPN Finnland."
                     )
                 },
                 confirmButton = {
@@ -134,6 +144,7 @@ fun V134VpnRouteBlockedScreen(
                 },
                 dismissButton = {
                     TextButton(
+                        modifier = Modifier.focusRequester(declineFocus),
                         onClick = { showConfirmation = false },
                         enabled = !busy
                     ) { Text("Nein, VPN beibehalten") }
