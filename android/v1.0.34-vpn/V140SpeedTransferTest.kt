@@ -1,7 +1,11 @@
 package de.epimediahub.app.vpn
 
-import com.sun.net.httpserver.HttpServer
-import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.net.InetAddress
+import java.io.InputStream
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.thread
 import java.util.concurrent.CancellationException
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.After
@@ -11,34 +15,73 @@ import org.junit.Test
 
 /** Loopback integration tests send real HTTP bytes, without external services. */
 class V140SpeedTransferTest {
-    private lateinit var server: HttpServer
+    private lateinit var server: ServerSocket
+    private lateinit var worker: Thread
     private lateinit var url: String
+    private val serverFailure = AtomicReference<Throwable?>(null)
     private val requests = AtomicInteger()
     private val uploaded = AtomicInteger()
     @Before fun setup() {
-        server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        server.createContext("/down") { exchange ->
-            requests.incrementAndGet()
-            val data = ByteArray(256 * 1024) { (it % 251).toByte() }
-            exchange.sendResponseHeaders(200, data.size.toLong())
-            exchange.responseBody.use { it.write(data) }
+        server = ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))
+        url = "http://127.0.0.1:${server.localPort}"
+        worker = thread(name = "speedtest-loopback", isDaemon = true) {
+            while (!server.isClosed) {
+                try { server.accept().use { serve(it) } }
+                catch (e: Exception) {
+                    if (!server.isClosed) serverFailure.set(e)
+                    break
+                }
+            }
         }
-        server.createContext("/up") { exchange ->
-            requests.incrementAndGet()
-            assertEquals("POST", exchange.requestMethod)
-            uploaded.set(exchange.requestBody.use { it.readBytes().size })
-            exchange.sendResponseHeaders(200, 2)
-            exchange.responseBody.use { it.write("OK".toByteArray()) }
-        }
-        server.createContext("/redirect") { exchange ->
-            exchange.responseHeaders.add("Location", "/down")
-            exchange.sendResponseHeaders(302, -1)
-            exchange.close()
-        }
-        server.start()
-        url = "http://127.0.0.1:${server.address.port}"
     }
-    @After fun teardown() { server.stop(0) }
+    private fun line(input: InputStream): String {
+        val bytes = ArrayList<Byte>()
+        while (true) {
+            val b = input.read()
+            if (b == -1 || b == 10) break
+            if (b != 13) bytes.add(b.toByte())
+            check(bytes.size <= 8192)
+        }
+        return bytes.toByteArray().toString(Charsets.US_ASCII)
+    }
+    private fun serve(socket: Socket) {
+        socket.soTimeout = 5000
+        val input = socket.getInputStream()
+        val request = line(input).split(' ')
+        var length = 0
+        while (true) {
+            val header = line(input)
+            if (header.isEmpty()) break
+            if (header.startsWith("Content-Length:", ignoreCase = true))
+                length = header.substringAfter(':').trim().toInt()
+        }
+        val output = socket.getOutputStream()
+        if (request[1] == "/redirect") {
+            output.write("HTTP/1.1 302 Found\r\nLocation: /down\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+        } else {
+            requests.incrementAndGet()
+            val data = if (request[1] == "/up") {
+                check(request[0] == "POST")
+                val buffer = ByteArray(8192)
+                var received = 0
+                while (received < length) {
+                    val n = input.read(buffer, 0, minOf(buffer.size, length - received))
+                    check(n > 0)
+                    received += n
+                }
+                uploaded.set(received)
+                "OK".toByteArray()
+            } else ByteArray(256 * 1024) { (it % 251).toByte() }
+            output.write("HTTP/1.1 200 OK\r\nContent-Length: ${data.size}\r\nConnection: close\r\n\r\n".toByteArray())
+            output.write(data)
+        }
+        output.flush()
+    }
+    @After fun teardown() {
+        server.close()
+        worker.join(1000)
+        assertNull("Loopback server failure", serverFailure.get())
+    }
 
     @Test fun actualDownloadAndUploadMatchServerBytes() {
         val transfer = V140SpeedTransfer()
