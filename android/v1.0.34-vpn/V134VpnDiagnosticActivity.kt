@@ -20,12 +20,10 @@ import kotlin.concurrent.thread
 /** Isolated tester activity. No VPN credentials bundled, persisted or logged. */
 class V134VpnDiagnosticActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
-    private val tunnel by lazy { V134WireGuardDeviceTunnel(applicationContext) }
     private lateinit var status: TextView
     private lateinit var openPlayer: Button
     private lateinit var vpnButton: Button
     private lateinit var directButton: Button
-    private var profile: String? = null
     private var route = "blocked"
     private var busy = false
 
@@ -113,7 +111,7 @@ class V134VpnDiagnosticActivity : Activity() {
     }
 
     private fun startVpn() {
-        if (profile == null) {
+        if (!V134VpnSession.hasProfile()) {
             setStatus("Bitte zuerst ein eigenes Finnland-Testprofil importieren.")
             return
         }
@@ -126,47 +124,17 @@ class V134VpnDiagnosticActivity : Activity() {
     }
 
     private fun connectAndCheck() {
-        val cfg = profile ?: return
-        work({
-            check(tunnel.connect(cfg))
-            try {
-                val ip = checkIpv4()
-                check(ip == FINLAND_IP) { "Kein bestätigter Finnland-Ausgang" }
-                ip
-            } catch (e: Exception) {
-                runCatching { tunnel.disconnect() }
-                throw e
-            }
-        }, { ip ->
+        work({ V134VpnSession.connectAndVerify(applicationContext) }, { ip ->
             route = "finland"
             setStatus("FINNLAND VPN bestätigt · Ausgang: " + ip + ". Testplayer bereit.")
         })
     }
 
     private fun startDirect() {
-        work({
-            check(tunnel.disconnect())
-            check(!tunnel.isUp())
-            val ip = checkIpv4()
-            check(ip != FINLAND_IP) { "Finnland-Ausgang weiterhin aktiv" }
-            ip
-        }, { ip ->
+        work({ V134VpnSession.disconnectAndVerify(applicationContext) }, { ip ->
             route = "direct"
             setStatus("DIREKT bestätigt · Ausgang: " + ip + ". Testplayer bereit.")
         })
-    }
-
-    private fun checkIpv4(): String {
-        val c = URL("https://api.ipify.org").openConnection() as HttpURLConnection
-        return try {
-            c.connectTimeout = 10000
-            c.readTimeout = 10000
-            c.useCaches = false
-            c.setRequestProperty("Cache-Control", "no-cache")
-            c.inputStream.bufferedReader().use { it.readText().trim() }.also {
-                require(it.matches(Regex("(?:\\d{1,3}\\.){3}\\d{1,3}")))
-            }
-        } finally { c.disconnect() }
     }
 
     @Deprecated("Compatibility with Fire OS Activity result API")
@@ -180,7 +148,7 @@ class V134VpnDiagnosticActivity : Activity() {
                 } ?: error("Datei nicht lesbar")
                 betaProfile(bytes.toString(Charsets.UTF_8))
             }, {
-                profile = it
+                V134VpnSession.storeProfile(it)
                 route = "blocked"
                 setStatus("Finnland-Profil eingelesen. Noch keine Verbindung aktiv.")
             })
@@ -204,6 +172,7 @@ class V134VpnDiagnosticActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::status.isInitialized && !busy) {
+            V134VpnSession.block()
             route = "blocked"
             setStatus("Vor jeder Wiedergabe VPN oder Direktverbindung neu prüfen.")
         }
