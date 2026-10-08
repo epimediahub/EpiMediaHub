@@ -74,9 +74,11 @@ if m is None:
 body = m.group(2)
 intent_filters = re.findall(r'<intent-filter\b[^>]*>.*?</intent-filter>', body, re.S)
 launch_filters = [i for i in intent_filters if 'android.intent.action.MAIN' in i]
-if len(launch_filters) != 1:
-    raise SystemExit("Refusing: MainActivity must have exactly one launch filter")
-new_body = body.replace(launch_filters[0], "")
+if not 1 <= len(launch_filters) <= 3:
+    raise SystemExit("Refusing: MainActivity launch filters missing or unexpected")
+new_body = body
+for launch_filter in launch_filters:
+    new_body = new_body.replace(launch_filter, "")
 xml = xml[:m.start()] + m.group(1) + new_body + m.group(3) + xml[m.end():]
 beta_launcher = """        <activity
             android:name="de.epimediahub.app.vpn.V134VpnDiagnosticActivity"
