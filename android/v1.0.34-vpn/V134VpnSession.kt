@@ -46,8 +46,15 @@ internal object V134VpnSession {
     fun eraseProfile(context: Context) {
         route = Route.BLOCKED
         temporaryDirectPlaylist = null
-        profile = null
+        // Never remove the only saved connection details while leaving a tunnel up.
+        if (tunnel != null) {
+            check(tunnel(context).disconnect()) { "VPN-Verbindung konnte nicht beendet werden" }
+            check(!tunnel(context).isUp()) { "VPN-Verbindung noch aktiv" }
+        }
         V139VpnEncryptedProfileStore.erase(context)
+        profile = null
+        lastExitOk = false
+        lastExitCheckMs = 0
     }
 
     fun mode(context: Context, playlistId: String): Boolean =
