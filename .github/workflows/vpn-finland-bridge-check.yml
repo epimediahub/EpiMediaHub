@@ -36,6 +36,7 @@ jobs:
           set -euo pipefail
           mkdir -p .ci-vpn/app/src/main/java/de/epimediahub/app/vpn
           mkdir -p .ci-vpn/app/src/main
+          printf "android.useAndroidX=true\n" > .ci-vpn/gradle.properties
           cat > .ci-vpn/settings.gradle.kts <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement {
