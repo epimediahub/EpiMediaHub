@@ -19,12 +19,16 @@ jobs:
           cat android/source_parts/source_* | base64 -d > /tmp/source.tar.gz
           mkdir -p /tmp/src
           tar -xzf /tmp/source.tar.gz -C /tmp/src
+          PROJECT_ROOT="$(find /tmp/src -maxdepth 5 -name settings.gradle.kts -printf '%h\\n' | head -1)"
+          test -n "$PROJECT_ROOT"
+          export PROJECT_ROOT
+          bash build_tools/install_android_v1033_source.sh
           echo '=== FILES ==='
-          find /tmp/src -type f \( -name 'V070Playlists.kt' -o -name '*Focus*.kt' \)
+          find "$PROJECT_ROOT" -type f \( -name 'V070Playlists.kt' -o -name '*Focus*.kt' \)
           echo '=== FOCUS DECLARATIONS ==='
-          rg -n -C 10 'fun .*v070TvFocus|fun V070PlaylistCard|V070PlaylistCard\(|onDelete|onClick|focusGroup|focusProperties|focusRequester|focusable|selectPlaylist|requestFocus|focusTarget|TVFocus' /tmp/src --glob 'V070Playlists.kt' | head -550
+          grep -nE -C 10 'fun .*v070TvFocus|fun V070PlaylistCard|V070PlaylistCard\\(|onDelete|onClick|focusGroup|focusProperties|focusRequester|focusable|selectPlaylist|requestFocus|focusTarget|TVFocus' "$(find "$PROJECT_ROOT" -name V070Playlists.kt | head -1)" | head -550 || true
           echo '=== FULL PLAYLIST SOURCE ==='
-          FILE="$(find /tmp/src -name V070Playlists.kt | head -1)"
+          FILE="$(find "$PROJECT_ROOT" -name V070Playlists.kt | head -1)"
           test -f "$FILE"
           wc -l "$FILE"
           cat "$FILE"
