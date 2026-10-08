@@ -24,12 +24,21 @@ dep = '    implementation("com.wireguard.android:tunnel:1.0.20260102")\n'
 text = gradle.read_text()
 if "com.wireguard.android:tunnel" in text:
     raise SystemExit("Refusing: tunnel dependency is already configured")
-if text.count("dependencies {") != 1 or "coreLibraryDesugaringEnabled = true" not in text:
-    raise SystemExit("Refusing: unsupported Gradle configuration (desugaring must be enabled)")
+if text.count("dependencies {") != 1:
+    raise SystemExit("Refusing: unsupported dependencies configuration")
 new_gradle = text.replace("dependencies {", "dependencies {\n"+dep, 1)
 if 'coreLibraryDesugaring(' not in new_gradle:
     new_gradle = new_gradle.replace('dependencies {\n'+dep,
         'dependencies {\n'+dep+'    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")\n',1)
+if "isCoreLibraryDesugaringEnabled = true" not in new_gradle and "coreLibraryDesugaringEnabled = true" not in new_gradle:
+    if new_gradle.count("compileOptions {") != 1:
+        raise SystemExit("Refusing: unknown compileOptions setup")
+    new_gradle = new_gradle.replace("compileOptions {",
+        "compileOptions {\n        isCoreLibraryDesugaringEnabled = true", 1)
+if new_gradle.count("versionCode = 1033") != 1 or new_gradle.count('versionName = "1.0.33"') != 1:
+    raise SystemExit("Refusing: expected 1.0.33 version")
+new_gradle = new_gradle.replace("versionCode = 1033", "versionCode = 1034", 1)
+new_gradle = new_gradle.replace('versionName = "1.0.33"', 'versionName = "1.0.34"', 1)
 
 service = '''        <!-- WireGuard internal beta: Android user consent required, no auto-connect. -->
         <service
