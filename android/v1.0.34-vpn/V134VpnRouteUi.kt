@@ -43,7 +43,8 @@ fun V134VpnRouteBlockedScreen(
     context: Context,
     playlistId: String,
     playlistName: String,
-    onPlaylists: () -> Unit
+    onPlaylists: () -> Unit,
+    onDirectApproved: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val declineFocus = remember(playlistId) { FocusRequester() }
@@ -137,7 +138,11 @@ fun V134VpnRouteBlockedScreen(
                                 }
                                 busy = false
                                 showConfirmation = false
-                                if (!verified) failed = true
+                                if (verified) {
+                                    // Re-prepare and reselect the SAME live channel under the
+                                    // verified direct route; no manual channel-zapping needed.
+                                    onDirectApproved()
+                                } else failed = true
                             }
                         }
                     ) { Text(if (busy) "Verbindung wird geprüft …" else "Ja, einmal direkt") }
