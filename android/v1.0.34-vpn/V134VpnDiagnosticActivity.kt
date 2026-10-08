@@ -13,6 +13,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import de.epimediahub.app.MainActivity
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
@@ -60,20 +61,26 @@ class V134VpnDiagnosticActivity : Activity() {
             }
         }
         label("EPIMEDIAHUB · FINLAND VPN BETA", 23f)
-        label("Separate Testinstallation. Erst Route überprüfen, dann den Testplayer öffnen. Automatischer Playlist-Wechsel ist noch nicht aktiviert.", 15f)
+        label("Separate Testinstallation. Profil über ADB laden, dann VPN verbinden und Playlists prüfen. Bitte ausschließlich die Beta testen.", 15f)
         status = TextView(this).apply {
             textSize = 17f
             setTextColor(Color.WHITE)
             setPadding(0, 18, 0, 24)
         }
         layout.addView(status)
-        action("Separates Finnland-VPN-Profil importieren") {
+        action("VPN-Profil vom Fire TV laden (ADB)") { importLocalProfile() }
+        action("Anderes VPN-Profil auswählen") {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
                 type = "*/*"
             }
-            runCatching { startActivityForResult(intent, REQUEST_FILE) }
-                .onFailure { setStatus("Keine Dateiauswahl verfügbar.") }
+            val handlerAvailable = intent.resolveActivity(packageManager) != null
+            if (!handlerAvailable) {
+                setStatus("Fire TV bietet keine Dateiauswahl. Bitte die ADB-Importtaste darüber verwenden.")
+            } else {
+                runCatching { startActivityForResult(intent, REQUEST_FILE) }
+                    .onFailure { setStatus("Dateiauswahl nicht verfügbar. Bitte über ADB importieren.") }
+            }
         }
         vpnButton = action("VPN Finnland verbinden und prüfen") { startVpn() }
         directButton = action("Direktverbindung herstellen und prüfen") { startDirect() }
@@ -104,10 +111,37 @@ class V134VpnDiagnosticActivity : Activity() {
                 busy = false
                 result.onSuccess(success).onFailure {
                     route = "blocked"
-                    setStatus("Netzwerkprüfung fehlgeschlagen: " + it.javaClass.simpleName)
+                    setStatus("Vorgang fehlgeschlagen: " + (it.message ?: it.javaClass.simpleName).take(135))
                 }
             }
         }
+    }
+
+    private fun importLocalProfile() {
+        val directory = getExternalFilesDir(null)
+        if (directory == null) {
+            setStatus("Fire TV-Speicher nicht verfügbar. Bitte USB-Speicher prüfen.")
+            return
+        }
+        val file = File(directory, "epi-test-01.conf")
+        if (!file.isFile) {
+            setStatus("VPN-Datei fehlt. Per ADB in Android/data/de.epimediahub.app.vpnbeta/files/epi-test-01.conf übertragen.")
+            return
+        }
+        work({
+            require(file.length() in 150L..12_000L) { "Ungültige Profildateigröße" }
+            file.inputStream().buffered().use { input ->
+                val buffer = input.readBytes()
+                betaProfile(buffer.toString(Charsets.UTF_8))
+            }
+        }, { vpnConfig ->
+            V134VpnSession.storeProfile(vpnConfig)
+            val erased = file.delete()
+            route = "blocked"
+            setStatus(if (erased)
+                "Finnland-Testprofil importiert. Temporäre Quelldatei gelöscht. Jetzt VPN verbinden und prüfen."
+            else "Finnland-Testprofil importiert. Bitte temporäre Quelldatei nach dem Test per ADB löschen.")
+        })
     }
 
     private fun startVpn() {
