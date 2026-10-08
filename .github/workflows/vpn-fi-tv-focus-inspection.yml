@@ -1,4 +1,4 @@
-name: Inspect Fire TV playlist focus (isolated, read-only)
+name: Inspect Fire TV player restore anchors (isolated, read-only)
 on:
   push:
     branches: [feature/vpn-finland-foundation]
@@ -9,10 +9,10 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-22.04
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct v1.0.33 playlist source and inspect D-pad navigation
+      - name: Inspect real V133 app state and player restart methods
         shell: bash
         run: |
           set -euo pipefail
@@ -23,16 +23,13 @@ jobs:
           test -n "$PROJECT_ROOT"
           export PROJECT_ROOT
           bash build_tools/install_android_v1033_source.sh
-          echo '=== FILES ==='
-          find "$PROJECT_ROOT" -type f \( -name 'V070Playlists.kt' -o -name '*Focus*.kt' \)
-          echo '=== FOCUS DECLARATIONS ==='
-          grep -nE -C 10 'fun .*v070TvFocus|fun V070PlaylistCard|V070PlaylistCard\\(|onDelete|onClick|focusGroup|focusProperties|focusRequester|focusable|selectPlaylist|requestFocus|focusTarget|TVFocus' "$(find "$PROJECT_ROOT" -name V070Playlists.kt | head -1)" | head -550 || true
-          echo '=== FULL PLAYLIST SOURCE ==='
-          FILE="$(find "$PROJECT_ROOT" -name V070Playlists.kt | head -1)"
-          test -f "$FILE"
-          wc -l "$FILE"
-          cat "$FILE"
-          echo '=== V070Focus.kt ==='
-          cat "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Focus.kt"
-          echo '=== V114Focus.kt ==='
-          cat "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V114Focus.kt"
+          JAVA="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app"
+          echo '=== MAIN MODEL PLAYBACK METHODS ==='
+          grep -nE -C 8 'fun (play|open|select|navigate|set|reload|start)|data class .*Ui|enum class Screen|LiveTv|LiveTV|Player|player|selectedChannel|currentChannel|activeChannel|isPlaying|playing' "$JAVA/MainViewModel.kt" | head -540 || true
+          echo '=== EPI APP PLAYER HOST ==='
+          grep -nE -C 10 'Screen\.Player|Screen\.Live|PlayerScreen|selected|channel|Player\(|Screen\.Play|LiveTv|V134' "$JAVA/EpiMediaHubApp.kt" | head -380 || true
+          echo '=== PLAYER SOURCE CANDIDATES ==='
+          find "$JAVA" -name '*Player*.kt' -o -name '*LiveTv*.kt' | head -45
+          echo '=== PLAYER SCREEN START ==='
+          P="$(find "$JAVA" -name PlayerScreen.kt | head -1)"
+          if [ -f "$P" ]; then grep -nE -C 12 'fun PlayerScreen|LaunchedEffect|remember\(|DisposableEffect|onDispose|ExoPlayer|mediaItem|prepare\(|playWhenReady|setMediaItem|play\(' "$P" | head -340; fi
