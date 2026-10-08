@@ -61,7 +61,7 @@ class V134VpnDiagnosticActivity : Activity() {
             }
         }
         label("EPIMEDIAHUB · FINLAND VPN BETA", 23f)
-        label("Separate Testinstallation. Profil über ADB laden, dann VPN verbinden und Playlists prüfen. Bitte ausschließlich die Beta testen.", 15f)
+        label("Separate Testinstallation. ADB-Import aus Android/media. Danach Finnland-VPN und Playlists prüfen.", 15f)
         status = TextView(this).apply {
             textSize = 17f
             setTextColor(Color.WHITE)
@@ -89,8 +89,10 @@ class V134VpnDiagnosticActivity : Activity() {
             else setStatus("Route nicht bestätigt. Player bleibt gesperrt.")
         }
         label("Keine Freigabe für Kunden. Der Android-VPN-Dialog erfordert deine Zustimmung. Verwende niemals den privaten VPN-Schlüssel in GitHub oder Screenshots.", 13f)
-        // Create the app-specific external transfer folder before the PC uses adb push.
+        // Android 11+ may deny adb shell access to Android/data even for this app.
+        // Android/media is intended only as a short-lived ADB handoff; delete on import.
         runCatching { getExternalFilesDir(null) }
+        runCatching { getExternalMediaDirs().firstOrNull()?.mkdirs() }
         setContentView(ScrollView(this).apply { addView(layout) })
         setStatus("Noch keine bestätigte Route. Bitte VPN oder Direktverbindung prüfen.")
     }
@@ -120,14 +122,16 @@ class V134VpnDiagnosticActivity : Activity() {
     }
 
     private fun importLocalProfile() {
-        val directory = getExternalFilesDir(null)
-        if (directory == null) {
-            setStatus("Fire TV-Speicher nicht verfügbar. Bitte USB-Speicher prüfen.")
-            return
-        }
-        val file = File(directory, "epi-test-01.conf")
-        if (!file.isFile) {
-            setStatus("VPN-Datei fehlt. Per ADB in Android/data/de.epimediahub.app.vpnbeta/files/epi-test-01.conf übertragen.")
+        val privateDirectory = getExternalFilesDir(null)
+        val adbMediaDirectory = runCatching { getExternalMediaDirs().firstOrNull() }.getOrNull()
+        val files = listOfNotNull(privateDirectory, adbMediaDirectory)
+            .map { File(it, "epi-test-01.conf") }
+        val file = files.firstOrNull { it.isFile }
+        if (file == null) {
+            setStatus(
+                "VPN-Datei fehlt. ADB-Ziel: /sdcard/Android/media/" +
+                    packageName + "/epi-test-01.conf"
+            )
             return
         }
         work({
@@ -141,8 +145,8 @@ class V134VpnDiagnosticActivity : Activity() {
             val erased = file.delete()
             route = "blocked"
             setStatus(if (erased)
-                "Finnland-Testprofil importiert. Temporäre Quelldatei gelöscht. Jetzt VPN verbinden und prüfen."
-            else "Finnland-Testprofil importiert. Bitte temporäre Quelldatei nach dem Test per ADB löschen.")
+                "Finnland-Testprofil importiert und temporäre Datei gelöscht. VPN jetzt verbinden."
+            else "Finnland-Testprofil importiert. Bitte temporäre Datei per ADB sofort löschen.")
         })
     }
 
