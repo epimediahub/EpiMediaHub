@@ -125,7 +125,9 @@ replace(app, "    MaterialTheme(colorScheme = scheme, shapes = shapes) {",
     MaterialTheme(colorScheme = scheme, shapes = shapes) {""")
 replace(app, "        } else if (kidsSessionActive) {",
     """        } else if (u.active != null && u.screen != Screen.Playlists && !v134Ready) {
-            de.epimediahub.app.vpn.V134VpnRouteBlockedScreen(context, u.active?.name ?: "Playlist") {
+            de.epimediahub.app.vpn.V134VpnRouteBlockedScreen(
+                context, u.active!!.id.toString(), u.active?.name ?: "Playlist"
+            ) {
                 vm.navigate(Screen.Playlists)
             }
         } else if (kidsSessionActive) {""")
