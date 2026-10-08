@@ -19,7 +19,7 @@ jobs:
           cat android/source_parts/source_* | base64 -d > /tmp/source.tar.gz
           mkdir -p /tmp/src
           tar -xzf /tmp/source.tar.gz -C /tmp/src
-          PROJECT_ROOT="$(find /tmp/src -maxdepth 5 -name settings.gradle.kts -printf '%h\\n' | head -1)"
+          PROJECT_ROOT="$(find /tmp/src -maxdepth 5 -name settings.gradle.kts -printf '%h\n' | head -1)"
           test -n "$PROJECT_ROOT"
           export PROJECT_ROOT
           bash build_tools/install_android_v1033_source.sh
