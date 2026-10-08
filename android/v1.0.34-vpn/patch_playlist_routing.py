@@ -169,11 +169,11 @@ _home = _home[:_line_end] + """    var v140SpeedOpen by remember { mutableStateO
 """ + _home[_line_end:]
 home.write_text(_home)
 replace(home,
-    """                weather = weather,
-                modifier = Modifier.fillMaxWidth().height(headerHeight)""",
-    """                weather = weather,
+    """            V083Header(
+                playlist = u.active?.name ?: "EpiMediaHub",""",
+    """            V083Header(
                 onSpeedtest = { v140SpeedOpen = true },
-                modifier = Modifier.fillMaxWidth().height(headerHeight)""")
+                playlist = u.active?.name ?: "EpiMediaHub",""")
 replace(home,
     """    weather: V070WeatherSnapshot?,
     modifier: Modifier = Modifier
