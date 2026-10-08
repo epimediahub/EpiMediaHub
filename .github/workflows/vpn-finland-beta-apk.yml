@@ -1,0 +1,249 @@
+name: EpiMediaHub VPN Finland 1.0.34 signed beta - artifact only
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/vpn-finland-foundation]
+    paths:
+      - '.github/workflows/vpn-finland-beta-apk.yml'
+      - 'android/v1.0.34-vpn/**'
+      - 'android/v1.0.33/**'
+      - 'android/v1.0.28/patch_v128.py'
+      - 'build_tools/generate_intro_sound_v128.py'
+      - 'build_tools/verify_intro_sound_v128.py'
+      - 'build_tools/install_android_v1033_source.sh'
+      - 'build_tools/build_android_audio_v123.sh'
+      - 'build_tools/generate_audio_fixtures_v123.py'
+      - 'build_tools/package_android_audio_sources_v126.py'
+      - 'build_tools/prepare_chromaprint_v126.sh'
+      - 'build_tools/generate_fingerprint_fixtures_v126.py'
+      - 'android/release_notes/v1.0.33.md'
+      - 'build_tools/install_skin_assets_v132.py'
+      - 'build_tools/verify_skin_assets_v132.py'
+      - 'build_tools/verify_android_release_v133.py'
+
+concurrency:
+  group: epimediahub-vpn-finland-beta-apk
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-vpn-beta-apk:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require permanent signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+
+      - name: Reconstruct project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* > .ci-android/source.b64
+          base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
+          EXPECTED="192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          ACTUAL="$(sha256sum .ci-android/source.tar.gz | awk '{print $1}')"
+          test "$ACTUAL" = "$EXPECTED"
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+
+      - name: Pin Gradle toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+
+      - name: Install v1.0.33 source and isolated VPN beta adapter
+        run: |
+          bash build_tools/install_android_v1033_source.sh
+          python3 android/v1.0.34-vpn/patch_wireguard_spike.py
+          python3 build_tools/verify_intro_sound_v128.py "$PROJECT_ROOT/app/src/main/res/raw/epimedia_intro_heartbeat_cinema.wav"
+
+      - name: Install permanent release signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/epimediahub-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias epimediahub >/dev/null
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_ROOT'])/'app/build.gradle.kts'
+          s=p.read_text()
+          anchor='    buildTypes {\n'
+          signing='''    signingConfigs {
+              create("release") {
+                  storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))
+                  storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                  keyAlias = "epimediahub"
+                  keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+              }
+          }
+
+          '''
+          if anchor not in s: raise SystemExit('buildTypes anchor missing')
+          s=s.replace(anchor, signing+anchor, 1)
+          release='        release {\n'
+          if release not in s: raise SystemExit('release build type missing')
+          s=s.replace(release, release+'            signingConfig = signingConfigs.getByName("release")\n', 1)
+          p.write_text(s)
+          PY
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+          cache-read-only: false
+
+      - name: Cache audio native libraries
+        id: audio-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.PROJECT_ROOT }}/ffmpeg-audio/src/main/jni/ffmpeg/android-libs
+            ${{ env.PROJECT_ROOT }}/ffmpeg-6.1.6.tar.xz
+          key: audio-ffmpeg-6.1.6-ndk26b-api25-${{ runner.os }}-${{ hashFiles('build_tools/build_android_audio_v123.sh', 'android/v1.0.23/upstream.json') }}
+
+      - name: Build audio-only FFmpeg for all Android architectures
+        run: bash build_tools/build_android_audio_v123.sh
+
+      - name: Preserve successful native build independently of app tests
+        if: steps.audio-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.PROJECT_ROOT }}/ffmpeg-audio/src/main/jni/ffmpeg/android-libs
+            ${{ env.PROJECT_ROOT }}/ffmpeg-6.1.6.tar.xz
+          key: ${{ steps.audio-cache.outputs.cache-primary-key }}
+
+      - name: Generate original audio test fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y ffmpeg
+          fi
+          python3 build_tools/generate_audio_fixtures_v123.py
+          python3 build_tools/generate_fingerprint_fixtures_v126.py
+
+      - name: Compile signed EpiMediaHub VPN Finland beta APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          gradle :app:testDebugUnitTest :app:assembleRelease --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+      - name: Verify version, native WireGuard, and official release signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE="$PROJECT_ROOT/app/build/outputs/apk/release"
+          for ABI in arm64-v8a armeabi-v7a universal; do
+            APK="$RELEASE/app-${ABI}-release.apk"
+            test -s "$APK"
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            grep -F "versionCode='1034'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            grep -F "versionName='1.0.34'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-${ABI}-signer.txt"
+            CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-${ABI}-signer.txt" | tr '[:lower:]' '[:upper:]')
+            test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+          done
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134WireGuardDeviceTunnel.kt"
+          grep -Fq 'GoBackend$VpnService' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
+          grep -Fq 'com.wireguard.android:tunnel:1.0.20260102' "$PROJECT_ROOT/app/build.gradle.kts"
+          mkdir -p vpn-beta-artifacts
+          cp "$RELEASE/app-arm64-v8a-release.apk" vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.34-ARM64-BETA.apk
+          cp "$RELEASE/app-armeabi-v7a-release.apk" vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.34-ARMv7-BETA.apk
+          (cd vpn-beta-artifacts && sha256sum *.apk > SHA256SUMS.txt)
+          cat > vpn-beta-artifacts/README.txt <<'EOF'
+          EpiMediaHub VPN Finland 1.0.34 - INTEGRATION COMPILE BETA
+          The WireGuard tunnel adapter is packaged but not enabled in the app.
+          There is NO VPN user interface, playlist toggle or device licensing in this beta.
+          DO NOT distribute to customers. Does NOT deploy to the in-app updater.
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-VPN-Finland-v1.0.34-integration-beta
+          path: vpn-beta-artifacts/
+          retention-days: 14
+          if-no-files-found: error
+
+  report-beta-result:
+    runs-on: ubuntu-22.04
+    needs: [build-vpn-beta-apk]
+    if: ${{ always() }}
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          BETA_RESULT: ${{ needs.build-vpn-beta-apk.result }}
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const branch = context.ref.replace('refs/heads/', '');
+            const path = 'build_status/vpn-finland-beta-apk.json';
+            const conclusion = process.env.BETA_RESULT;
+            let sha;
+            try {
+              const res = await github.rest.repos.getContent({owner, repo, path, ref: branch});
+              if (!Array.isArray(res.data)) sha = res.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            const body = JSON.stringify({
+              kind: 'signed-epimediahub-android-vpn-integration-beta',
+              conclusion,
+              run_id: context.runId,
+              run_url: `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`,
+              workflow_sha: context.sha,
+              updated_at: new Date().toISOString(),
+              functional_vpn_ui: false,
+              production_updater_modified: false
+            }, null, 2) + '\n';
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `CI VPN beta APK: ${conclusion} (run ${context.runId})`,
+              content: Buffer.from(body, 'utf8').toString('base64'),
+              ...(sha ? {sha} : {})
+            });
