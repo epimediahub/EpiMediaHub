@@ -32,3 +32,7 @@ jobs:
           test -f "$FILE"
           wc -l "$FILE"
           cat "$FILE"
+          echo '=== V070Focus.kt ==='
+          cat "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Focus.kt"
+          echo '=== V114Focus.kt ==='
+          cat "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V114Focus.kt"
