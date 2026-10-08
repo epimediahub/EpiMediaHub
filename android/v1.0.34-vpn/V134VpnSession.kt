@@ -14,6 +14,11 @@ internal object V134VpnSession {
     @Volatile private var route = Route.BLOCKED
     @Volatile private var profile: String? = null
     @Volatile private var tunnel: V134WireGuardDeviceTunnel? = null
+    // Per-process, single-playlist opt-in only. NEVER write the override to preferences.
+    @Volatile private var temporaryDirectPlaylist: String? = null
+    private var lastExitCheckMs: Long = 0
+    private var lastExitOk: Boolean = false
+    private const val EXIT_CHECK_INTERVAL_MS = 10_000L
     private const val FINLAND_IP = "37.27.42.215"
 
     @Synchronized private fun tunnel(context: Context): V134WireGuardDeviceTunnel {
@@ -23,35 +28,94 @@ internal object V134VpnSession {
 
     fun hasProfile(): Boolean = profile != null
 
+    @Synchronized
     fun storeProfile(value: String) {
         profile = value
         route = Route.BLOCKED
+        temporaryDirectPlaylist = null
+        lastExitOk = false
+        lastExitCheckMs = 0
     }
 
     fun mode(context: Context, playlistId: String): Boolean =
         context.getSharedPreferences("vpn-beta-routing", Context.MODE_PRIVATE)
             .getBoolean("vpn_$playlistId", false)
 
+    @Synchronized
     fun setMode(context: Context, playlistId: String, enabled: Boolean) {
+        // A fresh user selection always cancels any temporary direct exception.
+        temporaryDirectPlaylist = null
+        route = Route.BLOCKED
         context.getSharedPreferences("vpn-beta-routing", Context.MODE_PRIVATE)
             .edit().putBoolean("vpn_$playlistId", enabled).apply()
-        route = Route.BLOCKED
     }
 
     @Synchronized
     fun routeReady(context: Context, playlistId: String): Boolean {
         val actual = tunnel(context).isUp()
-        return if (mode(context, playlistId))
-            route == Route.FINLAND && actual
-        else route == Route.DIRECT && !actual
+        if (mode(context, playlistId) && temporaryDirectPlaylist == playlistId) {
+            return route == Route.DIRECT && !actual
+        }
+        if (!mode(context, playlistId)) return route == Route.DIRECT && !actual
+        if (route != Route.FINLAND || !actual) {
+            route = Route.BLOCKED
+            lastExitOk = false
+            return false
+        }
+        // A tunnel reporting UP is not proof of a working Finnish exit. Probe at
+        // bounded intervals while playing; on failed proof remove the player UI.
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastExitCheckMs >= EXIT_CHECK_INTERVAL_MS || lastExitCheckMs == 0L) {
+            lastExitCheckMs = now
+            lastExitOk = runCatching { publicIpv4() == FINLAND_IP }.getOrDefault(false)
+        }
+        if (!lastExitOk) route = Route.BLOCKED
+        return route == Route.FINLAND && actual && lastExitOk
     }
 
-    fun block() { route = Route.BLOCKED }
+    fun needsDirectFallbackPrompt(context: Context, playlistId: String): Boolean =
+        mode(context, playlistId) && temporaryDirectPlaylist != playlistId
+
+    /**
+     * Called ONLY after the user confirms the explicit privacy warning.
+     * Disconnects WireGuard, verifies the direct exit, then grants THIS playlist
+     * temporary direct access. The saved VPN playlist preference is unchanged.
+     */
+    @Synchronized
+    fun allowDirectOnce(context: Context, playlistId: String): Boolean {
+        if (!mode(context, playlistId)) return false
+        temporaryDirectPlaylist = null
+        route = Route.BLOCKED
+        return runCatching {
+            check(tunnel(context).disconnect()) { "VPN konnte nicht getrennt werden" }
+            check(!tunnel(context).isUp()) { "VPN weiterhin verbunden" }
+            val directIp = publicIpv4()
+            check(directIp != FINLAND_IP) { "Direktausgang nicht bestätigt" }
+            route = Route.DIRECT
+            temporaryDirectPlaylist = playlistId
+            true
+        }.getOrElse {
+            route = Route.BLOCKED
+            temporaryDirectPlaylist = null
+            false
+        }
+    }
+
+    @Synchronized
+    fun block() {
+        route = Route.BLOCKED
+        temporaryDirectPlaylist = null
+        lastExitOk = false
+        lastExitCheckMs = 0
+    }
 
     /** Called in a worker thread. Never change playlist until this returns true. */
     @Synchronized
     fun connectAndVerify(context: Context): String {
         route = Route.BLOCKED
+        temporaryDirectPlaylist = null
+        lastExitOk = false
+        lastExitCheckMs = 0
         val cfg = profile ?: error("Bitte Finnland-Profil neu importieren")
         check(VpnService.prepare(context) == null) { "VPN-Einwilligung fehlt" }
         check(tunnel(context).connect(cfg)) { "WireGuard konnte nicht verbunden werden" }
@@ -59,6 +123,8 @@ internal object V134VpnSession {
             val ip = publicIpv4()
             check(ip == FINLAND_IP) { "Finnland-Ausgang nicht bestätigt" }
             route = Route.FINLAND
+            lastExitOk = true
+            lastExitCheckMs = android.os.SystemClock.elapsedRealtime()
             ip
         } catch (error: Exception) {
             runCatching { tunnel(context).disconnect() }
@@ -70,6 +136,9 @@ internal object V134VpnSession {
     @Synchronized
     fun disconnectAndVerify(context: Context): String {
         route = Route.BLOCKED
+        temporaryDirectPlaylist = null
+        lastExitOk = false
+        lastExitCheckMs = 0
         check(tunnel(context).disconnect()) { "VPN konnte nicht getrennt werden" }
         check(!tunnel(context).isUp()) { "VPN noch verbunden" }
         val ip = publicIpv4()
@@ -93,6 +162,8 @@ internal object V134VpnSession {
 
     @Synchronized
     fun routeTo(context: Context, playlistId: String): Boolean {
+        // Explicit playlist reselection re-enforces its saved VPN/DIRECT mode.
+        temporaryDirectPlaylist = null
         return runCatching {
             if (mode(context, playlistId)) connectAndVerify(context)
             else disconnectAndVerify(context)
