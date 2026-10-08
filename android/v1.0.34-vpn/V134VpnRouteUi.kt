@@ -4,8 +4,10 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -15,9 +17,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Fail-closed UI: remove the player subtree when the selected route is wrong. */
+/** Blocks the player subtree until the configured or explicitly approved route is verified. */
 @Composable
 fun v134RouteReady(context: Context, playlistId: String?): Boolean {
     var ready by remember(playlistId) { mutableStateOf(playlistId == null) }
@@ -35,26 +38,107 @@ fun v134RouteReady(context: Context, playlistId: String?): Boolean {
 
 @Composable
 fun V134VpnRouteBlockedScreen(
-    context: Context, playlistName: String, onPlaylists: () -> Unit
+    context: Context,
+    playlistId: String,
+    playlistName: String,
+    onPlaylists: () -> Unit
 ) {
-    Box(Modifier.fillMaxSize().background(Color(0xFF07111D)), contentAlignment = Alignment.Center) {
+    val scope = rememberCoroutineScope()
+    var showConfirmation by remember(playlistId) { mutableStateOf(false) }
+    var busy by remember(playlistId) { mutableStateOf(false) }
+    var failed by remember(playlistId) { mutableStateOf(false) }
+    val canOfferDirect = V134VpnSession.needsDirectFallbackPrompt(context, playlistId)
+    Box(
+        Modifier.fillMaxSize().background(Color(0xFF07111D)),
+        contentAlignment = Alignment.Center
+    ) {
         Column(
             Modifier.fillMaxWidth(.83f),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Text("VPN-SICHERHEITSSPERRE", color = Color(0xFFF5C15B),
-                fontWeight = FontWeight.Black, fontSize = 27.sp)
-            Text("Die Netzwerkroute für „" + playlistName + "“ ist noch nicht bestätigt. "
-                 + "Wiedergabe bleibt gesperrt, damit der Stream nicht unbemerkt über die falsche Verbindung läuft.",
-                 color = Color.White, fontSize = 19.sp)
+            Text(
+                "VPN-VERBINDUNG UNTERBROCHEN",
+                color = Color(0xFFF5C15B),
+                fontWeight = FontWeight.Black,
+                fontSize = 27.sp
+            )
+            Text(
+                "Für „" + playlistName + "“ ist die eingestellte Netzwerkverbindung " +
+                    "nicht bestätigt. Die Wiedergabe wurde angehalten.",
+                color = Color.White, fontSize = 19.sp
+            )
+            if (canOfferDirect) {
+                Text(
+                    "Du kannst einmalig ohne VPN fortfahren. Dein IPTV-Anbieter " +
+                        "sieht dann deine normale öffentliche IP-Adresse.",
+                    color = Color.White, fontSize = 16.sp
+                )
+                Button(
+                    onClick = { showConfirmation = true },
+                    enabled = !busy
+                ) { Text("Ohne VPN fortfahren …") }
+            }
+            if (failed) {
+                Text(
+                    "Direktverbindung konnte nicht bestätigt werden. " +
+                        "Die Wiedergabe bleibt gesperrt.",
+                    color = Color(0xFFFFA89D), fontSize = 16.sp
+                )
+            }
             Button(onClick = {
-                context.startActivity(Intent(context, V134VpnDiagnosticActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }) { Text("VPN-Verbindung überprüfen") }
-            Button(onClick = onPlaylists) { Text("Playlist-Einstellungen öffnen") }
-            Text("Nur für die getrennte EpiMediaHub-VPN-Beta. Kein automatischer Direkt-Fallback.",
-                 color = Color.LightGray, fontSize = 13.sp)
+                context.startActivity(
+                    Intent(context, V134VpnDiagnosticActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }, enabled = !busy) { Text("VPN-Verbindung überprüfen") }
+            Button(onClick = onPlaylists, enabled = !busy) {
+                Text("Playlist-Einstellungen öffnen")
+            }
+            Text(
+                "Keine automatische Direktverbindung. Entscheidung nur für diese " +
+                    "Wiedergabe; „VPN Finnland“ bleibt gespeichert.",
+                color = Color.LightGray, fontSize = 13.sp
+            )
+        }
+        if (showConfirmation) {
+            AlertDialog(
+                onDismissRequest = { if (!busy) showConfirmation = false },
+                title = { Text("Wirklich ohne VPN fortfahren?") },
+                text = {
+                    Text(
+                        "Finnland-VPN ist nicht verfügbar. Wenn du fortfährst, " +
+                            "verbindet sich „" + playlistName + "“ direkt mit deinem " +
+                            "Internetprovider. Dein IPTV-Anbieter kann deine normale " +
+                            "öffentliche IP-Adresse erkennen. Nur für diese " +
+                            "Wiedergabe; die Playlist bleibt auf VPN Finnland."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = !busy,
+                        onClick = {
+                            if (busy) return@TextButton
+                            busy = true
+                            failed = false
+                            scope.launch {
+                                val verified = withContext(Dispatchers.IO) {
+                                    V134VpnSession.allowDirectOnce(context, playlistId)
+                                }
+                                busy = false
+                                showConfirmation = false
+                                if (!verified) failed = true
+                            }
+                        }
+                    ) { Text(if (busy) "Verbindung wird geprüft …" else "Ja, einmal direkt") }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showConfirmation = false },
+                        enabled = !busy
+                    ) { Text("Nein, VPN beibehalten") }
+                }
+            )
         }
     }
 }
