@@ -89,6 +89,8 @@ class V134VpnDiagnosticActivity : Activity() {
             else setStatus("Route nicht bestätigt. Player bleibt gesperrt.")
         }
         label("Keine Freigabe für Kunden. Der Android-VPN-Dialog erfordert deine Zustimmung. Verwende niemals den privaten VPN-Schlüssel in GitHub oder Screenshots.", 13f)
+        // Create the app-specific external transfer folder before the PC uses adb push.
+        runCatching { getExternalFilesDir(null) }
         setContentView(ScrollView(this).apply { addView(layout) })
         setStatus("Noch keine bestätigte Route. Bitte VPN oder Direktverbindung prüfen.")
     }
