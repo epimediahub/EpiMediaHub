@@ -151,9 +151,14 @@ print("V134 beta routing UI installed: per-playlist toggle and guarded playlist 
 # v1.0.40: A real, on-demand bandwidth test beside Radio and Playlist wechseln.
 # Keep the main menu tiles and all regular production resources untouched.
 home = java/"ui/V083Home.kt"
-replace(home,
-    """    val firstFocus = remember { FocusRequester() }""",
-    """    var v140SpeedOpen by remember { mutableStateOf(false) }
+# The home has accumulated many skin/focus changes since the original source.
+# Anchor to V083HomeScreen itself instead of assuming a first-focus declaration.
+_home = home.read_text()
+_screen = _home.index("fun V083HomeScreen(")
+_context = _home.find("    val context = LocalContext.current", _screen)
+assert _context >= 0 and _context < _home.index("    BoxWithConstraints(", _screen), "Home context anchor missing"
+_line_end = _home.index("\n", _context) + 1
+_home = _home[:_line_end] + """    var v140SpeedOpen by remember { mutableStateOf(false) }
     if (v140SpeedOpen) {
         de.epimediahub.app.vpn.V140SpeedTestScreen(
             context, u.active?.id?.toString(), isTv, accent,
@@ -161,7 +166,8 @@ replace(home,
         )
         return
     }
-    val firstFocus = remember { FocusRequester() }""")
+""" + _home[_line_end:]
+home.write_text(_home)
 replace(home,
     """                weather = weather,
                 modifier = Modifier.fillMaxWidth().height(headerHeight)""",
