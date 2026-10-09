@@ -45,8 +45,8 @@ class InstallerTests(unittest.TestCase):
                 return False
             def seek(self, *args, **kwargs):
                 raise io.UnsupportedOperation("File or stream is not seekable")
-        for line, expected in (("\\n", "https://api.epimediahub.com"),
-                               ("https://vpn.example.org\\n", "https://vpn.example.org")):
+        for line, expected in (("\n", "https://api.epimediahub.com"),
+                               ("https://vpn.example.org\n", "https://vpn.example.org")):
             with self.subTest(line=line):
                 with patch("builtins.open", return_value=NonSeekableTerminal(line)) as opened:
                     with contextlib.redirect_stderr(io.StringIO()) as prompt:
