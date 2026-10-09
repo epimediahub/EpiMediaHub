@@ -41,8 +41,9 @@ internal class V145RouteGuard(
  * A remote test-server rejection is not equivalent to losing VPN routing.
  * Only this error class is eligible for a reduced-concurrency retry.
  */
-internal class V146SpeedServerException(val httpStatus: Int, direction: String) :
-    IllegalStateException("$direction-Testserver: HTTP $httpStatus")
+internal class V146SpeedServerException(
+    val httpStatus: Int, direction: String, val host: String
+) : IllegalStateException("$direction-Testserver ($host): HTTP $httpStatus")
 
 /** Actual bounded HTTP transfers, independent of Android UI and VPN credentials. */
 internal class V140SpeedTransfer {
@@ -127,7 +128,7 @@ internal class V140SpeedTransfer {
         transfer(url, verify) { conn, started ->
             val responseCode = conn.responseCode
             if (responseCode != 200) {
-                throw V146SpeedServerException(responseCode, "Download")
+                throw V146SpeedServerException(responseCode, "Download", conn.url.host)
             }
             var received = 0L
             var lastReport = started
@@ -162,16 +163,29 @@ internal class V140SpeedTransfer {
      */
     fun downloadFilePrefixLive(
         url: String, bytes: Int, verify: () -> Unit, onSample: (Sample) -> Unit
+    ): Sample = downloadFileRangeLive(url, 0, bytes, verify, onSample)
+
+    /**
+     * Independent byte ranges avoid four requests for the identical file prefix.
+     * Nonzero offsets require the server to honor HTTP Range (206).
+     */
+    fun downloadFileRangeLive(
+        url: String, offset: Long, bytes: Int, verify: () -> Unit,
+        onSample: (Sample) -> Unit
     ): Sample = transfer(url, verify) { conn, started ->
         require(bytes in 32..(64 * 1024 * 1024))
-        conn.setRequestProperty("Range", "bytes=0-${bytes - 1}")
+        require(offset >= 0 && offset + bytes <= 100_000_000L)
+        conn.setRequestProperty("Range", "bytes=$offset-${offset + bytes - 1}")
         val responseCode = conn.responseCode
         if (responseCode != 200 && responseCode != 206) {
-            throw V146SpeedServerException(responseCode, "Download")
+            throw V146SpeedServerException(responseCode, "Download", conn.url.host)
+        }
+        if (offset > 0L && responseCode != 206) {
+            error("Testserver unterstützt keine Teilbereiche (HTTP Range)")
         }
         if (responseCode == 206) {
             val range = conn.getHeaderField("Content-Range").orEmpty()
-            check(range.startsWith("bytes 0-")) {
+            check(range.startsWith("bytes $offset-${offset + bytes - 1}/")) {
                 "Testserver lieferte einen unerwarteten HTTP-Bereich"
             }
         }
@@ -235,7 +249,7 @@ internal class V140SpeedTransfer {
             routeGuard.force()
             val responseCode = conn.responseCode
             if (responseCode !in 200..299) {
-                throw V146SpeedServerException(responseCode, "Upload")
+                throw V146SpeedServerException(responseCode, "Upload", conn.url.host)
             }
             conn.inputStream.use { input ->
                 val buffer = ByteArray(1024)
