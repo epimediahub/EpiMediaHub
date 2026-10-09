@@ -204,22 +204,19 @@ replace(speed,
     '"GIGABIT-MESSUNG • 4 Streams • dynamisches Datenvolumen"',
     '"ADAPTIVER SPEEDTEST • automatische Leitungsanpassung"')
 replace(speed,
-'''                            "  |  4 Streams: " +
-                            String.format(Locale.GERMANY, "%.1f", it.downloadMbps)''',
-'''                            "  |  \${it.activeStreams} Streams: " +
-                            String.format(Locale.GERMANY, "%.1f", it.downloadMbps)'''.replace("\\$","$"))
+    '"  |  4 Streams: "',
+    '"  |  ${it.activeStreams} Streams: "')
 replace(speed,
-'''                     Text("AUSGANG  \${it.route}   •   IP  \${it.ip}",'''.replace("\\$","$"),
-'''                     Text(
-                         "STABILITÄT  " + (it.stabilityPercent?.let { variation ->
-                             "Schwankung ca. $variation %" } ?: "zu wenig Messpunkte") +
-                             (it.peakMbps?.let { peak ->
-                                 "  •  Spitze \${String.format(Locale.GERMANY,"%.1f", peak)} Mbit/s"
-                             } ?: ""),
-                         color = Color(0xFFB3C4D9),
-                         fontSize = if (isTv) 13.sp else 12.sp
-                     )
-                     Text("AUSGANG  \${it.route}   •   IP  \${it.ip}",'''.replace("\\$","$"))
+    'Text("AUSGANG  ${it.route}   •   IP  ${it.ip}",',
+    '''Text("STABILITÄT  " +
+        (it.stabilityPercent?.let { variation ->
+            "Schwankung ca. $variation %" } ?: "zu wenig Messpunkte") +
+        (it.peakMbps?.let { peak ->
+            "  •  Spitze ${String.format(Locale.GERMANY, "%.1f", peak)} Mbit/s"
+        } ?: ""),
+        color = Color(0xFFB3C4D9),
+        fontSize = if (isTv) 13.sp else 12.sp)
+    Text("AUSGANG  ${it.route}   •   IP  ${it.ip}",''')
 replace(speed,
 '''            "4 Streams plus 1-/2-Stream-Vergleich, begrenztes Testvolumen. " +''',
 '''            "Automatisch angepasste Testmenge und 2–4 Streams, begrenztes Testvolumen. " +''')
