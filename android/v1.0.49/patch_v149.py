@@ -34,7 +34,7 @@ shutil.copyfile(here/"V149QuickMenu.kt", java/"ui/V149QuickMenu.kt")
 
 home = java/"ui/V083Home.kt"
 replace(home, "import androidx.compose.ui.focus.focusProperties",
-    "import androidx.compose.ui.focus.focusProperties\nimport androidx.compose.ui.input.key.Key\nimport androidx.compose.ui.input.key.KeyEventType\nimport androidx.compose.ui.input.key.onPreviewKeyEvent\nimport androidx.compose.ui.input.key.type\nimport androidx.compose.ui.zIndex")
+    "import androidx.compose.ui.focus.focusProperties\nimport androidx.compose.ui.input.key.Key\nimport androidx.compose.ui.input.key.KeyEventType\nimport androidx.compose.ui.input.key.key\nimport androidx.compose.ui.input.key.onPreviewKeyEvent\nimport androidx.compose.ui.input.key.type\nimport androidx.compose.ui.zIndex")
 replace(home, "    val v140RadioFocus = remember { FocusRequester() }",
     """    val v140RadioFocus = remember { FocusRequester() }
     val v149TileFocus = remember { List(6) { FocusRequester() } }
