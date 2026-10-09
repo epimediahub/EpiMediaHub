@@ -79,11 +79,14 @@ class V140SpeedTransferTest {
                 range = header.substringAfter(':').trim()
         }
         val output = socket.getOutputStream()
-        if (request[1] == "/redirect") {
+        // Cloudflare's documented download endpoint passes ?bytes=...;
+        // match fixture paths independently of query parameters.
+        val requestPath = request[1].substringBefore('?')
+        if (requestPath == "/redirect") {
             output.write("HTTP/1.1 302 Found\r\nLocation: /down\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
-        } else if (request[1] == "/forbidden") {
+        } else if (requestPath == "/forbidden") {
             output.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
-        } else if (request[1] == "/range") {
+        } else if (requestPath == "/range") {
             val requested = range?.removePrefix("bytes=0-")?.toIntOrNull()?.plus(1)
             val actual = (requested ?: 256 * 1024).coerceIn(1, 256 * 1024)
             val bytes = ByteArray(actual) { (it % 251).toByte() }
