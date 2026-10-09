@@ -4,7 +4,7 @@ on:
   push:
     branches: [feature/vpn-v143-live-gauge]
     paths:
-      - '.github/workflows/android-v143-speed-gauge-qa-candidate.yml'
+      - '.github/workflows/android-v143-speed-gauge-qa.yml'
       - 'android/v1.0.34-vpn/**'
   workflow_dispatch:
 
