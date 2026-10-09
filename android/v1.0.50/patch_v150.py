@@ -53,8 +53,13 @@ s=home.read_text()
 start=s.index('private fun V083Header(')
 end=s.index('\nprivate fun V083WeatherIcon(',start)
 h=s[start:end]
-assert h.count('                weather?.let {')==1
-h=h.replace('                weather?.let {','                if (!isTv) weather?.let {',1)
+weather_variants = (
+    '                weather?.takeIf { !compact || isTv }?.let {',
+    '                weather?.let {',
+)
+matches=[line for line in weather_variants if h.count(line)==1]
+assert len(matches)==1, 'Expected exactly one weather block in built header'
+h=h.replace(matches[0], matches[0].replace('weather?', 'if (!isTv) weather?', 1), 1)
 assert h.count('                if (weather == null) {')==1
 h=h.replace('                if (weather == null) {','                if (!isTv && weather == null) {',1)
 anchor='''        Box(
