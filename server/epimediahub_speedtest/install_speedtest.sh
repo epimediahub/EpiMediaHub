@@ -115,7 +115,7 @@ print('PASS: 1 MiB Download + 256 KiB Upload; Sessionauthentifizierung aktiv')
 PY
 
 echo "=== Dienst ==="
-systemctl --no-pager --full status epimediahub-speedtest.service | head -13
+systemctl --no-pager --full status epimediahub-speedtest.service | sed -n '1,13p'
 echo
 echo "Erfolgreich. Nur an 127.0.0.1:8792 erreichbar."
 echo "Keine Firewall, DNS, VPN, EpiScene oder oeffentliche HTTPS-Freigabe geaendert."
