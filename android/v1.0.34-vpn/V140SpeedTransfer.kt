@@ -37,6 +37,13 @@ internal class V145RouteGuard(
     }
 }
 
+/**
+ * A remote test-server rejection is not equivalent to losing VPN routing.
+ * Only this error class is eligible for a reduced-concurrency retry.
+ */
+internal class V146SpeedServerException(val httpStatus: Int, direction: String) :
+    IllegalStateException("$direction-Testserver: HTTP $httpStatus")
+
 /** Actual bounded HTTP transfers, independent of Android UI and VPN credentials. */
 internal class V140SpeedTransfer {
     data class Sample(val bytes: Long, val nanos: Long) {
@@ -118,7 +125,10 @@ internal class V140SpeedTransfer {
     fun downloadLive(url: String, bytes: Int, verify: () -> Unit,
                      onSample: (Sample) -> Unit): Sample =
         transfer(url, verify) { conn, started ->
-            check(conn.responseCode == 200) { "Download-Testserver: HTTP ${conn.responseCode}" }
+            val responseCode = conn.responseCode
+            if (responseCode != 200) {
+                throw V146SpeedServerException(responseCode, "Download")
+            }
             var received = 0L
             var lastReport = started
             val routeGuard = V145RouteGuard(verify)
@@ -173,7 +183,10 @@ internal class V140SpeedTransfer {
                 }
             }
             routeGuard.force()
-            check(conn.responseCode in 200..299) { "Upload-Testserver: HTTP ${conn.responseCode}" }
+            val responseCode = conn.responseCode
+            if (responseCode !in 200..299) {
+                throw V146SpeedServerException(responseCode, "Upload")
+            }
             conn.inputStream.use { input ->
                 val buffer = ByteArray(1024)
                 var responseBytes = 0
