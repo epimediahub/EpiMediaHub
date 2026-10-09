@@ -1,0 +1,42 @@
+name: EpiScene dual intro sections - regression CI
+
+on:
+  push:
+    branches: [feature/episcene-provider-series-intros]
+    paths:
+      - 'server/epimediahub_provisioning/**'
+      - '.github/workflows/episcene-multi-intro-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: server/epimediahub_provisioning:server/epimediahub_provisioning/tests
+      EPIMEDIAHUB_SECURE_COOKIES: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install runtime dependencies
+        run: |
+          python -m pip install -r server/epimediahub_provisioning/requirements.txt
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg libchromaprint1
+      - name: Compile all backend Python sources
+        run: python -m compileall -q server/epimediahub_provisioning
+      - name: Validate deploy script syntax
+        run: bash -n server/epimediahub_provisioning/deploy/install_skip_scene.sh
+      - name: Test dual intro dashboard and player protocol
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p test_skip_markers.py -v
+      - name: Test bulk review and conflict resolution
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p test_skip_analysis_bulk_review.py -v
+      - name: Test analysis deduplication and protection
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p test_skip_analysis_dedup.py -v
+      - name: Test EpiScene audio/visual integration
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p test_skip_analysis_episcene.py -v
