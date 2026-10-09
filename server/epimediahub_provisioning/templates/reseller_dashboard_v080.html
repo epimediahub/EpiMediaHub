@@ -28,6 +28,7 @@
     <div class="hierarchy-brand-caption-row"><span class="hierarchy-brand-caption">RESELLER CONTROL CENTER</span><span class="hierarchy-reseller-name">{{ reseller.branding_name or reseller.name }}</span></div>
   </div>
   <div class="hierarchy-topbar-actions">
+    <a class="button button-ghost" href="/reseller/vpn">VPN Finnland</a>
     <form method="post" action="{{ url_for('v080_reseller_logout') }}"><button class="button button-ghost" type="submit"><svg><use href="#i-logout"/></svg>Abmelden</button></form>
   </div>
 </header>

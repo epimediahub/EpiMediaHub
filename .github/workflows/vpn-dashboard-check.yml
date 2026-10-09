@@ -1,0 +1,43 @@
+name: VPN dashboard and Finland agent checks
+on:
+  push:
+    branches: [feature/vpn-dashboard]
+    paths:
+      - server/epimediahub_provisioning/**
+      - .github/workflows/vpn-dashboard-check.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: python -m pip install -r server/epimediahub_provisioning/requirements.txt playwright==1.51.0
+      - name: VPN routes, billing, agent and installer regression tests
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_vpn_*.py' -v
+      - name: Existing customer and reseller dashboard
+        env:
+          EPIMEDIAHUB_EXPECTED_API_VERSION: '0.8.2'
+        run: python server/epimediahub_provisioning/tests/smoke_v080.py
+      - name: Reproducible installers
+        run: |
+          python server/epimediahub_provisioning/deploy/build_vpn_installers.py
+          bash -n server/epimediahub_provisioning/deploy/install_vpn_dashboard.sh
+          bash -n server/epimediahub_provisioning/deploy/install_vpn_finland_agent.sh
+          git diff --exit-code -- server/epimediahub_provisioning/deploy/install_vpn_dashboard.sh server/epimediahub_provisioning/deploy/install_vpn_finland_agent.sh
+      - name: Browser layout and interaction checks
+        env:
+          VPN_PREVIEW_DIR: vpn-dashboard-preview
+        run: python server/epimediahub_provisioning/tests/render_vpn_preview.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vpn-dashboard-preview
+          path: vpn-dashboard-preview/
+          if-no-files-found: ignore
