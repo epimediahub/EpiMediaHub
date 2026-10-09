@@ -62,3 +62,5 @@
 # vpn/V141VpnSettings.kt
 43: V141VpnSettingsScreen(context, playlistId, accent, onBack = { open = false })
 88: private fun V141VpnSettingsScreen(
+104: val stableDeviceId = V142VpnAutoProvision.registeredDeviceId(context)
+144: Text("Deine feste Geräte-ID: $stableDeviceId",
