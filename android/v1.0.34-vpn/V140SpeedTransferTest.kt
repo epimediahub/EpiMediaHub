@@ -119,6 +119,30 @@ class V140SpeedTransferTest {
         }
         assertEquals(1, requests.get())
     }
+    @Test fun liveReadingsComeFromActualTransferredBytes() {
+        val readings = mutableListOf<V140SpeedTransfer.Sample>()
+        val transfer = V140SpeedTransfer()
+        val down = transfer.download("$url/down", 256 * 1024, {}, readings::add)
+        assertTrue(readings.isNotEmpty())
+        assertEquals(down.bytes, readings.last().bytes)
+        assertTrue(readings.all { it.bytes in 1L..down.bytes && it.nanos > 0L })
+        assertTrue(readings.zipWithNext().all { (a, b) -> b.bytes >= a.bytes })
+
+        readings.clear()
+        val up = transfer.upload("$url/up", 64 * 1024, {}, readings::add)
+        assertTrue(readings.isNotEmpty())
+        assertEquals(up.bytes, readings.last().bytes)
+        assertEquals(64 * 1024, uploaded.get())
+    }
+
+    @Test fun cancelledByLiveCallbackMustNeverReturnSuccessfulSpeed() {
+        val transfer = V140SpeedTransfer()
+        assertThrows(CancellationException::class.java) {
+            transfer.download("$url/down", 256 * 1024, {}) { _ -> transfer.cancel() }
+        }
+        assertTrue(transfer.isCancelled())
+    }
+
     @Test fun megabitsUseNanosecondDuration() {
         assertEquals(8.0, V140SpeedTransfer.Sample(1_000_000, 1_000_000_000).mbps, 0.0001)
     }
