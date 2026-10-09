@@ -221,9 +221,9 @@ jobs:
           import os,re
           from pathlib import Path
           manifest=(Path(os.environ["PROJECT_ROOT"])/"app/src/main/AndroidManifest.xml").read_text()
-          activity=re.search(r'<activity\\b[^>]*android:name="(?:\\.MainActivity|de\\.epimediahub\\.app\\.MainActivity)"[^>]*>(.*?)</activity>',manifest,re.S)
+          activity=re.search(r'<activity\b[^>]*android:name="(?:\.MainActivity|de\.epimediahub\.app\.MainActivity)"[^>]*>(.*?)</activity>',manifest,re.S)
           assert activity and 'android.intent.action.MAIN' in activity.group(1), "MainActivity must remain launcher"
-          diag=re.search(r'<activity\\b[^>]*android:name="de.epimediahub.app.vpn.V134VpnDiagnosticActivity"[^>]*>',manifest)
+          diag=re.search(r'<activity\b[^>]*android:name="de.epimediahub.app.vpn.V134VpnDiagnosticActivity"[^>]*>',manifest)
           assert diag and 'android:exported="false"' in diag.group(0), "Diagnostic is settings-only"
           assert manifest.count('android.intent.category.LEANBACK_LAUNCHER') == 1, "Exactly one TV launcher"
           PY
