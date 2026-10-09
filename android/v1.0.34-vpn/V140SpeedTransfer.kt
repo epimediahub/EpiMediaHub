@@ -154,6 +154,56 @@ internal class V140SpeedTransfer {
             received
         }
 
+    /**
+     * Alternate public HTTPS test file, e.g. Hetzner HEL1 100MB.bin.
+     * Do not download the whole 100 MB into memory or into device storage.
+     * A bounded range is requested; accept a server ignoring Range (HTTP 200)
+     * but READ EXACTLY the specified number of bytes, then disconnect.
+     */
+    fun downloadFilePrefixLive(
+        url: String, bytes: Int, verify: () -> Unit, onSample: (Sample) -> Unit
+    ): Sample = transfer(url, verify) { conn, started ->
+        require(bytes in 32..(64 * 1024 * 1024))
+        conn.setRequestProperty("Range", "bytes=0-${bytes - 1}")
+        val responseCode = conn.responseCode
+        if (responseCode != 200 && responseCode != 206) {
+            throw V146SpeedServerException(responseCode, "Download")
+        }
+        if (responseCode == 206) {
+            val range = conn.getHeaderField("Content-Range").orEmpty()
+            check(range.startsWith("bytes 0-")) {
+                "Testserver lieferte einen unerwarteten HTTP-Bereich"
+            }
+        }
+        val length = conn.contentLengthLong
+        check(length == -1L || length >= bytes) {
+            "Testserver liefert zu wenige Daten"
+        }
+        val guard = V145RouteGuard(verify)
+        var received = 0L
+        var lastReport = started
+        conn.inputStream.use { stream ->
+            val buffer = ByteArray(64 * 1024)
+            while (received < bytes.toLong()) {
+                checkActive()
+                guard.checkIfDue()
+                val next = minOf(buffer.size.toLong(), bytes.toLong() - received).toInt()
+                val count = stream.read(buffer, 0, next)
+                check(count > 0) { "Alternativer Testserver: unvollständige Daten" }
+                received += count
+                val now = System.nanoTime()
+                if (now - lastReport >= 200_000_000L) {
+                    onSample(Sample(received, now - started))
+                    lastReport = now
+                }
+            }
+        }
+        guard.force()
+        val final = Sample(received, System.nanoTime() - started)
+        onSample(final)
+        received
+    }
+
     fun upload(url: String, bytes: Int, verify: () -> Unit): Sample =
         uploadLive(url, bytes, verify) {}
 
