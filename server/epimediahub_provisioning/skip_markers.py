@@ -280,8 +280,9 @@ def review_record(con, row, decision, start, end, disabled, wake=True):
     if decision == 'approve':
         con.execute("""UPDATE skip_records SET status='superseded',reviewed_at=? WHERE id<>?
           AND asset_key=? AND segment_type=? AND ABS(duration_ms-?)<=2000
-          AND status='approved' AND start_ms<? AND end_ms>?""",
-          (now(), record_id, row['asset_key'], row['segment_type'], row['duration_ms'], end, start))
+          AND status='approved' AND (?=1 OR (start_ms<? AND end_ms>?))""",
+          (now(), record_id, row['asset_key'], row['segment_type'],
+           row['duration_ms'], int(disabled), end, start))
         if wake:
             wake_reference_jobs(con, row['source_key'])
     con.execute('DELETE FROM skip_fingerprints WHERE record_id=?', (record_id,))
@@ -290,7 +291,8 @@ def review_record(con, row, decision, start, end, disabled, wake=True):
                 ('approved' if decision == 'approve' else 'rejected', start, end, int(disabled), now(), record_id))
     con.execute('UPDATE skip_auto_evidence SET human_review=1 WHERE record_id=?', (record_id,))
     from skip_automation import retire_proposals
-    retire_proposals(con, row, row['segment_type'], record_id, {'start_ms': start, 'end_ms': end})
+    retire_proposals(con, row, row['segment_type'], record_id,
+                     None if disabled else {'start_ms': start, 'end_ms': end})
     if decision == 'reject' or disabled:
         con.execute('INSERT OR REPLACE INTO skip_auto_blocks VALUES(?,?,?,?)',
                     (row['asset_key'], row['segment_type'], row['duration_ms'], now()))
