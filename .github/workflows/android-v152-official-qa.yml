@@ -1,0 +1,373 @@
+name: EpiMediaHub 1.0.52 signed official combined-feature QA
+
+on:
+  push:
+    branches: [fix/v152-speedtest-benchmark]
+    paths:
+      - '.github/workflows/android-v152-official-qa.yml'
+      - 'android/v1.0.52/**'
+      - '.github/workflows/android-v152-official-qa.yml'
+      - '.github/workflows/v147-official-inapp-updater.yml'
+      - 'android/v1.0.34-vpn/**'
+  workflow_dispatch:
+
+concurrency:
+  group: epimediahub-android-v152-qa
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-vpn-beta-apk:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      EPIMEDIAHUB_OFFICIAL_CANDIDATE: '1'
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require permanent signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+
+      - name: Reconstruct project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* > .ci-android/source.b64
+          base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
+          EXPECTED="192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          ACTUAL="$(sha256sum .ci-android/source.tar.gz | awk '{print $1}')"
+          test "$ACTUAL" = "$EXPECTED"
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+
+      - name: Pin Gradle toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+
+      - name: Install v1.0.33 source and isolated VPN beta adapter
+        run: |
+          bash build_tools/install_android_v1033_source.sh
+          python3 android/v1.0.34-vpn/patch_wireguard_spike.py
+          python3 android/v1.0.34-vpn/patch_playlist_routing.py
+          python3 android/v1.0.49/patch_v149.py
+          python3 android/v1.0.50/patch_v150.py
+          python3 android/v1.0.51/patch_v151.py
+          python3 android/v1.0.52/patch_v152.py
+          python3 build_tools/verify_intro_sound_v128.py "$PROJECT_ROOT/app/src/main/res/raw/epimedia_intro_heartbeat_cinema.wav"
+
+      - name: Install permanent release signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/epimediahub-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias epimediahub >/dev/null
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_ROOT'])/'app/build.gradle.kts'
+          s=p.read_text()
+          anchor='    buildTypes {\n'
+          signing='''    signingConfigs {
+              create("release") {
+                  storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))
+                  storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                  keyAlias = "epimediahub"
+                  keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+              }
+          }
+
+          '''
+          if anchor not in s: raise SystemExit('buildTypes anchor missing')
+          s=s.replace(anchor, signing+anchor, 1)
+          release='        release {\n'
+          if release not in s: raise SystemExit('release build type missing')
+          s=s.replace(release, release+'            signingConfig = signingConfigs.getByName("release")\n', 1)
+          p.write_text(s)
+          PY
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+          cache-read-only: false
+
+      - name: Cache audio native libraries
+        id: audio-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.PROJECT_ROOT }}/ffmpeg-audio/src/main/jni/ffmpeg/android-libs
+            ${{ env.PROJECT_ROOT }}/ffmpeg-6.1.6.tar.xz
+          key: audio-ffmpeg-6.1.6-ndk26b-api25-${{ runner.os }}-${{ hashFiles('build_tools/build_android_audio_v123.sh', 'android/v1.0.23/upstream.json') }}
+
+      - name: Build audio-only FFmpeg for all Android architectures
+        run: bash build_tools/build_android_audio_v123.sh
+
+      - name: Preserve successful native build independently of app tests
+        if: steps.audio-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.PROJECT_ROOT }}/ffmpeg-audio/src/main/jni/ffmpeg/android-libs
+            ${{ env.PROJECT_ROOT }}/ffmpeg-6.1.6.tar.xz
+          key: ${{ steps.audio-cache.outputs.cache-primary-key }}
+
+      # ffmpeg-audio/src/androidTest fixtures are instrumented-test-only resources.
+      # They are not inputs to :app:testDebugUnitTest or :app:assembleRelease.
+      # The pure beta build must not depend on long-running synthetic audio jobs.
+      - name: Check Android instrumented fixtures are not release inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$PROJECT_ROOT/ffmpeg-audio/src/androidTest"
+          echo "Skipping optional Android instrumentation fixture generation for signed beta."
+
+      - name: Compile signed EpiMediaHub official EpiMediaHub QA APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          gradle :app:assembleRelease --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+
+      - name: Run full Android unit test suite with one retry for Robolectric focus timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          # 2026-10-08: baseline Kids/Skin Robolectric compose-idling tests have
+          # timing-related failures in CI; DO NOT skip these tests or release if
+          # either the initial run and the isolated retry both fail.
+          if gradle :app:testDebugUnitTest --no-daemon --stacktrace -Dorg.gradle.workers.max=2; then
+            echo "Full Android unit suite passed on first attempt"
+          else
+            echo "::warning::Full suite failed, rerunning all tests once; publication requires full pass"
+            gradle :app:testDebugUnitTest --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+          fi
+      - name: Verify version, native WireGuard, and official release signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE="$PROJECT_ROOT/app/build/outputs/apk/release"
+          for ABI in arm64-v8a armeabi-v7a universal; do
+            APK="$RELEASE/app-${ABI}-release.apk"
+            test -s "$APK"
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            grep -F "versionCode='1052'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            grep -F "versionName='1.0.52'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            grep -F "package: name='de.epimediahub.app'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            if grep -Fq "package: name='de.epimediahub.app.vpnbeta'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"; then echo "Refusing beta packageId"; exit 1; fi
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-${ABI}-signer.txt"
+            CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-${ABI}-signer.txt" | tr '[:lower:]' '[:upper:]')
+            test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+          done
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134WireGuardDeviceTunnel.kt"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnDiagnosticActivity.kt"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V141VpnSettings.kt"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V142VpnPrivateKeyStore.kt"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V142VpnAutoProvision.kt"
+          grep -Fq 'SetupCodeProvisioning.deviceId(context)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V142VpnAutoProvision.kt"
+          grep -Fq 'SetupCodeProvisioning.sessionToken(context)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V142VpnAutoProvision.kt"
+          grep -Fq 'V142VpnAutoProvision.ensureProfile(context)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnSession.kt"
+          grep -Fq 'V142VpnAutoProvision.ensureProfile(context)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V141VpnSettings.kt"
+          grep -Fq 'V141VpnSettingsHost(context' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -Fq 'Screen.Settings -> de.epimediahub.app.vpn.V141VpnSettingsHost' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          manifest=(Path(os.environ["PROJECT_ROOT"])/"app/src/main/AndroidManifest.xml").read_text()
+          activity=re.search(r'<activity\b[^>]*android:name="(?:\.MainActivity|de\.epimediahub\.app\.MainActivity)"[^>]*>(.*?)</activity>',manifest,re.S)
+          assert activity and 'android.intent.action.MAIN' in activity.group(1), "MainActivity must remain launcher"
+          diag=re.search(r'<activity\b[^>]*android:name="de.epimediahub.app.vpn.V134VpnDiagnosticActivity"[^>]*>',manifest)
+          assert diag and 'android:exported="false"' in diag.group(0), "Diagnostic is settings-only"
+          assert manifest.count('android.intent.category.LEANBACK_LAUNCHER') == 1, "Exactly one TV launcher"
+          PY
+          grep -Fq 'VPN-Profil vom Fire TV laden (ADB)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnDiagnosticActivity.kt"
+          grep -Fq 'getExternalFilesDir(null)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnDiagnosticActivity.kt"
+          grep -Fq 'getExternalMediaDirs()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnDiagnosticActivity.kt"
+          VPN_SRC="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn"
+          # Consent-first VPN failure protection: never directly fall back on polling failure.
+          # Persist VPN client keys only as AndroidKeyStore AES-GCM ciphertext.
+          test -f "$VPN_SRC/V139VpnEncryptedProfileStore.kt"
+          grep -Fq 'KeyStore.getInstance("AndroidKeyStore")' "$VPN_SRC/V139VpnEncryptedProfileStore.kt"
+          grep -Fq 'context.noBackupFilesDir' "$VPN_SRC/V139VpnEncryptedProfileStore.kt"
+          grep -Fq 'AES/GCM/NoPadding' "$VPN_SRC/V139VpnEncryptedProfileStore.kt"
+          grep -Fq 'fun hasProfile(context: Context)' "$VPN_SRC/V134VpnSession.kt"
+          grep -Fq 'V139VpnEncryptedProfileStore.save(context, value)' "$VPN_SRC/V134VpnSession.kt"
+          grep -Fq 'V139VpnEncryptedProfileStore.load(context)' "$VPN_SRC/V134VpnSession.kt"
+          grep -Fq 'fun eraseProfile(context: Context)' "$VPN_SRC/V134VpnSession.kt"
+          grep -Fq 'Gespeichertes VPN-Profil löschen' "$VPN_SRC/V134VpnDiagnosticActivity.kt"
+          grep -Fq 'onDirectApproved()' "$VPN_SRC/V134VpnRouteUi.kt"
+          grep -Fq 'vm.switchLiveChannel(interrupted.item, interrupted.episodeList)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -Fq 'vm.play(interrupted.item)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -Fq 'fun allowDirectOnce(context: Context, playlistId: String)' "$VPN_SRC/V134VpnSession.kt"
+          grep -Fq 'temporaryDirectPlaylist = playlistId' "$VPN_SRC/V134VpnSession.kt"
+          grep -Fq 'val directIp = publicIpv4()' "$VPN_SRC/V134VpnSession.kt"
+          grep -Fq 'Ja, einmal direkt' "$VPN_SRC/V134VpnRouteUi.kt"
+          grep -Fq 'Nein, VPN beibehalten' "$VPN_SRC/V134VpnRouteUi.kt"
+          grep -Fq 'onClick = { showConfirmation = true }' "$VPN_SRC/V134VpnRouteUi.kt"
+          grep -Fq 'V134VpnSession.allowDirectOnce(context, playlistId)' "$VPN_SRC/V134VpnRouteUi.kt"
+          # The Compose call uses named arguments across multiple lines now.
+          # Assert the fallback callback exists rather than one fragile formatting line.
+          grep -Fq 'onDirectApproved = {' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -Fq 'u.active!!.id.toString()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnSession.kt"
+          grep -Fq 'V134VpnSession.routeTo(context, playlist.id.toString())' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Playlists.kt"
+          # Explicit remote focus: parent row MUST NOT consume D-pad navigation.
+          PLAYLIST_SOURCE="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V070Playlists.kt"
+          grep -Fq 'TextButton(onClick = onVpnToggle,' "$PLAYLIST_SOURCE"
+          grep -Fq 'onClick = onSelect,' "$PLAYLIST_SOURCE"
+          grep -Fq 'TextButton(onClick = onDelete,' "$PLAYLIST_SOURCE"
+          grep -Fq 'modifier = modifier.v070TvFocus(accent).v114FocusRing()' "$PLAYLIST_SOURCE"
+          if grep -Fq '.clickable(onClick = onSelect)' "$PLAYLIST_SOURCE"; then
+            echo 'Unsafe nested focusable playlist card'; exit 1
+          fi
+          grep -Fq 'v134RouteReady(context, u.active?.id?.toString())' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -Fq 'V134VpnDiagnosticActivity' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
+          grep -Fq 'GoBackend$VpnService' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
+          grep -Fq 'com.wireguard.android:tunnel:1.0.20260102' "$PROJECT_ROOT/app/build.gradle.kts"
+          # v1.0.52 must ship an ACTUAL download/upload test, not an inert button.
+          test -f "$VPN_SRC/V140SpeedTest.kt"
+          test -f "$VPN_SRC/V140VpnLossMonitor.kt"
+          grep -Fq 'speed.cloudflare.com' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'conn.inputStream.use' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'setFixedLengthStreamingMode(bytes)' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'V134VpnSession.routeReady(context, playlistId, checkExit = false)' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'fun measure(context: Context, playlistId: String' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'https://speedtest.epimediahub.com' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'openSelfHostedSession(verify)' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'selfHostedToken: String? = null' "$VPN_SRC/V144GigabitTransfer.kt"
+          grep -Fq 'isSelfHostedSpeedtestOrigin(conn.url)' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'Bearer $it' "$VPN_SRC/V140SpeedTransfer.kt"
+          test -f "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V148SelfHostedSpeedTestContractTest.kt"
+          grep -Fq 'bearerNeverSentToLookalikeOrInsecureOrigins' "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V148SelfHostedSpeedTestContractTest.kt"
+          grep -Fq 'selfHostedPlanStaysWithinSessionAndRequestLimits' "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V148SelfHostedSpeedTestContractTest.kt"
+          grep -Fq 'home-speedtest' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'speedtest-live-gauge' "$VPN_SRC/V140SpeedTest.kt"
+          test -f "$VPN_SRC/V144GigabitTransfer.kt"
+          grep -Fq 'downloadBytesPerStream' "$VPN_SRC/V144GigabitTransfer.kt"
+          grep -Fq 'MAX_TOTAL_MIB = 256' "$VPN_SRC/V144GigabitTransfer.kt"
+          grep -Fq 'class V145RouteGuard(' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'INTERVAL_NANOS: Long = 125_000_000L' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'routeGuard.checkIfDue()' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'routeGuard.force()' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'fun measureWithStreams(' "$VPN_SRC/V144GigabitTransfer.kt"
+          grep -Fq 'speedtest-stream-diagnostic' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'throttledRouteGuardChecksAtFixedIntervalAndFailCloses' "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V140SpeedTransferTest.kt"
+          grep -Fq 'twoStreamDiagnosticIsActualTransferAndRetainsRouteChecks' "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V140SpeedTransferTest.kt"
+          grep -Fq 'class V146SpeedServerException(' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'fun downloadFilePrefixLive(' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'https://hel1-speed.hetzner.com/100MB.bin' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'catch (blocked: V146SpeedServerException)' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'parallel403PreservesRealHttpStatusForAlternativeProvider' "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V140SpeedTransferTest.kt"
+          grep -Fq 'fixedFileRangeReadsExactlyBoundedBytesWithVPNVerification' "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V140SpeedTransferTest.kt"
+          grep -Fq 'https://fsn1-speed.hetzner.com/100MB.bin' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'rangeOffsetsUseDistinctExactBlocksInsteadOfFourIdenticalPrefixes' "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V140SpeedTransferTest.kt"
+          grep -Fq 'rateLimitedHostIsReportedAndCannotBeMistakenForVpnDisconnect' "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V140SpeedTransferTest.kt"
+          grep -Fq 'downloadFileRangeLive' "$VPN_SRC/V144GigabitTransfer.kt"
+          grep -Fq 'val host: String' "$VPN_SRC/V140SpeedTransfer.kt"
+
+          grep -Fq 'fun registerWorker(worker: V140SpeedTransfer)' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'fourStreamGigabitTestMeasuresAggregateActualBytes' "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V140SpeedTransferTest.kt"
+          grep -Fq 'animated <= 1000f -> 1000f' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'gigabit' "$VPN_SRC/V144GigabitTransfer.kt"
+
+          grep -Fq 'speedtest-live-mbps' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'drawArc(' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'fun download(url: String, bytes: Int, verify: () -> Unit): Sample' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'fun downloadLive(url: String, bytes: Int, verify: () -> Unit,' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'fun uploadLive(url: String, bytes: Int, verify: () -> Unit,' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'onSample(Sample(received,' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'onSample(Sample(sent.toLong(),' "$VPN_SRC/V140SpeedTransfer.kt"
+          grep -Fq 'liveReadingsComeFromActualTransferredBytes' "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V140SpeedTransferTest.kt"
+          grep -Fq 'cancelledByLiveCallbackMustNeverReturnSuccessfulSpeed' "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V140SpeedTransferTest.kt"
+          grep -Fq 'V140SpeedTestScreen(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'V149QuickMenu(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'V083Tile("RADIO"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'Wetter derzeit nicht verfügbar' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'V140SpeedTestScreen(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'Vorspann überspringen' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V115SkipRepository.kt"
+          grep -Fq 'row.optString("intro_role", "unknown")' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V116SkipRepository.kt"
+          grep -Fq 'segment.skipLabel' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V115PlayerChrome.kt"
+          grep -Fq 'if (age !in 0 until CACHE_MAX_AGE) return null' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V070WeatherClient.kt"
+          grep -Fq 'Wetter & Ort' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V149QuickMenu.kt"
+          test -f "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/data/V149IntroRoleTest.kt"
+          test -f "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V150AdaptiveSpeedTest.kt"
+          test -f "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V151RollingSpeedTest.kt"
+          test -f "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/vpn/V152BenchmarkPolicyTest.kt"
+          grep -Fq 'weather?.takeIf { !compact || isTv }?.let {' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'downloadRate.rate(sample)' "$VPN_SRC/V140SpeedTest.kt"
+          grep -Fq 'V152BenchmarkPolicy.plan(one.mbps, two.mbps, fixedFile)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V140SpeedTest.kt"
+          grep -Fq 'Wetter & Ort einrichten' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          grep -Fq 'vpn-top-back' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V141VpnSettings.kt"
+          grep -Fq 'V140VpnLossMonitor.start(context)' "$VPN_SRC/V134VpnSession.kt"
+          grep -Fq 'override fun onLost(network: Network)' "$VPN_SRC/V140VpnLossMonitor.kt"
+          grep -Fq 'V134VpnSession.onVpnTransportLost()' "$VPN_SRC/V140VpnLossMonitor.kt"
+          grep -Fq 'cm.bindProcessToNetwork(network)' "$VPN_SRC/V140VpnLossMonitor.kt"
+          grep -Fq '.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)' "$VPN_SRC/V140VpnLossMonitor.kt"
+          # Process binding is not device-wide always-on VPN lockdown.
+          mkdir -p qa-artifacts
+          cp "$RELEASE/app-arm64-v8a-release.apk" qa-artifacts/EpiMediaHub-Official-v1.0.52-ARM64-PILOT.apk
+          cp "$RELEASE/app-armeabi-v7a-release.apk" qa-artifacts/EpiMediaHub-Official-v1.0.52-ARMv7-PILOT.apk
+          cp "$RELEASE/app-universal-release.apk" qa-artifacts/EpiMediaHub-Official-v1.0.52-Universal-PILOT.apk
+          (cd qa-artifacts && sha256sum *.apk > SHA256SUMS.txt)
+          cat > qa-artifacts/README.txt <<'EOF'
+          EpiMediaHub official package 1.0.49 - combined features - SIGNED QA CANDIDATE
+          This APK uses the OFFICIAL app package de.epimediahub.app; upgrading preserves existing registration on the same signing certificate.
+          VPN key is generated locally and encrypted using AndroidKeyStore; entitlement/peer assigned automatically by authorized EpiMediaHub backend.
+          On-demand Speedtest measures download, upload, HTTP latency and public egress IP over the verified route.
+          Playlist mode can be configured separately and verified on change in this beta.
+          No ADB imports or manually copied WireGuard keys. First Android VPN consent cannot be bypassed.
+          App sockets and DNS are pinned to the VPN network; loss retains the binding until explicit direct consent.
+          This is process-scoped and does not replace device-wide Android always-on lockdown.
+          Process restart, pre-existing/direct-bound library sockets and Fire TV routing still need hardware tests.
+          1.0.49 includes a real routed speedtest in a labelled focusable quick menu, Radio main tile, centered clock, dual provider/series intro skips and fresh weather with explicit postal location.
+          Only successful signed and passing QA builds can be released through the official updater. Real hardware performance remains to be verified.
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-Official-v1.0.52-adaptive-private-qa
+          path: qa-artifacts/
+          retention-days: 14
+          if-no-files-found: error
+
