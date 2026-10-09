@@ -6,6 +6,7 @@ on:
     paths:
       - 'android/v1.0.53/**'
       - '.github/workflows/android-v153-source-qa.yml'
+      - '.github/workflows/v153-official-inapp-updater.yml'
   workflow_dispatch:
 
 permissions:
