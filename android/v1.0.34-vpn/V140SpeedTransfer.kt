@@ -9,6 +9,34 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.ConcurrentHashMap
 
+/**
+ * Checks the bound VPN route at a fixed cadence rather than on every 64 KiB
+ * read/write. A failed verification still aborts the HTTPS operation.
+ *
+ * Android's VPN-network pin remains attached; its onLost callback immediately
+ * marks the session blocked. This only reduces redundant polling overhead.
+ */
+internal class V145RouteGuard(
+    private val verify: () -> Unit,
+    private val clockNanos: () -> Long = System::nanoTime
+) {
+    companion object { const val INTERVAL_NANOS: Long = 125_000_000L }
+    private var lastVerifiedAt = clockNanos()
+
+    fun checkIfDue() {
+        val now = clockNanos()
+        if (now < lastVerifiedAt || now - lastVerifiedAt >= INTERVAL_NANOS) {
+            verify() // Always commit the timestamp after a successful validation.
+            lastVerifiedAt = now
+        }
+    }
+
+    fun force() {
+        verify()
+        lastVerifiedAt = clockNanos()
+    }
+}
+
 /** Actual bounded HTTP transfers, independent of Android UI and VPN credentials. */
 internal class V140SpeedTransfer {
     data class Sample(val bytes: Long, val nanos: Long) {
@@ -93,11 +121,12 @@ internal class V140SpeedTransfer {
             check(conn.responseCode == 200) { "Download-Testserver: HTTP ${conn.responseCode}" }
             var received = 0L
             var lastReport = started
+            val routeGuard = V145RouteGuard(verify)
             conn.inputStream.use { stream ->
                 val buffer = ByteArray(64 * 1024)
                 while (true) {
                     checkActive()
-                    verify()
+                    routeGuard.checkIfDue()
                     val n = stream.read(buffer)
                     if (n < 0) break
                     received += n
@@ -109,6 +138,7 @@ internal class V140SpeedTransfer {
                     }
                 }
             }
+            routeGuard.force()
             check(received == bytes.toLong()) { "Unvollständiger Download ($received / $bytes)" }
             onSample(Sample(received, System.nanoTime() - started))
             received
@@ -125,12 +155,13 @@ internal class V140SpeedTransfer {
             conn.setRequestProperty("Content-Type", "application/octet-stream")
             conn.setFixedLengthStreamingMode(bytes)
             var lastReport = started
+            val routeGuard = V145RouteGuard(verify)
             conn.outputStream.use { stream ->
                 val buffer = ByteArray(64 * 1024)
                 var sent = 0
                 while (sent < bytes) {
                     checkActive()
-                    verify()
+                    routeGuard.checkIfDue()
                     val n = minOf(buffer.size, bytes - sent)
                     stream.write(buffer, 0, n)
                     sent += n
@@ -141,13 +172,14 @@ internal class V140SpeedTransfer {
                     }
                 }
             }
+            routeGuard.force()
             check(conn.responseCode in 200..299) { "Upload-Testserver: HTTP ${conn.responseCode}" }
             conn.inputStream.use { input ->
                 val buffer = ByteArray(1024)
                 var responseBytes = 0
                 while (true) {
                     checkActive()
-                    verify()
+                    routeGuard.checkIfDue()
                     val n = input.read(buffer)
                     if (n < 0) break
                     responseBytes += n
