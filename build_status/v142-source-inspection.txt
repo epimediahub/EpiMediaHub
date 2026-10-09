@@ -64,3 +64,12 @@
 88: private fun V141VpnSettingsScreen(
 104: val stableDeviceId = V142VpnAutoProvision.registeredDeviceId(context)
 144: Text("Deine feste Geräte-ID: $stableDeviceId",
+# vpn/V142VpnAutoProvision.kt
+16: private const val ORIGIN = "https://api.epimediahub.com"
+18: data class Status(val deviceId: String, val status: String, val enabled: Boolean,
+23: fun registeredDeviceId(context: Context): String = SetupCodeProvisioning.deviceId(context)
+26: val token = SetupCodeProvisioning.sessionToken(context)
+72: val deviceId = registeredDeviceId(context)
+73: check(data.optString("device_id") == deviceId) { "VPN-Geräte-ID stimmt nicht überein" }
+74: val status = Status(deviceId, data.optString("status", "UNKNOWN"),
+105: .put("device_id", status.deviceId)
