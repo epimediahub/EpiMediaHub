@@ -344,37 +344,6 @@ jobs:
           Process restart, pre-existing/direct-bound library sockets and Fire TV routing still need hardware tests.
           PRIVATE QA: Use only after server/agent compatibility checks. Does NOT deploy to the public in-app updater.
           EOF
-      - name: Publish separate Fire TV Downloader APK (1.0.42 beta only)
-        if: github.event_name != 'pull_request'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          TAG=vpnfi42
-          if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
-            echo "Refusing to overwrite an existing VPN beta prerelease" >&2
-            exit 1
-          fi
-          cp vpn-beta-artifacts/EpiMediaHub-Official-v1.0.42-ARMv7-BETA.apk vpn-beta-artifacts/EpiFI.apk
-          cat > /tmp/epi-vpn-fi35-notes.md <<'EOF'
-          EpiMediaHub VPN Finland v1.0.42 Fire TV testing build.
-          Separate Android package: de.epimediahub.app.vpnbeta.
-          Includes encrypted persistent VPN profile and explicit direct fallback. v1.0.42 adds a working on-demand speed test for download/upload/HTTP latency with exit-IP validation, and VPN-bound app sockets/DNS that remain bound on transport loss until explicit direct consent.
-          This is a testing prerelease, not an update to the standard app.
-          System-level kill-switch behavior and v1.0.42 Fire TV speedtest have NOT been
-          independently verified. Never distribute test WireGuard keys.
-          EOF
-          gh release create "$TAG" vpn-beta-artifacts/EpiFI.apk \
-            --repo "$GH_REPO" --target "$GITHUB_SHA" \
-            --title "EpiMediaHub VPN Finland 1.0.42 - Speedtest and VPN network guard beta" \
-            --notes-file /tmp/epi-vpn-fi35-notes.md --prerelease
-          URL="https://github.com/$GH_REPO/releases/download/$TAG/EpiFI.apk"
-          STATUS="$(curl --location --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 90 "$URL")"
-          test "$STATUS" = "200"
-          echo "Verified Fire TV Downloader URL: $URL"
-
       - uses: actions/upload-artifact@v4
         with:
           name: EpiMediaHub-Official-v1.0.42-private-customer-qa
@@ -382,42 +351,3 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-  report-beta-result:
-    runs-on: ubuntu-22.04
-    needs: [build-vpn-beta-apk]
-    if: ${{ always() && github.event_name != 'pull_request' }}
-    steps:
-      - uses: actions/github-script@v7
-        env:
-          BETA_RESULT: ${{ needs.build-vpn-beta-apk.result }}
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const branch = context.ref.replace('refs/heads/', '');
-            const path = 'build_status/vpn-finland-beta-apk.json';
-            const conclusion = process.env.BETA_RESULT;
-            let sha;
-            try {
-              const res = await github.rest.repos.getContent({owner, repo, path, ref: branch});
-              if (!Array.isArray(res.data)) sha = res.data.sha;
-            } catch (error) {
-              if (error.status !== 404) throw error;
-            }
-            const body = JSON.stringify({
-              kind: 'signed-epimediahub-android-vpn-integration-beta',
-              conclusion,
-              run_id: context.runId,
-              run_url: `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`,
-              workflow_sha: context.sha,
-              updated_at: new Date().toISOString(),
-              vpn_diagnostic_ui: true,
-              automatic_per_playlist_routing: true,
-              player_network_fail_closed_hardware_verified: false,
-              production_updater_modified: false
-            }, null, 2) + '\n';
-            await github.rest.repos.createOrUpdateFileContents({
-              owner, repo, path, branch,
-              message: `CI VPN beta APK: ${conclusion} (run ${context.runId})`,
-              content: Buffer.from(body, 'utf8').toString('base64'),
-              ...(sha ? {sha} : {})
-            });
