@@ -24,7 +24,8 @@ internal object V144GigabitTransfer {
             warmupMbps >= 300.0 -> 64
             warmupMbps >= 130.0 -> 32
             warmupMbps >= 60.0 -> 16
-            else -> 8
+            warmupMbps >= 10.0 -> 8
+            else -> 2
         }
         return mib * MIB
     }
