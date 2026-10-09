@@ -526,7 +526,7 @@ def protected(con, asset, kind, section=None):
     if section is None:
         return bool(rows)
     from skip_intro_sections import overlaps
-    return any(overlaps(r, section) for r in rows)
+    return any(r['disabled'] or overlaps(r, section) for r in rows)
 
 
 def pending_proposals(con, asset, kind):
