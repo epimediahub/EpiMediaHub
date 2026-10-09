@@ -40,23 +40,36 @@ internal object V144GigabitTransfer {
         upload: Boolean,
         verify: () -> Unit,
         onSample: (V140SpeedTransfer.Sample) -> Unit
+    ): V140SpeedTransfer.Sample =
+        measureWithStreams(parent, url, bytesPerStream, upload, verify, STREAMS, onSample)
+
+    /** Short 1/2 stream diagnostic; the normal benchmark remains 4 streams. */
+    fun measureWithStreams(
+        parent: V140SpeedTransfer,
+        url: String,
+        bytesPerStream: Int,
+        upload: Boolean,
+        verify: () -> Unit,
+        streams: Int,
+        onSample: (V140SpeedTransfer.Sample) -> Unit
     ): V140SpeedTransfer.Sample {
         require(bytesPerStream in (256 * 1024)..(128 * MIB))
-        require(bytesPerStream.toLong() * STREAMS <= MAX_TOTAL_MIB.toLong() * MIB)
+        require(streams in 1..STREAMS)
+        require(bytesPerStream.toLong() * streams <= MAX_TOTAL_MIB.toLong() * MIB)
         parent.checkActive()
         verify()
 
-        val executor = Executors.newFixedThreadPool(STREAMS) { command ->
+        val executor = Executors.newFixedThreadPool(streams) { command ->
             Thread(command, "epimedia-gigabit-speed-worker").apply { isDaemon = true }
         }
-        val workers = ArrayList<V140SpeedTransfer>(STREAMS)
-        val totals = AtomicLongArray(STREAMS)
+        val workers = ArrayList<V140SpeedTransfer>(streams)
+        val totals = AtomicLongArray(streams)
         val lastReport = AtomicLong(0)
-        val ready = CountDownLatch(STREAMS)
+        val ready = CountDownLatch(streams)
         val go = CountDownLatch(1)
         val started = System.nanoTime()
         try {
-            repeat(STREAMS) {
+            repeat(streams) {
                 val worker = V140SpeedTransfer()
                 parent.registerWorker(worker)
                 workers.add(worker)
@@ -73,7 +86,7 @@ internal object V144GigabitTransfer {
                         if (now - previous >= 150_000_000L &&
                             lastReport.compareAndSet(previous, now)) {
                             parent.checkActive()
-                            val count = (0 until STREAMS).sumOf { totals.get(it) }
+                            val count = (0 until streams).sumOf { totals.get(it) }
                             onSample(V140SpeedTransfer.Sample(count, now - started))
                         }
                     }
@@ -95,7 +108,7 @@ internal object V144GigabitTransfer {
             val elapsed = (System.nanoTime() - started).coerceAtLeast(1L)
             parent.checkActive()
             verify()
-            check(received == bytesPerStream.toLong() * STREAMS) {
+            check(received == bytesPerStream.toLong() * streams) {
                 "Unvollständige parallele Datenübertragung"
             }
             val final = V140SpeedTransfer.Sample(received, elapsed)
