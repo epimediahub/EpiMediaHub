@@ -120,6 +120,11 @@ replace(playlist,
 
 
 app=java/"EpiMediaHubApp.kt"
+# VPN is reached from the EXISTING Settings page, never before the home menu.
+# Preserve the app's own back stack and render the settings button with TV focus.
+replace(app,
+    "                Screen.Settings -> SettingsScreen(vm, accent)",
+    "                Screen.Settings -> de.epimediahub.app.vpn.V141VpnSettingsHost(context, u.active?.id?.toString(), accent) { SettingsScreen(vm, accent) }")
 replace(app, "    MaterialTheme(colorScheme = scheme, shapes = shapes) {",
     """    val v134Ready = de.epimediahub.app.vpn.v134RouteReady(context, u.active?.id?.toString())
     MaterialTheme(colorScheme = scheme, shapes = shapes) {""")
