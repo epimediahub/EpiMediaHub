@@ -426,6 +426,18 @@ def install(app, db):
         # reports its actual public key over the protected agent channel.
         raw_server_key = body.get("server_public_key")
         server_key = public_key(raw_server_key) if raw_server_key is not None else None
+        unmanaged = body.get("unmanaged_networks")
+        if unmanaged is not None:
+            if not isinstance(unmanaged, list) or len(unmanaged) > 1000 or any(
+                not isinstance(x, str) or len(x) > 49 for x in unmanaged
+            ):
+                abort(400)
+            try:
+                ranges = [ipaddress.ip_network(x, strict=False) for x in unmanaged]
+                if any(x.version != 4 for x in ranges):
+                    abort(400)
+            except ValueError:
+                abort(400)
         with db() as con:
             con.execute("BEGIN IMMEDIATE")
             rows = {r["id"]: r for r in con.execute(JOINED)}
@@ -448,6 +460,10 @@ def install(app, db):
                 con.execute("""INSERT INTO vpn_meta(key,value) VALUES('server_public_key',?)
                                ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
                             (server_key,))
+            if unmanaged is not None:
+                con.execute("""INSERT INTO vpn_meta(key,value) VALUES('unmanaged_networks',?)
+                               ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                            (json.dumps(unmanaged),))
         return jsonify(status="recorded")
 
     @app.after_request
