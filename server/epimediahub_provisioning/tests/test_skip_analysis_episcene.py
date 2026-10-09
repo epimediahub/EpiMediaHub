@@ -206,7 +206,7 @@ class ScenePublicationTests(AutomationFixture, unittest.TestCase):
             con.execute('UPDATE skip_analysis_sources SET enabled=0')
             self.assertEqual(release.accept_pending(con), 0)
 
-    def test_visual_disagreement_retains_audio_for_manual_review(self):
+    def test_disjoint_audio_and_visual_intro_are_not_false_conflicts(self):
         vote = self.voted(9, '99')
         with self.db() as con:
             auto.store_proposal(con, self.target, 'intro', 48000, 74530, 'audio', .95,
@@ -217,26 +217,30 @@ class ScenePublicationTests(AutomationFixture, unittest.TestCase):
             data = self.descriptor(str(100+episode), episode)
             partners.append((self.add_window(data, 20+episode),data))
         outcome = scene._compare(self.db, self.target, 'intro', own, partners, lambda: False)
-        self.assertEqual(outcome['approvals'], 0)
-        self.assertTrue(outcome['disagreement'])
-        repeated=scene._compare(self.db,self.target,'intro',own,partners,lambda:False)
-        self.assertEqual(repeated['approvals'],0)
-        self.assertTrue(repeated['disagreement'])
+        self.assertEqual(outcome['approvals'], 1)
+        self.assertFalse(outcome['disagreement'])
         with self.db() as con:
-            self.assertEqual(release.accept_pending(con), 0)
-            self.assertFalse(con.execute("SELECT 1 FROM skip_records WHERE asset_key=? AND status='approved'", (self.target['asset_key'],)).fetchone())
+            # A disjoint, genuinely separate audio segment stays available
+            # for its own evaluation instead of being marked superseded.
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE asset_key=? "
+                                         "AND source='audio' AND status='pending'",
+                                         (self.target['asset_key'],)).fetchone()[0], 1)
 
-    def test_human_correction_is_not_overwritten_by_visual_consensus(self):
+    def test_human_correction_is_preserved_while_separate_visual_intro_is_added(self):
         own = self.add_window(self.target)
-        self.marker(self.target)
+        manual = self.marker(self.target)
         partners = []
         for episode in (10,11,12):
             data = self.descriptor(str(100+episode), episode)
             partners.append((self.add_window(data,20+episode),data))
         outcome = scene._compare(self.db, self.target, 'intro', own, partners, lambda: False)
-        self.assertEqual(outcome['approvals'], 0)
+        self.assertEqual(outcome['approvals'], 1)
         with self.db() as con:
-            self.assertEqual(con.execute('SELECT start_ms,end_ms,source FROM skip_records').fetchone()[:], (283043,309573,'device'))
+            original = con.execute('SELECT start_ms,end_ms,source,status FROM skip_records WHERE id=?',
+                                   (manual,)).fetchone()
+            self.assertEqual(original[:], (283043,309573,'device','approved'))
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE asset_key=? "
+                                         "AND status='approved'",(self.target['asset_key'],)).fetchone()[0], 2)
 
     def test_cache_chunks_resume_without_provider_and_preserve_absolute_time_grid(self):
         frames = visual.hashes(pixel_frames(5, 180))
