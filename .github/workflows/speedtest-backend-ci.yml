@@ -1,0 +1,34 @@
+name: EpiMediaHub isolated Speedtest service QA
+on:
+  push:
+    branches: [feature/speedtest-selfhosted-v148]
+    paths:
+      - 'server/epimediahub_speedtest/**'
+      - '.github/workflows/speedtest-backend-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Python server, installer and local integration fixtures
+        run: |
+          set -euo pipefail
+          python3 -m py_compile server/epimediahub_speedtest/server.py server/epimediahub_speedtest/test_server.py
+          bash -n server/epimediahub_speedtest/install_speedtest.sh
+      - name: Run local HTTP security and transport integration tests
+        run: |
+          set -euo pipefail
+          cd server/epimediahub_speedtest
+          python3 -m unittest -v test_server
+      - name: Ensure no public listening, WireGuard or EpiScene mutations in installer
+        run: |
+          set -euo pipefail
+          grep -Fq '127.0.0.1' server/epimediahub_speedtest/install_speedtest.sh
+          ! grep -Eq 'ufw allow|iptables -I|wg set|wg-quick|systemctl stop.*epimedia' \
+            server/epimediahub_speedtest/install_speedtest.sh
