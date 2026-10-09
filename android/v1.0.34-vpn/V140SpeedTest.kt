@@ -62,6 +62,7 @@ internal object V140SpeedTest {
 
     private const val HOST = "https://speed.cloudflare.com"
     private const val HETZNER_FILE = "https://hel1-speed.hetzner.com/100MB.bin"
+    private const val HETZNER_FSN1_FILE = "https://fsn1-speed.hetzner.com/100MB.bin"
     private data class DownPlan(
         val latencyMs: Long,
         val one: V140SpeedTransfer.Sample,
@@ -97,13 +98,18 @@ internal object V140SpeedTest {
         }
         verify()
 
-        fun runDownloads(hetzner: Boolean): DownPlan {
-            val source = if (hetzner) HETZNER_FILE else "$HOST/__down"
-            val provider = if (hetzner) "Hetzner HEL1" else "Cloudflare"
-            val singleBytes = if (hetzner) 4 * 1024 * 1024 else WARMUP_BYTES
+        fun runDownloads(provider: String): DownPlan {
+            val source = when (provider) {
+                "Cloudflare" -> "$HOST/__down"
+                "Hetzner HEL1" -> HETZNER_FILE
+                "Hetzner FSN1" -> HETZNER_FSN1_FILE
+                else -> error("Unbekannter Speedtest-Anbieter")
+            }
+            val fixedFile = provider != "Cloudflare"
+            val singleBytes = if (fixedFile) 4 * 1024 * 1024 else WARMUP_BYTES
             progress("HTTP-Latenz ($provider) wird gemessen …")
             val latencyStart = SystemClock.elapsedRealtimeNanos()
-            if (hetzner) {
+            if (fixedFile) {
                 transfer.downloadFilePrefixLive(source, 32, verify) {}
             } else {
                 transfer.download("$source?bytes=32", 32, verify)
@@ -111,16 +117,16 @@ internal object V140SpeedTest {
             val latency = ((SystemClock.elapsedRealtimeNanos() - latencyStart) / 1_000_000)
                 .coerceAtLeast(1L)
             progress("Diagnose: 1 HTTPS-Verbindung ($provider) …")
-            val one = if (hetzner) {
+            val one = if (fixedFile) {
                 transfer.downloadFilePrefixLive(source, singleBytes, verify) {}
             } else {
                 transfer.download("$source?bytes=$singleBytes", singleBytes, verify)
             }
             progress("Diagnose: 2 parallele HTTPS-Verbindungen ($provider) …")
             val two = V144GigabitTransfer.measureWithStreams(
-                transfer, source, singleBytes, false, verify, 2, {}, hetzner
+                transfer, source, singleBytes, false, verify, 2, {}, fixedFile
             )
-            val fourEach = if (hetzner) 8 * 1024 * 1024
+            val fourEach = if (fixedFile) 8 * 1024 * 1024
                 else V144GigabitTransfer.downloadBytesPerStream(one.mbps)
             val total = fourEach.toLong() * 4L
             live(Live(Phase.DOWNLOAD, 0.0, 0f))
@@ -129,21 +135,41 @@ internal object V140SpeedTest {
                 transfer, source, fourEach, false, verify, 4, { sample ->
                     live(Live(Phase.DOWNLOAD, sample.mbps,
                         (sample.bytes.toDouble() / total).toFloat().coerceIn(0f, 1f)))
-                }, hetzner
+                }, fixedFile
             )
             return DownPlan(latency, one, two, four, provider)
         }
 
-        // A 403 means the remote speed-test service denied a request.
-        // It must not be mistaken for a measured zero or a WireGuard failure.
+        // Single small server probes succeeded from the Finland VPS. The Fire TV
+        // may still hit rate limits during repeated larger parallel transfers.
+        // Check both independent Hetzner sites; NEVER change Android network pin.
+        // A 403/429 is an invalid result, not "0 Mbit/s".
         val download = try {
-            runDownloads(false)
-        } catch (blocked: V146SpeedServerException) {
-            if (blocked.httpStatus != 403 && blocked.httpStatus != 429) throw blocked
-            verify()  // Never switch to the physical Wi-Fi network.
-            progress("Cloudflare lehnt den Test ab (HTTP ${blocked.httpStatus}). " +
-                "Alternative Downloadmessung über Hetzner HEL1 …")
-            runDownloads(true)
+            runDownloads("Cloudflare")
+        } catch (cloudBlocked: V146SpeedServerException) {
+            if (cloudBlocked.httpStatus !in listOf(403, 429)) throw cloudBlocked
+            verify()
+            progress("${cloudBlocked.host}: HTTP ${cloudBlocked.httpStatus}; " +
+                "prüfe alternativen Testserver in Helsinki …")
+            try {
+                runDownloads("Hetzner HEL1")
+            } catch (helBlocked: V146SpeedServerException) {
+                if (helBlocked.httpStatus !in listOf(403, 429)) throw helBlocked
+                verify()
+                progress("${helBlocked.host}: HTTP ${helBlocked.httpStatus}; " +
+                    "prüfe alternativen Testserver in Falkenstein …")
+                try {
+                    runDownloads("Hetzner FSN1")
+                } catch (fsnBlocked: V146SpeedServerException) {
+                    if (fsnBlocked.httpStatus !in listOf(403, 429)) throw fsnBlocked
+                    verify()
+                    throw IllegalStateException(
+                        "Alle drei Download-Testserver haben die Messung begrenzt " +
+                        "(zuletzt ${fsnBlocked.host}: HTTP ${fsnBlocked.httpStatus}). " +
+                        "Das ist kein VPN-Geschwindigkeitswert. Bitte später erneut versuchen."
+                    )
+                }
+            }
         }
         verify()
         live(Live(Phase.UPLOAD, 0.0, 0f))
@@ -556,7 +582,8 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
         }
         if (playlistId == null)
             Text("Bitte zuerst eine Playlist auswählen.", color = Color(0xFFFFAFA9))
-        Text("Speedtest über Cloudflare (bei HTTP 403/429 Download-Fallback Hetzner HEL1). " +
+        Text("Speedtest über Cloudflare; bei HTTP 403/429 alternative Server " +
+            "Hetzner HEL1 und FSN1. " +
             "4 Streams plus 1-/2-Stream-Vergleich, maximal etwa 320 MiB Testdaten. " +
             "HTTPS-Latenz inklusive TLS, kein ICMP-Ping. " +
             "Ohne bestätigte VPN-Route kein ungeschützter Fallback. " +
