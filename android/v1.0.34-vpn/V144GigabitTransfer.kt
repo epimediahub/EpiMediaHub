@@ -95,8 +95,9 @@ internal object V144GigabitTransfer {
                         }
                     }
                     if (upload) worker.uploadLive(url, bytesPerStream, verify, sampleUpdate)
-                    else if (fixedFileDownload) worker.downloadFilePrefixLive(
-                        url, bytesPerStream, verify, sampleUpdate
+                    else if (fixedFileDownload) worker.downloadFileRangeLive(
+                        url, index.toLong() * 8 * MIB, bytesPerStream,
+                        verify, sampleUpdate
                     )
                     else worker.downloadLive(
                         "$url?bytes=$bytesPerStream",
