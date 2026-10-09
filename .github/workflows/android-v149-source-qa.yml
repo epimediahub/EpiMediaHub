@@ -62,14 +62,14 @@ jobs:
               assert label in quick
           for label in ('quick-settings','quick-servers','quick-speedtest','quick-weather'):
               assert label in quick
-          weather=(base/'data/V081WeatherClient.kt').read_text()
+          weather=(base/'data/V070WeatherClient.kt').read_text()
           assert 'if (age !in 0 until CACHE_MAX_AGE) return null' in weather
           assert 'if (postalCode(context).isBlank()) return@withContext null' in weather
           assert 'useCaches = false' in weather
           assert 'delay(15 * 60 * 1000L)' in home
           assert 'introRole: String = "unknown"' in (base/'data/V115SkipRepository.kt').read_text()
           assert 'row.optString("intro_role", "unknown")' in (base/'data/V116SkipRepository.kt').read_text()
-          assert 'segment.skipLabel' in (base/'ui/V117PlayerChrome.kt').read_text()
+          assert 'segment.skipLabel' in (base/'ui/V115PlayerChrome.kt').read_text()
           assert 'fun measure(context: Context, playlistId: String' in (base/'vpn/V140SpeedTest.kt').read_text()
           assert (p/'app/src/main/res/drawable/icon_radio_v149.xml').is_file()
           test=(p/'app/src/test/java/de/epimediahub/app/ui/V133HomeControlsUiTest.kt').read_text()
