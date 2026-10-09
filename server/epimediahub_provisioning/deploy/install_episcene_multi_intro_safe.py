@@ -6,6 +6,7 @@ apply: same checks, SQLite-consistent backup, natural idle wait and reversible r
 No live provider credentials are fetched or logged. No queues/markers are reset.
 """
 import ast
+import difflib
 import hashlib
 import json
 import os
@@ -79,6 +80,87 @@ def db_path():
     return Path(directory) / "provisioning.db"
 
 
+def _occurrences(lines, block):
+    if not block:
+        return list(range(len(lines) + 1))
+    size = len(block)
+    return [idx for idx in range(len(lines) - size + 1)
+            if lines[idx:idx+size] == block]
+
+
+def transplant(old_source, new_source, live_source, file):
+    """Cherry-pick exact old->new hunks into an independently modified live file.
+
+    Unlike diff3 this preserves concurrent edits *near* an unchanged anchor.
+    Each changed old block must occur uniquely or have a unique context match.
+    Ambiguity and changed source anchors always fail closed.
+    """
+    old = old_source.splitlines(keepends=True)
+    new = new_source.splitlines(keepends=True)
+    live = live_source.splitlines(keepends=True)
+    changed = [(tag,a,b,c,d) for tag,a,b,c,d in
+               difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes()
+               if tag != 'equal']
+    require(len(changed) <= 80, f"{file}: unexpected number of modifications")
+    for tag, a, b, c, d in reversed(changed):
+        prior = old[a:b]
+        replacement = new[c:d]
+        options = _occurrences(live, prior)
+        if not options:
+            raise RuntimeError(f"{file}: original changed at source lines {a+1}-{b}; "
+                               "independent functionality touched this exact block")
+        # Score candidate insertion/replacement locations against both unchanged
+        # sides of the original. No character-level fuzzy or heuristic rewriting.
+        scored = []
+        for idx in options:
+            left = 0
+            while (left < min(6,a,idx)
+                   and live[idx-left-1] == old[a-left-1]):
+                left += 1
+            right = 0
+            while (right < min(6,len(old)-b,len(live)-(idx+len(prior)))
+                   and live[idx+len(prior)+right] == old[b+right]):
+                right += 1
+            scored.append((left+right, min(left,right), idx))
+        scored.sort(reverse=True)
+        score, balance, idx = scored[0]
+        if len(scored) > 1:
+            nxt = scored[1]
+            require((score,balance) > (nxt[0],nxt[1]) and score > 0,
+                    f"{file}: ambiguous change at old line {a+1}: "
+                    f"{len(options)} possible anchors")
+        if not prior:
+            require(score > 0, f"{file}: insertion has no proven source anchor")
+        live[idx:idx+len(prior)] = replacement
+    result = ''.join(live)
+    require('<<<<<<<' not in result and '>>>>>>>' not in result,
+            f"{file}: conflict markers in generated result")
+    return result
+
+
+def selftest():
+    """Exercise exact feature recreation and independent additions for all files."""
+    for file in FILES:
+        original = fetch(OLD,file).decode()
+        feature = fetch(NEW,file).decode()
+        result = transplant(original,feature,original,file)
+        require(result == feature, f"{file}: patch did not recreate approved feature")
+        # Emulate unrelated preexisting user modifications, including the live
+        # independent-playlist foreign keys on the real Hetzner controller.
+        sentinel = '# preserved-independent-playlists\n' if file.endswith('.py') else '<!-- preserved-independent-playlists -->\n'
+        simulated = sentinel + original.replace(
+            "REFERENCES customer_playlists(id)", "REFERENCES skip_analysis_playlists(id)")
+        patched = transplant(original,feature,simulated,file)
+        require(sentinel in patched, f"{file}: lost existing independent code")
+        require("REFERENCES customer_playlists(id)" not in patched or
+                "REFERENCES customer_playlists(id)" in feature,
+                f"{file}: old customer-playlist schema restored unexpectedly")
+        if file.endswith(".py"):
+            ast.parse(patched)
+        print(f"OK targeted cherry-pick: {file}",flush=True)
+    print("Transplant self-test passed.",flush=True)
+
+
 def stage(work):
     require(BASE.is_dir() and (BASE / ".venv/bin/python").is_file(),
             "Actual Hetzner controller installation not found")
@@ -103,15 +185,8 @@ def stage(work):
         current.write_bytes(live)
         baseline.write_bytes(fetch(OLD, file))
         proposed.write_bytes(fetch(NEW, file))
-        result = run("diff3", "-m", "-L", f"LIVE:{file}",
-                     "-L", f"OLD:{file}", "-L", f"NEW:{file}",
-                     str(current), str(baseline), str(proposed), check=False)
-        require(result.returncode == 0,
-                f"Merge conflict in {file}: no live changes made. "
-                "The independently updated module needs a targeted manual merge.")
-        require(not re.search(r"(?m)^(<<<<<<<|=======|>>>>>>>)", result.stdout),
-                f"Unresolved merge conflict: {file}")
-        merged.write_text(result.stdout)
+        merged.write_text(transplant(
+            baseline.read_text(), proposed.read_text(), live.decode(), file))
         staged[file] = merged
 
     helper = work / "merged" / HELPER
@@ -229,10 +304,12 @@ def apply(staged):
 
 
 def main():
-    require(os.geteuid() == 0, "Root required")
     mode = sys.argv[1] if len(sys.argv) > 1 else "check"
-    require(mode in {"check", "apply"}, "Use check or apply")
-    require(shutil.which("diff3") is not None, "diffutils (diff3) required")
+    require(mode in {"check", "apply", "selftest"}, "Use check, apply or selftest")
+    if mode == "selftest":
+        selftest()
+        return
+    require(os.geteuid() == 0, "Root required")
     with tempfile.TemporaryDirectory(prefix="epi-multi-intro-") as temporary:
         staged = stage(Path(temporary))
         if mode == "check":
