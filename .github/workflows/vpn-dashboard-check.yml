@@ -36,7 +36,7 @@ jobs:
           bash -n server/epimediahub_provisioning/deploy/install_vpn_dashboard.sh
           bash -n server/epimediahub_provisioning/deploy/install_vpn_finland_agent.sh
       - name: Persist regenerated installers to internal change branch
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feature/vpn-auto-server'
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/feature/vpn-auto-server') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feature/vpn-auto-server')
         uses: actions/github-script@v7
         with:
           script: |
