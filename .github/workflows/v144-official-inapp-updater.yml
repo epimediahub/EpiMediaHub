@@ -5,6 +5,7 @@ on:
     branches: [feature/vpn-v144-gigabit-speedtest]
     paths:
       - '.github/workflows/v144-official-inapp-updater.yml'
+      - 'android/v1.0.34-vpn/V140SpeedTransferTest.kt'
   workflow_dispatch:
 
 permissions:
