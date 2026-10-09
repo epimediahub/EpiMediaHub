@@ -2,10 +2,9 @@ name: EpiMediaHub 1.0.50 source compatibility and menu tests
 
 on:
   push:
-    branches: [feature/official-v150-quickmenu-weather-intros]
+    branches: [feature/official-v150-adaptive-speed-focus-weather]
     paths:
       - 'android/v1.0.50/**'
-      - '.github/workflows/android-v150-source-qa.yml'
       - '.github/workflows/android-v150-source-qa.yml'
   workflow_dispatch:
 
