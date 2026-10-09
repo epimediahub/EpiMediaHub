@@ -22,6 +22,7 @@ class FakeWireGuard:
     def __call__(self,args,**kwargs):
         self.calls.append(args)
         if args[1:]==["show","wg0","allowed-ips"]:return SimpleNamespace(stdout="\n".join(k+"\t"+(" ".join(v) or "(none)") for k,v in self.peers.items()))
+        if args[1:]==["show","wg0","public-key"]:return SimpleNamespace(stdout=KEY2+"\n")
         if args[1:]==["show","wg0","latest-handshakes"]:return SimpleNamespace(stdout="\n".join(k+"\t0" for k in self.peers))
         if args[1:4]==["set","wg0","peer"]:
             self.peers[args[4]]=set(args[6].split(",")) if args[6] else set()
