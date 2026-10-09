@@ -86,12 +86,18 @@ class V140SpeedTransferTest {
             output.write("HTTP/1.1 302 Found\r\nLocation: /down\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
         } else if (requestPath == "/forbidden") {
             output.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+        } else if (requestPath == "/limited") {
+            output.write("HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\nRetry-After: 30\r\nConnection: close\r\n\r\n".toByteArray())
         } else if (requestPath == "/range") {
-            val requested = range?.removePrefix("bytes=0-")?.toIntOrNull()?.plus(1)
-            val actual = (requested ?: 256 * 1024).coerceIn(1, 256 * 1024)
+            val match = Regex("bytes=(\\d+)-(\\d+)").matchEntire(range.orEmpty())
+            val startByte = match?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+            val lastByte = match?.groupValues?.get(2)?.toLongOrNull() ?: 262143L
+            check(lastByte >= startByte && lastByte < 100_000_000L)
+            val actual = (lastByte - startByte + 1L).toInt()
+            check(actual in 1..262144)
             val bytes = ByteArray(actual) { (it % 251).toByte() }
             output.write(("HTTP/1.1 206 Partial Content\r\n" +
-                "Content-Range: bytes 0-${actual - 1}/104857600\r\n" +
+                "Content-Range: bytes $startByte-$lastByte/100000000\r\n" +
                 "Content-Length: $actual\r\nConnection: close\r\n\r\n").toByteArray())
             output.write(bytes)
         } else {
@@ -225,6 +231,31 @@ class V140SpeedTransferTest {
             transfer, "$url/range", 256 * 1024, false, {}, 2, {}, true)
         assertEquals(512L * 1024L, two.bytes)
         assertTrue(two.mbps.isFinite())
+    }
+
+    @Test fun rangeOffsetsUseDistinctExactBlocksInsteadOfFourIdenticalPrefixes() {
+        val verifications = AtomicInteger()
+        val transfer = V140SpeedTransfer()
+        val one = transfer.downloadFileRangeLive(
+            "$url/range", 8L * 1024 * 1024, 256 * 1024,
+            { verifications.incrementAndGet() }, {})
+        assertEquals(256L * 1024, one.bytes)
+        val four = V144GigabitTransfer.measureWithStreams(
+            transfer, "$url/range", 256 * 1024, false, {}, 4, {}, true)
+        assertEquals(4L * 256 * 1024, four.bytes)
+        assertTrue(verifications.get() >= 3)
+    }
+
+    @Test fun rateLimitedHostIsReportedAndCannotBeMistakenForVpnDisconnect() {
+        val transfer = V140SpeedTransfer()
+        val rejected = assertThrows(V146SpeedServerException::class.java) {
+            V144GigabitTransfer.measureWithStreams(
+                transfer, "$url/limited", 256 * 1024, false, {}, 2, {})
+        }
+        assertEquals(429, rejected.httpStatus)
+        assertEquals("127.0.0.1", rejected.host)
+        assertTrue(rejected.message!!.contains("127.0.0.1"))
+        assertFalse(transfer.isCancelled())
     }
 
     @Test fun parallel403PreservesRealHttpStatusForAlternativeProvider() {
