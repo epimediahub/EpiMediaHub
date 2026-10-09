@@ -207,7 +207,7 @@ class Agent:
             "--max-filesize", "1048576",
             "--max-redirs", "0",
             "--header", "@-",
-            "--write-out", "\\n%{http_code}",
+            "--write-out", "\n%{http_code}",
         ]
         if body is not None:
             # Report includes only already-public peer IDs/generations and
@@ -219,11 +219,12 @@ class Agent:
         command.extend(["--url", self.base + path])
         result = subprocess.run(
             command,
-            input="Authorization: Bearer " + self.token + "\\nAccept: application/json\\n",
+            input="Authorization: Bearer " + self.token + "\nAccept: application/json\n" +
+                  ("Content-Type: application/json\n" if body is not None else ""),
             text=True, capture_output=True, timeout=8, check=False,
         )
-        content, separator, status = result.stdout.rpartition("\\n")
-        if separator != "\\n" or not status.isdigit():
+        content, separator, status = result.stdout.rpartition("\n")
+        if separator != "\n" or not status.isdigit():
             raise ValueError("VPN API did not return a usable HTTP response")
         code = int(status)
         if code != 200:
