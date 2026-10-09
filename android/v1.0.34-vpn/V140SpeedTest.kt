@@ -47,8 +47,11 @@ internal object V140SpeedTest {
         val downloadMbps: Double, val uploadMbps: Double, val bytes: Long)
 
     private const val HOST = "https://speed.cloudflare.com"
-    private const val DOWNLOAD_BYTES = 8 * 1024 * 1024
-    private const val UPLOAD_BYTES = 2 * 1024 * 1024
+    enum class Phase { IDLE, CHECKING, DOWNLOAD, UPLOAD, DONE }
+    data class Live(val phase: Phase, val mbps: Double, val fraction: Float)
+
+    private const val DOWNLOAD_BYTES = 24 * 1024 * 1024
+    private const val UPLOAD_BYTES = 4 * 1024 * 1024
 
     private fun verifyRoute(context: Context, playlistId: String, vpn: Boolean,
                             transfer: V140SpeedTransfer) {
@@ -62,8 +65,9 @@ internal object V140SpeedTest {
     }
 
     fun measure(context: Context, playlistId: String, transfer: V140SpeedTransfer,
-                progress: (String) -> Unit): Result {
+                progress: (String) -> Unit, live: (Live) -> Unit = {}): Result {
         val vpn = V134VpnSession.usesVpn(context, playlistId)
+        live(Live(Phase.CHECKING, 0.0, 0f))
         verifyRoute(context, playlistId, vpn, transfer)
         val verify = { verifyRoute(context, playlistId, vpn, transfer) }
         val before = V134VpnSession.publicIpv4()
@@ -72,15 +76,24 @@ internal object V140SpeedTest {
         }
         verifyRoute(context, playlistId, vpn, transfer)
         progress("HTTP-Latenz wird gemessen …")
-        // Small transaction including HTTPS setup: not an ICMP ping.
         val latencyStart = SystemClock.elapsedRealtimeNanos()
         transfer.download("$HOST/__down?bytes=32", 32, verify)
         val latencyMs = ((SystemClock.elapsedRealtimeNanos() - latencyStart) / 1_000_000).coerceAtLeast(1L)
-        progress("Download: 8 MiB über aktive Verbindung …")
-        val down = transfer.download("$HOST/__down?bytes=$DOWNLOAD_BYTES", DOWNLOAD_BYTES, verify)
-        progress("Upload: 2 MiB über aktive Verbindung …")
-        val up = transfer.upload("$HOST/__up", UPLOAD_BYTES, verify)
-        progress("Öffentliche IP wird abschließend geprüft …")
+
+        live(Live(Phase.DOWNLOAD, 0.0, 0f))
+        progress("Download wird live gemessen …")
+        val down = transfer.download("$HOST/__down?bytes=$DOWNLOAD_BYTES", DOWNLOAD_BYTES, verify) { sample ->
+            live(Live(Phase.DOWNLOAD, sample.mbps,
+                (sample.bytes.toFloat() / DOWNLOAD_BYTES).coerceIn(0f, 1f)))
+        }
+        live(Live(Phase.UPLOAD, 0.0, 0f))
+        progress("Upload wird live gemessen …")
+        val up = transfer.upload("$HOST/__up", UPLOAD_BYTES, verify) { sample ->
+            live(Live(Phase.UPLOAD, sample.mbps,
+                (sample.bytes.toFloat() / UPLOAD_BYTES).coerceIn(0f, 1f)))
+        }
+
+        progress("VPN-Ausgang wird nochmals geprüft …")
         verifyRoute(context, playlistId, vpn, transfer)
         val after = V134VpnSession.publicIpv4()
         check(before == after) { "Öffentliche IP hat sich während des Tests geändert" }
