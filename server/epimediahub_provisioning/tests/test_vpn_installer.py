@@ -63,6 +63,43 @@ class InstallerTests(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "abgebrochen"):
                     agent_installer.read_dashboard_url()
 
+    def test_finland_installer_reports_status_without_leaking_token(self):
+        from urllib.error import HTTPError
+        private_token = "private-test-agent-token-do-not-print-anywhere"
+        class FakeAgent:
+            subnet = "10.92.0.0/24"
+            def request(self, path):
+                self.last_path = path
+                raise HTTPError("https://api.epimediahub.com"+path, 401,
+                                "Unauthorized", {}, None)
+        with patch.object(agent_installer.os, "geteuid", return_value=0), \
+             patch.object(agent_installer.shutil, "which", return_value="/usr/bin/wg"), \
+             patch.object(agent_installer.Path, "is_file", return_value=True), \
+             patch.object(agent_installer.Path, "exists", return_value=False), \
+             patch.object(agent_installer, "read_dashboard_url", return_value="https://api.epimediahub.com"), \
+             patch.object(agent_installer.getpass, "getpass", return_value=private_token), \
+             patch.object(agent_installer, "Agent", return_value=FakeAgent()), \
+             contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit) as failure:
+                agent_installer.main()
+        message = str(failure.exception)
+        self.assertIn("HTTP 401", message)
+        self.assertIn("Nichts installiert", message)
+        self.assertNotIn(private_token, message)
+
+    def test_finland_installer_rejects_short_token_before_network(self):
+        with patch.object(agent_installer.os, "geteuid", return_value=0), \
+             patch.object(agent_installer.shutil, "which", return_value="/usr/bin/wg"), \
+             patch.object(agent_installer.Path, "is_file", return_value=True), \
+             patch.object(agent_installer.Path, "exists", return_value=False), \
+             patch.object(agent_installer, "read_dashboard_url", return_value="https://api.epimediahub.com"), \
+             patch.object(agent_installer.getpass, "getpass", return_value="bad"), \
+             patch.object(agent_installer, "Agent") as create_agent, \
+             contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(SystemExit, "zu kurz"):
+                agent_installer.main()
+        create_agent.assert_not_called()
+
     def test_staging_is_idempotent_and_uses_isolated_database(self):
         stage=self.root/"stage";stage.mkdir()
         installer.prepare(self.base,ROOT,stage)
