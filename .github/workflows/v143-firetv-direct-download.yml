@@ -5,6 +5,7 @@ on:
     branches: [feature/vpn-v143-live-gauge]
     paths:
       - 'android/v1.0.34-vpn/V140SpeedTest.kt'
+      - 'android/v1.0.34-vpn/V140SpeedTransferTest.kt'
 
 permissions:
   actions: read
