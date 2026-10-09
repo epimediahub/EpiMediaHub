@@ -1,0 +1,90 @@
+name: EpiMediaHub 1.0.52 source compatibility and menu tests
+
+on:
+  push:
+    branches: [fix/v152-speedtest-benchmark]
+    paths:
+      - 'android/v1.0.52/**'
+      - '.github/workflows/android-v152-source-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Recover pinned Android production source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* > .ci-android/source.b64
+          base64 -d .ci-android/source.b64 > .ci-android/source.tar.gz
+          test "$(sha256sum .ci-android/source.tar.gz | awk '{print $1}')" = "192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n 1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+      - name: Apply exact Android production and VPN speedtest patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash build_tools/install_android_v1033_source.sh
+          python3 android/v1.0.34-vpn/patch_wireguard_spike.py
+          python3 android/v1.0.34-vpn/patch_playlist_routing.py
+          python3 android/v1.0.49/patch_v149.py
+          python3 android/v1.0.50/patch_v150.py
+          python3 android/v1.0.51/patch_v151.py
+          python3 android/v1.0.52/patch_v152.py
+      - name: Check real features survive the new layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_ROOT'])
+          base=p/'app/src/main/java/de/epimediahub/app'
+          home=(base/'ui/V083Home.kt').read_text()
+          assert 'V083Tile("RADIO"' in home
+          assert 'V149QuickMenu(' in home
+          assert 'Key.DirectionUp' in home
+          assert 'v149TileFocus' in home
+          assert 'V140SpeedTestScreen(' in home
+          assert 'V140SpeedShortcutButton(' not in home
+          assert 'RadioHomeActions(showPlaylistSwitch,' not in home
+          quick=(base/'ui/V149QuickMenu.kt').read_text()
+          for label in ('Einstellungen','Server wechseln','Speedtest','Wetter & Ort'):
+              assert label in quick
+          for label in ('quick-settings','quick-servers','quick-speedtest','quick-weather'):
+              assert label in quick
+          weather=(base/'data/V070WeatherClient.kt').read_text()
+          assert 'if (age !in 0 until CACHE_MAX_AGE) return null' in weather
+          assert 'if (postalCode(context).isBlank()) return@withContext null' in weather
+          assert 'useCaches = false' in weather
+          assert 'delay(15 * 60 * 1000L)' in home
+          assert 'introRole: String = "unknown"' in (base/'data/V115SkipRepository.kt').read_text()
+          assert 'row.optString("intro_role", "unknown")' in (base/'data/V116SkipRepository.kt').read_text()
+          assert 'segment.skipLabel' in (base/'ui/V115PlayerChrome.kt').read_text()
+          assert 'fun measure(context: Context, playlistId: String' in (base/'vpn/V140SpeedTest.kt').read_text()
+          assert (p/'app/src/main/res/drawable/icon_radio_v149.xml').is_file()
+          test=(p/'app/src/test/java/de/epimediahub/app/ui/V133HomeControlsUiTest.kt').read_text()
+          assert 'remoteControlOpensDrawerFromTopRowAndShowsLabelledActions' in test
+          assert 'speedShortcutOpensRealTestScreenAndReturnsHome' in test
+          assert 'weather?.takeIf { !compact || isTv }?.let {' in home
+          assert 'if (!isTv) weather?.takeIf' not in home
+          assert 'V151RollingSpeed' in (base/'vpn/V140SpeedTest.kt').read_text()
+          assert 'started.set(System.nanoTime())' in (base/'vpn/V144GigabitTransfer.kt').read_text()
+          assert (p/'app/src/test/java/de/epimediahub/app/vpn/V151RollingSpeedTest.kt').is_file()
+          assert 'V152BenchmarkPolicy.plan(one.mbps, two.mbps, fixedFile)' in (base/'vpn/V140SpeedTest.kt').read_text()
+          assert 'sampleSeconds = download.four.nanos' in (base/'vpn/V140SpeedTest.kt').read_text()
+          assert (p/'app/src/test/java/de/epimediahub/app/vpn/V152BenchmarkPolicyTest.kt').is_file()
+          print('v1.0.52 adaptive pilot benchmark source compatibility passed')
+          PY
