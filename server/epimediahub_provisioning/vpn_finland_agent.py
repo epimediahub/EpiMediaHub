@@ -244,7 +244,13 @@ class Agent:
             # Public server key is safe to return via the authenticated agent
             # channel; clients no longer need a manually copied WireGuard key.
             server_key = self.wg("show", self.interface, "public-key").strip()
-            return {"peers": report, "server_public_key": server_key}
+            unmanaged = sorted({cidr for key, networks in actual.items()
+                                if key not in self.owned and key not in wanted
+                                for cidr in networks})
+            if len(unmanaged) > 1000:
+                raise ValueError("Too many unmanaged peer ranges")
+            return {"peers": report, "server_public_key": server_key,
+                    "unmanaged_networks": unmanaged}
 
     def run(self):
         # Never reuse an old grant after process restart.
