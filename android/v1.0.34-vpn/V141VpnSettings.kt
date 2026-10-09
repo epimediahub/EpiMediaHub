@@ -55,7 +55,7 @@ fun V141VpnSettingsHost(
 }
 
 @Composable
-private fun V141FocusButton(
+internal fun V141FocusButton(
     label: String,
     accent: Color,
     onClick: () -> Unit,
