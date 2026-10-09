@@ -37,8 +37,8 @@ if "isCoreLibraryDesugaringEnabled = true" not in new_gradle and "coreLibraryDes
         "compileOptions {\n        isCoreLibraryDesugaringEnabled = true", 1)
 if new_gradle.count("versionCode = 1033") != 1 or new_gradle.count('versionName = "1.0.33"') != 1:
     raise SystemExit("Refusing: expected 1.0.33 version")
-new_gradle = new_gradle.replace("versionCode = 1033", "versionCode = 1046", 1)
-new_gradle = new_gradle.replace('versionName = "1.0.33"', 'versionName = "1.0.46"', 1)
+new_gradle = new_gradle.replace("versionCode = 1033", "versionCode = 1047", 1)
+new_gradle = new_gradle.replace('versionName = "1.0.33"', 'versionName = "1.0.47"', 1)
 # This beta MUST install beside the user's daily production app.
 import re
 matches = re.findall(r'applicationId\s*=\s*"([^"]+)"', new_gradle)
