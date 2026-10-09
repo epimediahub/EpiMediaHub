@@ -46,7 +46,7 @@ class AgentTests(unittest.TestCase):
     def test_agent_curl_transport_uses_stdin_for_secret_and_json_post(self):
         from unittest.mock import patch
         from urllib.error import HTTPError
-        response = SimpleNamespace(stdout='{"peers":[]}\\n200', returncode=0, stderr="")
+        response = SimpleNamespace(stdout='{"peers":[]}\n200', returncode=0, stderr="")
         with patch("vpn_finland_agent.subprocess.run", return_value=response) as run:
             body=self.agent.request("/v1/vpn-agent/desired")
         self.assertEqual(body, {"peers":[]})
@@ -56,14 +56,14 @@ class AgentTests(unittest.TestCase):
         self.assertIn("--proto", command)
         self.assertIn("=https", command)
         self.assertEqual(command[command.index("--header")+1], "@-")
-        self.assertIn("Authorization: Bearer "+self.config["token"]+"\\n",kwargs["input"])
+        self.assertIn("Authorization: Bearer "+self.config["token"]+"\n",kwargs["input"])
         self.assertFalse(kwargs["shell"] if "shell" in kwargs else False)
 
         with patch("vpn_finland_agent.subprocess.run", return_value=response) as post:
             self.agent.request("/v1/vpn-agent/applied", {"peers":[]})
         args,kwargs=post.call_args
         self.assertIn("--data-binary",args[0])
-        self.assertIn("Content-Type: application/json\\n",kwargs["input"])
+        self.assertIn("Content-Type: application/json\n",kwargs["input"])
         self.assertNotIn(self.config["token"]," ".join(args[0]))
 
     def test_agent_curl_transport_rejects_denied_or_redirected_requests(self):
@@ -71,7 +71,7 @@ class AgentTests(unittest.TestCase):
         from urllib.error import HTTPError
         for code in (301,401,403,404):
             with self.subTest(status=code):
-                response=SimpleNamespace(stdout='{}\\n'+str(code),returncode=0,stderr="")
+                response=SimpleNamespace(stdout='{}\n'+str(code),returncode=0,stderr="")
                 with patch("vpn_finland_agent.subprocess.run",return_value=response):
                     with self.assertRaises(HTTPError) as caught:
                         self.agent.request("/v1/vpn-agent/desired")
