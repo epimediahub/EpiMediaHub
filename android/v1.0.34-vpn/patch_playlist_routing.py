@@ -44,7 +44,7 @@ replace(playlist, "    val u by vm.ui.collectAsState()",
             confirmButton = {
                 TextButton(onClick = {
                     routeFailed = false
-                    context.startActivity(Intent(context, V134VpnDiagnosticActivity::class.java))
+                    vm.navigate(Screen.Settings)
                 }) { Text("VPN-Einstellungen") }
             },
             dismissButton = { TextButton(onClick = { routeFailed = false }) { Text("Schließen") } }
@@ -137,6 +137,7 @@ replace(app, "        } else if (kidsSessionActive) {",
                 u.active!!.id.toString(),
                 u.active?.name ?: "Playlist",
                 onPlaylists = { vm.navigate(Screen.Playlists) },
+                onSettings = { vm.navigate(Screen.Settings) },
                 onDirectApproved = {
                     // The playback surface is removed while VPN egress is unverified.
                     // After explicit direct consent, reprepare the very same channel
