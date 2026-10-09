@@ -28,6 +28,13 @@ fun v134RouteReady(context: Context, playlistId: String?): Boolean {
     var ready by remember(playlistId) { mutableStateOf(playlistId == null) }
     LaunchedEffect(context, playlistId) {
         if (playlistId == null) { ready = true; return@LaunchedEffect }
+        // Initial route is always rebuilt after process recreation: the old
+        // in-memory Route enum is BLOCKED even when the Android tunnel is still UP.
+        // This preserves the saved per-playlist selection, and never allows
+        // playback before a fresh verified exit check succeeds.
+        ready = withContext(Dispatchers.IO) {
+            runCatching { V134VpnSession.routeTo(context, playlistId) }.getOrDefault(false)
+        }
         while (true) {
             ready = withContext(Dispatchers.IO) {
                 runCatching { V134VpnSession.routeReady(context, playlistId) }.getOrDefault(false)
@@ -51,6 +58,11 @@ fun V134VpnRouteBlockedScreen(
     var showConfirmation by remember(playlistId) { mutableStateOf(false) }
     var busy by remember(playlistId) { mutableStateOf(false) }
     var failed by remember(playlistId) { mutableStateOf(false) }
+    var initialRouteCheck by remember(playlistId) { mutableStateOf(true) }
+    LaunchedEffect(playlistId) {
+        delay(5500)
+        initialRouteCheck = false
+    }
     val canOfferDirect = V134VpnSession.needsDirectFallbackPrompt(context, playlistId)
     // Never default Fire TV D-pad focus to the privacy-exposing confirmation.
     LaunchedEffect(showConfirmation) {
@@ -69,7 +81,7 @@ fun V134VpnRouteBlockedScreen(
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Text(
-                "VPN-VERBINDUNG UNTERBROCHEN",
+                if (initialRouteCheck) "NETZWERKVERBINDUNG WIRD GEPRÜFT" else "VPN-VERBINDUNG UNTERBROCHEN",
                 color = Color(0xFFF5C15B),
                 fontWeight = FontWeight.Black,
                 fontSize = 27.sp
@@ -85,10 +97,12 @@ fun V134VpnRouteBlockedScreen(
                         "sieht dann deine normale öffentliche IP-Adresse.",
                     color = Color.White, fontSize = 16.sp
                 )
-                Button(
+                V141FocusButton(
+                    label = "Ohne VPN fortfahren …",
+                    accent = Color(0xFFF5C15B),
                     onClick = { showConfirmation = true },
                     enabled = !busy
-                ) { Text("Ohne VPN fortfahren …") }
+                )
             }
             if (failed) {
                 Text(
@@ -97,15 +111,18 @@ fun V134VpnRouteBlockedScreen(
                     color = Color(0xFFFFA89D), fontSize = 16.sp
                 )
             }
-            Button(onClick = {
-                context.startActivity(
-                    Intent(context, V134VpnDiagnosticActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            }, enabled = !busy) { Text("VPN-Verbindung überprüfen") }
-            Button(onClick = onPlaylists, enabled = !busy) {
-                Text("Playlist-Einstellungen öffnen")
-            }
+            V141FocusButton(
+                label = "VPN-Verbindung überprüfen",
+                accent = Color(0xFFF5C15B),
+                onClick = { context.startActivity(Intent(context, V134VpnDiagnosticActivity::class.java)) },
+                enabled = !busy
+            )
+            V141FocusButton(
+                label = "Playlist-Einstellungen öffnen",
+                accent = Color(0xFFF5C15B),
+                onClick = onPlaylists,
+                enabled = !busy
+            )
             Text(
                 "Keine automatische Direktverbindung. Entscheidung nur für diese " +
                     "Sitzung; „VPN Finnland“ bleibt für den nächsten Playlist-Wechsel gespeichert.",

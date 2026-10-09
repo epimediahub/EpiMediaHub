@@ -37,8 +37,8 @@ if "isCoreLibraryDesugaringEnabled = true" not in new_gradle and "coreLibraryDes
         "compileOptions {\n        isCoreLibraryDesugaringEnabled = true", 1)
 if new_gradle.count("versionCode = 1033") != 1 or new_gradle.count('versionName = "1.0.33"') != 1:
     raise SystemExit("Refusing: expected 1.0.33 version")
-new_gradle = new_gradle.replace("versionCode = 1033", "versionCode = 1040", 1)
-new_gradle = new_gradle.replace('versionName = "1.0.33"', 'versionName = "1.0.40"', 1)
+new_gradle = new_gradle.replace("versionCode = 1033", "versionCode = 1041", 1)
+new_gradle = new_gradle.replace('versionName = "1.0.33"', 'versionName = "1.0.41"', 1)
 # This beta MUST install beside the user's daily production app.
 import re
 matches = re.findall(r'applicationId\s*=\s*"([^"]+)"', new_gradle)
@@ -62,38 +62,19 @@ service = '''        <!-- WireGuard internal beta: Android user consent required
         </service>
 '''
 xml = manifest.read_text()
-# For beta testing, only the VPN diagnostics may be launched from the TV home screen.
-# Keep MainActivity itself available for explicit launch AFTER route verification.
-activity_pattern = re.compile(
-    r'(<activity\b[^>]*android:name="(?:\.MainActivity|de\.epimediahub\.app\.MainActivity)"[^>]*>)(.*?)(</activity>)',
-    re.S
-)
-m = activity_pattern.search(xml)
-if m is None:
-    raise SystemExit("Refusing: MainActivity manifest declaration not found")
-body = m.group(2)
-intent_filters = re.findall(r'<intent-filter\b[^>]*>.*?</intent-filter>', body, re.S)
-launch_filters = [i for i in intent_filters if 'android.intent.action.MAIN' in i]
-if not 1 <= len(launch_filters) <= 3:
-    raise SystemExit("Refusing: MainActivity launch filters missing or unexpected")
-new_body = body
-for launch_filter in launch_filters:
-    new_body = new_body.replace(launch_filter, "")
-xml = xml[:m.start()] + m.group(1) + new_body + m.group(3) + xml[m.end():]
-beta_launcher = """        <activity
+# Keep EpiMediaHub's regular MainActivity as the ONLY TV/phone launcher.
+# A diagnostic activity may be opened from Settings, never stacked as home.
+xml = manifest.read_text()
+if not 1 <= xml.count('android.intent.action.MAIN') <= 3:
+    raise SystemExit("Refusing: MainActivity launcher intent filters missing")
+beta_settings = """        <activity
             android:name="de.epimediahub.app.vpn.V134VpnDiagnosticActivity"
-            android:label="EpiMediaHub VPN Beta"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:label="VPN Diagnose"
+            android:exported="false" />
 """
 if "V134VpnDiagnosticActivity" in xml:
-    raise SystemExit("Refusing: VPN launcher already exists")
-xml = xml.replace("</application>", beta_launcher + "    </application>", 1)
+    raise SystemExit("Refusing: VPN diagnostic activity already exists")
+xml = xml.replace("</application>", beta_settings + "    </application>", 1)
 if "GoBackend$VpnService" in xml:
     raise SystemExit("Refusing: VPN service already configured")
 if xml.count("</application>") != 1:
@@ -103,6 +84,7 @@ files = [
     (src/"V134VpnRoutingPolicy.kt",java/"V134VpnRoutingPolicy.kt"),
     (src/"V134WireGuardDeviceTunnel.kt",java/"V134WireGuardDeviceTunnel.kt"),
     (src/"V134VpnDiagnosticActivity.kt",java/"V134VpnDiagnosticActivity.kt"),
+    (src/"V141VpnSettings.kt",java/"V141VpnSettings.kt"),
     (src/"V134VpnSession.kt",java/"V134VpnSession.kt"),
     (src/"V139VpnEncryptedProfileStore.kt",java/"V139VpnEncryptedProfileStore.kt"),
     (src/"V134VpnRouteUi.kt",java/"V134VpnRouteUi.kt"),
