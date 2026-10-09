@@ -99,7 +99,7 @@
         {% for device in customer.devices %}
         <section id="device-{{ device.id }}" class="device-card">
           <header class="device-head">
-            <div class="device-title"><span class="device-icon"><svg><use href="#i-device"/></svg></span><div><small>GERÄT</small><h3>{{ device.display_name or device.device_id }}</h3><p>{% if device.display_name %}{{ device.device_id }} · {% endif %}{{ device.platform|capitalize }} · Soll v{{ device.config_version }} / Gerät v{{ device.applied_config_version or 0 }}</p></div></div>
+            <div class="device-title"><span class="device-icon"><svg><use href="#i-device"/></svg></span><div><small>GERÄT</small><h3>{{ device.display_name or device.device_id }}</h3><p><strong>Feste Geräte-ID:</strong> <code title="Diese ID gehört zur App-Registrierung dieses Geräts">{{ device.device_id }}</code> · {{ device.platform|capitalize }} · Soll v{{ device.config_version }} / Gerät v{{ device.applied_config_version or 0 }}</p></div></div>
             <div class="device-actions">
               {% if device.last_sync_status == 'error' %}<span class="sync-state error">Fehler</span>{% elif device.sync_pending %}<span class="sync-state pending">Ausstehend</span>{% else %}<span class="sync-state ok">Synchron</span>{% endif %}
               <button class="button button-ghost button-small" type="button" data-open-dialog="rename-device-{{ device.id }}">Gerät umbenennen</button>
