@@ -206,6 +206,11 @@ def apply(staged):
             except Exception:
                 time.sleep(2)
         require(health.get("status") == "ok", "Dashboard health check failed")
+        with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as check:
+            tables = {r[0] for r in check.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+        require({"skip_intro_roles", "skip_records", "skip_analysis_playlists"} <= tables,
+                "New intro-role schema or independent playlist schema not initialized")
         require(active(report_timer), "Daily report timer stopped")
         print("INSTALLIERT: EpiScene Mehrfach-Intros aktiv; Backup: " + str(backup),
               flush=True)
