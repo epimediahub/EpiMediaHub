@@ -2,6 +2,7 @@ package de.epimediahub.app.vpn
 
 import java.net.HttpURLConnection
 import java.net.URL
+import org.json.JSONObject
 import java.util.Timer
 import java.util.TimerTask
 import java.util.concurrent.CancellationException
@@ -46,12 +47,13 @@ internal class V146SpeedServerException(
 ) : IllegalStateException("$direction-Testserver ($host): HTTP $httpStatus")
 
 /** Actual bounded HTTP transfers, independent of Android UI and VPN credentials. */
-internal class V140SpeedTransfer {
+internal class V140SpeedTransfer(initialSelfHostedToken: String? = null) {
     data class Sample(val bytes: Long, val nanos: Long) {
         val mbps: Double get() = bytes * 8_000.0 / nanos.coerceAtLeast(1L)
     }
 
     // Each click gets a new instance. A cancelled run can never be revived.
+    private val selfHostedToken = AtomicReference<String?>(initialSelfHostedToken)
     private val cancelled = AtomicBoolean(false)
     private val active = AtomicReference<HttpURLConnection?>(null)
     // Multi-stream benchmarks have independent sockets; cancelling a test must
@@ -76,6 +78,41 @@ internal class V140SpeedTransfer {
         if (cancelled.get()) throw CancellationException("Messung abgebrochen")
     }
 
+    /**
+     * Issue a short-lived token via the pinned network route. It is used ONLY for
+     * speedtest.epimediahub.com; never forward it to backup test providers.
+     */
+    fun openSelfHostedSession(verify: () -> Unit): String {
+        var session = ""
+        transfer("https://speedtest.epimediahub.com/v1/session", verify) { conn, _ ->
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.setFixedLengthStreamingMode(0)
+            conn.outputStream.use { }
+            val code = conn.responseCode
+            if (code != 200) {
+                throw V146SpeedServerException(code, "Sitzung", conn.url.host)
+            }
+            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            check(body.length in 1..4096) { "Ungültige Speedtest-Antwort" }
+            val json = JSONObject(body)
+            val issued = json.getString("session")
+            check(Regex("[A-Za-z0-9_-]{32,128}").matches(issued)) {
+                "Ungültiger Speedtest-Sitzungsschlüssel"
+            }
+            check(json.optInt("ttlSeconds") >= 60 && json.optInt("maxStreams") >= 4) {
+                "Speedtest-Serverprotokoll ist nicht kompatibel"
+            }
+            session = issued
+            body.length.toLong()
+        }
+        checkActive()
+        verify()
+        check(session.isNotEmpty()) { "Speedtest-Sitzung fehlt" }
+        selfHostedToken.set(session)
+        return session
+    }
+
     private fun transfer(url: String, verify: () -> Unit,
                          body: (HttpURLConnection, Long) -> Long): Sample {
         checkActive()
@@ -87,6 +124,15 @@ internal class V140SpeedTransfer {
         conn.useCaches = false
         conn.setRequestProperty("Cache-Control", "no-store")
         conn.setRequestProperty("Accept-Encoding", "identity")
+        // Strict origin allowlist: prevents leaking the ephemeral session token
+        // if a public backup provider is used. Redirects stay disabled.
+        if (conn.url.protocol == "https" &&
+            conn.url.host.equals("speedtest.epimediahub.com", ignoreCase = true)
+        ) {
+            selfHostedToken.get()?.let {
+                conn.setRequestProperty("Authorization", "Bearer $it")
+            }
+        }
         active.set(conn)
         val expired = AtomicBoolean(false)
         val timer = Timer("epimedia-speedtest-deadline", true)
