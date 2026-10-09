@@ -38,8 +38,8 @@ class ProposalTests(fixtures.AutomationFixture, unittest.TestCase):
             self.assertEqual(con.execute('SELECT COUNT(*) FROM skip_records').fetchone()[0], 5)
 
     def test_own_pending_marker_and_rejection_block_generated_replacement(self):
-        self.marker(self.target, status='pending')
         with self.db() as con:
+            add_record(con, self.target, 'intro', 48000, 74530, False, source='device')
             self.assertIsNone(auto.store_proposal(con, self.target, 'intro', 48000,74530,'audio',.99))
             self.assertEqual(con.execute('SELECT COUNT(*) FROM skip_records').fetchone()[0],1)
             con.execute("UPDATE skip_records SET status='rejected'")
