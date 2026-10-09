@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: epimediahub-android-v152-qa
+  group: epimediahub-android-v152-benchmark-qa
   cancel-in-progress: true
 
 permissions:
