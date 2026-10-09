@@ -1,0 +1,14 @@
+# Independent HTTPS origin; only after DNS-only record points to 2.31.6.81
+# No Cloudflare proxy, no cloudflared Tunnel, no response compression.
+speedtest.epimediahub.com {
+    header {
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        Cache-Control "no-store"
+        -Server
+    }
+    reverse_proxy 127.0.0.1:8792 {
+        # Overwrite client-supplied values: protect session/IP quotas
+        header_up X-Client-IP {remote_host}
+    }
+}
