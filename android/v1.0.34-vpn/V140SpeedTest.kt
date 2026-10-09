@@ -56,10 +56,19 @@ import kotlin.math.min
  */
 internal object V140SpeedTest {
     data class Result(val route: String, val ip: String, val latencyMs: Long,
-        val downloadMbps: Double, val uploadMbps: Double, val bytes: Long,
-        val singleStreamMbps: Double = 0.0, val dualStreamMbps: Double = 0.0)
+        val downloadMbps: Double, val uploadMbps: Double?, val bytes: Long,
+        val singleStreamMbps: Double = 0.0, val dualStreamMbps: Double = 0.0,
+        val downloadProvider: String = "Cloudflare", val partial: Boolean = false)
 
     private const val HOST = "https://speed.cloudflare.com"
+    private const val HETZNER_FILE = "https://hel1-speed.hetzner.com/100MB.bin"
+    private data class DownPlan(
+        val latencyMs: Long,
+        val one: V140SpeedTransfer.Sample,
+        val two: V140SpeedTransfer.Sample,
+        val four: V140SpeedTransfer.Sample,
+        val provider: String
+    )
     enum class Phase { IDLE, CHECKING, DOWNLOAD, UPLOAD, DONE }
     data class Live(val phase: Phase, val mbps: Double, val fraction: Float)
 
@@ -86,54 +95,90 @@ internal object V140SpeedTest {
         check(if (vpn) before == "37.27.42.215" else before != "37.27.42.215") {
             "IP stimmt nicht mit dem gewählten Routing überein"
         }
-        verifyRoute(context, playlistId, vpn, transfer)
-        progress("HTTP-Latenz wird gemessen …")
-        val latencyStart = SystemClock.elapsedRealtimeNanos()
-        transfer.download("$HOST/__down?bytes=32", 32, verify)
-        val latencyMs = ((SystemClock.elapsedRealtimeNanos() - latencyStart) / 1_000_000).coerceAtLeast(1L)
+        verify()
 
-        // A short single-stream probe sizes the real four-stream bandwidth test.
-        // Slow networks transfer fewer bytes; fast gigabit links transfer more.
-        progress("Verbindung wird für Gigabit-Messung vorbereitet …")
-        val warmup = transfer.download(
-            "$HOST/__down?bytes=$WARMUP_BYTES", WARMUP_BYTES, verify
-        )
-        // Short extra comparison exposes whether additional TCP streams help.
-        // All tests retain mandatory route verification and do not switch VPN.
-        progress("Diagnose: 2 parallele HTTPS-Verbindungen …")
-        val two = V144GigabitTransfer.measureWithStreams(
-            transfer, "$HOST/__down", WARMUP_BYTES, false, verify, 2
-        ) { _ -> }
-        val downEach = V144GigabitTransfer.downloadBytesPerStream(warmup.mbps)
-        val downTotal = downEach.toLong() * 4L
-        live(Live(Phase.DOWNLOAD, 0.0, 0f))
-        progress("Download: vier parallele HTTPS-Verbindungen …")
-        val down = V144GigabitTransfer.measure(
-            transfer, "$HOST/__down", downEach, false, verify
-        ) { sample ->
-            live(Live(Phase.DOWNLOAD, sample.mbps,
-                (sample.bytes.toDouble() / downTotal).toFloat().coerceIn(0f, 1f)))
+        fun runDownloads(hetzner: Boolean): DownPlan {
+            val source = if (hetzner) HETZNER_FILE else "$HOST/__down"
+            val provider = if (hetzner) "Hetzner HEL1" else "Cloudflare"
+            val singleBytes = if (hetzner) 4 * 1024 * 1024 else WARMUP_BYTES
+            progress("HTTP-Latenz ($provider) wird gemessen …")
+            val latencyStart = SystemClock.elapsedRealtimeNanos()
+            if (hetzner) {
+                transfer.downloadFilePrefixLive(source, 32, verify) {}
+            } else {
+                transfer.download("$source?bytes=32", 32, verify)
+            }
+            val latency = ((SystemClock.elapsedRealtimeNanos() - latencyStart) / 1_000_000)
+                .coerceAtLeast(1L)
+            progress("Diagnose: 1 HTTPS-Verbindung ($provider) …")
+            val one = if (hetzner) {
+                transfer.downloadFilePrefixLive(source, singleBytes, verify) {}
+            } else {
+                transfer.download("$source?bytes=$singleBytes", singleBytes, verify)
+            }
+            progress("Diagnose: 2 parallele HTTPS-Verbindungen ($provider) …")
+            val two = V144GigabitTransfer.measureWithStreams(
+                transfer, source, singleBytes, false, verify, 2, {}, hetzner
+            )
+            val fourEach = if (hetzner) 8 * 1024 * 1024
+                else V144GigabitTransfer.downloadBytesPerStream(one.mbps)
+            val total = fourEach.toLong() * 4L
+            live(Live(Phase.DOWNLOAD, 0.0, 0f))
+            progress("Download: 4 parallele HTTPS-Verbindungen ($provider) …")
+            val four = V144GigabitTransfer.measureWithStreams(
+                transfer, source, fourEach, false, verify, 4, { sample ->
+                    live(Live(Phase.DOWNLOAD, sample.mbps,
+                        (sample.bytes.toDouble() / total).toFloat().coerceIn(0f, 1f)))
+                }, hetzner
+            )
+            return DownPlan(latency, one, two, four, provider)
+        }
+
+        // A 403 means the remote speed-test service denied a request.
+        // It must not be mistaken for a measured zero or a WireGuard failure.
+        val download = try {
+            runDownloads(false)
+        } catch (blocked: V146SpeedServerException) {
+            if (blocked.httpStatus != 403 && blocked.httpStatus != 429) throw blocked
+            verify()  // Never switch to the physical Wi-Fi network.
+            progress("Cloudflare lehnt den Test ab (HTTP ${blocked.httpStatus}). " +
+                "Alternative Downloadmessung über Hetzner HEL1 …")
+            runDownloads(true)
         }
         verify()
         live(Live(Phase.UPLOAD, 0.0, 0f))
-        progress("Upload: vier parallele HTTPS-Verbindungen …")
-        val uploadEach = V144GigabitTransfer.uploadBytesPerStream(down.mbps)
-        val uploadTotal = uploadEach.toLong() * 4L
-        val up = V144GigabitTransfer.measure(
-            transfer, "$HOST/__up", uploadEach, true, verify
-        ) { sample ->
-            live(Live(Phase.UPLOAD, sample.mbps,
-                (sample.bytes.toDouble() / uploadTotal).toFloat().coerceIn(0f, 1f)))
+        progress("Upload: 4 parallele HTTPS-Verbindungen (Cloudflare) …")
+        val uploadEach = V144GigabitTransfer.uploadBytesPerStream(download.four.mbps)
+        // Hetzner's public static test files have no upload endpoint.
+        // If Cloudflare denies the POST, report upload unavailable, never 0 Mbit/s.
+        val up: V140SpeedTransfer.Sample? = try {
+            V144GigabitTransfer.measure(
+                transfer, "$HOST/__up", uploadEach, true, verify
+            ) { sample ->
+                live(Live(Phase.UPLOAD, sample.mbps,
+                    (sample.bytes.toDouble() / (uploadEach.toLong() * 4L))
+                        .toFloat().coerceIn(0f, 1f)))
+            }
+        } catch (blocked: V146SpeedServerException) {
+            if (blocked.httpStatus != 403 && blocked.httpStatus != 429) throw blocked
+            verify()
+            progress("Upload von Cloudflare abgewiesen (HTTP ${blocked.httpStatus}); " +
+                "Downloadmessung ist gültig, Upload nicht verfügbar.")
+            null
         }
 
         progress("VPN-Ausgang wird nochmals geprüft …")
-        verifyRoute(context, playlistId, vpn, transfer)
+        verify()
         val after = V134VpnSession.publicIpv4()
         check(before == after) { "Öffentliche IP hat sich während des Tests geändert" }
-        verifyRoute(context, playlistId, vpn, transfer)
-        return Result(if (vpn) "VPN FINNLAND" else "DIREKT", after, latencyMs,
-            down.mbps, up.mbps, warmup.bytes + two.bytes + down.bytes + up.bytes,
-            warmup.mbps, two.mbps)
+        verify()
+        return Result(
+            if (vpn) "VPN FINNLAND" else "DIREKT",
+            after, download.latencyMs, download.four.mbps, up?.mbps,
+            download.one.bytes + download.two.bytes + download.four.bytes + (up?.bytes ?: 0L),
+            download.one.mbps, download.two.mbps, download.provider,
+            partial = up == null
+        )
     }
 }
 
@@ -357,7 +402,9 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
                         V140SpeedTest.Phase.CHECKING -> "● Netzwerk und öffentliche IP werden geprüft"
                         V140SpeedTest.Phase.DOWNLOAD -> "↓  DOWNLOAD LÄUFT"
                         V140SpeedTest.Phase.UPLOAD -> "↑  UPLOAD LÄUFT"
-                        V140SpeedTest.Phase.DONE -> "✓  TEST ERFOLGREICH ABGESCHLOSSEN"
+                        V140SpeedTest.Phase.DONE -> if (result?.partial == true)
+                             "✓  DOWNLOAD GEMESSEN · UPLOAD NICHT VERFÜGBAR"
+                             else "✓  TEST ERFOLGREICH ABGESCHLOSSEN"
                         else -> "BEREIT  •  ECHTE DATENÜBERTRAGUNG"
                     },
                     color = liveTint, fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -403,6 +450,9 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
                 Text(status, color = if (failed) Color(0xFFFFAFA9) else Color(0xFFDCE7F4),
                     fontSize = if (isTv) 15.sp else 13.sp)
                 result?.let {
+                    Text("TESTSERVER DOWNLOAD: ${it.downloadProvider}" +
+                            if (it.partial) " · Upload beim Testserver blockiert" else "",
+                        color = Color(0xFFB3C4D9), fontSize = if (isTv) 13.sp else 12.sp)
                     Text(
                         "DOWNLOAD-VERGLEICH  •  1 Stream: " +
                             String.format(Locale.GERMANY, "%.1f", it.singleStreamMbps) +
@@ -464,7 +514,9 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
                                 phase = V140SpeedTest.Phase.DONE
                                 completed = 1f
                                 speed = measured.downloadMbps
-                                status = "Messung erfolgreich abgeschlossen."
+                                status = if (measured.partial)
+                                    "Download erfolgreich. Upload vom Testserver blockiert (HTTP 403/429)."
+                                else "Messung erfolgreich abgeschlossen."
                             }
                         } catch (e: CancellationException) {
                             status = "Messung abgebrochen."
@@ -504,8 +556,8 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
         }
         if (playlistId == null)
             Text("Bitte zuerst eine Playlist auswählen.", color = Color(0xFFFFAFA9))
-        Text("Gigabit-Speedtest über Cloudflare: 4 parallele HTTPS-Streams, " +
-            "zuzüglich 1-/2-Stream-Vergleich, je nach Leitung bis ca. 575 MiB Testdaten. " +
+        Text("Speedtest über Cloudflare (bei HTTP 403/429 Download-Fallback Hetzner HEL1). " +
+            "4 Streams plus 1-/2-Stream-Vergleich, maximal etwa 320 MiB Testdaten. " +
             "HTTPS-Latenz inklusive TLS, kein ICMP-Ping. " +
             "Ohne bestätigte VPN-Route kein ungeschützter Fallback. " +
             "Speedtest-Werte entsprechen nicht zwingend der Geschwindigkeit eines IPTV-Anbieters.",
