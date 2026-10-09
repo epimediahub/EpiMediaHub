@@ -18,7 +18,7 @@ import tempfile
 import time
 import urllib.request
 
-ADDON_FILES = ("vpn_dashboard.py", "templates/vpn_dashboard.html", "static/vpn-dashboard.css", "static/vpn-dashboard.js")
+ADDON_FILES = ("vpn_dashboard.py", "vpn_autoprovision.py", "templates/vpn_dashboard.html", "static/vpn-dashboard.css", "static/vpn-dashboard.js")
 IMPORT = "\n# EpiMediaHub VPN dashboard addon\nfrom vpn_dashboard import install as install_vpn_dashboard\ninstall_vpn_dashboard(app, db)\n"
 
 
@@ -58,7 +58,7 @@ def prepare(base, source, stage):
     for filename, url in (("dashboard_v080.html", "/admin/vpn"), ("reseller_dashboard_v080.html", "/reseller/vpn")):
         path = stage / "templates" / filename
         path.write_text(patch_navigation(path.read_text(), url))
-    for filename in ("vpn_dashboard.py", "wsgi.py"):
+    for filename in ("vpn_dashboard.py", "vpn_autoprovision.py", "wsgi.py"):
         py_compile.compile(str(stage / filename), doraise=True)
 
 

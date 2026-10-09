@@ -36,7 +36,7 @@ def build(files,target,run):
 
 
 def main():
-    build(["vpn_dashboard.py","templates/vpn_dashboard.html","static/vpn-dashboard.css","static/vpn-dashboard.js","deploy/install_vpn_dashboard.py"],"install_vpn_dashboard.sh",'BASE="${EPIMEDIAHUB_APP_DIR:-/opt/epimediahub/provisioning}"\n"$BASE/.venv/bin/python" "$TASK/deploy/install_vpn_dashboard.py" --source "$TASK" --base "$BASE" --env "${EPIMEDIAHUB_ENV_FILE:-/etc/epimediahub/provisioning.env}"')
+    build(["vpn_dashboard.py","vpn_autoprovision.py","templates/vpn_dashboard.html","static/vpn-dashboard.css","static/vpn-dashboard.js","deploy/install_vpn_dashboard.py"],"install_vpn_dashboard.sh",'BASE="${EPIMEDIAHUB_APP_DIR:-/opt/epimediahub/provisioning}"\n"$BASE/.venv/bin/python" "$TASK/deploy/install_vpn_dashboard.py" --source "$TASK" --base "$BASE" --env "${EPIMEDIAHUB_ENV_FILE:-/etc/epimediahub/provisioning.env}"')
     build(["vpn_finland_agent.py","deploy/install_vpn_agent.py"],"install_vpn_finland_agent.sh",'python3 "$TASK/deploy/install_vpn_agent.py"')
 
 

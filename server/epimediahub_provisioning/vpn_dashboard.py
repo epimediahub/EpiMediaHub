@@ -114,6 +114,8 @@ def migrate(con):
     CREATE TABLE IF NOT EXISTS vpn_operations(id TEXT PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS vpn_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
     """)
+    from vpn_autoprovision import migrate as migrate_vpn_auto
+    migrate_vpn_auto(con)
 
 
 JOINED = """SELECT v.*,d.device_id,d.display_name,d.customer_id current_customer_id,d.enabled device_enabled,c.enabled customer_enabled,
@@ -149,6 +151,8 @@ def install(app, db):
         return
     with db() as con:
         migrate(con)
+    from vpn_autoprovision import install as install_vpn_auto
+    install_vpn_auto(app, db)
     app.extensions["epimediahub_vpn"] = VERSION
     app.add_template_filter(lambda value: instant(value).astimezone(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y · %H:%M") if value else "–", "vpn_date")
 
@@ -204,6 +208,9 @@ def install(app, db):
                 row["state_label"] = ("Freigegeben" if state["enabled"] else "Abgelaufen" if row["expired"] else "Gesperrt") if row["confirmed"] else "Bestätigung offen"
                 by_device[row["device_row_id"]] = row
             for row in devices:
+                pending = con.execute("SELECT days,source FROM vpn_pending_grants WHERE device_row_id=?",
+                                      (row["id"],)).fetchone()
+                row["pending"] = dict(pending) if pending else None
                 row["vpn"] = by_device.get(row["id"])
             plans = [dict(r) for r in con.execute("SELECT * FROM vpn_plans ORDER BY id")]
             resellers = [dict(r) for r in con.execute("SELECT r.id,r.name,r.enabled,a.price_cents FROM resellers r LEFT JOIN vpn_accounts a ON a.reseller_id=r.id ORDER BY r.name")]
@@ -297,6 +304,37 @@ def install(app, db):
                 else:
                     target = device(con, integer(data.get("device_row_id")), admin)
                     entry = con.execute("SELECT * FROM vpn_devices WHERE device_row_id=?", (target["id"],)).fetchone()
+                    if not entry and operation in {"grant", "activate"}:
+                        # Admin/reseller purchase before the device first opens the
+                        # VPN settings: reserve the entitlement, not a WG secret.
+                        from vpn_autoprovision import ensure_pending
+                        usable(target)
+                        if operation == "grant":
+                            days = integer(data.get("days"), 1, 366)
+                            source = "admin"
+                        else:
+                            if not fresh(con):
+                                raise Invalid("Finnland-Server nicht erreichbar. Keine VPN-Credits abgebucht.")
+                            plan_parts = data.get("plan", "").split(":")
+                            if len(plan_parts) != 3:
+                                raise Invalid("Bitte einen VPN-Tarif auswählen.")
+                            plan = con.execute("SELECT * FROM vpn_plans WHERE id=? AND enabled=1",
+                                               (integer(plan_parts[0]),)).fetchone()
+                            if not plan or plan_parts[1:] != [str(plan["days"]), str(plan["credits"])]:
+                                raise Invalid("Dieser VPN-Tarif wurde geändert.")
+                            rid = target["reseller_id"]
+                            if rid is None or balance(con, rid) < plan["credits"]:
+                                raise Invalid("Nicht genügend VPN-Credits.")
+                            con.execute("""INSERT INTO vpn_credits(reseller_id,amount,kind,reference,note,created_at)
+                                           VALUES(?,?,'activation',?,?,?)""",
+                                        (rid,-plan["credits"],request_id,
+                                         f"{plan['name']} · Gerät #{target['id']} (automatisch)",stamp()))
+                            days = plan["days"]
+                            source = "reseller"
+                        ensure_pending(con, target["id"], days, source, target["reseller_id"])
+                        audit(con, who, operation+"_pending", device_row_id=target["id"], days=days)
+                        flash("VPN-Laufzeit zugeordnet. Das Gerät richtet den Schlüssel beim nächsten App-Start automatisch ein.", "success")
+                        return redirect("/admin/vpn" if admin else "/reseller/vpn", code=303)
                     if operation == "bind":
                         usable(target)
                         if entry:
@@ -383,6 +421,23 @@ def install(app, db):
         body = request.get_json(silent=True)
         if not isinstance(body, dict) or not isinstance(body.get("peers"), list) or len(body["peers"]) > 10000:
             abort(400)
+        # Existing beta agents omit this; keep their lease acknowledgement valid.
+        # No customer provisioning config is released until the new agent
+        # reports its actual public key over the protected agent channel.
+        raw_server_key = body.get("server_public_key")
+        server_key = public_key(raw_server_key) if raw_server_key is not None else None
+        unmanaged = body.get("unmanaged_networks")
+        if unmanaged is not None:
+            if not isinstance(unmanaged, list) or len(unmanaged) > 1000 or any(
+                not isinstance(x, str) or len(x) > 49 for x in unmanaged
+            ):
+                abort(400)
+            try:
+                ranges = [ipaddress.ip_network(x, strict=False) for x in unmanaged]
+                if any(x.version != 4 for x in ranges):
+                    abort(400)
+            except ValueError:
+                abort(400)
         with db() as con:
             con.execute("BEGIN IMMEDIATE")
             rows = {r["id"]: r for r in con.execute(JOINED)}
@@ -401,10 +456,18 @@ def install(app, db):
             if seen != set(rows):
                 abort(409)
             con.execute("INSERT INTO vpn_meta VALUES('agent_applied_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (stamp(),))
+            if server_key:
+                con.execute("""INSERT INTO vpn_meta(key,value) VALUES('server_public_key',?)
+                               ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                            (server_key,))
+            if unmanaged is not None:
+                con.execute("""INSERT INTO vpn_meta(key,value) VALUES('unmanaged_networks',?)
+                               ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                            (json.dumps(unmanaged),))
         return jsonify(status="recorded")
 
     @app.after_request
     def vpn_no_cache(response):
-        if request.path.startswith(("/admin/vpn", "/reseller/vpn", "/v1/vpn-agent")):
+        if request.path.startswith(("/admin/vpn", "/reseller/vpn", "/v1/vpn-agent", "/v1/device/vpn", "/v1/device/identity")):
             response.headers["Cache-Control"] = "no-store"
         return response

@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from urllib.error import HTTPError, URLError
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from vpn_finland_agent import Agent, atomic
@@ -40,6 +41,28 @@ WantedBy=multi-user.target
 """
 
 
+
+def read_dashboard_url():
+    """Read the optional dashboard URL from a terminal without seeking on a TTY.
+
+    A POSIX terminal is not seekable. Opening /dev/tty in update mode ("r+")
+    makes Python's text wrapper attempt an illegal seek on some environments.
+    Never read the dashboard VPN token here; getpass handles that separately.
+    """
+    fallback = "https://api.epimediahub.com"
+    try:
+        with open("/dev/tty", "r", encoding="utf-8") as terminal:
+            print(f"Dashboard-URL [{fallback}]: ", file=sys.stderr, end="", flush=True)
+            value = terminal.readline()
+    except (OSError, UnicodeError) as exc:
+        raise SystemExit(
+            "Keine interaktive Konsole verfuegbar. Installer direkt im "
+            "SSH-Terminal ausfuehren (nicht mit curl | bash)."
+        ) from exc
+    if value == "":
+        raise SystemExit("Dashboard-URL-Eingabe abgebrochen; nichts installiert.")
+    return value.strip() or fallback
+
 def main():
     if os.geteuid()!=0:raise SystemExit("Bitte als root auf dem Finnland-VPN-Server starten.")
     wg=Path("/etc/wireguard/wg0.conf")
@@ -51,15 +74,30 @@ def main():
         config=json.loads(config_path.read_text())
     else:
         print("Kopplung mit dem Dashboard. Das Token nicht in Chats oder GitHub einfügen.")
-        with open("/dev/tty","r+") as terminal:
-            terminal.write("Dashboard-URL [https://api.epimediahub.com]: ");terminal.flush()
-            url=terminal.readline().strip() or "https://api.epimediahub.com"
-        token=getpass.getpass("VPN-Kopplungstoken vom Dashboard-Server: ")
+        url = read_dashboard_url()
+        token=getpass.getpass("VPN-Kopplungstoken vom Dashboard-Server: ").strip()
+        if len(token) < 32:
+            raise SystemExit("VPN-Kopplungstoken zu kurz (mindestens 32 Zeichen). "
+                             "Bitte den gesamten Inhalt der Token-Datei verwenden. Nichts installiert.")
         config={"dashboard_url":url,"token":token,"interface":"wg0"}
-    agent=Agent(config)
-    from vpn_finland_agent import validate
-    try:validate(agent.request("/v1/vpn-agent/desired"),agent.subnet)
-    except Exception as error:raise SystemExit(f"Dashboard-Kopplung fehlgeschlagen ({type(error).__name__}). Nichts installiert.") from None
+    try:
+        agent=Agent(config)
+        from vpn_finland_agent import validate
+        validate(agent.request("/v1/vpn-agent/desired"),agent.subnet)
+    except HTTPError as error:
+        # Never display headers, response bodies or authorization material.
+        message = {401:"Token stimmt nicht mit dem Dashboard ueberein.",
+                   403:"Zugriff durch Reverse Proxy/Cloudflare verweigert.",
+                   404:"Agent-API ist an dieser Dashboard-URL nicht erreichbar."}.get(
+                       error.code, "Dashboard oder Proxy hat die Anfrage abgelehnt.")
+        raise SystemExit(f"Dashboard-Kopplung fehlgeschlagen: HTTP {error.code}. "
+                         f"{message} Nichts installiert.") from None
+    except URLError:
+        raise SystemExit("Dashboard-Kopplung fehlgeschlagen: HTTPS-/Netzwerkfehler. "
+                         "DNS, Firewall und Dashboard-URL pruefen. Nichts installiert.") from None
+    except (ValueError, KeyError, TypeError) as error:
+        raise SystemExit(f"Dashboard-Kopplung fehlgeschlagen: {type(error).__name__}. "
+                         "Token, Dashboard-URL und Agent-Antwort pruefen. Nichts installiert.") from None
     print("Dashboard authentifiziert. Agent verwaltet nur dort ausdrücklich zugeordnete Geräte.")
     destination.mkdir(parents=True,exist_ok=True)
     Path("/var/lib/epimediahub-vpn").mkdir(mode=0o700,exist_ok=True)
