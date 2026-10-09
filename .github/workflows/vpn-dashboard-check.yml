@@ -1,5 +1,10 @@
 name: VPN dashboard and Finland agent checks
 on:
+  pull_request:
+    branches: [feature/vpn-dashboard]
+    paths:
+      - server/epimediahub_provisioning/**
+      - .github/workflows/vpn-dashboard-check.yml
   push:
     branches: [feature/vpn-dashboard]
     paths:
@@ -31,6 +36,17 @@ jobs:
           bash -n server/epimediahub_provisioning/deploy/install_vpn_dashboard.sh
           bash -n server/epimediahub_provisioning/deploy/install_vpn_finland_agent.sh
           git diff --exit-code -- server/epimediahub_provisioning/deploy/install_vpn_dashboard.sh server/epimediahub_provisioning/deploy/install_vpn_finland_agent.sh
+      - name: Device ID must always be visible with custom device names
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          root=Path("server/epimediahub_provisioning/templates")
+          for name in ("dashboard_v080.html","reseller_dashboard_v080.html"):
+              text=(root/name).read_text()
+              assert "<strong>Feste Geräte-ID:</strong>" in text
+              assert '<code title="Diese ID gehört zur App-Registrierung dieses Geräts">{{ device.device_id }}</code>' in text
+          assert "Geräte-ID: {{ d.device_id }}" in (root/"vpn_dashboard.html").read_text()
+          PY
       - name: Browser layout and interaction checks
         env:
           VPN_PREVIEW_DIR: vpn-dashboard-preview
