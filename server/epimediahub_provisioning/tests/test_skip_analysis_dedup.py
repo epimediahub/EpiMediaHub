@@ -98,15 +98,17 @@ class MaintenanceTests(fixtures.AutomationFixture, unittest.TestCase):
                     auto.migrate(con)
                     self.assertEqual(con.execute('SELECT status,attempts FROM skip_jobs').fetchone()[:],('review',2))
 
-    def test_existing_human_choice_retires_generated_proposals_and_is_not_requeued(self):
+    def test_existing_disjoint_human_choice_does_not_erase_another_intro(self):
         self.old_job()
-        manual = self.marker(self.target)
+        manual = self.marker(self.target)  # Different section at 04:43.
         with self.db() as con:
             auto.migrate(con)
-            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE status='pending'").fetchone()[0],0)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE status='pending'").fetchone()[0],1)
             row = con.execute('SELECT status,start_ms,end_ms FROM skip_records WHERE id=?',(manual,)).fetchone()
             self.assertEqual(row[:],('approved',283043,309573))
-            self.assertEqual(con.execute('SELECT status FROM skip_jobs').fetchone()[0],'review')
+            # An independent candidate is not silently discarded by a review.
+            candidate = con.execute("SELECT start_ms,end_ms FROM skip_records WHERE status='pending'").fetchone()
+            self.assertTrue(candidate['end_ms'] < row['start_ms'])
 
 
 class PublicationGuards(fixtures.AutomationFixture, unittest.TestCase):
