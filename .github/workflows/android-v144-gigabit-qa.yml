@@ -297,6 +297,7 @@ jobs:
           mkdir -p qa-artifacts
           cp "$RELEASE/app-arm64-v8a-release.apk" qa-artifacts/EpiMediaHub-Official-v1.0.44-ARM64-PILOT.apk
           cp "$RELEASE/app-armeabi-v7a-release.apk" qa-artifacts/EpiMediaHub-Official-v1.0.44-ARMv7-PILOT.apk
+          cp "$RELEASE/app-universal-release.apk" qa-artifacts/EpiMediaHub-Official-v1.0.44-Universal-PILOT.apk
           (cd qa-artifacts && sha256sum *.apk > SHA256SUMS.txt)
           cat > qa-artifacts/README.txt <<'EOF'
           EpiMediaHub official package 1.0.44 - PRIVATE CUSTOMER QA CANDIDATE
