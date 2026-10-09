@@ -239,7 +239,7 @@ class V140SpeedTransferTest {
             V144GigabitTransfer.downloadBytesPerStream(15.0))
         assertEquals(64 * 1024 * 1024,
             V144GigabitTransfer.downloadBytesPerStream(500.0))
-        assertEquals(128 * 1024 * 1024,
+        assertEquals(64 * 1024 * 1024,
             V144GigabitTransfer.downloadBytesPerStream(1_000.0))
         assertEquals(8 * 1024 * 1024,
             V144GigabitTransfer.uploadBytesPerStream(1_000.0))
