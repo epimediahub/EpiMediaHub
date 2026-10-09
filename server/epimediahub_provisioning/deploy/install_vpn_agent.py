@@ -40,6 +40,28 @@ WantedBy=multi-user.target
 """
 
 
+
+def read_dashboard_url():
+    """Read the optional dashboard URL from a terminal without seeking on a TTY.
+
+    A POSIX terminal is not seekable. Opening /dev/tty in update mode ("r+")
+    makes Python's text wrapper attempt an illegal seek on some environments.
+    Never read the dashboard VPN token here; getpass handles that separately.
+    """
+    fallback = "https://api.epimediahub.com"
+    try:
+        with open("/dev/tty", "r", encoding="utf-8") as terminal:
+            print(f"Dashboard-URL [{fallback}]: ", file=sys.stderr, end="", flush=True)
+            value = terminal.readline()
+    except (OSError, UnicodeError) as exc:
+        raise SystemExit(
+            "Keine interaktive Konsole verfuegbar. Installer direkt im "
+            "SSH-Terminal ausfuehren (nicht mit curl | bash)."
+        ) from exc
+    if value == "":
+        raise SystemExit("Dashboard-URL-Eingabe abgebrochen; nichts installiert.")
+    return value.strip() or fallback
+
 def main():
     if os.geteuid()!=0:raise SystemExit("Bitte als root auf dem Finnland-VPN-Server starten.")
     wg=Path("/etc/wireguard/wg0.conf")
@@ -51,9 +73,7 @@ def main():
         config=json.loads(config_path.read_text())
     else:
         print("Kopplung mit dem Dashboard. Das Token nicht in Chats oder GitHub einfügen.")
-        with open("/dev/tty","r+") as terminal:
-            terminal.write("Dashboard-URL [https://api.epimediahub.com]: ");terminal.flush()
-            url=terminal.readline().strip() or "https://api.epimediahub.com"
+        url = read_dashboard_url()
         token=getpass.getpass("VPN-Kopplungstoken vom Dashboard-Server: ")
         config={"dashboard_url":url,"token":token,"interface":"wg0"}
     agent=Agent(config)
