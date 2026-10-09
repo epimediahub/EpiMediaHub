@@ -97,10 +97,12 @@ fun V134VpnRouteBlockedScreen(
                         "sieht dann deine normale öffentliche IP-Adresse.",
                     color = Color.White, fontSize = 16.sp
                 )
-                Button(
+                V141FocusButton(
+                    label = "Ohne VPN fortfahren …",
+                    accent = Color(0xFFF5C15B),
                     onClick = { showConfirmation = true },
                     enabled = !busy
-                ) { Text("Ohne VPN fortfahren …") }
+                )
             }
             if (failed) {
                 Text(
@@ -109,15 +111,18 @@ fun V134VpnRouteBlockedScreen(
                     color = Color(0xFFFFA89D), fontSize = 16.sp
                 )
             }
-            Button(onClick = {
-                context.startActivity(
-                    Intent(context, V134VpnDiagnosticActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            }, enabled = !busy) { Text("VPN-Verbindung überprüfen") }
-            Button(onClick = onPlaylists, enabled = !busy) {
-                Text("Playlist-Einstellungen öffnen")
-            }
+            V141FocusButton(
+                label = "VPN-Verbindung überprüfen",
+                accent = Color(0xFFF5C15B),
+                onClick = { context.startActivity(Intent(context, V134VpnDiagnosticActivity::class.java)) },
+                enabled = !busy
+            )
+            V141FocusButton(
+                label = "Playlist-Einstellungen öffnen",
+                accent = Color(0xFFF5C15B),
+                onClick = onPlaylists,
+                enabled = !busy
+            )
             Text(
                 "Keine automatische Direktverbindung. Entscheidung nur für diese " +
                     "Sitzung; „VPN Finnland“ bleibt für den nächsten Playlist-Wechsel gespeichert.",
