@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -122,6 +123,9 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
     val firstFocus = remember { FocusRequester() }
     val lifecycleOwner = LocalLifecycleOwner.current
     var job by remember { mutableStateOf<Job?>(null) }
+    var startFocused by remember { mutableStateOf(false) }
+    var cancelFocused by remember { mutableStateOf(false) }
+    var backFocused by remember { mutableStateOf(false) }
     fun stop() {
         if (!busy) return
         transfer?.cancel()
@@ -194,13 +198,22 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
                         } finally { if (transfer === current) busy = false }
                     }
                 }, enabled = !busy && playlistId != null, modifier = Modifier.focusRequester(firstFocus).testTag("speedtest-start")
+                    .onFocusChanged { startFocused = it.hasFocus }
+                    .border(BorderStroke(if (startFocused) 4.dp else 1.dp,
+                        if (startFocused) Color.White else Color.Gray), RoundedCornerShape(12.dp))
             ) { Text(if (busy) "Messung läuft …" else "Speedtest starten") }
             if (busy) OutlinedButton(onClick = {
                 stop()
                 status = "Messung abgebrochen."
-            }, modifier = Modifier.testTag("speedtest-cancel")) { Text("Abbrechen") }
+            }, modifier = Modifier.testTag("speedtest-cancel")
+                .onFocusChanged { cancelFocused = it.hasFocus }
+                .border(BorderStroke(if (cancelFocused) 4.dp else 1.dp,
+                    if (cancelFocused) Color.White else Color.Gray), RoundedCornerShape(12.dp))) { Text("Abbrechen") }
             OutlinedButton(onClick = { stop(); onBack() },
-                modifier = Modifier.testTag("speedtest-back")) { Text("Zurück") }
+                modifier = Modifier.testTag("speedtest-back")
+                    .onFocusChanged { backFocused = it.hasFocus }
+                    .border(BorderStroke(if (backFocused) 4.dp else 1.dp,
+                        if (backFocused) Color.White else Color.Gray), RoundedCornerShape(12.dp))) { Text("Zurück") }
         }
         if (playlistId == null) Text("Zuerst eine Playlist auswählen.",
             color = Color(0xFFFFB4A9))
