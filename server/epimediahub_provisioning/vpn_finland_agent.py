@@ -241,7 +241,10 @@ class Agent:
                 if actual.get(peer["public_key"], set()) != expected:
                     raise ValueError("WireGuard did not apply the requested rules")
                 report.append({"id": peer["id"], "generation": peer["generation"], "enabled": peer["enabled"], "last_handshake": handshakes.get(peer["public_key"], 0)})
-            return {"peers": report}
+            # Public server key is safe to return via the authenticated agent
+            # channel; clients no longer need a manually copied WireGuard key.
+            server_key = self.wg("show", self.interface, "public-key").strip()
+            return {"peers": report, "server_public_key": server_key}
 
     def run(self):
         # Never reuse an old grant after process restart.
