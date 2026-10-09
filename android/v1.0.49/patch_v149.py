@@ -269,13 +269,13 @@ replace(repository,
                     automaticSegment.endMs > manual.startMs
             }
         } + overrides).sortedBy { it.startMs }''')
-chrome = java/"ui/V117PlayerChrome.kt"
+chrome = java/"ui/V115PlayerChrome.kt"
 replace(chrome, "Text(segment.kind.label, fontSize = if (isTv) 19.sp else 16.sp, fontWeight = FontWeight.Bold)",
         "Text(segment.skipLabel, fontSize = if (isTv) 19.sp else 16.sp, fontWeight = FontWeight.Bold)")
 
 # Weather must never show last week's cached values as live weather or
 # use VPN exit-country IP geolocation while claiming it is the local town.
-weather = java/"data/V081WeatherClient.kt"
+weather = java/"data/V070WeatherClient.kt"
 replace(weather,
 '''        val json = prefs.getString("payload", null) ?: return null''',
 '''        // Fire TV usually lacks location hardware; an exit VPN IP is not the TV's location.
