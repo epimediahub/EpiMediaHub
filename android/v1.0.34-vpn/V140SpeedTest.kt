@@ -62,8 +62,7 @@ internal object V140SpeedTest {
     enum class Phase { IDLE, CHECKING, DOWNLOAD, UPLOAD, DONE }
     data class Live(val phase: Phase, val mbps: Double, val fraction: Float)
 
-    private const val DOWNLOAD_BYTES = 24 * 1024 * 1024
-    private const val UPLOAD_BYTES = 4 * 1024 * 1024
+    private const val WARMUP_BYTES = 8 * 1024 * 1024
 
     private fun verifyRoute(context: Context, playlistId: String, vpn: Boolean,
                             transfer: V140SpeedTransfer) {
@@ -92,17 +91,32 @@ internal object V140SpeedTest {
         transfer.download("$HOST/__down?bytes=32", 32, verify)
         val latencyMs = ((SystemClock.elapsedRealtimeNanos() - latencyStart) / 1_000_000).coerceAtLeast(1L)
 
+        // A short single-stream probe sizes the real four-stream bandwidth test.
+        // Slow networks transfer fewer bytes; fast gigabit links transfer more.
+        progress("Verbindung wird für Gigabit-Messung vorbereitet …")
+        val warmup = transfer.download(
+            "$HOST/__down?bytes=$WARMUP_BYTES", WARMUP_BYTES, verify
+        )
+        val downEach = V144GigabitTransfer.downloadBytesPerStream(warmup.mbps)
+        val downTotal = downEach.toLong() * 4L
         live(Live(Phase.DOWNLOAD, 0.0, 0f))
-        progress("Download wird live gemessen …")
-        val down = transfer.downloadLive("$HOST/__down?bytes=$DOWNLOAD_BYTES", DOWNLOAD_BYTES, verify) { sample ->
+        progress("Download: vier parallele HTTPS-Verbindungen …")
+        val down = V144GigabitTransfer.measure(
+            transfer, "$HOST/__down", downEach, false, verify
+        ) { sample ->
             live(Live(Phase.DOWNLOAD, sample.mbps,
-                (sample.bytes.toFloat() / DOWNLOAD_BYTES).coerceIn(0f, 1f)))
+                (sample.bytes.toDouble() / downTotal).toFloat().coerceIn(0f, 1f)))
         }
+        verify()
         live(Live(Phase.UPLOAD, 0.0, 0f))
-        progress("Upload wird live gemessen …")
-        val up = transfer.uploadLive("$HOST/__up", UPLOAD_BYTES, verify) { sample ->
+        progress("Upload: vier parallele HTTPS-Verbindungen …")
+        val uploadEach = V144GigabitTransfer.uploadBytesPerStream(down.mbps)
+        val uploadTotal = uploadEach.toLong() * 4L
+        val up = V144GigabitTransfer.measure(
+            transfer, "$HOST/__up", uploadEach, true, verify
+        ) { sample ->
             live(Live(Phase.UPLOAD, sample.mbps,
-                (sample.bytes.toFloat() / UPLOAD_BYTES).coerceIn(0f, 1f)))
+                (sample.bytes.toDouble() / uploadTotal).toFloat().coerceIn(0f, 1f)))
         }
 
         progress("VPN-Ausgang wird nochmals geprüft …")
@@ -111,7 +125,7 @@ internal object V140SpeedTest {
         check(before == after) { "Öffentliche IP hat sich während des Tests geändert" }
         verifyRoute(context, playlistId, vpn, transfer)
         return Result(if (vpn) "VPN FINNLAND" else "DIREKT", after, latencyMs,
-            down.mbps, up.mbps, down.bytes + up.bytes)
+            down.mbps, up.mbps, warmup.bytes + down.bytes + up.bytes)
     }
 }
 
@@ -149,12 +163,13 @@ private fun V143SpeedGauge(speedMbps: Double, stage: V140SpeedTest.Phase,
         targetValue = safeSpeed, animationSpec = tween(durationMillis = 230),
         label = "genuine-network-throughput"
     )
+    // A real gigabit-capable gauge: 250 is a measured value, never its limit.
+    // Preserve the full 0..1000 scale at all normal home broadband speeds.
     val ceiling = when {
-        animated <= 100f -> 100f
-        animated <= 250f -> 250f
-        animated <= 500f -> 500f
         animated <= 1000f -> 1000f
-        else -> 2500f
+        animated <= 2500f -> 2500f
+        animated <= 5000f -> 5000f
+        else -> 10000f
     }
     val fraction = (animated / ceiling).coerceIn(0f, 1f)
     val dialHeight = if (isTv) 186.dp else 156.dp
@@ -199,6 +214,10 @@ private fun V143SpeedGauge(speedMbps: Double, stage: V140SpeedTest.Phase,
             Text("0", color = Color(0xFF9EADC3),
                 fontSize = 13.sp, modifier = Modifier.align(Alignment.BottomStart)
                     .padding(start = if (isTv) 38.dp else 16.dp))
+            Text(String.format(Locale.GERMANY, "%.0f", ceiling / 2f),
+                color = Color(0xFF9EADC3), fontSize = 13.sp,
+                modifier = Modifier.align(Alignment.TopCenter)
+                    .padding(top = if (isTv) 12.dp else 9.dp))
             Text(String.format(Locale.GERMANY, "%.0f", ceiling),
                 color = Color(0xFF9EADC3), fontSize = 13.sp,
                 modifier = Modifier.align(Alignment.BottomEnd)
@@ -349,7 +368,7 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
                                 uploadResult ?: if (phase == V140SpeedTest.Phase.UPLOAD) speed else null,
                                 Color(0xFFFFC46A), isTv)
                             Text(result?.let { "HTTP-Latenz ${it.latencyMs} ms  •  ${it.bytes / 1_048_576} MiB" }
-                                ?: "HTTP-Test • 24 MiB Down / 4 MiB Up",
+                                ?: "GIGABIT-MESSUNG • 4 Streams • dynamisches Datenvolumen",
                                 color = Color(0xFFB3C4D9), fontSize = 13.sp)
                         }
                     }
@@ -442,6 +461,12 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
                     .border(BorderStroke(if (startFocused) 4.dp else 1.dp,
                         if (startFocused) Color.White else Color.Gray),
                         RoundedCornerShape(12.dp))
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF4EDCFF),
+                    contentColor = Color(0xFF051827),
+                    disabledContainerColor = Color(0xFF426578),
+                    disabledContentColor = Color.White
+                )
             ) { Text(if (busy) "MESSUNG LÄUFT" else "▶  SPEEDTEST STARTEN") }
             if (busy) OutlinedButton(
                 onClick = { stop() },
@@ -460,7 +485,9 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
         }
         if (playlistId == null)
             Text("Bitte zuerst eine Playlist auswählen.", color = Color(0xFFFFAFA9))
-        Text("Live-Messung über Cloudflare · HTTPS-Latenz inklusive TLS, kein ICMP-Ping. " +
+        Text("Gigabit-Speedtest über Cloudflare: 4 parallele HTTPS-Streams, " +
+            "je nach Leitung bis ca. 550 MiB Testdaten. " +
+            "HTTPS-Latenz inklusive TLS, kein ICMP-Ping. " +
             "Ohne bestätigte VPN-Route kein ungeschützter Fallback. " +
             "Speedtest-Werte entsprechen nicht zwingend der Geschwindigkeit eines IPTV-Anbieters.",
             color = Color(0xFF8BA0B9), fontSize = 12.sp)
