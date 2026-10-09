@@ -56,7 +56,8 @@ import kotlin.math.min
  */
 internal object V140SpeedTest {
     data class Result(val route: String, val ip: String, val latencyMs: Long,
-        val downloadMbps: Double, val uploadMbps: Double, val bytes: Long)
+        val downloadMbps: Double, val uploadMbps: Double, val bytes: Long,
+        val singleStreamMbps: Double = 0.0, val dualStreamMbps: Double = 0.0)
 
     private const val HOST = "https://speed.cloudflare.com"
     enum class Phase { IDLE, CHECKING, DOWNLOAD, UPLOAD, DONE }
@@ -97,6 +98,12 @@ internal object V140SpeedTest {
         val warmup = transfer.download(
             "$HOST/__down?bytes=$WARMUP_BYTES", WARMUP_BYTES, verify
         )
+        // Short extra comparison exposes whether additional TCP streams help.
+        // All tests retain mandatory route verification and do not switch VPN.
+        progress("Diagnose: 2 parallele HTTPS-Verbindungen …")
+        val two = V144GigabitTransfer.measureWithStreams(
+            transfer, "$HOST/__down", WARMUP_BYTES, false, verify, 2
+        ) { _ -> }
         val downEach = V144GigabitTransfer.downloadBytesPerStream(warmup.mbps)
         val downTotal = downEach.toLong() * 4L
         live(Live(Phase.DOWNLOAD, 0.0, 0f))
@@ -125,7 +132,8 @@ internal object V140SpeedTest {
         check(before == after) { "Öffentliche IP hat sich während des Tests geändert" }
         verifyRoute(context, playlistId, vpn, transfer)
         return Result(if (vpn) "VPN FINNLAND" else "DIREKT", after, latencyMs,
-            down.mbps, up.mbps, warmup.bytes + down.bytes + up.bytes)
+            down.mbps, up.mbps, warmup.bytes + two.bytes + down.bytes + up.bytes,
+            warmup.mbps, two.mbps)
     }
 }
 
@@ -395,6 +403,17 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
                 Text(status, color = if (failed) Color(0xFFFFAFA9) else Color(0xFFDCE7F4),
                     fontSize = if (isTv) 15.sp else 13.sp)
                 result?.let {
+                    Text(
+                        "DOWNLOAD-VERGLEICH  •  1 Stream: " +
+                            String.format(Locale.GERMANY, "%.1f", it.singleStreamMbps) +
+                            "  |  2 Streams: " +
+                            String.format(Locale.GERMANY, "%.1f", it.dualStreamMbps) +
+                            "  |  4 Streams: " +
+                            String.format(Locale.GERMANY, "%.1f", it.downloadMbps) +
+                            " Mbit/s",
+                        color = Color(0xFFD5E7FC), fontSize = if (isTv) 14.sp else 12.sp,
+                        modifier = Modifier.testTag("speedtest-stream-diagnostic")
+                    )
                     Text("AUSGANG  ${it.route}   •   IP  ${it.ip}",
                         color = Color(0xFF86E8D4), fontWeight = FontWeight.Bold,
                         fontSize = if (isTv) 15.sp else 13.sp)
@@ -486,7 +505,7 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
         if (playlistId == null)
             Text("Bitte zuerst eine Playlist auswählen.", color = Color(0xFFFFAFA9))
         Text("Gigabit-Speedtest über Cloudflare: 4 parallele HTTPS-Streams, " +
-            "je nach Leitung bis ca. 550 MiB Testdaten. " +
+            "zuzüglich 1-/2-Stream-Vergleich, je nach Leitung bis ca. 575 MiB Testdaten. " +
             "HTTPS-Latenz inklusive TLS, kein ICMP-Ping. " +
             "Ohne bestätigte VPN-Route kein ungeschützter Fallback. " +
             "Speedtest-Werte entsprechen nicht zwingend der Geschwindigkeit eines IPTV-Anbieters.",
