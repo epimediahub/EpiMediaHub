@@ -53,7 +53,8 @@ internal object V144GigabitTransfer {
         upload: Boolean,
         verify: () -> Unit,
         streams: Int,
-        onSample: (V140SpeedTransfer.Sample) -> Unit
+        onSample: (V140SpeedTransfer.Sample) -> Unit,
+        fixedFileDownload: Boolean = false
     ): V140SpeedTransfer.Sample {
         require(bytesPerStream in (256 * 1024)..(64 * MIB))
         require(streams in 1..STREAMS)
@@ -93,6 +94,9 @@ internal object V144GigabitTransfer {
                         }
                     }
                     if (upload) worker.uploadLive(url, bytesPerStream, verify, sampleUpdate)
+                    else if (fixedFileDownload) worker.downloadFilePrefixLive(
+                        url, bytesPerStream, verify, sampleUpdate
+                    )
                     else worker.downloadLive(
                         "$url?bytes=$bytesPerStream",
                         bytesPerStream, verify, sampleUpdate
