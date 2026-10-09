@@ -2,6 +2,7 @@ package de.epimediahub.app.vpn
 
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
@@ -109,7 +110,13 @@ internal object V144GigabitTransfer {
             var received = 0L
             for (future in futures) {
                 val remaining = (deadline - System.nanoTime()).coerceAtLeast(1L)
-                received += future.get(remaining, TimeUnit.NANOSECONDS).bytes
+                try {
+                    received += future.get(remaining, TimeUnit.NANOSECONDS).bytes
+                } catch (failed: ExecutionException) {
+                    // Worker HTTP rejections must remain distinguishable from
+                    // real VPN routing failures for a safe provider fallback.
+                    throw (failed.cause as? Exception ?: failed)
+                }
             }
             val elapsed = (System.nanoTime() - started).coerceAtLeast(1L)
             parent.checkActive()
