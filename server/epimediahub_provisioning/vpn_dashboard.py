@@ -114,6 +114,8 @@ def migrate(con):
     CREATE TABLE IF NOT EXISTS vpn_operations(id TEXT PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS vpn_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
     """)
+    from vpn_autoprovision import migrate as migrate_vpn_auto
+    migrate_vpn_auto(con)
 
 
 JOINED = """SELECT v.*,d.device_id,d.display_name,d.customer_id current_customer_id,d.enabled device_enabled,c.enabled customer_enabled,
