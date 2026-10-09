@@ -27,7 +27,7 @@ internal class V140SpeedTransfer {
     }
 
     private fun transfer(url: String, verify: () -> Unit,
-                         body: (HttpURLConnection) -> Long): Sample {
+                         body: (HttpURLConnection, Long) -> Long): Sample {
         checkActive()
         verify()
         val conn = URL(url).openConnection() as HttpURLConnection
@@ -46,7 +46,7 @@ internal class V140SpeedTransfer {
         try {
             checkActive() // Includes cancellation racing with active.set().
             val started = System.nanoTime()
-            val bytes = body(conn)
+            val bytes = body(conn, started)
             val elapsed = (System.nanoTime() - started).coerceAtLeast(1L)
             checkActive()
             check(!expired.get()) { "Zeitlimit für die Messung überschritten" }
@@ -63,10 +63,17 @@ internal class V140SpeedTransfer {
         }
     }
 
-    fun download(url: String, bytes: Int, verify: () -> Unit): Sample =
-        transfer(url, verify) { conn ->
+    /**
+     * Real throughput samples emitted from received/sent byte counts, throttled
+     * to protect low-powered TV sticks from excessive Compose recomposition.
+     * Verifying the selected route remains a separate, mandatory check.
+     */
+    fun download(url: String, bytes: Int, verify: () -> Unit,
+                 onSample: (Sample) -> Unit = {}): Sample =
+        transfer(url, verify) { conn, started ->
             check(conn.responseCode == 200) { "Download-Testserver: HTTP ${conn.responseCode}" }
             var received = 0L
+            var lastReport = started
             conn.inputStream.use { stream ->
                 val buffer = ByteArray(64 * 1024)
                 while (true) {
@@ -76,18 +83,26 @@ internal class V140SpeedTransfer {
                     if (n < 0) break
                     received += n
                     check(received <= bytes) { "Unerwartete Downloadgröße" }
+                    val now = System.nanoTime()
+                    if (now - lastReport >= 200_000_000L) {
+                        onSample(Sample(received, now - started))
+                        lastReport = now
+                    }
                 }
             }
             check(received == bytes.toLong()) { "Unvollständiger Download ($received / $bytes)" }
+            onSample(Sample(received, System.nanoTime() - started))
             received
         }
 
-    fun upload(url: String, bytes: Int, verify: () -> Unit): Sample =
-        transfer(url, verify) { conn ->
+    fun upload(url: String, bytes: Int, verify: () -> Unit,
+               onSample: (Sample) -> Unit = {}): Sample =
+        transfer(url, verify) { conn, started ->
             conn.requestMethod = "POST"
             conn.doOutput = true
             conn.setRequestProperty("Content-Type", "application/octet-stream")
             conn.setFixedLengthStreamingMode(bytes)
+            var lastReport = started
             conn.outputStream.use { stream ->
                 val buffer = ByteArray(64 * 1024)
                 var sent = 0
@@ -97,6 +112,11 @@ internal class V140SpeedTransfer {
                     val n = minOf(buffer.size, bytes - sent)
                     stream.write(buffer, 0, n)
                     sent += n
+                    val now = System.nanoTime()
+                    if (now - lastReport >= 200_000_000L) {
+                        onSample(Sample(sent.toLong(), now - started))
+                        lastReport = now
+                    }
                 }
             }
             check(conn.responseCode in 200..299) { "Upload-Testserver: HTTP ${conn.responseCode}" }
@@ -112,6 +132,7 @@ internal class V140SpeedTransfer {
                     check(responseBytes <= 64 * 1024) { "Unerwartete Upload-Antwort" }
                 }
             }
+            onSample(Sample(bytes.toLong(), System.nanoTime() - started))
             bytes.toLong()
         }
 }
