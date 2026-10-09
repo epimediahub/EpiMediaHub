@@ -8,6 +8,8 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import java.util.concurrent.CancellationException
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
+import java.net.SocketException
 import java.util.Collections
 import org.junit.After
 import org.junit.Assert.*
@@ -22,6 +24,7 @@ class V140SpeedTransferTest {
     private val serverFailure = AtomicReference<Throwable?>(null)
     private val requests = AtomicInteger()
     private val uploaded = AtomicInteger()
+    private val expectClientAbort = AtomicBoolean(false)
     private val activeClients = Collections.synchronizedList(mutableListOf<Thread>())
     @Before fun setup() {
         server = ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))
@@ -32,7 +35,16 @@ class V140SpeedTransferTest {
                     val client = server.accept()
                     val child = thread(name = "speedtest-loopback-client", isDaemon = true) {
                         try { client.use { serve(it) } }
-                        catch (e: Exception) { serverFailure.compareAndSet(null, e) }
+                        catch (e: Exception) {
+                            // A test that deliberately disconnects four active
+                            // streams is expected to elicit EPIPE on the fixture.
+                            // All other socket errors remain test failures.
+                            val expected = expectClientAbort.get() &&
+                                e is SocketException &&
+                                (e.message?.contains("Broken pipe", ignoreCase = true) == true ||
+                                 e.message?.contains("Connection reset", ignoreCase = true) == true)
+                            if (!expected) serverFailure.compareAndSet(null, e)
+                        }
                     }
                     activeClients.add(child)
                 } catch (e: Exception) {
@@ -189,6 +201,7 @@ class V140SpeedTransferTest {
     }
 
     @Test fun parallelCancellationPreventsAnySuccessfulReading() {
+        expectClientAbort.set(true)
         val transfer = V140SpeedTransfer()
         assertThrows(CancellationException::class.java) {
             V144GigabitTransfer.measure(
