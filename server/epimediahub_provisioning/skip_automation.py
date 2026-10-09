@@ -749,7 +749,8 @@ def publish(con, asset, kind, evidence):
         return False
     con.execute("INSERT OR REPLACE INTO skip_auto_evidence VALUES(?,?,0)", (saved["id"], json.dumps(evidence)))
     con.execute("UPDATE skip_records SET status='approved',reviewed_at=? WHERE id=? AND status='pending'", (now(), saved["id"]))
-    retire_proposals(con, asset, kind, saved['id'], evidence)
+    retire_proposals(con, asset, kind, saved['id'],
+                     {'start_ms': evidence['start'], 'end_ms': evidence['end']})
     return True
 
 
