@@ -211,8 +211,10 @@ internal object V134VpnSession {
         // Explicit playlist reselection re-enforces its saved VPN/DIRECT mode.
         temporaryDirectPlaylist = null
         return runCatching {
-            if (mode(context, playlistId)) connectAndVerify(context)
-            else disconnectAndVerify(context)
+            if (mode(context, playlistId)) {
+                V142VpnAutoProvision.ensureProfile(context)
+                connectAndVerify(context)
+            } else disconnectAndVerify(context)
             routeReady(context, playlistId)
         }.getOrElse { route = Route.BLOCKED; false }
     }

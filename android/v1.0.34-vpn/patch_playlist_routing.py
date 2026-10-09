@@ -10,7 +10,9 @@ from pathlib import Path
 root = Path(os.environ["PROJECT_ROOT"])
 java = root/"app/src/main/java/de/epimediahub/app"
 build = (root/"app/build.gradle.kts").read_text()
-assert 'applicationId = "de.epimediahub.app.vpnbeta"' in build, "Refusing production package"
+candidate = os.environ.get("EPIMEDIAHUB_OFFICIAL_CANDIDATE") == "1"
+expected = 'applicationId = "de.epimediahub.app"' if candidate else 'applicationId = "de.epimediahub.app.vpnbeta"'
+assert expected in build, "Unexpected applicationId; refusing release"
 
 def replace(path, old, new, expected=1):
     content=path.read_text()
@@ -42,7 +44,7 @@ replace(playlist, "    val u by vm.ui.collectAsState()",
             confirmButton = {
                 TextButton(onClick = {
                     routeFailed = false
-                    context.startActivity(Intent(context, V134VpnDiagnosticActivity::class.java))
+                    vm.navigate(Screen.Settings)
                 }) { Text("VPN-Einstellungen") }
             },
             dismissButton = { TextButton(onClick = { routeFailed = false }) { Text("Schließen") } }
@@ -129,12 +131,13 @@ replace(app, "    MaterialTheme(colorScheme = scheme, shapes = shapes) {",
     """    val v134Ready = de.epimediahub.app.vpn.v134RouteReady(context, u.active?.id?.toString())
     MaterialTheme(colorScheme = scheme, shapes = shapes) {""")
 replace(app, "        } else if (kidsSessionActive) {",
-    """        } else if (u.active != null && u.screen != Screen.Playlists && !v134Ready) {
+    """        } else if (u.active != null && u.screen is Screen.Player && !v134Ready) {
             de.epimediahub.app.vpn.V134VpnRouteBlockedScreen(
                 context,
                 u.active!!.id.toString(),
                 u.active?.name ?: "Playlist",
                 onPlaylists = { vm.navigate(Screen.Playlists) },
+                onSettings = { vm.navigate(Screen.Settings) },
                 onDirectApproved = {
                     // The playback surface is removed while VPN egress is unverified.
                     // After explicit direct consent, reprepare the very same channel

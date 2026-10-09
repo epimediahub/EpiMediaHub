@@ -44,12 +44,25 @@ fun V141VpnSettingsHost(
     } else {
         Box(Modifier.fillMaxSize()) {
             settingsContent()
-            V141FocusButton(
-                label = "VPN & Netzwerk",
-                accent = accent,
-                onClick = { open = true },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(28.dp)
-            )
+            Column(
+                modifier = Modifier.align(Alignment.BottomEnd).padding(28.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Geräte-ID: " + V142VpnAutoProvision.registeredDeviceId(context),
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.background(Color(0xFF07111D), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+                V141FocusButton(
+                    label = "VPN & Netzwerk",
+                    accent = accent,
+                    onClick = { open = true }
+                )
+            }
         }
     }
 }
@@ -101,6 +114,23 @@ private fun V141VpnSettingsScreen(
     var status by remember { mutableStateOf("Wähle eine Verbindung. Die normale App bleibt dein Startbildschirm.") }
     var vpnUp by remember { mutableStateOf(false) }
     val hasProfile = V134VpnSession.hasProfile(context)
+    val stableDeviceId = V142VpnAutoProvision.registeredDeviceId(context)
+    LaunchedEffect(stableDeviceId) {
+        val license = withContext(Dispatchers.IO) {
+            runCatching { V142VpnAutoProvision.checkStatus(context) }
+        }
+        license.onSuccess {
+            if (!busy && !vpnUp) {
+                status = when (it.status) {
+                    "READY" -> "VPN-Lizenz bestätigt. Du kannst jetzt verbinden."
+                    "NO_VPN_LICENSE" -> "Für dieses Gerät ist noch kein VPN freigeschaltet."
+                    "AWAITING_DEVICE_KEY" -> "VPN gebucht. Beim Verbinden richtet die App den Zugang automatisch ein."
+                    "WAITING_FOR_SERVER" -> "VPN-Freigabe wird auf dem Finnland-Server vorbereitet."
+                    else -> "VPN-Lizenzstatus: " + it.status
+                }
+            }
+        }
+    }
 
     fun verifyVpn() {
         if (busy) return
@@ -108,7 +138,10 @@ private fun V141VpnSettingsScreen(
         status = "Finnland-Verbindung wird geprüft …"
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching { V134VpnSession.connectAndVerify(context) }
+                runCatching {
+                    V142VpnAutoProvision.ensureProfile(context)
+                    V134VpnSession.connectAndVerify(context)
+                }
             }
             busy = false
             result.onSuccess {
@@ -137,19 +170,19 @@ private fun V141VpnSettingsScreen(
     ) {
         Text("EINSTELLUNGEN · VPN & NETZWERK",
             fontSize = 27.sp, fontWeight = FontWeight.Black, color = Color.White)
+        Text("Deine feste Geräte-ID: $stableDeviceId",
+            fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text("Diese ID steht identisch im Admin- und Reseller-Dashboard.",
+            fontSize = 14.sp, color = Color.LightGray)
         Text(status, fontSize = 19.sp, color = if (vpnUp) accent else Color.White)
         Text(
-            if (hasProfile) "Gespeichertes VPN-Profil vorhanden."
-            else "Noch kein VPN-Profil zugewiesen. Diese Beta benötigt vorläufig ein Testprofil.",
+            "Der Zugang wird bei gültiger Freischaltung automatisch vom Finnland-Server abgerufen. " +
+                "Keine Schlüsseldatei und keine ADB-Eingabe nötig.",
             color = Color.LightGray, fontSize = 16.sp
         )
         V141FocusButton("Finnland-VPN verbinden / prüfen", accent, onClick = {
-            if (!hasProfile) {
-                status = "Noch kein VPN-Profil vorhanden. Erst ein Testprofil über Diagnose importieren."
-            } else {
-                val request = VpnService.prepare(context)
-                if (request == null) verifyVpn() else consent.launch(request)
-            }
+            val request = VpnService.prepare(context)
+            if (request == null) verifyVpn() else consent.launch(request)
         }, enabled = !busy)
         V141FocusButton("VPN trennen · Direktverbindung", accent, onClick = {
             if (!busy) {
@@ -170,9 +203,13 @@ private fun V141VpnSettingsScreen(
             }
         }, enabled = !busy)
         V141FocusButton("Speedtest", accent, onClick = { speedOpen = true }, enabled = !busy)
-        V141FocusButton("Erweitert · VPN-Diagnose (Beta)", accent, onClick = {
-            context.startActivity(Intent(context, V134VpnDiagnosticActivity::class.java))
-        }, enabled = !busy)
+        // The manual profile importer is retained ONLY in the isolated beta
+        // package, never in the signed official/customer app.
+        if (context.packageName.endsWith(".vpnbeta")) {
+            V141FocusButton("Erweitert · VPN-Diagnose (Beta)", accent, onClick = {
+                context.startActivity(Intent(context, V134VpnDiagnosticActivity::class.java))
+            }, enabled = !busy)
+        }
         Text("Bei VPN-Ausfall bleibt die Wiedergabe gesperrt, bis die Verbindung bestätigt ist. " +
             "Ein Wechsel zur Direktverbindung erfolgt nie automatisch.",
             color = Color.White.copy(alpha = .75f), fontSize = 15.sp)

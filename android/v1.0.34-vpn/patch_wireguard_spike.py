@@ -37,8 +37,8 @@ if "isCoreLibraryDesugaringEnabled = true" not in new_gradle and "coreLibraryDes
         "compileOptions {\n        isCoreLibraryDesugaringEnabled = true", 1)
 if new_gradle.count("versionCode = 1033") != 1 or new_gradle.count('versionName = "1.0.33"') != 1:
     raise SystemExit("Refusing: expected 1.0.33 version")
-new_gradle = new_gradle.replace("versionCode = 1033", "versionCode = 1041", 1)
-new_gradle = new_gradle.replace('versionName = "1.0.33"', 'versionName = "1.0.41"', 1)
+new_gradle = new_gradle.replace("versionCode = 1033", "versionCode = 1042", 1)
+new_gradle = new_gradle.replace('versionName = "1.0.33"', 'versionName = "1.0.42"', 1)
 # This beta MUST install beside the user's daily production app.
 import re
 matches = re.findall(r'applicationId\s*=\s*"([^"]+)"', new_gradle)
@@ -47,8 +47,12 @@ if len(matches) != 1:
 production_id = matches[0]
 if production_id != "de.epimediahub.app":
     raise SystemExit("Refusing: unexpected production applicationId " + production_id)
+# Official QA is a signed in-place upgrade of the registered app; the
+# isolated test variant remains available for destructive experiments.
+OFFICIAL_CANDIDATE = os.environ.get("EPIMEDIAHUB_OFFICIAL_CANDIDATE") == "1"
+new_id = "de.epimediahub.app" if OFFICIAL_CANDIDATE else "de.epimediahub.app.vpnbeta"
 new_gradle = re.sub(r'applicationId\s*=\s*"[^"]+"',
-                    'applicationId = "de.epimediahub.app.vpnbeta"', new_gradle, count=1)
+                    f'applicationId = "{new_id}"', new_gradle, count=1)
 
 
 service = '''        <!-- WireGuard internal beta: Android user consent required, no auto-connect. -->
@@ -85,6 +89,8 @@ files = [
     (src/"V134WireGuardDeviceTunnel.kt",java/"V134WireGuardDeviceTunnel.kt"),
     (src/"V134VpnDiagnosticActivity.kt",java/"V134VpnDiagnosticActivity.kt"),
     (src/"V141VpnSettings.kt",java/"V141VpnSettings.kt"),
+    (src/"V142VpnPrivateKeyStore.kt",java/"V142VpnPrivateKeyStore.kt"),
+    (src/"V142VpnAutoProvision.kt",java/"V142VpnAutoProvision.kt"),
     (src/"V134VpnSession.kt",java/"V134VpnSession.kt"),
     (src/"V139VpnEncryptedProfileStore.kt",java/"V139VpnEncryptedProfileStore.kt"),
     (src/"V134VpnRouteUi.kt",java/"V134VpnRouteUi.kt"),

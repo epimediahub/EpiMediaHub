@@ -1,38 +1,19 @@
-name: EpiMediaHub 1.0.42 official-app signed private QA build
+name: EpiMediaHub 1.0.42 signed official-app QA candidate
 
 on:
-  workflow_dispatch:
-  pull_request:
-    branches: [feature/vpn-finland-foundation, fix/vpn-v141-start-navigation, feature/vpn-v142-auto-provisioning]
-    paths:
-      - '.github/workflows/vpn-finland-beta-apk.yml'
-      - 'android/v1.0.34-vpn/**'
   push:
-    branches: [feature/vpn-finland-foundation]
+    branches: [feature/vpn-v142-auto-provisioning]
     paths:
-      - '.github/workflows/vpn-finland-beta-apk.yml'
+      - '.github/workflows/android-v142-qa-candidate.yml'
       - 'android/v1.0.34-vpn/**'
-      - 'android/v1.0.33/**'
-      - 'android/v1.0.28/patch_v128.py'
-      - 'build_tools/generate_intro_sound_v128.py'
-      - 'build_tools/verify_intro_sound_v128.py'
-      - 'build_tools/install_android_v1033_source.sh'
-      - 'build_tools/build_android_audio_v123.sh'
-      - 'build_tools/generate_audio_fixtures_v123.py'
-      - 'build_tools/package_android_audio_sources_v126.py'
-      - 'build_tools/prepare_chromaprint_v126.sh'
-      - 'build_tools/generate_fingerprint_fixtures_v126.py'
-      - 'android/release_notes/v1.0.33.md'
-      - 'build_tools/install_skin_assets_v132.py'
-      - 'build_tools/verify_skin_assets_v132.py'
-      - 'build_tools/verify_android_release_v133.py'
+  workflow_dispatch:
 
 concurrency:
-  group: epimediahub-vpn-finland-beta-apk
+  group: epimediahub-android-v142-qa
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-vpn-beta-apk:
@@ -92,39 +73,6 @@ jobs:
           python3 android/v1.0.34-vpn/patch_playlist_routing.py
           python3 build_tools/verify_intro_sound_v128.py "$PROJECT_ROOT/app/src/main/res/raw/epimedia_intro_heartbeat_cinema.wav"
 
-      - name: Map existing app device auth and identity code for secure auto provisioning
-        run: |
-          python - <<'PY'
-          import os,re,pathlib
-          root=pathlib.Path(os.environ['PROJECT_ROOT'])/'app/src/main/java/de/epimediahub/app'
-          terms=re.compile(r'deviceId|device_id|sessionToken|session_token|api\.epimediahub|SettingsScreen|license/status|/v1/device/config|DeviceIdentity|trialKey|device.*token',re.I)
-          items=[]
-          for file in sorted(root.rglob('*.kt')):
-              lines=file.read_text(errors='replace').splitlines()
-              matches=[(n+1,line.strip()) for n,line in enumerate(lines) if terms.search(line)]
-              if matches:
-                  items.append('# '+str(file.relative_to(root)))
-                  items.extend(str(n)+': '+line[:180] for n,line in matches[:30])
-          pathlib.Path('build_status/v142-source-inspection.txt').write_text('\n'.join(items)[:38000]+'\n')
-          print('Mapped Android session and identity hooks in',len(items),'matched lines')
-          PY
-      - name: Upload source-reference report to development PR branch
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs=require('fs'),{owner,repo}=context.repo;
-            const path='build_status/v142-source-inspection.txt';
-            const branch='feature/vpn-v142-auto-provisioning';
-            const contents=fs.readFileSync(path);
-            let sha;
-            try {const r=await github.rest.repos.getContent({owner,repo,path,ref:branch});sha=r.data.sha;}
-            catch(e){if(e.status!==404)throw e;}
-            await github.rest.repos.createOrUpdateFileContents({
-              owner,repo,path,branch,sha,
-              message:'inspect(android): record existing device ID and session-token source anchors',
-              content:contents.toString('base64')
-            });
       - name: Install permanent release signing key
         shell: bash
         run: |
@@ -208,7 +156,7 @@ jobs:
           test -d "$PROJECT_ROOT/ffmpeg-audio/src/androidTest"
           echo "Skipping optional Android instrumentation fixture generation for signed beta."
 
-      - name: Compile signed EpiMediaHub VPN Finland beta APK
+      - name: Compile signed EpiMediaHub official EpiMediaHub QA APK
         shell: bash
         run: |
           set -euo pipefail
@@ -241,7 +189,7 @@ jobs:
             grep -F "versionCode='1042'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
             grep -F "versionName='1.0.42'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
             grep -F "package: name='de.epimediahub.app'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
-            if grep -Fq "package: name='de.epimediahub.app.vpnbeta'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"; then echo "Refusing beta package"; exit 1; fi
+            if grep -Fq "package: name='de.epimediahub.app.vpnbeta'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"; then echo "Refusing beta packageId"; exit 1; fi
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-${ABI}-signer.txt"
             CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-${ABI}-signer.txt" | tr '[:lower:]' '[:upper:]')
             test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
@@ -328,26 +276,26 @@ jobs:
           grep -Fq 'cm.bindProcessToNetwork(network)' "$VPN_SRC/V140VpnLossMonitor.kt"
           grep -Fq '.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)' "$VPN_SRC/V140VpnLossMonitor.kt"
           # Process binding is not device-wide always-on VPN lockdown.
-          mkdir -p vpn-beta-artifacts
-          cp "$RELEASE/app-arm64-v8a-release.apk" vpn-beta-artifacts/EpiMediaHub-Official-v1.0.42-ARM64-BETA.apk
-          cp "$RELEASE/app-armeabi-v7a-release.apk" vpn-beta-artifacts/EpiMediaHub-Official-v1.0.42-ARMv7-BETA.apk
-          (cd vpn-beta-artifacts && sha256sum *.apk > SHA256SUMS.txt)
-          cat > vpn-beta-artifacts/README.txt <<'EOF'
-          EpiMediaHub VPN Finland 1.0.42 - ENCRYPTED PROFILE FIRE TV BETA
-          This APK uses the official application ID de.epimediahub.app and the existing official signing key. It preserves the installed app and device ID.
-          VPN profiles are provisioned via authenticated existing device sessions, with local AndroidKeyStore-encrypted private key storage.
+          mkdir -p qa-artifacts
+          cp "$RELEASE/app-arm64-v8a-release.apk" qa-artifacts/EpiMediaHub-Official-v1.0.42-ARM64-BETA.apk
+          cp "$RELEASE/app-armeabi-v7a-release.apk" qa-artifacts/EpiMediaHub-Official-v1.0.42-ARMv7-BETA.apk
+          (cd qa-artifacts && sha256sum *.apk > SHA256SUMS.txt)
+          cat > qa-artifacts/README.txt <<'EOF'
+          EpiMediaHub official package 1.0.42 - PRIVATE CUSTOMER QA CANDIDATE
+          This APK uses the OFFICIAL app package de.epimediahub.app; upgrading preserves existing registration on the same signing certificate.
+          VPN key is generated locally and encrypted using AndroidKeyStore; entitlement/peer assigned automatically by authorized EpiMediaHub backend.
           On-demand Speedtest measures download, upload, HTTP latency and public egress IP over the verified route.
           Playlist mode can be configured separately and verified on change in this beta.
-          No ADB keys or manual peer files required. Device must be paired in the Admin dashboard.
+          No ADB imports or manually copied WireGuard keys. First Android VPN consent cannot be bypassed.
           App sockets and DNS are pinned to the VPN network; loss retains the binding until explicit direct consent.
           This is process-scoped and does not replace device-wide Android always-on lockdown.
           Process restart, pre-existing/direct-bound library sockets and Fire TV routing still need hardware tests.
-          PRIVATE QA: Use only after server/agent compatibility checks. Does NOT deploy to the public in-app updater.
+          Internal QA artifact only. Does NOT deploy to the in-app updater or any public download.
           EOF
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Official-v1.0.42-private-customer-qa
-          path: vpn-beta-artifacts/
+          name: EpiMediaHub-Official-v1.0.42-official-private-qa
+          path: qa-artifacts/
           retention-days: 14
           if-no-files-found: error
 
