@@ -57,7 +57,7 @@ def seal_config(path, owned):
     path = Path(path)
     original = path.read_text()
     blocks = peer_blocks(original)
-    blocks[0] = re.sub(r"(?im)^\s*SaveConfig\s*=\s*true\s*$", "SaveConfig = false", blocks[0])
+    blocks[0] = re.sub(r"(?im)^\s*SaveConfig\s*=\s*true\s*(?:#.*)?$", "SaveConfig = false", blocks[0])
     found = set()
     for index, block in enumerate(blocks[1:], 1):
         key = block_key(block)

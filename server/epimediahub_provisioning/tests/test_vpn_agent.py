@@ -33,7 +33,7 @@ class AgentTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name);self.wg=self.root/"wg0.conf"
-        self.original=f"[Interface]\nPrivateKey = fixture-private-key\nAddress = 10.92.0.1/24\nSaveConfig = true\n\n[Peer]\nPublicKey = {KEY1}\nPresharedKey = fixture-psk\nAllowedIPs = 10.92.0.2/32\n\n[Peer]\nPublicKey = {OTHER}\nAllowedIPs = 10.92.0.90/32\n"
+        self.original=f"[Interface]\nPrivateKey = fixture-private-key\nAddress = 10.92.0.1/24\nSaveConfig = true # existing server setting\n\n[Peer]\nPublicKey = {KEY1}\nPresharedKey = fixture-psk\nAllowedIPs = 10.92.0.2/32\n\n[Peer]\nPublicKey = {OTHER}\nAllowedIPs = 10.92.0.90/32\n"
         self.wg.write_text(self.original)
         self.runner=FakeWireGuard()
         self.config={"dashboard_url":"https://api.epimediahub.com","token":"test-"*10,"state_file":str(self.root/"state.json"),"wireguard_config":str(self.wg)}
