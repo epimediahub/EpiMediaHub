@@ -1,4 +1,4 @@
-name: EpiMediaHub VPN Finland 1.0.42 signed Fire TV beta
+name: EpiMediaHub 1.0.42 official-app signed private QA build
 
 on:
   workflow_dispatch:
@@ -39,6 +39,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     env:
+      EPIMEDIAHUB_OFFICIAL_CANDIDATE: '1'
       ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
 
@@ -239,8 +240,8 @@ jobs:
             "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/apk-${ABI}-badging.txt"
             grep -F "versionCode='1042'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
             grep -F "versionName='1.0.42'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
-            grep -F "package: name='de.epimediahub.app.vpnbeta'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
-            if grep -Fq "package: name='de.epimediahub.app'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"; then echo "Refusing production appId"; exit 1; fi
+            grep -F "package: name='de.epimediahub.app'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            if grep -Fq "package: name='de.epimediahub.app.vpnbeta'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"; then echo "Refusing beta package"; exit 1; fi
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-${ABI}-signer.txt"
             CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-${ABI}-signer.txt" | tr '[:lower:]' '[:upper:]')
             test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
@@ -328,20 +329,20 @@ jobs:
           grep -Fq '.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)' "$VPN_SRC/V140VpnLossMonitor.kt"
           # Process binding is not device-wide always-on VPN lockdown.
           mkdir -p vpn-beta-artifacts
-          cp "$RELEASE/app-arm64-v8a-release.apk" vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.42-ARM64-BETA.apk
-          cp "$RELEASE/app-armeabi-v7a-release.apk" vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.42-ARMv7-BETA.apk
+          cp "$RELEASE/app-arm64-v8a-release.apk" vpn-beta-artifacts/EpiMediaHub-Official-v1.0.42-ARM64-BETA.apk
+          cp "$RELEASE/app-armeabi-v7a-release.apk" vpn-beta-artifacts/EpiMediaHub-Official-v1.0.42-ARMv7-BETA.apk
           (cd vpn-beta-artifacts && sha256sum *.apk > SHA256SUMS.txt)
           cat > vpn-beta-artifacts/README.txt <<'EOF'
           EpiMediaHub VPN Finland 1.0.42 - ENCRYPTED PROFILE FIRE TV BETA
-          This APK has a SEPARATE Android package ID and will NOT overwrite the daily EpiMediaHub app.
-          VPN profile is imported once, encrypted via AndroidKeyStore AES-GCM, stored without backups.
+          This APK uses the official application ID de.epimediahub.app and the existing official signing key. It preserves the installed app and device ID.
+          VPN profiles are provisioned via authenticated existing device sessions, with local AndroidKeyStore-encrypted private key storage.
           On-demand Speedtest measures download, upload, HTTP latency and public egress IP over the verified route.
           Playlist mode can be configured separately and verified on change in this beta.
-          VPN keys must be supplied privately on device. NOT FOR CUSTOMERS.
+          No ADB keys or manual peer files required. Device must be paired in the Admin dashboard.
           App sockets and DNS are pinned to the VPN network; loss retains the binding until explicit direct consent.
           This is process-scoped and does not replace device-wide Android always-on lockdown.
           Process restart, pre-existing/direct-bound library sockets and Fire TV routing still need hardware tests.
-          DO NOT distribute to customers. Does NOT deploy to the in-app updater.
+          PRIVATE QA: Use only after server/agent compatibility checks. Does NOT deploy to the public in-app updater.
           EOF
       - name: Publish separate Fire TV Downloader APK (1.0.42 beta only)
         if: github.event_name != 'pull_request'
@@ -356,7 +357,7 @@ jobs:
             echo "Refusing to overwrite an existing VPN beta prerelease" >&2
             exit 1
           fi
-          cp vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.42-ARMv7-BETA.apk vpn-beta-artifacts/EpiFI.apk
+          cp vpn-beta-artifacts/EpiMediaHub-Official-v1.0.42-ARMv7-BETA.apk vpn-beta-artifacts/EpiFI.apk
           cat > /tmp/epi-vpn-fi35-notes.md <<'EOF'
           EpiMediaHub VPN Finland v1.0.42 Fire TV testing build.
           Separate Android package: de.epimediahub.app.vpnbeta.
@@ -376,7 +377,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-VPN-Finland-v1.0.42-adb-import-beta
+          name: EpiMediaHub-Official-v1.0.42-private-customer-qa
           path: vpn-beta-artifacts/
           retention-days: 14
           if-no-files-found: error
