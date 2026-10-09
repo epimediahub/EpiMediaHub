@@ -39,8 +39,8 @@ jobs:
           mkdir -p /tmp/episcene-merge/baseline/templates
           for file in skip_markers.py skip_automation.py skip_release.py skip_scene.py templates/skip_markers.html; do
             curl -fsSL "https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$base/server/epimediahub_provisioning/$file" -o "/tmp/episcene-merge/baseline/$file"
-            printf '\n# independent_playlist_retained\n' >> "/tmp/episcene-merge/baseline/$file"
-            sed '$d' "/tmp/episcene-merge/baseline/$file" >"/tmp/episcene-merge/original"
+            cp "/tmp/episcene-merge/baseline/$file" /tmp/episcene-merge/original
+            { printf '# independent_playlist_retained\n'; cat /tmp/episcene-merge/original; } > "/tmp/episcene-merge/baseline/$file"
             diff3 -m "/tmp/episcene-merge/baseline/$file" "/tmp/episcene-merge/original" "server/epimediahub_provisioning/$file" >"/tmp/episcene-merge/merged"
             grep -Fq 'independent_playlist_retained' "/tmp/episcene-merge/merged"
           done
