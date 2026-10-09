@@ -92,7 +92,13 @@ def _status(con, device):
     result = dict(device_id=device["device_id"], status=status, assigned=True,
                   enabled=confirmed, revision=entry["revision"], expires_at=entry["expires_at"])
     if confirmed:
-        server_key = public_key(os.environ.get("EPIMEDIAHUB_VPN_SERVER_PUBLIC_KEY", ""))
+        server_key_row = con.execute("SELECT value FROM vpn_meta WHERE key='server_public_key'").fetchone()
+        server_key = server_key_row[0] if server_key_row else ""
+        if not server_key:
+            result["status"] = "WAITING_FOR_SERVER_CONFIGURATION"
+            result["enabled"] = False
+            return result
+        server_key = public_key(server_key)
         endpoint = os.environ.get("EPIMEDIAHUB_VPN_ENDPOINT", "37.27.42.215:51820")
         if not re.fullmatch(r"[A-Za-z0-9.-]{1,253}:[0-9]{2,5}", endpoint):
             raise ValueError("Invalid server endpoint")
