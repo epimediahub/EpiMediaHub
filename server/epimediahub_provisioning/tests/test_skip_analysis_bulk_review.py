@@ -98,13 +98,29 @@ class BulkReviewTests(BulkReviewFixture, unittest.TestCase):
         self.assertEqual(values.count('approved'), 1)
         self.assertEqual(values.count('superseded'), 3)
 
-    def test_conflicting_times_choose_a_winner_and_do_not_leave_review_stuck(self):
+    def test_nonoverlapping_intros_approve_both_instead_of_choosing_one(self):
         first = self.alternative()
         second = self.alternative(start=60000, end=90000)
         other = self.mark(1002, 2)
         notice = self.notice(self.approve())
-        self.assertIn('1 abweichende Varianten automatisch ausgewählt', notice)
-        self.assertEqual(self.statuses(), {first: 'superseded', second: 'approved', other: 'approved'})
+        self.assertIn('3 Zeitmarken freigegeben', notice)
+        self.assertEqual(self.statuses(), {first: 'approved', second: 'approved', other: 'approved'})
+
+    def test_provider_preroll_and_series_title_are_independent_sections(self):
+        provider = self.alternative(start=0, end=19000)
+        series = self.alternative(start=218000, end=225000)
+        notice = self.notice(self.approve())
+        self.assertIn('2 Zeitmarken freigegeben', notice)
+        self.assertEqual(self.statuses()[provider], 'approved')
+        self.assertEqual(self.statuses()[series], 'approved')
+        # An overlapping correction can supersede only the matching section.
+        correction = self.alternative(start=219000, end=226000, source='device')
+        with self.db() as con:
+            row = con.execute('SELECT * FROM skip_records WHERE id=?', (correction,)).fetchone()
+            markers.review_record(con,row,'approve',219000,226000,False)
+        self.assertEqual(self.statuses()[provider], 'approved')
+        self.assertEqual(self.statuses()[series], 'superseded')
+        self.assertEqual(self.statuses()[correction], 'approved')
 
     def test_conflicting_disable_marker_selects_the_latest_equally_ranked_choice(self):
         first = self.alternative()
