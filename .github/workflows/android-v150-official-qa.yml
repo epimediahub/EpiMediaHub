@@ -2,7 +2,7 @@ name: EpiMediaHub 1.0.50 signed official combined-feature QA
 
 on:
   push:
-    branches: [feature/official-v150-quickmenu-weather-intros]
+    branches: [feature/official-v150-adaptive-speed-focus-weather]
     paths:
       - '.github/workflows/android-v150-official-qa.yml'
       - 'android/v1.0.50/**'
