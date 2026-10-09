@@ -188,13 +188,51 @@ class Agent:
                 os._exit(1)
 
     def request(self, path, body=None):
-        data = json.dumps(body).encode() if body is not None else None
-        req = urllib.request.Request(self.base + path, data=data, headers={"Authorization": "Bearer " + self.token, "Content-Type": "application/json"})
-        with self.opener.open(req, timeout=5) as response:
-            payload = response.read(1024 * 1024 + 1)
-            if len(payload) > 1024 * 1024:
-                raise ValueError("Oversized response")
-            return json.loads(payload)
+        """Agent API over curl's verified HTTPS stack.
+
+        On the Finland host the authenticated curl request works, while
+        Python-urllib is rejected with 403 by the public gateway. Supplying
+        the bearer credential on stdin rather than --header "Bearer ..." keeps
+        it out of /proc/<pid>/cmdline, ps listings and systemd journals.
+        """
+        if path not in ("/v1/vpn-agent/desired", "/v1/vpn-agent/applied"):
+            raise ValueError("Unexpected agent API path")
+        if (path.endswith("/desired") and body is not None) or (path.endswith("/applied") and body is None):
+            raise ValueError("Unexpected agent API method")
+        command = [
+            shutil.which("curl") or "/usr/bin/curl",
+            "--silent", "--show-error",
+            "--proto", "=https",
+            "--connect-timeout", "3", "--max-time", "5",
+            "--max-filesize", "1048576",
+            "--max-redirs", "0",
+            "--header", "@-",
+            "--write-out", "\\n%{http_code}",
+        ]
+        if body is not None:
+            # Report includes only already-public peer IDs/generations and
+            # handshakes, no token, no client's private key.
+            data = json.dumps(body, separators=(",", ":"))
+            if len(data) > 1024 * 1024:
+                raise ValueError("Oversized agent report")
+            command.extend(["--request", "POST", "--data-binary", data])
+        command.extend(["--url", self.base + path])
+        result = subprocess.run(
+            command,
+            input="Authorization: Bearer " + self.token + "\\nAccept: application/json\\n",
+            text=True, capture_output=True, timeout=8, check=False,
+        )
+        content, separator, status = result.stdout.rpartition("\\n")
+        if separator != "\\n" or not status.isdigit():
+            raise ValueError("VPN API did not return a usable HTTP response")
+        code = int(status)
+        if code != 200:
+            # No token or response body in the error message.
+            raise urllib.error.HTTPError(self.base + path, code,
+                                         "Agent API HTTP status", {}, None)
+        if result.returncode != 0 or len(content.encode("utf-8")) > 1024 * 1024:
+            raise ValueError("VPN API transfer failed or response was oversized")
+        return json.loads(content)
 
     def apply(self, snapshot):
         server_time = validate(snapshot, self.subnet)
