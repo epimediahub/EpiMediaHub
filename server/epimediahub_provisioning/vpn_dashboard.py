@@ -149,6 +149,8 @@ def install(app, db):
         return
     with db() as con:
         migrate(con)
+    from vpn_autoprovision import install as install_vpn_auto
+    install_vpn_auto(app, db)
     app.extensions["epimediahub_vpn"] = VERSION
     app.add_template_filter(lambda value: instant(value).astimezone(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y · %H:%M") if value else "–", "vpn_date")
 
@@ -204,6 +206,9 @@ def install(app, db):
                 row["state_label"] = ("Freigegeben" if state["enabled"] else "Abgelaufen" if row["expired"] else "Gesperrt") if row["confirmed"] else "Bestätigung offen"
                 by_device[row["device_row_id"]] = row
             for row in devices:
+                pending = con.execute("SELECT days,source FROM vpn_pending_grants WHERE device_row_id=?",
+                                      (row["id"],)).fetchone()
+                row["pending"] = dict(pending) if pending else None
                 row["vpn"] = by_device.get(row["id"])
             plans = [dict(r) for r in con.execute("SELECT * FROM vpn_plans ORDER BY id")]
             resellers = [dict(r) for r in con.execute("SELECT r.id,r.name,r.enabled,a.price_cents FROM resellers r LEFT JOIN vpn_accounts a ON a.reseller_id=r.id ORDER BY r.name")]
@@ -297,6 +302,37 @@ def install(app, db):
                 else:
                     target = device(con, integer(data.get("device_row_id")), admin)
                     entry = con.execute("SELECT * FROM vpn_devices WHERE device_row_id=?", (target["id"],)).fetchone()
+                    if not entry and operation in {"grant", "activate"}:
+                        # Admin/reseller purchase before the device first opens the
+                        # VPN settings: reserve the entitlement, not a WG secret.
+                        from vpn_autoprovision import ensure_pending
+                        usable(target)
+                        if operation == "grant":
+                            days = integer(data.get("days"), 1, 366)
+                            source = "admin"
+                        else:
+                            if not fresh(con):
+                                raise Invalid("Finnland-Server nicht erreichbar. Keine VPN-Credits abgebucht.")
+                            plan_parts = data.get("plan", "").split(":")
+                            if len(plan_parts) != 3:
+                                raise Invalid("Bitte einen VPN-Tarif auswählen.")
+                            plan = con.execute("SELECT * FROM vpn_plans WHERE id=? AND enabled=1",
+                                               (integer(plan_parts[0]),)).fetchone()
+                            if not plan or plan_parts[1:] != [str(plan["days"]), str(plan["credits"])]:
+                                raise Invalid("Dieser VPN-Tarif wurde geändert.")
+                            rid = target["reseller_id"]
+                            if rid is None or balance(con, rid) < plan["credits"]:
+                                raise Invalid("Nicht genügend VPN-Credits.")
+                            con.execute("""INSERT INTO vpn_credits(reseller_id,amount,kind,reference,note,created_at)
+                                           VALUES(?,?,'activation',?,?,?)""",
+                                        (rid,-plan["credits"],request_id,
+                                         f"{plan['name']} · Gerät #{target['id']} (automatisch)",stamp()))
+                            days = plan["days"]
+                            source = "reseller"
+                        ensure_pending(con, target["id"], days, source, target["reseller_id"])
+                        audit(con, who, operation+"_pending", device_row_id=target["id"], days=days)
+                        flash("VPN-Laufzeit zugeordnet. Das Gerät richtet den Schlüssel beim nächsten App-Start automatisch ein.", "success")
+                        return redirect("/admin/vpn" if admin else "/reseller/vpn", code=303)
                     if operation == "bind":
                         usable(target)
                         if entry:
@@ -405,6 +441,6 @@ def install(app, db):
 
     @app.after_request
     def vpn_no_cache(response):
-        if request.path.startswith(("/admin/vpn", "/reseller/vpn", "/v1/vpn-agent")):
+        if request.path.startswith(("/admin/vpn", "/reseller/vpn", "/v1/vpn-agent", "/v1/device/vpn", "/v1/device/identity")):
             response.headers["Cache-Control"] = "no-store"
         return response
