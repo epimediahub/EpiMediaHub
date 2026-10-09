@@ -1,6 +1,11 @@
 name: Credits 1.0.20 Raspberry compatibility
 
 on:
+  pull_request:
+    branches: [raspberry-v0.8.3-credits]
+    paths:
+      - '.github/workflows/credits-v120-check.yml'
+      - 'server/epimediahub_provisioning/**'
   push:
     branches: [raspberry-v0.8.3-credits]
     paths:
