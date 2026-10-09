@@ -10,7 +10,9 @@ from pathlib import Path
 root = Path(os.environ["PROJECT_ROOT"])
 java = root/"app/src/main/java/de/epimediahub/app"
 build = (root/"app/build.gradle.kts").read_text()
-assert 'applicationId = "de.epimediahub.app.vpnbeta"' in build, "Refusing production package"
+candidate = os.environ.get("EPIMEDIAHUB_OFFICIAL_CANDIDATE") == "1"
+expected = 'applicationId = "de.epimediahub.app"' if candidate else 'applicationId = "de.epimediahub.app.vpnbeta"'
+assert expected in build, "Unexpected applicationId; refusing release"
 
 def replace(path, old, new, expected=1):
     content=path.read_text()
