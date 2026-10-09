@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import java.util.concurrent.CancellationException
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.Collections
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -21,13 +22,20 @@ class V140SpeedTransferTest {
     private val serverFailure = AtomicReference<Throwable?>(null)
     private val requests = AtomicInteger()
     private val uploaded = AtomicInteger()
+    private val activeClients = Collections.synchronizedList(mutableListOf<Thread>())
     @Before fun setup() {
         server = ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))
         url = "http://127.0.0.1:${server.localPort}"
         worker = thread(name = "speedtest-loopback", isDaemon = true) {
             while (!server.isClosed) {
-                try { server.accept().use { serve(it) } }
-                catch (e: Exception) {
+                try {
+                    val client = server.accept()
+                    val child = thread(name = "speedtest-loopback-client", isDaemon = true) {
+                        try { client.use { serve(it) } }
+                        catch (e: Exception) { serverFailure.compareAndSet(null, e) }
+                    }
+                    activeClients.add(child)
+                } catch (e: Exception) {
                     if (!server.isClosed) serverFailure.set(e)
                     break
                 }
@@ -69,7 +77,7 @@ class V140SpeedTransferTest {
                     check(n > 0)
                     received += n
                 }
-                uploaded.set(received)
+                uploaded.addAndGet(received)
                 "OK".toByteArray()
             } else ByteArray(256 * 1024) { (it % 251).toByte() }
             output.write("HTTP/1.1 200 OK\r\nContent-Length: ${data.size}\r\nConnection: close\r\n\r\n".toByteArray())
@@ -80,6 +88,7 @@ class V140SpeedTransferTest {
     @After fun teardown() {
         server.close()
         worker.join(1000)
+        activeClients.toList().forEach { it.join(3000) }
         assertNull("Loopback server failure", serverFailure.get())
     }
 
@@ -143,6 +152,48 @@ class V140SpeedTransferTest {
         val transfer = V140SpeedTransfer()
         assertThrows(CancellationException::class.java) {
             transfer.downloadLive("$url/down", 256 * 1024, {}) { _ -> transfer.cancel() }
+        }
+        assertTrue(transfer.isCancelled())
+    }
+
+    @Test fun fourStreamGigabitTestMeasuresAggregateActualBytes() {
+        val count = AtomicInteger()
+        val samples = Collections.synchronizedList(
+            mutableListOf<V140SpeedTransfer.Sample>())
+        val transfer = V140SpeedTransfer()
+        val down = V144GigabitTransfer.measure(
+            transfer, "$url/down", 256 * 1024, false,
+            { count.incrementAndGet() }, samples::add)
+        assertEquals(4L * 256 * 1024, down.bytes)
+        assertEquals(4, requests.get())
+        assertTrue("All workers must re-verify the route", count.get() > 8)
+        assertTrue(samples.isNotEmpty())
+        assertEquals(down.bytes, samples.last().bytes)
+        assertTrue(down.mbps > 0.0 && down.mbps.isFinite())
+
+        val up = V144GigabitTransfer.measure(
+            transfer, "$url/up", 256 * 1024, true, {}, {})
+        assertEquals(4L * 256 * 1024, up.bytes)
+        assertEquals(4 * 256 * 1024, uploaded.get())
+    }
+
+    @Test fun gigabitSampleSizingHonorsRealBudgetAndNoArtificial250MbpsCeiling() {
+        assertEquals(8 * 1024 * 1024,
+            V144GigabitTransfer.downloadBytesPerStream(15.0))
+        assertEquals(64 * 1024 * 1024,
+            V144GigabitTransfer.downloadBytesPerStream(500.0))
+        assertEquals(128 * 1024 * 1024,
+            V144GigabitTransfer.downloadBytesPerStream(1_000.0))
+        assertEquals(8 * 1024 * 1024,
+            V144GigabitTransfer.uploadBytesPerStream(1_000.0))
+    }
+
+    @Test fun parallelCancellationPreventsAnySuccessfulReading() {
+        val transfer = V140SpeedTransfer()
+        assertThrows(CancellationException::class.java) {
+            V144GigabitTransfer.measure(
+                transfer, "$url/down", 256 * 1024, false, {},
+                { transfer.cancel() })
         }
         assertTrue(transfer.isCancelled())
     }
