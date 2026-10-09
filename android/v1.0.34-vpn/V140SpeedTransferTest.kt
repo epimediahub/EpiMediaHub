@@ -211,6 +211,53 @@ class V140SpeedTransferTest {
         assertTrue(transfer.isCancelled())
     }
 
+    @Test fun throttledRouteGuardChecksAtFixedIntervalAndFailCloses() {
+        var now = 1_000_000_000L
+        var checks = 0
+        var blocked = false
+        val guard = V145RouteGuard({
+            checks++
+            if (blocked) throw IllegalStateException("VPN network lost")
+        }, { now })
+        repeat(1000) { guard.checkIfDue() }
+        assertEquals("Repeated 64 KiB chunks must not flood VPN state probes", 0, checks)
+        now += 124_000_000L
+        guard.checkIfDue()
+        assertEquals(0, checks)
+        now += 1_000_000L
+        guard.checkIfDue()
+        assertEquals(1, checks)
+        blocked = true
+        now += 125_000_000L
+        assertThrows(IllegalStateException::class.java) { guard.checkIfDue() }
+        assertEquals(2, checks)
+        assertThrows(IllegalStateException::class.java) { guard.force() }
+        assertEquals(3, checks)
+    }
+
+    @Test fun twoStreamDiagnosticIsActualTransferAndRetainsRouteChecks() {
+        val verified = AtomicInteger()
+        val parent = V140SpeedTransfer()
+        val result = V144GigabitTransfer.measureWithStreams(
+            parent, "$url/down", 256 * 1024, false,
+            { verified.incrementAndGet() }, 2, {})
+        assertEquals(2L * 256L * 1024L, result.bytes)
+        assertEquals(2, requests.get())
+        assertTrue(verified.get() >= 6)
+        assertTrue(result.mbps.isFinite() && result.mbps > 0.0)
+    }
+
+    @Test fun diagnosticRejectsInvalidStreamCountsBeforeSendingAnyPackets() {
+        val parent = V140SpeedTransfer()
+        for (streams in listOf(0, 5)) {
+            assertThrows(IllegalArgumentException::class.java) {
+                V144GigabitTransfer.measureWithStreams(
+                    parent, "$url/down", 256 * 1024, false, {}, streams, {})
+            }
+        }
+        assertEquals(0, requests.get())
+    }
+
     @Test fun megabitsUseNanosecondDuration() {
         assertEquals(8.0, V140SpeedTransfer.Sample(1_000_000, 1_000_000_000).mbps, 0.0001)
     }
