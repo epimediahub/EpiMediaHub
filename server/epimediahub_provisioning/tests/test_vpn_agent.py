@@ -43,6 +43,45 @@ class AgentTests(unittest.TestCase):
     def snapshot(self):
         return {"version":1,"node":"finland","server_time":datetime.now(timezone.utc).isoformat(),"lease_seconds":60,"peers":[{"id":1,"public_key":KEY1,"client_address":"10.92.0.2/32","enabled":True,"expires_at":(datetime.now(timezone.utc)+timedelta(days=1)).isoformat(),"generation":"a"*64,"revision":1}]}
 
+    def test_agent_curl_transport_uses_stdin_for_secret_and_json_post(self):
+        from unittest.mock import patch
+        from urllib.error import HTTPError
+        response = SimpleNamespace(stdout='{"peers":[]}\\n200', returncode=0, stderr="")
+        with patch("vpn_finland_agent.subprocess.run", return_value=response) as run:
+            body=self.agent.request("/v1/vpn-agent/desired")
+        self.assertEqual(body, {"peers":[]})
+        args,kwargs=run.call_args
+        command=args[0]
+        self.assertNotIn(self.config["token"], " ".join(command))
+        self.assertIn("--proto", command)
+        self.assertIn("=https", command)
+        self.assertEqual(command[command.index("--header")+1], "@-")
+        self.assertIn("Authorization: Bearer "+self.config["token"]+"\\n",kwargs["input"])
+        self.assertFalse(kwargs["shell"] if "shell" in kwargs else False)
+
+        with patch("vpn_finland_agent.subprocess.run", return_value=response) as post:
+            self.agent.request("/v1/vpn-agent/applied", {"peers":[]})
+        args,kwargs=post.call_args
+        self.assertIn("--data-binary",args[0])
+        self.assertIn("Content-Type: application/json\\n",kwargs["input"])
+        self.assertNotIn(self.config["token"]," ".join(args[0]))
+
+    def test_agent_curl_transport_rejects_denied_or_redirected_requests(self):
+        from unittest.mock import patch
+        from urllib.error import HTTPError
+        for code in (301,401,403,404):
+            with self.subTest(status=code):
+                response=SimpleNamespace(stdout='{}\\n'+str(code),returncode=0,stderr="")
+                with patch("vpn_finland_agent.subprocess.run",return_value=response):
+                    with self.assertRaises(HTTPError) as caught:
+                        self.agent.request("/v1/vpn-agent/desired")
+                self.assertEqual(caught.exception.code, code)
+                self.assertNotIn(self.config["token"],str(caught.exception))
+        with self.assertRaises(ValueError):
+            self.agent.request("/v1/vpn-agent/desired", {"peers":[]})
+        with self.assertRaises(ValueError):
+            self.agent.request("https://evil.example/", None)
+
     def test_actual_rules_ack_and_sealed_reboot_config(self):
         report=self.agent.apply(self.snapshot())
         self.assertTrue(report["peers"][0]["enabled"])
