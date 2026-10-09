@@ -15,6 +15,9 @@ from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location("vpn_installer",ROOT/"deploy/install_vpn_dashboard.py")
 installer=importlib.util.module_from_spec(spec);spec.loader.exec_module(installer)
+agent_spec=importlib.util.spec_from_file_location("vpn_agent_installer",ROOT/"deploy/install_vpn_agent.py")
+agent_installer=importlib.util.module_from_spec(agent_spec);agent_spec.loader.exec_module(agent_installer)
+
 
 
 class InstallerTests(unittest.TestCase):
@@ -35,6 +38,30 @@ class InstallerTests(unittest.TestCase):
         self.env=os.environ.copy();self.env["EPIMEDIAHUB_DATA_DIR"]=str(self.data)
         self.envfile=self.root/"backend.env";self.envfile.write_text(f"EPIMEDIAHUB_DATA_DIR={self.data}\n")
         subprocess.run([sys.executable,"-c","import wsgi; from app import db;\nwith db() as c: c.execute(\"INSERT INTO customers(name,created_at) VALUES('Preserved customer','2026-10-09T00:00:00Z')\")"],cwd=self.base,env=self.env,check=True,capture_output=True)
+
+    def test_finland_installer_accepts_a_nonseekable_tty(self):
+        class NonSeekableTerminal(io.StringIO):
+            def seekable(self):
+                return False
+            def seek(self, *args, **kwargs):
+                raise io.UnsupportedOperation("File or stream is not seekable")
+        for line, expected in (("\\n", "https://api.epimediahub.com"),
+                               ("https://vpn.example.org\\n", "https://vpn.example.org")):
+            with self.subTest(line=line):
+                with patch("builtins.open", return_value=NonSeekableTerminal(line)) as opened:
+                    with contextlib.redirect_stderr(io.StringIO()) as prompt:
+                        self.assertEqual(agent_installer.read_dashboard_url(), expected)
+                opened.assert_called_once_with("/dev/tty", "r", encoding="utf-8")
+                self.assertIn("Dashboard-URL", prompt.getvalue())
+
+    def test_finland_installer_requires_interactive_console(self):
+        with patch("builtins.open", side_effect=OSError("No TTY")):
+            with self.assertRaisesRegex(SystemExit, "interaktive Konsole"):
+                agent_installer.read_dashboard_url()
+        with patch("builtins.open", return_value=io.StringIO("")):
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaisesRegex(SystemExit, "abgebrochen"):
+                    agent_installer.read_dashboard_url()
 
     def test_staging_is_idempotent_and_uses_isolated_database(self):
         stage=self.root/"stage";stage.mkdir()
