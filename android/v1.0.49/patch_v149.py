@@ -47,19 +47,6 @@ replace(home,
 '''        V083Tile("RADIO", "Sender weltweit · Favoriten · Suche", R.drawable.icon_radio_v149) {
             radioOpen = true
         }''')
-replace(home,
-'''                weather = V070WeatherClient.refresh(context) ?: weather''',
-'''                weather = V070WeatherClient.refresh(context)''') if '                weather = V070WeatherClient.refresh(context) ?: weather' in home.read_text() else None
-replace(home,
-'''    LaunchedEffect(Unit) {
-        weather = V070WeatherClient.refresh(context) ?: weather
-    }''',
-'''    LaunchedEffect(Unit) {
-        while (true) {
-            weather = V070WeatherClient.refresh(context)
-            delay(15 * 60 * 1000L)
-        }
-    }''') if '    LaunchedEffect(Unit) {\n        weather = V070WeatherClient.refresh(context) ?: weather\n    }' in home.read_text() else None
 # The code above may have replaced the inner expression first; make the loop
 # unconditionally from either spelling to avoid one-shot refresh.
 for old in (
