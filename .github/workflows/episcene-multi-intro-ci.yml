@@ -32,6 +32,8 @@ jobs:
         run: |
           python -m compileall -q server/epimediahub_provisioning
           python -m py_compile server/epimediahub_provisioning/deploy/install_episcene_multi_intro_safe.py
+      - name: Verify strict source-hunk transplant preserves independent changes
+        run: python server/epimediahub_provisioning/deploy/install_episcene_multi_intro_safe.py selftest
       - name: Verify 3-way overlay against pinned parent without losing user additions
         run: |
           set -euo pipefail
