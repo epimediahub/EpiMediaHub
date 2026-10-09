@@ -15,12 +15,12 @@ import java.util.concurrent.atomic.AtomicLongArray
 internal object V144GigabitTransfer {
     private const val STREAMS = 4
     private const val MIB = 1024 * 1024
-    private const val MAX_TOTAL_MIB = 512
+    private const val MAX_TOTAL_MIB = 256
 
     /** Pilot before sizing a bounded test, not before trusting the VPN route. */
     fun downloadBytesPerStream(warmupMbps: Double): Int {
         val mib = when {
-            warmupMbps >= 600.0 -> 128
+            warmupMbps >= 600.0 -> 64
             warmupMbps >= 300.0 -> 64
             warmupMbps >= 130.0 -> 32
             warmupMbps >= 60.0 -> 16
@@ -43,6 +43,8 @@ internal object V144GigabitTransfer {
     ): V140SpeedTransfer.Sample =
         measureWithStreams(parent, url, bytesPerStream, upload, verify, STREAMS, onSample)
 
+    /** Each stream uses only the documented bytes parameter. Cloudflare may reject
+     * unsupported query strings or payloads >= 100 MB; keep each at <= 64 MiB. */
     /** Short 1/2 stream diagnostic; the normal benchmark remains 4 streams. */
     fun measureWithStreams(
         parent: V140SpeedTransfer,
@@ -53,7 +55,7 @@ internal object V144GigabitTransfer {
         streams: Int,
         onSample: (V140SpeedTransfer.Sample) -> Unit
     ): V140SpeedTransfer.Sample {
-        require(bytesPerStream in (256 * 1024)..(128 * MIB))
+        require(bytesPerStream in (256 * 1024)..(64 * MIB))
         require(streams in 1..STREAMS)
         require(bytesPerStream.toLong() * streams <= MAX_TOTAL_MIB.toLong() * MIB)
         parent.checkActive()
@@ -92,7 +94,7 @@ internal object V144GigabitTransfer {
                     }
                     if (upload) worker.uploadLive(url, bytesPerStream, verify, sampleUpdate)
                     else worker.downloadLive(
-                        "$url?bytes=$bytesPerStream&stream=$index",
+                        "$url?bytes=$bytesPerStream",
                         bytesPerStream, verify, sampleUpdate
                     )
                 })
