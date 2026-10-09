@@ -98,6 +98,19 @@ replace(gigabit,
     '            check(completedAt > started.get()) { "Transferabschluss nicht erfasst" }\n'
     '            val elapsed = (completedAt - started.get()).coerceAtLeast(1L)')
 assert 'val final = V140SpeedTransfer.Sample(received, elapsed)' in gigabit.read_text()
+
+# Measure upload bytes before HTTP response overhead; a non-2xx response
+# still invalidates the result in uploadLive and must not be reported.
+transfer = java/"vpn/V140SpeedTransfer.kt"
+replace(transfer,
+    '            }\n            routeGuard.force()\n            val responseCode = conn.responseCode\n',
+    '            }\n            onSample(Sample(bytes.toLong(), System.nanoTime() - started))\n'
+    '            routeGuard.force()\n            val responseCode = conn.responseCode\n')
+replace(transfer,
+    '            onSample(Sample(bytes.toLong(), System.nanoTime() - started))\n'
+    '            bytes.toLong()\n        }\n}',
+    '            bytes.toLong()\n        }\n}')
+
 shutil.copyfile(here/"V151RollingSpeedTest.kt",
                 tests/"vpn/V151RollingSpeedTest.kt")
 print("v1.0.51: weather/location restored and speedtest timer, rolling gauge corrected.")
