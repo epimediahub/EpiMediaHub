@@ -53,7 +53,15 @@ internal object V142VpnAutoProvision {
                 error(message)
             }
             val body = connection.inputStream.use { input ->
-                input.readNBytes(16_385)
+                val out = java.io.ByteArrayOutputStream()
+                val chunk = ByteArray(4096)
+                while (true) {
+                    val n = input.read(chunk)
+                    if (n < 0) break
+                    if (out.size() + n > 16_384) error("VPN-Serverantwort zu groß")
+                    out.write(chunk, 0, n)
+                }
+                out.toByteArray()
             }
             require(body.size <= 16_384) { "VPN-Serverantwort zu groß" }
             return JSONObject(body.toString(Charsets.UTF_8))
@@ -90,22 +98,22 @@ internal object V142VpnAutoProvision {
             status.status == "SUSPENDED") {
             error("VPN ist für diese Geräte-ID nicht freigeschaltet: ${status.status}")
         }
-        if (!status.enabled) {
-            val identity = V142VpnPrivateKeyStore.getOrCreate(application)
-            data = request(application, "/v1/device/vpn/enroll", JSONObject()
-                .put("device_id", status.deviceId)
-                .put("public_key", identity.publicKey))
+        // Always check our public key with the authenticated server,
+        // including after application reinstalls or an Android data restore.
+        val identity = V142VpnPrivateKeyStore.getOrCreate(application)
+        data = request(application, "/v1/device/vpn/enroll", JSONObject()
+            .put("device_id", status.deviceId)
+            .put("public_key", identity.publicKey))
+        status = remember(application, data)
+        // A fresh binding requires a confirmed Finland-agent reconciliation.
+        // Bounded retry; protected playback never switches directly on failure.
+        for (i in 0..6) {
+            if (status.enabled) break
+            if (status.status in setOf("EXPIRED","SUSPENDED","NO_VPN_LICENSE"))
+                error("VPN ist gesperrt oder abgelaufen")
+            Thread.sleep(1500)
+            data = request(application, "/v1/device/vpn/status")
             status = remember(application, data)
-            // A fresh binding requires the Finland reconciliation service to
-            // authorize this peer. Bounded retry, never speculative playback.
-            for (i in 0..6) {
-                if (status.enabled) break
-                if (status.status in setOf("EXPIRED","SUSPENDED","NO_VPN_LICENSE"))
-                    error("VPN ist gesperrt oder abgelaufen")
-                Thread.sleep(1500)
-                data = request(application, "/v1/device/vpn/status")
-                status = remember(application, data)
-            }
         }
         check(status.enabled && status.status == "READY") {
             "VPN ist zugeordnet, aber der Finnland-Server hat die Freigabe noch nicht bestätigt"
