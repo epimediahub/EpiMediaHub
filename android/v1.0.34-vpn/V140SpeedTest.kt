@@ -94,13 +94,13 @@ internal object V140SpeedTest {
 
         live(Live(Phase.DOWNLOAD, 0.0, 0f))
         progress("Download wird live gemessen …")
-        val down = transfer.download("$HOST/__down?bytes=$DOWNLOAD_BYTES", DOWNLOAD_BYTES, verify) { sample ->
+        val down = transfer.downloadLive("$HOST/__down?bytes=$DOWNLOAD_BYTES", DOWNLOAD_BYTES, verify) { sample ->
             live(Live(Phase.DOWNLOAD, sample.mbps,
                 (sample.bytes.toFloat() / DOWNLOAD_BYTES).coerceIn(0f, 1f)))
         }
         live(Live(Phase.UPLOAD, 0.0, 0f))
         progress("Upload wird live gemessen …")
-        val up = transfer.upload("$HOST/__up", UPLOAD_BYTES, verify) { sample ->
+        val up = transfer.uploadLive("$HOST/__up", UPLOAD_BYTES, verify) { sample ->
             live(Live(Phase.UPLOAD, sample.mbps,
                 (sample.bytes.toFloat() / UPLOAD_BYTES).coerceIn(0f, 1f)))
         }
