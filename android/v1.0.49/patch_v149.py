@@ -263,6 +263,10 @@ replace(repository,
 '''        val selected = V115SkipPolicy.select(automatic.filter { it.kind !in disabled }, duration)
         val overrides = own.values.filterNotNull()
         return (selected.filter { automaticSegment ->
+            // "No intro" is a deliberate user decision. It suppresses every
+            // intro section, while a timed manual correction replaces only
+            // the overlapping section (not a different provider/series intro).
+            !(automaticSegment.kind in own && own[automaticSegment.kind] == null) &&
             overrides.none { manual ->
                 automaticSegment.kind == manual.kind &&
                     automaticSegment.startMs < manual.endMs &&
@@ -318,6 +322,19 @@ replace(policyTest,
 '''        assertEquals(2, merged.size)
         assertEquals(listOf(30_000L, 150_000L), merged.map { it.startMs })
         assertEquals(90_000L, merged.first().endMs)''')
+
+# Historical skin-geometry tests should continue testing ALL SIX tiles.
+# The sixth tile is RADIO instead of EINSTELLUNGEN by explicit design; the
+# settings entry continues through the labelled quick menu and its own tests.
+for legacy in ("ui/V131SkinUiTest.kt", "ui/V132SkinUiTest.kt"):
+    legacy_test = tests/legacy
+    previous = legacy_test.read_text()
+    expected = 2 if "V131SkinUiTest" in legacy else 1
+    assert previous.count('"SMARTTUBE", "EINSTELLUNGEN"') == expected, (
+        legacy, "unexpected skin UI test structure")
+    legacy_test.write_text(previous.replace(
+        '"SMARTTUBE", "EINSTELLUNGEN"',
+        '"SMARTTUBE", "RADIO"'))
 
 # Dedicated deterministic regression cases for independently-labelled intros.
 extra = tests/"data/V149IntroRoleTest.kt"
