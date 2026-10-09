@@ -63,9 +63,12 @@ def _address(con):
         raise ValueError("VPN IPv4 subnet configuration unavailable")
     used = {ipaddress.ip_interface(x[0]).ip for x in
             con.execute("SELECT client_address FROM vpn_devices")}
+    reserved = con.execute("SELECT value FROM vpn_meta WHERE key='unmanaged_networks'").fetchone()
+    ranges = [ipaddress.ip_network(value, strict=False) for value in
+              __import__('json').loads(reserved[0])] if reserved else []
     for host in net.hosts():
         # Reserve WireGuard server address and low reserved pool.
-        if int(host) <= int(net.network_address) + 1 or host in used:
+        if int(host) <= int(net.network_address) + 1 or host in used or any(host in x for x in ranges):
             continue
         return str(host) + "/32"
     raise RuntimeError("VPN address pool exhausted")
