@@ -59,7 +59,9 @@ def approve_rows(con, rows, human=False):
                 batches.append([])
             batches[-1].append(row)
         # Time-disjoint provider and series intros are independent sections.
-        batches = [section for runtime_group in batches for section in section_groups(runtime_group)]
+        batches = [section for runtime_group in batches for section in
+                   ([runtime_group] if any(r['disabled'] for r in runtime_group)
+                    else section_groups(runtime_group))]
         for batch in batches:
             first = batch[0]
             decided = con.execute('''SELECT r.source,r.status,r.start_ms,r.end_ms,
