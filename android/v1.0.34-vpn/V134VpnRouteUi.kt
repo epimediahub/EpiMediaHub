@@ -51,6 +51,7 @@ fun V134VpnRouteBlockedScreen(
     playlistId: String,
     playlistName: String,
     onPlaylists: () -> Unit,
+    onSettings: () -> Unit,
     onDirectApproved: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -81,7 +82,7 @@ fun V134VpnRouteBlockedScreen(
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Text(
-                if (initialRouteCheck) "NETZWERKVERBINDUNG WIRD GEPRÜFT" else "VPN-VERBINDUNG UNTERBROCHEN",
+                if (initialRouteCheck) "NETZWERKVERBINDUNG WIRD GEPRÜFT" else "VPN NICHT BEREIT",
                 color = Color(0xFFF5C15B),
                 fontWeight = FontWeight.Black,
                 fontSize = 27.sp
@@ -112,9 +113,9 @@ fun V134VpnRouteBlockedScreen(
                 )
             }
             V141FocusButton(
-                label = "VPN-Verbindung überprüfen",
+                label = "VPN-Einstellungen öffnen",
                 accent = Color(0xFFF5C15B),
-                onClick = { context.startActivity(Intent(context, V134VpnDiagnosticActivity::class.java)) },
+                onClick = onSettings,
                 enabled = !busy
             )
             V141FocusButton(
