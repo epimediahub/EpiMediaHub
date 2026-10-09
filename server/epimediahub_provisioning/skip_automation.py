@@ -712,7 +712,9 @@ def publish(con, asset, kind, evidence):
             or evidence['confidence'] < AUTO_CONFIDENCE or not evidence['votes']
             or not valid_range(kind, evidence['start'], evidence['end'], asset['duration_ms'])):
         return False
-    if not enabled(con, asset["playlist_id"]) or protected(con, asset, kind, evidence):
+    if (not enabled(con, asset["playlist_id"])
+            or protected(con, asset, kind,
+                         {'start_ms': evidence['start'], 'end_ms': evidence['end']})):
         return False
     current = con.execute("SELECT * FROM skip_assets WHERE asset_key=?", (asset["asset_key"],)).fetchone()
     if (not current or any(current[key] != asset[key] for key in ("source_key", "media_type", "season", "episode", "playlist_id"))
