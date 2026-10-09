@@ -294,10 +294,15 @@ replace(weather,
 replace(weather,
 '''                useCaches = true''',
 '''                useCaches = false''')
-replace(weather,
-'''                setRequestProperty("User-Agent", "EpiMediaHub-Android/0.8.1")''',
-'''                setRequestProperty("User-Agent", "EpiMediaHub-Android/1.0.49")
-                setRequestProperty("Cache-Control", "no-cache")''')
+# Keep the inherited User-Agent (updated by other releases); disable HTTP caches.
+weather_source = weather.read_text()
+import re
+weather_source, n = re.subn(
+    r'(\s*setRequestProperty\("User-Agent",\s*"[^"]+"\))',
+    r'\1\n                setRequestProperty("Cache-Control", "no-cache")',
+    weather_source, count=1)
+assert n == 1, "weather request user-agent not found"
+weather.write_text(weather_source)
 settings = java/"ui/V081WeatherSettings.kt"
 replace(settings, '"Automatische Standorterkennung"', '"Standort einrichten · bei VPN bitte PLZ angeben"')
 replace(settings,
