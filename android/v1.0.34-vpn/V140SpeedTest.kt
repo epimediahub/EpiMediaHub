@@ -460,7 +460,7 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
                     .onFocusChanged { startFocused = it.hasFocus }
                     .border(BorderStroke(if (startFocused) 4.dp else 1.dp,
                         if (startFocused) Color.White else Color.Gray),
-                        RoundedCornerShape(12.dp))
+                        RoundedCornerShape(12.dp)),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF4EDCFF),
                     contentColor = Color(0xFF051827),
