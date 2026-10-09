@@ -38,6 +38,12 @@ def migrate(con):
       customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
       created_at TEXT NOT NULL, reviewed_at TEXT
     );
+    CREATE TABLE IF NOT EXISTS skip_intro_roles(
+      record_id INTEGER PRIMARY KEY REFERENCES skip_records(id) ON DELETE CASCADE,
+      intro_role TEXT NOT NULL DEFAULT 'unknown'
+      CHECK(intro_role IN ('unknown','provider','series')),
+      assigned_at TEXT NOT NULL
+    );
     CREATE INDEX IF NOT EXISTS idx_skip_asset ON skip_records(asset_key,duration_ms,status);
     CREATE INDEX IF NOT EXISTS idx_skip_source ON skip_records(source_key,status);
     CREATE INDEX IF NOT EXISTS idx_skip_dashboard ON skip_records(status,source_key,season,episode);
@@ -231,7 +237,11 @@ def marker_browser(con, state, source_key="", season=None, page=1, episode_page=
         if group["media_type"] == "movie":
             group["movie_pages"] = max(1, (group["count"] + 49) // 50)
             episode_page = min(episode_page, group["movie_pages"])
-            group["movie_rows"] = con.execute("SELECT * FROM skip_records WHERE status=? AND source_key=? ORDER BY id DESC LIMIT 50 OFFSET ?", (state, source_key, (episode_page - 1) * 50)).fetchall()
+            group["movie_rows"] = con.execute("""SELECT r.*,
+              COALESCE((SELECT intro_role FROM skip_intro_roles WHERE record_id=r.id),'unknown') intro_role
+              FROM skip_records r WHERE r.status=? AND r.source_key=?
+              ORDER BY r.id DESC LIMIT 50 OFFSET ?""",
+              (state, source_key, (episode_page - 1) * 50)).fetchall()
             continue
         seasons = con.execute("SELECT season,COUNT(*) count,COUNT(DISTINCT episode) episode_count FROM skip_records WHERE status=? AND source_key=? GROUP BY season ORDER BY season", (state, source_key)).fetchall()
         for raw in seasons:
@@ -241,7 +251,12 @@ def marker_browser(con, state, source_key="", season=None, page=1, episode_page=
                 numbers = [row[0] for row in con.execute("SELECT episode FROM skip_records WHERE status=? AND source_key=? AND season=? GROUP BY episode ORDER BY episode LIMIT 25 OFFSET ?", (state, source_key, season, (episode_page - 1) * 25))]
                 if numbers:
                     placeholders = ",".join("?" for _ in numbers)
-                    records = con.execute("SELECT * FROM skip_records WHERE status=? AND source_key=? AND season=? AND episode IN (" + placeholders + ") ORDER BY episode,CASE segment_type WHEN 'intro' THEN 0 WHEN 'recap' THEN 1 ELSE 2 END,id DESC", (state, source_key, season, *numbers)).fetchall()
+                    records = con.execute("""SELECT r.*,
+                      COALESCE((SELECT intro_role FROM skip_intro_roles WHERE record_id=r.id),'unknown') intro_role
+                      FROM skip_records r WHERE r.status=? AND r.source_key=? AND r.season=?
+                      AND r.episode IN (""" + placeholders + """) ORDER BY r.episode,
+                      CASE r.segment_type WHEN 'intro' THEN 0 WHEN 'recap' THEN 1 ELSE 2 END,
+                      r.start_ms,r.id DESC""", (state, source_key, season, *numbers)).fetchall()
                     item["episodes"] = media_groups(records)[0]["seasons"][0]["episodes"]
             group["seasons"].append(item)
     return dict(groups=groups, total=total, pages=pages, page=page, episode_page=episode_page,
@@ -264,8 +279,10 @@ def review_record(con, row, decision, start, end, disabled, wake=True):
     record_id = row['id']
     if decision == 'approve':
         con.execute("""UPDATE skip_records SET status='superseded',reviewed_at=? WHERE id<>?
-          AND asset_key=? AND segment_type=? AND ABS(duration_ms-?)<=2000 AND status='approved'""",
-          (now(), record_id, row['asset_key'], row['segment_type'], row['duration_ms']))
+          AND asset_key=? AND segment_type=? AND ABS(duration_ms-?)<=2000
+          AND status='approved' AND (?=1 OR (start_ms<? AND end_ms>?))""",
+          (now(), record_id, row['asset_key'], row['segment_type'],
+           row['duration_ms'], int(disabled), end, start))
         if wake:
             wake_reference_jobs(con, row['source_key'])
     con.execute('DELETE FROM skip_fingerprints WHERE record_id=?', (record_id,))
@@ -274,7 +291,8 @@ def review_record(con, row, decision, start, end, disabled, wake=True):
                 ('approved' if decision == 'approve' else 'rejected', start, end, int(disabled), now(), record_id))
     con.execute('UPDATE skip_auto_evidence SET human_review=1 WHERE record_id=?', (record_id,))
     from skip_automation import retire_proposals
-    retire_proposals(con, row, row['segment_type'], record_id)
+    retire_proposals(con, row, row['segment_type'], record_id,
+                     None if disabled else {'start_ms': start, 'end_ms': end})
     if decision == 'reject' or disabled:
         con.execute('INSERT OR REPLACE INTO skip_auto_blocks VALUES(?,?,?,?)',
                     (row['asset_key'], row['segment_type'], row['duration_ms'], now()))
@@ -375,12 +393,29 @@ def install(app, db):
                     AND ABS(r.duration_ms-?)<=2000 LIMIT 1""", (data['asset_key'],data['duration_ms'])).fetchone()
                 request_series(con, data['asset_key'], 'reference' if human_reference else 'playback')
             from skip_automation import enabled as capture_enabled
+            from skip_intro_sections import overlaps
             seen = set(); segments = []
             for record in records:
-                if record["segment_type"] in seen:
+                kind = record["segment_type"]
+                if kind != 'intro' and kind in seen:
                     continue
-                seen.add(record["segment_type"])
-                segments.append({k: record[k] for k in ("segment_type", "start_ms", "end_ms", "duration_ms", "status", "source") } | {"disabled": bool(record["disabled"])})
+                if kind == 'intro' and any(
+                    segment['segment_type'] == 'intro' and overlaps(record, segment)
+                    for segment in segments):
+                    continue  # Duplicates share a section; a second distinct intro does not.
+                seen.add(kind)
+                segment = {k: record[k] for k in
+                           ("segment_type", "start_ms", "end_ms", "duration_ms", "status", "source")}
+                segment['disabled'] = bool(record['disabled'])
+                if kind == 'intro':
+                    role_row = con.execute("SELECT intro_role FROM skip_intro_roles WHERE record_id=?",
+                                           (record['id'],)).fetchone()
+                    role = role_row['intro_role'] if role_row else 'unknown'
+                    segment['intro_role'] = role
+                    segment['label'] = ('Vorspann überspringen' if role == 'provider'
+                                        else 'Intro überspringen')
+                segments.append(segment)
+            segments.sort(key=lambda item: (item["start_ms"], item["end_ms"]))
             return jsonify(asset_key=data["asset_key"], source_key=data["source_key"], duration_ms=data["duration_ms"],
                            segments=segments, identity=dict(identity) if identity else {}, analysis="available" if registered else "unavailable",
                            fingerprint_capture=bool(registered and data['media_type']=='episode' and capture_enabled(con, raw.get('playlist_id'))))
@@ -546,6 +581,28 @@ def install(app, db):
                 abort(400)
             review_record(con, row, decision, start, end, off)
         return return_to_marker(row, "Zeitmarke freigegeben" if decision == "approve" else "Vorschlag abgelehnt")
+
+    @app.post("/admin/skip/<int:record_id>/intro-role")
+    def v152_intro_role(record_id):
+        guard = web_auth()
+        if guard:
+            return guard
+        csrf()
+        from skip_intro_sections import INTRO_ROLES
+        role = request.form.get("intro_role", "")
+        if role not in INTRO_ROLES:
+            abort(400)
+        with db() as con:
+            row = con.execute("SELECT * FROM skip_records WHERE id=?", (record_id,)).fetchone()
+            if row is None:
+                abort(404)
+            if row["segment_type"] != "intro":
+                abort(400)
+            con.execute("""INSERT INTO skip_intro_roles(record_id,intro_role,assigned_at)
+              VALUES(?,?,?) ON CONFLICT(record_id) DO UPDATE SET
+              intro_role=excluded.intro_role, assigned_at=excluded.assigned_at""",
+              (record_id, role, now()))
+        return return_to_marker(row, "Intro-Kategorie gespeichert")
 
     @app.post('/admin/skip/bulk-review')
     def v082_skip_bulk_review():

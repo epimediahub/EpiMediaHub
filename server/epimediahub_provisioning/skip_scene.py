@@ -239,8 +239,13 @@ def _compare(db, asset, kind, own, selected, busy):
         return None
     with db() as con:
         audio = _audio_candidates(con, asset, kind)
+    from skip_intro_sections import overlaps
+    # Provider preroll and later series intro may BOTH be genuine. Only an
+    # overlapping audio candidate can contradict visual boundaries.
+    concurrent = [c for c in audio if overlaps(c, decision)]
     disagreement = any(abs(c['start_ms'] - decision['start_ms']) > 2000
-                       or abs(c['end_ms'] - decision['end_ms']) > 2000 for c in audio)
+                       or abs(c['end_ms'] - decision['end_ms']) > 2000
+                       for c in concurrent)
     if disagreement:
         decision = dict(decision, status='REVIEW')
     evidence = dict(policy=POLICY, method='episcene_consensus', episcene_required=True,

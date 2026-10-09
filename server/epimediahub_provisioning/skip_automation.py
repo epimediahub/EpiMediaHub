@@ -509,13 +509,24 @@ def refresh_online_one(db, busy_factory, playlist_id=None):
     return 'online_checked'
 
 
-def protected(con, asset, kind):
-    return bool(con.execute("""SELECT 1 FROM skip_records WHERE asset_key=? AND segment_type=?
-      AND ABS(duration_ms-?)<=2000 AND (status IN ('approved','rejected') OR (status='pending' AND
-        (source='device' OR EXISTS(SELECT 1 FROM skip_auto_evidence e WHERE e.record_id=skip_records.id AND e.human_review=1)))) LIMIT 1""",
-      (asset["asset_key"], kind, asset["duration_ms"])).fetchone()
-      or con.execute("SELECT 1 FROM skip_auto_blocks WHERE asset_key=? AND kind=? AND ABS(duration_ms-?)<=2000 LIMIT 1",
-                     (asset["asset_key"], kind, asset["duration_ms"])).fetchone())
+def protected(con, asset, kind, section=None):
+    # Old coarse-grained manual exclusions stay authoritative. A separate,
+    # approved intro is not grounds to suppress a nonoverlapping new intro.
+    if con.execute(
+        "SELECT 1 FROM skip_auto_blocks WHERE asset_key=? AND kind=? "
+        "AND ABS(duration_ms-?)<=2000 LIMIT 1",
+        (asset["asset_key"], kind, asset["duration_ms"])).fetchone():
+        return True
+    rows = con.execute("""SELECT * FROM skip_records WHERE asset_key=? AND segment_type=?
+      AND ABS(duration_ms-?)<=2000 AND (status IN ('approved','rejected') OR
+        (status='pending' AND (source='device' OR EXISTS(
+          SELECT 1 FROM skip_auto_evidence e
+          WHERE e.record_id=skip_records.id AND e.human_review=1))))""",
+      (asset["asset_key"], kind, asset["duration_ms"])).fetchall()
+    if section is None:
+        return bool(rows)
+    from skip_intro_sections import overlaps
+    return any(r['disabled'] or overlaps(r, section) for r in rows)
 
 
 def pending_proposals(con, asset, kind):
@@ -544,13 +555,18 @@ def same_boundaries(first, second):
             and abs(first['end_ms'] - second['end_ms']) <= BOUNDARY_TOLERANCE)
 
 
-def retire_proposals(con, asset, kind, keep=None):
-    """Archive generated alternatives after a decision, preserving human records."""
-    con.execute("""UPDATE skip_records SET status='superseded' WHERE asset_key=? AND source_key=?
+def retire_proposals(con, asset, kind, keep=None, section=None):
+    """Retire only overlapping machine alternatives after a local decision."""
+    sql = """UPDATE skip_records SET status='superseded' WHERE asset_key=? AND source_key=?
       AND media_type=? AND season=? AND episode=? AND ABS(duration_ms-?)<=2000 AND segment_type=?
       AND status='pending' AND source IN ('audio','chapter','theintrodb','audio_repetition','episcene')
-      AND id<>? AND NOT EXISTS(SELECT 1 FROM skip_auto_evidence e WHERE e.record_id=skip_records.id AND e.human_review=1)""",
-      (*(asset[key] for key in ('asset_key','source_key','media_type','season','episode','duration_ms')), kind, keep or -1))
+      AND id<>? AND NOT EXISTS(SELECT 1 FROM skip_auto_evidence e WHERE e.record_id=skip_records.id AND e.human_review=1)"""
+    args = [*(asset[key] for key in ('asset_key','source_key','media_type','season','episode','duration_ms')),
+            kind, keep or -1]
+    if section is not None:
+        sql += ' AND start_ms<? AND end_ms>?'
+        args.extend((section['end_ms'], section['start_ms']))
+    con.execute(sql, args)
 
 
 def consolidate_proposals(con, asset, kind):
@@ -567,7 +583,7 @@ def consolidate_proposals(con, asset, kind):
 def store_proposal(con, asset, kind, start, end, source, confidence=0, evidence=None):
     """Keep the strongest matching proposal, independent of the reference count."""
     asset = dict(asset)
-    if protected(con, asset, kind):
+    if protected(con, asset, kind, {'start_ms': start, 'end_ms': end}):
         return None
     from skip_scene import enabled as scene_enabled
     if scene_enabled(con):
@@ -606,10 +622,14 @@ def maintain_proposals(con):
     groups = con.execute("""SELECT DISTINCT asset_key,source_key,media_type,season,episode,duration_ms,segment_type
       FROM skip_records WHERE status='pending' AND source IN ('audio','chapter','theintrodb','audio_repetition')""").fetchall()
     for row in groups:
-        if protected(con, row, row['segment_type']):
-            retire_proposals(con, row, row['segment_type'])
-        else:
-            consolidate_proposals(con, row, row['segment_type'])
+        # An earlier accepted intro must not erase a different intro.
+        decided = con.execute("""SELECT start_ms,end_ms FROM skip_records WHERE
+          asset_key=? AND segment_type=? AND ABS(duration_ms-?)<=2000
+          AND status IN ('approved','rejected')""",
+          (row['asset_key'], row['segment_type'], row['duration_ms'])).fetchall()
+        for decision in decided:
+            retire_proposals(con, row, row['segment_type'], section=decision)
+        consolidate_proposals(con, row, row['segment_type'])
     # Old scores alone are not enough: the normal worker verifies current files,
     # unique position and both boundaries before publishing. Keep the daily ledger.
     if con.execute('SELECT 1 FROM skip_auto_settings WHERE enabled=1 LIMIT 1').fetchone():
@@ -692,7 +712,9 @@ def publish(con, asset, kind, evidence):
             or evidence['confidence'] < AUTO_CONFIDENCE or not evidence['votes']
             or not valid_range(kind, evidence['start'], evidence['end'], asset['duration_ms'])):
         return False
-    if not enabled(con, asset["playlist_id"]) or protected(con, asset, kind):
+    if (not enabled(con, asset["playlist_id"])
+            or protected(con, asset, kind,
+                         {'start_ms': evidence['start'], 'end_ms': evidence['end']})):
         return False
     current = con.execute("SELECT * FROM skip_assets WHERE asset_key=?", (asset["asset_key"],)).fetchone()
     if (not current or any(current[key] != asset[key] for key in ("source_key", "media_type", "season", "episode", "playlist_id"))
@@ -729,7 +751,8 @@ def publish(con, asset, kind, evidence):
         return False
     con.execute("INSERT OR REPLACE INTO skip_auto_evidence VALUES(?,?,0)", (saved["id"], json.dumps(evidence)))
     con.execute("UPDATE skip_records SET status='approved',reviewed_at=? WHERE id=? AND status='pending'", (now(), saved["id"]))
-    retire_proposals(con, asset, kind, saved['id'])
+    retire_proposals(con, asset, kind, saved['id'],
+                     {'start_ms': evidence['start'], 'end_ms': evidence['end']})
     return True
 
 
@@ -825,7 +848,7 @@ def _trusted_markers(con, row, kind):
 
 def bootstrap(con, asset, kind, busy=lambda: False):
     """Run V3.1 episode consensus entirely from the bounded cached windows."""
-    if not enabled(con, asset['playlist_id']) or protected(con, asset, kind):
+    if not enabled(con, asset['playlist_id']):
         return False
     current = con.execute('SELECT * FROM skip_assets WHERE asset_key=?', (asset['asset_key'],)).fetchone()
     if (not current or any(current[k] != asset[k] for k in ('source_key','season','episode','playlist_id'))
@@ -920,7 +943,7 @@ def bootstrap(con, asset, kind, busy=lambda: False):
     if saved:
         # REVIEW remains pending. Only V3.1 AUTO_CONFIRMED evidence can pass
         # skip_release.detector_release_ready().
-        retire_proposals(con, asset, kind, saved['id'])
+        retire_proposals(con, asset, kind, saved['id'], {'start_ms': start, 'end_ms': end})
     return bool(saved)
 
 def refresh_neighbour_consensus(db, asset, kind, busy=lambda: False):

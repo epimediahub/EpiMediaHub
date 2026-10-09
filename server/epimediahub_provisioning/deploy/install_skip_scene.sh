@@ -8,11 +8,11 @@ SOURCE_REF="${2:-}"
 [[ "$(id -u)" == 0 ]] || { echo 'Bitte mit sudo ausführen.'; exit 1; }
 if [[ "$MODE" == compute ]]; then
   BASE="${EPIMEDIAHUB_WORKER_DIR:-/opt/epimediahub/analysis}"
-  FILES=(skip_analysis.py skip_automation.py skip_markers.py skip_detector_v2.py skip_detector_v3.py skip_remote_client.py skip_remote_protocol.py skip_remote_worker.py skip_visual.py skip_scene.py skip_release.py)
+  FILES=(skip_analysis.py skip_automation.py skip_markers.py skip_detector_v2.py skip_detector_v3.py skip_remote_client.py skip_remote_protocol.py skip_remote_worker.py skip_visual.py skip_scene.py skip_release.py skip_intro_sections.py)
   test ! -f "$BASE/skip_remote_role.json"
 else
   BASE="${EPIMEDIAHUB_APP_DIR:-/opt/epimediahub/provisioning}"
-  FILES=(skip_analysis.py skip_automation.py skip_analysis_worker.py skip_markers.py skip_detector_v2.py skip_detector_v3.py skip_remote_client.py skip_remote_protocol.py skip_visual.py skip_scene.py skip_release.py templates/skip_markers.html)
+  FILES=(skip_analysis.py skip_automation.py skip_analysis_worker.py skip_markers.py skip_detector_v2.py skip_detector_v3.py skip_remote_client.py skip_remote_protocol.py skip_visual.py skip_scene.py skip_release.py skip_intro_sections.py templates/skip_markers.html)
   test -f "$BASE/skip_remote_role.json"
   test -f "$BASE/skip_dashboard_stats.py"
 fi

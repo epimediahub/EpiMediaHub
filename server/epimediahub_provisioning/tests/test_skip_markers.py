@@ -109,6 +109,29 @@ class SkipMarkersTest(unittest.TestCase):
         with db() as con:
             self.assertEqual(con.execute("SELECT status FROM skip_records WHERE id=?", (first,)).fetchone()[0], "superseded")
 
+    def test_provider_preroll_and_series_intro_both_reach_the_player(self):
+        # 00:00-00:19 provider logo; 03:38-03:45 series title sequence.
+        provider = self.submit(self.mark | dict(start_ms=0, end_ms=19_000)).get_json()['id']
+        series = self.submit(self.mark | dict(start_ms=218_000, end_ms=225_000)).get_json()['id']
+        self.assertEqual(self.review(provider).status_code, 302)
+        self.assertEqual(self.review(series).status_code, 302)
+        with db() as con:
+            self.assertEqual(con.execute(
+                "SELECT COUNT(*) FROM skip_records WHERE status='approved'").fetchone()[0], 2)
+        # Only an authenticated administrator can classify the kind of intro.
+        path = f"/admin/skip/{provider}/intro-role"
+        self.assertEqual(self.admin.post(path, data={'csrf': 'invalid', 'intro_role': 'provider'}).status_code, 403)
+        self.assertEqual(self.admin.post(path, data={'csrf': self.csrf, 'intro_role': 'bogus'}).status_code, 400)
+        self.assertEqual(self.admin.post(path, data={'csrf': self.csrf, 'intro_role': 'provider'}).status_code, 302)
+        self.assertEqual(self.admin.post(f"/admin/skip/{series}/intro-role",
+                            data={'csrf': self.csrf, 'intro_role': 'series'}).status_code, 302)
+        markers = self.lookup().get_json()['segments']
+        self.assertEqual([(m['start_ms'],m['end_ms']) for m in markers],
+                         [(0,19_000),(218_000,225_000)])
+        self.assertEqual([m['intro_role'] for m in markers], ['provider','series'])
+        self.assertEqual([m['label'] for m in markers],
+                         ['Vorspann überspringen','Intro überspringen'])
+
     def test_explicit_absence_can_be_reviewed_and_withdrawn(self):
         record = self.submit(self.mark | dict(disabled=True, start_ms=0, end_ms=0)).get_json()["id"]
         self.review(record, disabled="1")

@@ -1,0 +1,58 @@
+name: EpiScene dual intro sections - regression CI
+
+on:
+  push:
+    branches: [feature/episcene-provider-series-intros]
+    paths:
+      - 'server/epimediahub_provisioning/**'
+      - '.github/workflows/episcene-multi-intro-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: server/epimediahub_provisioning:server/epimediahub_provisioning/tests
+      EPIMEDIAHUB_SECURE_COOKIES: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install runtime dependencies
+        run: |
+          python -m pip install -r server/epimediahub_provisioning/requirements.txt
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg libchromaprint1
+      - name: Compile all backend Python sources
+        run: |
+          python -m compileall -q server/epimediahub_provisioning
+          python -m py_compile server/epimediahub_provisioning/deploy/install_episcene_multi_intro_safe.py
+      - name: Verify strict source-hunk transplant preserves independent changes
+        run: python server/epimediahub_provisioning/deploy/install_episcene_multi_intro_safe.py selftest
+      - name: Verify 3-way overlay against pinned parent without losing user additions
+        run: |
+          set -euo pipefail
+          base=033271aaab94554652af866f4dadd0f06ec4d89f
+          mkdir -p /tmp/episcene-merge/baseline/templates
+          for file in skip_markers.py skip_automation.py skip_release.py skip_scene.py templates/skip_markers.html; do
+            curl -fsSL "https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$base/server/epimediahub_provisioning/$file" -o "/tmp/episcene-merge/baseline/$file"
+            cp "/tmp/episcene-merge/baseline/$file" /tmp/episcene-merge/original
+            { printf '# independent_playlist_retained\n'; cat /tmp/episcene-merge/original; } > "/tmp/episcene-merge/baseline/$file"
+            diff3 -m "/tmp/episcene-merge/baseline/$file" "/tmp/episcene-merge/original" "server/epimediahub_provisioning/$file" >"/tmp/episcene-merge/merged"
+            grep -Fq 'independent_playlist_retained' "/tmp/episcene-merge/merged"
+          done
+      - name: Validate deploy script syntax
+        run: bash -n server/epimediahub_provisioning/deploy/install_skip_scene.sh
+      - name: Test dual intro dashboard and player protocol
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p test_skip_markers.py -v
+      - name: Test bulk review and conflict resolution
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p test_skip_analysis_bulk_review.py -v
+      - name: Test analysis deduplication and protection
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p test_skip_analysis_dedup.py -v
+      - name: Test EpiScene audio/visual integration
+        run: python -m unittest discover -s server/epimediahub_provisioning/tests -p test_skip_analysis_episcene.py -v

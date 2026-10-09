@@ -46,6 +46,7 @@ def choose(rows):
 def approve_rows(con, rows, human=False):
     """Resolve alternatives per actual file/kind/runtime, without leaving duplicates pending."""
     from skip_markers import review_record, wake_reference_jobs
+    from skip_intro_sections import overlaps, section_groups
     buckets = defaultdict(list)
     for row in rows:
         buckets[(row['asset_key'], row['segment_type'])].append(row)
@@ -57,13 +58,19 @@ def approve_rows(con, rows, human=False):
             if not batches or row['duration_ms'] - batches[-1][0]['duration_ms'] > 2000:
                 batches.append([])
             batches[-1].append(row)
+        # Time-disjoint provider and series intros are independent sections.
+        batches = [section for runtime_group in batches for section in
+                   ([runtime_group] if any(r['disabled'] for r in runtime_group)
+                    else section_groups(runtime_group))]
         for batch in batches:
             first = batch[0]
-            decided = con.execute('''SELECT r.source,r.status,COALESCE(e.human_review,0) human_review
+            decided = con.execute('''SELECT r.source,r.status,r.start_ms,r.end_ms,
+                   COALESCE(e.human_review,0) human_review
               FROM skip_records r LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
               WHERE r.asset_key=? AND r.segment_type=?
               AND ABS(r.duration_ms-?)<=2000 AND r.status IN ('approved','rejected')''',
               (first['asset_key'], first['segment_type'], first['duration_ms'])).fetchall()
+            decided = [r for r in decided if any(overlaps(r, candidate) for candidate in batch)]
             blocked = con.execute('''SELECT 1 FROM skip_auto_blocks WHERE asset_key=? AND kind=?
               AND ABS(duration_ms-?)<=2000 LIMIT 1''',
               (first['asset_key'], first['segment_type'], first['duration_ms'])).fetchone()
@@ -146,16 +153,23 @@ def accept_pending(con, asset_key=None, playlist_id=None):
         if isinstance(evidence, dict) and evidence.get('method') == 'reviewed_audio_match':
             reviewed[(row['asset_key'], row['segment_type'])].append(row)
     from skip_automation import BOUNDARY_TOLERANCE
-    disputed = {key for key, versions in reviewed.items()
-                if max(r['start_ms'] for r in versions)-min(r['start_ms'] for r in versions)>BOUNDARY_TOLERANCE
-                or max(r['end_ms'] for r in versions)-min(r['end_ms'] for r in versions)>BOUNDARY_TOLERANCE}
-    rows = [r for r in rows if (r['asset_key'], r['segment_type']) not in disputed]
+    from skip_intro_sections import overlaps, section_groups
+    disputed_ids = set()
+    for versions in reviewed.values():
+        # Independent intro sections must not contaminate consensus decisions.
+        for section in section_groups(versions):
+            if (max(r['start_ms'] for r in section)-min(r['start_ms'] for r in section)>BOUNDARY_TOLERANCE
+                    or max(r['end_ms'] for r in section)-min(r['end_ms'] for r in section)>BOUNDARY_TOLERANCE):
+                disputed_ids.update(r['id'] for r in section)
+    rows = [r for r in rows if r['id'] not in disputed_ids]
     # A device proposal represents a correction in progress, not a machine competitor.
     rows = [r for r in rows if not con.execute('''SELECT 1 FROM skip_records d
       LEFT JOIN skip_auto_evidence e ON e.record_id=d.id WHERE d.asset_key=? AND d.segment_type=?
       AND ABS(d.duration_ms-?)<=2000 AND d.status='pending'
+      AND d.start_ms<? AND d.end_ms>?
       AND (d.source='device' OR e.human_review=1) LIMIT 1''',
-      (r['asset_key'], r['segment_type'], r['duration_ms'])).fetchone()]
+      (r['asset_key'], r['segment_type'], r['duration_ms'],
+       r['end_ms'], r['start_ms'])).fetchone()]
     return approve_rows(con, rows)['approved']
 
 

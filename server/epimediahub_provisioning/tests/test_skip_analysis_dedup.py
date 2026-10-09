@@ -38,8 +38,8 @@ class ProposalTests(fixtures.AutomationFixture, unittest.TestCase):
             self.assertEqual(con.execute('SELECT COUNT(*) FROM skip_records').fetchone()[0], 5)
 
     def test_own_pending_marker_and_rejection_block_generated_replacement(self):
-        self.marker(self.target, status='pending')
         with self.db() as con:
+            add_record(con, self.target, 'intro', 48000, 74530, False, source='device')
             self.assertIsNone(auto.store_proposal(con, self.target, 'intro', 48000,74530,'audio',.99))
             self.assertEqual(con.execute('SELECT COUNT(*) FROM skip_records').fetchone()[0],1)
             con.execute("UPDATE skip_records SET status='rejected'")
@@ -98,15 +98,17 @@ class MaintenanceTests(fixtures.AutomationFixture, unittest.TestCase):
                     auto.migrate(con)
                     self.assertEqual(con.execute('SELECT status,attempts FROM skip_jobs').fetchone()[:],('review',2))
 
-    def test_existing_human_choice_retires_generated_proposals_and_is_not_requeued(self):
+    def test_existing_disjoint_human_choice_does_not_erase_another_intro(self):
         self.old_job()
-        manual = self.marker(self.target)
+        manual = self.marker(self.target)  # Different section at 04:43.
         with self.db() as con:
             auto.migrate(con)
-            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE status='pending'").fetchone()[0],0)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_records WHERE status='pending'").fetchone()[0],1)
             row = con.execute('SELECT status,start_ms,end_ms FROM skip_records WHERE id=?',(manual,)).fetchone()
             self.assertEqual(row[:],('approved',283043,309573))
-            self.assertEqual(con.execute('SELECT status FROM skip_jobs').fetchone()[0],'review')
+            # An independent candidate is not silently discarded by a review.
+            candidate = con.execute("SELECT start_ms,end_ms FROM skip_records WHERE status='pending'").fetchone()
+            self.assertTrue(candidate['end_ms'] < row['start_ms'])
 
 
 class PublicationGuards(fixtures.AutomationFixture, unittest.TestCase):
