@@ -67,6 +67,30 @@ jobs:
           test -n "$PROJECT_ROOT"
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
 
+      - name: Pin Gradle toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+
+      - name: Install v1.0.33 source and isolated VPN beta adapter
+        run: |
+          bash build_tools/install_android_v1033_source.sh
+          python3 android/v1.0.34-vpn/patch_wireguard_spike.py
+          python3 android/v1.0.34-vpn/patch_playlist_routing.py
+          python3 build_tools/verify_intro_sound_v128.py "$PROJECT_ROOT/app/src/main/res/raw/epimedia_intro_heartbeat_cinema.wav"
+
       - name: Map existing app device auth and identity code for secure auto provisioning
         run: |
           python - <<'PY'
@@ -100,30 +124,6 @@ jobs:
               message:'inspect(android): record existing device ID and session-token source anchors',
               content:contents.toString('base64')
             });
-      - name: Pin Gradle toolchain
-        shell: bash
-        run: |
-          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
-          plugins {
-              id("com.android.application") version "8.5.2" apply false
-              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
-              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
-          }
-          EOF
-          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
-          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-          rootProject.name = "EpiMediaHubAndroid"
-          include(":app")
-          EOF
-
-      - name: Install v1.0.33 source and isolated VPN beta adapter
-        run: |
-          bash build_tools/install_android_v1033_source.sh
-          python3 android/v1.0.34-vpn/patch_wireguard_spike.py
-          python3 android/v1.0.34-vpn/patch_playlist_routing.py
-          python3 build_tools/verify_intro_sound_v128.py "$PROJECT_ROOT/app/src/main/res/raw/epimedia_intro_heartbeat_cinema.wav"
-
       - name: Install permanent release signing key
         shell: bash
         run: |
