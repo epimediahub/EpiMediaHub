@@ -44,12 +44,25 @@ fun V141VpnSettingsHost(
     } else {
         Box(Modifier.fillMaxSize()) {
             settingsContent()
-            V141FocusButton(
-                label = "VPN & Netzwerk",
-                accent = accent,
-                onClick = { open = true },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(28.dp)
-            )
+            Column(
+                modifier = Modifier.align(Alignment.BottomEnd).padding(28.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Geräte-ID: " + V142VpnAutoProvision.registeredDeviceId(context),
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.background(Color(0xFF07111D), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+                V141FocusButton(
+                    label = "VPN & Netzwerk",
+                    accent = accent,
+                    onClick = { open = true }
+                )
+            }
         }
     }
 }
@@ -102,6 +115,22 @@ private fun V141VpnSettingsScreen(
     var vpnUp by remember { mutableStateOf(false) }
     val hasProfile = V134VpnSession.hasProfile(context)
     val stableDeviceId = V142VpnAutoProvision.registeredDeviceId(context)
+    LaunchedEffect(stableDeviceId) {
+        val license = withContext(Dispatchers.IO) {
+            runCatching { V142VpnAutoProvision.checkStatus(context) }
+        }
+        license.onSuccess {
+            if (!busy && !vpnUp) {
+                status = when (it.status) {
+                    "READY" -> "VPN-Lizenz bestätigt. Du kannst jetzt verbinden."
+                    "NO_VPN_LICENSE" -> "Für dieses Gerät ist noch kein VPN freigeschaltet."
+                    "AWAITING_DEVICE_KEY" -> "VPN gebucht. Beim Verbinden richtet die App den Zugang automatisch ein."
+                    "WAITING_FOR_SERVER" -> "VPN-Freigabe wird auf dem Finnland-Server vorbereitet."
+                    else -> "VPN-Lizenzstatus: " + it.status
+                }
+            }
+        }
+    }
 
     fun verifyVpn() {
         if (busy) return
