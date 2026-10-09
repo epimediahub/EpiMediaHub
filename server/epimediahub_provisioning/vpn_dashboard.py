@@ -421,6 +421,7 @@ def install(app, db):
         body = request.get_json(silent=True)
         if not isinstance(body, dict) or not isinstance(body.get("peers"), list) or len(body["peers"]) > 10000:
             abort(400)
+        server_key = public_key(body.get("server_public_key", ""))
         with db() as con:
             con.execute("BEGIN IMMEDIATE")
             rows = {r["id"]: r for r in con.execute(JOINED)}
@@ -439,6 +440,9 @@ def install(app, db):
             if seen != set(rows):
                 abort(409)
             con.execute("INSERT INTO vpn_meta VALUES('agent_applied_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (stamp(),))
+            con.execute("""INSERT INTO vpn_meta(key,value) VALUES('server_public_key',?)
+                           ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                        (server_key,))
         return jsonify(status="recorded")
 
     @app.after_request
