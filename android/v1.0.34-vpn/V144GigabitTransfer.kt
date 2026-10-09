@@ -55,7 +55,8 @@ internal object V144GigabitTransfer {
         verify: () -> Unit,
         streams: Int,
         onSample: (V140SpeedTransfer.Sample) -> Unit,
-        fixedFileDownload: Boolean = false
+        fixedFileDownload: Boolean = false,
+        selfHostedToken: String? = null
     ): V140SpeedTransfer.Sample {
         require(bytesPerStream in (256 * 1024)..(64 * MIB))
         require(streams in 1..STREAMS)
@@ -74,7 +75,7 @@ internal object V144GigabitTransfer {
         val started = System.nanoTime()
         try {
             repeat(streams) {
-                val worker = V140SpeedTransfer()
+                val worker = V140SpeedTransfer(selfHostedToken)
                 parent.registerWorker(worker)
                 workers.add(worker)
             }
@@ -100,7 +101,9 @@ internal object V144GigabitTransfer {
                         verify, sampleUpdate
                     )
                     else worker.downloadLive(
-                        "$url?bytes=$bytesPerStream",
+                        if (selfHostedToken != null)
+                            "$url?bytes=$bytesPerStream&stream=$index"
+                        else "$url?bytes=$bytesPerStream",
                         bytesPerStream, verify, sampleUpdate
                     )
                 })

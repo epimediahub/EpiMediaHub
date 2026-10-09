@@ -50,17 +50,19 @@ import kotlin.math.sin
 import kotlin.math.min
 
 /**
- * Real, finite HTTP throughput test. Cloudflare speed.cloudflare.com/__down and
- * /__up are public speed-test endpoints. No mock readings or credential uploads.
+ * Real, finite HTTP throughput test. Primary: authenticated EpiMediaHub Hetzner
+ * service; bounded Cloudflare/Hetzner fallbacks only on server rate limits.
+ * No mock readings or credential uploads.
  * Requires the current playlist's route to remain verified throughout the test.
  */
 internal object V140SpeedTest {
     data class Result(val route: String, val ip: String, val latencyMs: Long,
         val downloadMbps: Double, val uploadMbps: Double?, val bytes: Long,
         val singleStreamMbps: Double = 0.0, val dualStreamMbps: Double = 0.0,
-        val downloadProvider: String = "Cloudflare", val partial: Boolean = false)
+        val downloadProvider: String = "EpiMediaHub", val partial: Boolean = false)
 
     private const val HOST = "https://speed.cloudflare.com"
+    private const val OWN_HOST = "https://speedtest.epimediahub.com"
     private const val HETZNER_FILE = "https://hel1-speed.hetzner.com/100MB.bin"
     private const val HETZNER_FSN1_FILE = "https://fsn1-speed.hetzner.com/100MB.bin"
     private data class DownPlan(
@@ -98,21 +100,28 @@ internal object V140SpeedTest {
         }
         verify()
 
+        var ownSession: String? = null
         fun runDownloads(provider: String): DownPlan {
             val source = when (provider) {
+                "EpiMediaHub" -> "$OWN_HOST/v1/down"
                 "Cloudflare" -> "$HOST/__down"
                 "Hetzner HEL1" -> HETZNER_FILE
                 "Hetzner FSN1" -> HETZNER_FSN1_FILE
                 else -> error("Unbekannter Speedtest-Anbieter")
             }
-            val fixedFile = provider != "Cloudflare"
-            val singleBytes = if (fixedFile) 4 * 1024 * 1024 else WARMUP_BYTES
+            val selfHosted = provider == "EpiMediaHub"
+            if (selfHosted) checkNotNull(ownSession) { "Speedtest-Sitzung fehlt" }
+            val fixedFile = provider.startsWith("Hetzner")
+            val singleBytes = if (fixedFile || selfHosted) 4 * 1024 * 1024 else WARMUP_BYTES
             progress("HTTP-Latenz ($provider) wird gemessen …")
             val latencyStart = SystemClock.elapsedRealtimeNanos()
             if (fixedFile) {
                 transfer.downloadFilePrefixLive(source, 32, verify) {}
             } else {
-                transfer.download("$source?bytes=32", 32, verify)
+                transfer.download(
+                    if (selfHosted) "$source?bytes=32&stream=0" else "$source?bytes=32",
+                    32, verify
+                )
             }
             val latency = ((SystemClock.elapsedRealtimeNanos() - latencyStart) / 1_000_000)
                 .coerceAtLeast(1L)
@@ -120,13 +129,19 @@ internal object V140SpeedTest {
             val one = if (fixedFile) {
                 transfer.downloadFilePrefixLive(source, singleBytes, verify) {}
             } else {
-                transfer.download("$source?bytes=$singleBytes", singleBytes, verify)
+                transfer.download(
+                    if (selfHosted) "$source?bytes=$singleBytes&stream=0"
+                    else "$source?bytes=$singleBytes", singleBytes, verify
+                )
             }
             progress("Diagnose: 2 parallele HTTPS-Verbindungen ($provider) …")
             val two = V144GigabitTransfer.measureWithStreams(
-                transfer, source, singleBytes, false, verify, 2, {}, fixedFile
+                transfer, source, singleBytes, false, verify, 2, {}, fixedFile,
+                if (selfHosted) ownSession else null
             )
             val fourEach = if (fixedFile) 8 * 1024 * 1024
+                else if (selfHosted) V144GigabitTransfer.downloadBytesPerStream(one.mbps)
+                    .coerceAtMost(32 * 1024 * 1024)
                 else V144GigabitTransfer.downloadBytesPerStream(one.mbps)
             val total = fourEach.toLong() * 4L
             live(Live(Phase.DOWNLOAD, 0.0, 0f))
@@ -135,16 +150,14 @@ internal object V140SpeedTest {
                 transfer, source, fourEach, false, verify, 4, { sample ->
                     live(Live(Phase.DOWNLOAD, sample.mbps,
                         (sample.bytes.toDouble() / total).toFloat().coerceIn(0f, 1f)))
-                }, fixedFile
+                }, fixedFile, if (selfHosted) ownSession else null
             )
             return DownPlan(latency, one, two, four, provider)
         }
 
-        // Single small server probes succeeded from the Finland VPS. The Fire TV
-        // may still hit rate limits during repeated larger parallel transfers.
-        // Check both independent Hetzner sites; NEVER change Android network pin.
-        // A 403/429 is an invalid result, not "0 Mbit/s".
-        val download = try {
+        // Primary provider is our own verified HTTPS origin. The short-lived
+        // token is tied to the egress IP and never passed to public backups.
+        fun runBackupDownloads(): DownPlan = try {
             runDownloads("Cloudflare")
         } catch (cloudBlocked: V146SpeedServerException) {
             if (cloudBlocked.httpStatus !in listOf(403, 429)) throw cloudBlocked
@@ -171,24 +184,39 @@ internal object V140SpeedTest {
                 }
             }
         }
+
+        val download = try {
+            ownSession = transfer.openSelfHostedSession(verify)
+            runDownloads("EpiMediaHub")
+        } catch (ownBusy: V146SpeedServerException) {
+            // Rate-limited or temporarily overloaded: existing public fallbacks
+            // remain available, but a VPN/route failure is NEVER a fallback.
+            if (ownBusy.httpStatus !in listOf(429, 503)) throw ownBusy
+            verify()
+            progress("EpiMediaHub-Speedtest HTTP ${ownBusy.httpStatus}; alternativer Testserver …")
+            runBackupDownloads()
+        }
         verify()
         live(Live(Phase.UPLOAD, 0.0, 0f))
-        progress("Upload: 4 parallele HTTPS-Verbindungen (Cloudflare) …")
+        val uploadOwn = download.provider == "EpiMediaHub"
+        val uploadProvider = if (uploadOwn) "EpiMediaHub" else "Cloudflare"
+        val uploadUrl = if (uploadOwn) "$OWN_HOST/v1/up" else "$HOST/__up"
+        progress("Upload: 4 parallele HTTPS-Verbindungen ($uploadProvider) …")
         val uploadEach = V144GigabitTransfer.uploadBytesPerStream(download.four.mbps)
-        // Hetzner's public static test files have no upload endpoint.
-        // If Cloudflare denies the POST, report upload unavailable, never 0 Mbit/s.
+        // Each upload request fits the self-hosted 16 MiB limit; 4 streams fit
+        // the 64 MiB session budget. Upload failure is never displayed as 0.
         val up: V140SpeedTransfer.Sample? = try {
-            V144GigabitTransfer.measure(
-                transfer, "$HOST/__up", uploadEach, true, verify
-            ) { sample ->
-                live(Live(Phase.UPLOAD, sample.mbps,
-                    (sample.bytes.toDouble() / (uploadEach.toLong() * 4L))
-                        .toFloat().coerceIn(0f, 1f)))
-            }
+            V144GigabitTransfer.measureWithStreams(
+                transfer, uploadUrl, uploadEach, true, verify, 4, { sample ->
+                    live(Live(Phase.UPLOAD, sample.mbps,
+                        (sample.bytes.toDouble() / (uploadEach.toLong() * 4L))
+                            .toFloat().coerceIn(0f, 1f)))
+                }, false, if (uploadOwn) ownSession else null
+            )
         } catch (blocked: V146SpeedServerException) {
-            if (blocked.httpStatus != 403 && blocked.httpStatus != 429) throw blocked
+            if (blocked.httpStatus !in listOf(403, 429, 503)) throw blocked
             verify()
-            progress("Upload von Cloudflare abgewiesen (HTTP ${blocked.httpStatus}); " +
+            progress("Upload von $uploadProvider abgewiesen (HTTP ${blocked.httpStatus}); " +
                 "Downloadmessung ist gültig, Upload nicht verfügbar.")
             null
         }
@@ -541,7 +569,7 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
                                 completed = 1f
                                 speed = measured.downloadMbps
                                 status = if (measured.partial)
-                                    "Download erfolgreich. Upload vom Testserver blockiert (HTTP 403/429)."
+                                    "Download erfolgreich. Upload vom Testserver nicht verfügbar."
                                 else "Messung erfolgreich abgeschlossen."
                             }
                         } catch (e: CancellationException) {
@@ -582,9 +610,9 @@ internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Bo
         }
         if (playlistId == null)
             Text("Bitte zuerst eine Playlist auswählen.", color = Color(0xFFFFAFA9))
-        Text("Speedtest über Cloudflare; bei HTTP 403/429 alternative Server " +
-            "Hetzner HEL1 und FSN1. " +
-            "4 Streams plus 1-/2-Stream-Vergleich, maximal etwa 320 MiB Testdaten. " +
+        Text("Speedtest über eigenen EpiMediaHub-Hetzner-Server; bei HTTP 429/503 " +
+            "alternative Testserver Cloudflare, Hetzner HEL1 und FSN1. " +
+            "4 Streams plus 1-/2-Stream-Vergleich, begrenztes Testvolumen. " +
             "HTTPS-Latenz inklusive TLS, kein ICMP-Ping. " +
             "Ohne bestätigte VPN-Route kein ungeschützter Fallback. " +
             "Speedtest-Werte entsprechen nicht zwingend der Geschwindigkeit eines IPTV-Anbieters.",
