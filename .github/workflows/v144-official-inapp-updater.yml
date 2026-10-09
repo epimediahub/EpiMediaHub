@@ -1,0 +1,162 @@
+name: Publish signed v1.0.44 through official EpiMediaHub in-app updater
+
+on:
+  push:
+    branches: [feature/vpn-v144-gigabit-speedtest]
+    paths:
+      - '.github/workflows/v144-official-inapp-updater.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: epimediahub-android-rolling-updater
+  cancel-in-progress: false
+
+jobs:
+  official-updater:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for successful matching signed Android 1.0.44 build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 110); do
+            JSON=$(gh run list --repo epimediahub/EpiMediaHub \
+              --workflow android-v144-gigabit-qa.yml \
+              --branch feature/vpn-v144-gigabit-speedtest \
+              --limit 20 \
+              --json databaseId,headSha,status,conclusion)
+            MATCH=$(printf '%s' "$JSON" | jq -r --arg sha "$GITHUB_SHA" \
+              '[.[] | select(.headSha == $sha)] | first | .databaseId // empty')
+            if [ -n "$MATCH" ]; then
+              STATE=$(printf '%s' "$JSON" | jq -r --argjson id "$MATCH" \
+                '.[] | select(.databaseId == $id) | .status')
+              if [ "$STATE" = completed ]; then
+                CONCLUSION=$(printf '%s' "$JSON" | jq -r --argjson id "$MATCH" \
+                  '.[] | select(.databaseId == $id) | .conclusion')
+                test "$CONCLUSION" = success || {
+                  echo "Refusing official update: signed QA $MATCH = $CONCLUSION" >&2
+                  exit 1
+                }
+                echo "SIGNED_RUN=$MATCH" >> "$GITHUB_ENV"
+                echo "Exact signed QA verified: $MATCH"
+                exit 0
+              fi
+            fi
+            echo "Awaiting full signed build and tests: $attempt/110"
+            sleep 30
+          done
+          echo "Signed Android QA timed out; leaving existing updater unchanged" >&2
+          exit 1
+
+      - name: Download verified universal, ARM64 and ARMv7 APKs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p qa dist
+          gh run download "$SIGNED_RUN" --repo epimediahub/EpiMediaHub \
+            --name EpiMediaHub-Official-v1.0.44-gigabit-private-qa --dir qa
+          (cd qa && sha256sum -c SHA256SUMS.txt)
+          for ABI in arm64-v8a armeabi-v7a universal; do
+            case "$ABI" in
+              arm64-v8a) INPUT=EpiMediaHub-Official-v1.0.44-ARM64-PILOT.apk ;;
+              armeabi-v7a) INPUT=EpiMediaHub-Official-v1.0.44-ARMv7-PILOT.apk ;;
+              universal) INPUT=EpiMediaHub-Official-v1.0.44-Universal-PILOT.apk ;;
+            esac
+            test -s "qa/$INPUT"
+            cp "qa/$INPUT" "dist/EpiMediaHub_Android_v1.0.44-$ABI.apk"
+          done
+          cp dist/EpiMediaHub_Android_v1.0.44-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+
+      - name: Verify monotonic update and prepare SHA256-validated updater manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=v0.7.0-test
+          gh release view "$TAG" --repo epimediahub/EpiMediaHub >/dev/null
+          mkdir -p previous
+          gh release download "$TAG" --repo epimediahub/EpiMediaHub \
+            --pattern latest.json --dir previous
+          python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          previous=json.loads(Path("previous/latest.json").read_text())
+          current=int(previous.get("versionCode",0))
+          if current > 1044:
+              raise SystemExit("Refusing to downgrade official updater from "+str(current))
+          expected={
+            "arm64-v8a":"EpiMediaHub_Android_v1.0.44-arm64-v8a.apk",
+            "armeabi-v7a":"EpiMediaHub_Android_v1.0.44-armeabi-v7a.apk",
+            "universal":"EpiMediaHub_Android_v1.0.44-universal.apk",
+          }
+          apks={}
+          for abi,name in expected.items():
+              f=Path("dist")/name
+              assert f.is_file() and f.stat().st_size>10_000_000
+              apks[abi]={
+                "url":"https://download.epimediahub.com/android/"+name,
+                "sha256":hashlib.sha256(f.read_bytes()).hexdigest(),
+                "size":f.stat().st_size,
+              }
+          manifest={
+            "version":"1.0.44",
+            "versionCode":1044,
+            "notes":"EpiMediaHub 1.0.44: Live-Gigabit-Speedtest mit vier parallelen HTTPS-Verbindungen, einer 0–1000-Mbit/s-Tacho-Skala und besser lesbarem Fire-TV-Startknopf. Automatische VPN-Freigabe und bestehende App-Aktivierung bleiben erhalten. Mehr Messdatenverbrauch bei schnellem Anschluss.",
+            "apks":apks,
+          }
+          for name in ("latest.json","android-latest.json"):
+              (Path("dist")/name).write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n")
+          assert json.loads(Path("dist/latest.json").read_text())==manifest
+          assert json.loads(Path("dist/android-latest.json").read_text())==manifest
+          print("Updater verified: old versionCode =", current, ", new versionCode = 1044")
+          PY
+
+      - name: Publish verified APK files BEFORE new update manifests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO=epimediahub/EpiMediaHub
+          TAG=v0.7.0-test
+          for asset in dist/*.apk; do
+            timeout 15m gh release upload "$TAG" "$asset" --repo "$REPO" --clobber
+          done
+          timeout 5m gh release upload "$TAG" dist/SHA256SUMS.txt --repo "$REPO" --clobber
+          # Only after all three signed APKs have uploaded successfully,
+          # let clients see the higher version.
+          timeout 5m gh release upload "$TAG" dist/android-latest.json --repo "$REPO" --clobber
+          timeout 5m gh release upload "$TAG" dist/latest.json --repo "$REPO" --clobber
+          gh release edit "$TAG" --repo "$REPO" \
+            --title "EpiMediaHub Android v1.0.44" \
+            --notes-file android/release_notes/v1.0.44.md --prerelease
+          echo "Official updater manifest advanced to v1.0.44"
+
+      - name: Verify official release contains all three signed APK variants
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view v0.7.0-test --repo epimediahub/EpiMediaHub \
+            --json assets --jq '.assets[].name' > published-assets.txt
+          for file in EpiMediaHub_Android_v1.0.44-arm64-v8a.apk \
+              EpiMediaHub_Android_v1.0.44-armeabi-v7a.apk \
+              EpiMediaHub_Android_v1.0.44-universal.apk \
+              latest.json android-latest.json; do
+            grep -Fx "$file" published-assets.txt
+          done
+          echo "Official in-app updater v1.0.44 published with all verified APKs"
