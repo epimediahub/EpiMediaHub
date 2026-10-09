@@ -186,6 +186,34 @@ class CreditPricingTest(unittest.TestCase):
         self.licensing.ensure_license_schema()
         self.assertEqual(437, self.row("SELECT credit_price_cents FROM resellers WHERE id=?", (self.reseller_id,))[0])
 
+    def test_admin_can_grant_lifetime_for_free_without_debit_or_fake_payment(self):
+        device_id = self.make_device("free-admin-device", self.reseller_id)
+        self.assertEqual("TRIAL_ACTIVE", self.status("free-admin-device").get_json()["status"])
+        page = self.admin.get("/admin/credits").get_data(as_text=True)
+        self.assertIn("Lifetime kostenlos freigeben", page)
+        res = self.admin.post(f"/admin/devices/{device_id}/grant-lifetime")
+        self.assertIn("admin_granted", res.location)
+        license_row = self.row(
+            "SELECT source, activated_device_id FROM lifetime_licenses WHERE activated_device_id=?",
+            ("free-admin-device",))
+        self.assertEqual(("admin_grant", "free-admin-device"), tuple(license_row))
+        self.assertEqual("LIFETIME_ACTIVE", self.status("free-admin-device").get_json()["status"])
+        self.assertEqual(0, self.row("SELECT COUNT(*) FROM credit_transactions")[0])
+        self.assertEqual(0, self.row("SELECT COUNT(*) FROM credit_orders")[0])
+        self.assertEqual(0, self.row("SELECT COUNT(*) FROM audit_log WHERE action='retail_payment_confirmed'")[0])
+        self.assertEqual(1, self.row("SELECT COUNT(*) FROM audit_log WHERE action='free_lifetime_granted'")[0])
+        again = self.admin.post(f"/admin/devices/{device_id}/grant-lifetime")
+        self.assertIn("already_active", again.location)
+        self.assertEqual(1, self.row("SELECT COUNT(*) FROM lifetime_licenses")[0])
+
+    def test_only_admin_can_give_free_lifetime_access(self):
+        device_id = self.make_device("free-protected-device", self.reseller_id)
+        self.status("free-protected-device")
+        for client in (self.core.app.test_client(), self.reseller):
+            result = client.post(f"/admin/devices/{device_id}/grant-lifetime")
+            self.assertIn("/admin/login", result.location)
+        self.assertEqual(0, self.row("SELECT COUNT(*) FROM lifetime_licenses")[0])
+
     def test_trial_is_seven_days_and_lifetime_always_costs_one_credit(self):
         response = self.reseller.post("/v1/license/status", json={"device_id": "test-device", "trial_key": "a" * 64})
         payload = response.get_json()

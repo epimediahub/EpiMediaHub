@@ -85,17 +85,24 @@ def _subject_status(con, subject, now):
                 reseller_name=None,remaining_seconds=remaining,trial_started_at=subject["trial_started_at"],
                 trial_expires_at=subject["trial_expires_at"],credit_cost=1)
 
-def _activate_subject(con, subject_id, reseller_id, customer_id, device_id):
+def _activate_subject(con, subject_id, reseller_id, customer_id, device_id, *, admin_grant=False):
+    # Free lifetime is a privileged *admin* operation, never a user-controlled
+    # license parameter. No paid-order receipt or reseller credit is fabricated.
+    if admin_grant and not session.get("admin"):
+        raise PermissionError("Administrator session required for gratis activation")
     existing=con.execute("SELECT * FROM lifetime_licenses WHERE subject_id=? AND status='ACTIVE'",(subject_id,)).fetchone()
     if existing:return existing,False,None
     if reseller_id is not None:
         reseller=con.execute("SELECT id,enabled FROM resellers WHERE id=?",(reseller_id,)).fetchone()
         if reseller is None or not reseller["enabled"]:return None,False,"reseller_invalid"
-        if _balance(con,reseller_id)<1:return None,False,"no_credits"
+        if not admin_grant and _balance(con,reseller_id)<1:return None,False,"no_credits"
     now=iso(utcnow())
     license_id=con.execute("""INSERT INTO lifetime_licenses(subject_id,reseller_id,customer_id,activated_device_id,status,source,activated_at)
-                              VALUES(?,?,?,?, 'ACTIVE',?,?)""",(subject_id,reseller_id,customer_id,device_id,"retail" if reseller_id is None else "credit",now)).lastrowid
-    if reseller_id is not None:
+                              VALUES(?,?,?,?, 'ACTIVE',?,?)""",(subject_id,reseller_id,customer_id,device_id,"admin_grant" if admin_grant else ("retail" if reseller_id is None else "credit"),now)).lastrowid
+    if admin_grant:
+        _audit(con,"admin",None,"free_lifetime_granted","lifetime_license",license_id,
+               amount_eur_cents=0,credits_charged=0,device_id=device_id)
+    elif reseller_id is not None:
         con.execute("""INSERT INTO credit_transactions(reseller_id,amount,kind,license_id,note,created_at)
                        VALUES(?,-1,'activation',?,?,?)""",(reseller_id,license_id,f"Lifetime-Aktivierung {device_id}",now))
     else:
@@ -349,6 +356,30 @@ def admin_adjust_credits(reseller_id):
         con.execute("INSERT INTO credit_transactions(reseller_id,amount,kind,note,created_at) VALUES(?,?,'admin_adjustment',?,?)",
                     (reseller_id,amount,note or "Admin-Anpassung",iso(utcnow())))
     return redirect(url_for("admin_credits",notice="credits_updated"))
+
+
+@app.post("/admin/devices/<int:device_row_id>/grant-lifetime")
+def admin_grant_lifetime(device_row_id):
+    guard=_admin_guard()
+    if guard:return guard
+    with db() as con:
+        con.execute("BEGIN IMMEDIATE")
+        device=con.execute("""SELECT d.*,c.reseller_id FROM devices d
+                              JOIN customers c ON c.id=d.customer_id WHERE d.id=?""",
+                           (device_row_id,)).fetchone()
+        if device is None:abort(404)
+        subject=con.execute("""SELECT * FROM license_subjects
+                               WHERE current_device_id=? ORDER BY id DESC LIMIT 1""",
+                            (device["device_id"],)).fetchone()
+        if subject is None:
+            return redirect(url_for("admin_credits",notice="license_subject_missing"))
+        _,created,error=_activate_subject(
+            con,subject["id"],device["reseller_id"],device["customer_id"],
+            device["device_id"],admin_grant=True
+        )
+        if error:return redirect(url_for("admin_credits",notice=error))
+    return redirect(url_for("admin_credits",
+                            notice="admin_granted" if created else "already_active"))
 
 
 @app.post("/admin/devices/<int:device_row_id>/activate-lifetime")
