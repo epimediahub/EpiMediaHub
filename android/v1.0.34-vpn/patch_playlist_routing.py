@@ -131,7 +131,7 @@ replace(app, "    MaterialTheme(colorScheme = scheme, shapes = shapes) {",
     """    val v134Ready = de.epimediahub.app.vpn.v134RouteReady(context, u.active?.id?.toString())
     MaterialTheme(colorScheme = scheme, shapes = shapes) {""")
 replace(app, "        } else if (kidsSessionActive) {",
-    """        } else if (u.active != null && u.screen != Screen.Playlists && !v134Ready) {
+    """        } else if (u.active != null && u.screen is Screen.Player && !v134Ready) {
             de.epimediahub.app.vpn.V134VpnRouteBlockedScreen(
                 context,
                 u.active!!.id.toString(),
