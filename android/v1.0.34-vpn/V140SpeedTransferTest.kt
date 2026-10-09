@@ -69,15 +69,28 @@ class V140SpeedTransferTest {
         val input = socket.getInputStream()
         val request = line(input).split(' ')
         var length = 0
+        var range: String? = null
         while (true) {
             val header = line(input)
             if (header.isEmpty()) break
             if (header.startsWith("Content-Length:", ignoreCase = true))
                 length = header.substringAfter(':').trim().toInt()
+            if (header.startsWith("Range:", ignoreCase = true))
+                range = header.substringAfter(':').trim()
         }
         val output = socket.getOutputStream()
         if (request[1] == "/redirect") {
             output.write("HTTP/1.1 302 Found\r\nLocation: /down\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+        } else if (request[1] == "/forbidden") {
+            output.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+        } else if (request[1] == "/range") {
+            val requested = range?.removePrefix("bytes=0-")?.toIntOrNull()?.plus(1)
+            val actual = (requested ?: 256 * 1024).coerceIn(1, 256 * 1024)
+            val bytes = ByteArray(actual) { (it % 251).toByte() }
+            output.write(("HTTP/1.1 206 Partial Content\r\n" +
+                "Content-Range: bytes 0-${actual - 1}/104857600\r\n" +
+                "Content-Length: $actual\r\nConnection: close\r\n\r\n").toByteArray())
+            output.write(bytes)
         } else {
             requests.incrementAndGet()
             val data = if (request[1] == "/up") {
@@ -187,6 +200,38 @@ class V140SpeedTransferTest {
             transfer, "$url/up", 256 * 1024, true, {}, {})
         assertEquals(4L * 256 * 1024, up.bytes)
         assertEquals(4 * 256 * 1024, uploaded.get())
+    }
+
+    @Test fun forbiddenCloudflareDownloadIsTypedRemoteRejection() {
+        val error = assertThrows(V146SpeedServerException::class.java) {
+            V140SpeedTransfer().download("$url/forbidden", 32) {}
+        }
+        assertEquals(403, error.httpStatus)
+    }
+
+    @Test fun fixedFileRangeReadsExactlyBoundedBytesWithVPNVerification() {
+        val transfer = V140SpeedTransfer()
+        val checkCalls = AtomicInteger()
+        val samples = mutableListOf<V140SpeedTransfer.Sample>()
+        val downloaded = transfer.downloadFilePrefixLive(
+            "$url/range", 256 * 1024, { checkCalls.incrementAndGet() }, samples::add)
+        assertEquals(256L * 1024L, downloaded.bytes)
+        assertTrue(checkCalls.get() >= 3)
+        assertEquals(downloaded.bytes, samples.last().bytes)
+        val two = V144GigabitTransfer.measureWithStreams(
+            transfer, "$url/range", 256 * 1024, false, {}, 2, {}, true)
+        assertEquals(512L * 1024L, two.bytes)
+        assertTrue(two.mbps.isFinite())
+    }
+
+    @Test fun parallel403PreservesRealHttpStatusForAlternativeProvider() {
+        val transfer = V140SpeedTransfer()
+        val error = assertThrows(V146SpeedServerException::class.java) {
+            V144GigabitTransfer.measureWithStreams(
+                transfer, "$url/forbidden", 256 * 1024, false, {}, 2, {})
+        }
+        assertEquals(403, error.httpStatus)
+        assertFalse("Remote 403 must not mean VPN cancellation", transfer.isCancelled())
     }
 
     @Test fun gigabitSampleSizingHonorsRealBudgetAndNoArtificial250MbpsCeiling() {
