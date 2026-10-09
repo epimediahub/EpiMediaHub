@@ -129,6 +129,17 @@ class AutomaticProvisioningTests(unittest.TestCase):
         self.ack()
         self.assertEqual("READY",self.guest.get("/v1/device/vpn/status",headers=self.auth(1)).json["status"])
 
+    def test_ip_pool_skips_existing_unmanaged_finland_peers(self):
+        self.assertEqual(200,self.guest.post("/v1/vpn-agent/applied",headers=self.agent,
+            json={"peers":[],"server_public_key":SERVER_KEY,
+                  "unmanaged_networks":["10.92.0.2/32","10.92.0.90/32"]}).status_code)
+        self.post("grant",device_row_id="1",days="7")
+        res=self.enroll(1)
+        self.assertEqual("WAITING_FOR_SERVER",res.json["status"])
+        with core.db() as con:
+            address=con.execute("SELECT client_address FROM vpn_devices WHERE device_row_id=1").fetchone()[0]
+        self.assertEqual("10.92.0.3/32",address)
+
     def test_other_reseller_cannot_claim_another_device(self):
         self.assertEqual(303,self.post("grant",client=self.admin,device_row_id="1",days="7").status_code)
         self.assertEqual(404,self.post("activate",client=self.reseller,device_row_id="2",plan="1:30:1").status_code)
