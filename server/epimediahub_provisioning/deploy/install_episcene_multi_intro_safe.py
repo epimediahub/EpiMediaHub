@@ -45,6 +45,13 @@ def active(name):
     return run("systemctl", "is-active", "--quiet", name, check=False).returncode == 0
 
 
+def busy(name):
+    state = run("systemctl", "show", "--property=ActiveState", "--value",
+                name, check=False).stdout.strip()
+    # is-active alone does not reliably cover a starting oneshot worker.
+    return state in {"active", "activating", "deactivating", "reloading"}
+
+
 def require(ok, detail):
     if not ok:
         raise RuntimeError(detail)
@@ -176,9 +183,9 @@ def apply(staged):
             run("systemctl", "stop", timer)
         print("Warte auf natuerliches Ende des aktuellen Analysejobs ...", flush=True)
         deadline = time.monotonic() + 360
-        while active(worker) and time.monotonic() < deadline:
+        while busy(worker) and time.monotonic() < deadline:
             time.sleep(2)
-        require(not active(worker),
+        require(not busy(worker),
                 "Analysis still busy. No files changed; timer will be restored.")
         files_changed = True
         for name, prepared in staged.items():
@@ -189,8 +196,15 @@ def apply(staged):
             os.replace(tmp, dest)
         run("systemctl", "restart", "epimediahub-provisioning.service")
         require(active("epimediahub-provisioning.service"), "Dashboard restart failed")
-        with urlopen("http://127.0.0.1:8787/health", timeout=20) as response:
-            health = json.load(response)
+        health = {}
+        for _ in range(10):
+            try:
+                with urlopen("http://127.0.0.1:8787/health", timeout=5) as response:
+                    health = json.load(response)
+                if health.get("status") == "ok":
+                    break
+            except Exception:
+                time.sleep(2)
         require(health.get("status") == "ok", "Dashboard health check failed")
         require(active(report_timer), "Daily report timer stopped")
         print("INSTALLIERT: EpiScene Mehrfach-Intros aktiv; Backup: " + str(backup),
