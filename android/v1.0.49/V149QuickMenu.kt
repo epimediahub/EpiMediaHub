@@ -87,16 +87,33 @@ internal fun V149QuickMenu(
                     }
                     .testTag("home-quick-panel")
             ) {
-                Row(Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(if (isTv) 10.dp else 4.dp)) {
-                    V149QuickAction("⚙", "Einstellungen", "quick-settings", accent, isTv,
-                        Modifier.focusRequester(firstAction), onSettings)
-                    V149QuickAction("⇄", "Server wechseln", "quick-servers", accent, isTv,
-                        Modifier, onServers)
-                    V149QuickAction("⇅", "Speedtest", "quick-speedtest", accent, isTv,
-                        Modifier, onSpeedtest)
-                    V149QuickAction("☁", "Wetter & Ort", "quick-weather", accent, isTv,
-                        Modifier, onWeather)
+                if (isTv) {
+                    Row(Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        V149QuickAction("⚙", "Einstellungen", "quick-settings", accent, isTv,
+                            Modifier.focusRequester(firstAction), onSettings)
+                        V149QuickAction("⇄", "Server wechseln", "quick-servers", accent, isTv,
+                            Modifier, onServers)
+                        V149QuickAction("⇅", "Speedtest", "quick-speedtest", accent, isTv,
+                            Modifier, onSpeedtest)
+                        V149QuickAction("☁", "Wetter & Ort", "quick-weather", accent, isTv,
+                            Modifier, onWeather)
+                    }
+                } else {
+                    Column(Modifier.padding(7.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            V149QuickAction("⚙", "Einstellungen", "quick-settings", accent, isTv,
+                                Modifier.focusRequester(firstAction), onSettings)
+                            V149QuickAction("⇄", "Server wechseln", "quick-servers", accent, isTv,
+                                Modifier, onServers)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            V149QuickAction("⇅", "Speedtest", "quick-speedtest", accent, isTv,
+                                Modifier, onSpeedtest)
+                            V149QuickAction("☁", "Wetter & Ort", "quick-weather", accent, isTv,
+                                Modifier, onWeather)
+                        }
+                    }
                 }
             }
         }
@@ -115,7 +132,7 @@ private fun V149QuickAction(
 ) {
     var focused by remember { mutableStateOf(false) }
     Surface(
-        modifier = modifier.width(if (isTv) 135.dp else 83.dp)
+        modifier = modifier.width(if (isTv) 135.dp else 134.dp)
             .height(if (isTv) 79.dp else 67.dp)
             .onFocusChanged { focused = it.isFocused }
             .semantics { contentDescription = label }
