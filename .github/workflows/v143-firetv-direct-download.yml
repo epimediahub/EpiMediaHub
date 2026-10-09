@@ -6,6 +6,7 @@ on:
     paths:
       - 'android/v1.0.34-vpn/V140SpeedTest.kt'
       - 'android/v1.0.34-vpn/V140SpeedTransferTest.kt'
+      - '.github/workflows/android-v143-speed-gauge-qa.yml'
 
 permissions:
   actions: read
