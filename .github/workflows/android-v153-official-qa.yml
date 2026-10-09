@@ -8,6 +8,7 @@ on:
       - 'android/v1.0.53/**'
       - '.github/workflows/android-v153-official-qa.yml'
       - '.github/workflows/v147-official-inapp-updater.yml'
+      - '.github/workflows/v153-official-inapp-updater.yml'
       - 'android/v1.0.34-vpn/**'
   workflow_dispatch:
 
