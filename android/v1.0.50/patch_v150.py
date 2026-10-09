@@ -201,8 +201,8 @@ replace(speed,
             stabilityPercent = download.stability.variationPercent,
             peakMbps = download.stability.peakMbps''')
 replace(speed,
-'''                                 ?: "GIGABIT-MESSUNG • 4 Streams • dynamisches Datenvolumen",''',
-'''                                 ?: "ADAPTIVER SPEEDTEST • automatische Leitungsanpassung",''')
+    '"GIGABIT-MESSUNG • 4 Streams • dynamisches Datenvolumen"',
+    '"ADAPTIVER SPEEDTEST • automatische Leitungsanpassung"')
 replace(speed,
 '''                            "  |  4 Streams: " +
                             String.format(Locale.GERMANY, "%.1f", it.downloadMbps)''',
