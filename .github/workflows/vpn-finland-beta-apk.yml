@@ -1,4 +1,4 @@
-name: EpiMediaHub VPN Finland 1.0.40 signed Fire TV beta
+name: EpiMediaHub VPN Finland 1.0.41 signed Fire TV beta
 
 on:
   workflow_dispatch:
@@ -199,8 +199,8 @@ jobs:
             APK="$RELEASE/app-${ABI}-release.apk"
             test -s "$APK"
             "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/apk-${ABI}-badging.txt"
-            grep -F "versionCode='1040'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
-            grep -F "versionName='1.0.40'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            grep -F "versionCode='1041'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
+            grep -F "versionName='1.0.41'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
             grep -F "package: name='de.epimediahub.app.vpnbeta'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"
             if grep -Fq "package: name='de.epimediahub.app'" "$RUNNER_TEMP/apk-${ABI}-badging.txt"; then echo "Refusing production appId"; exit 1; fi
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-${ABI}-signer.txt"
@@ -209,6 +209,19 @@ jobs:
           done
           test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134WireGuardDeviceTunnel.kt"
           test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnDiagnosticActivity.kt"
+          test -f "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V141VpnSettings.kt"
+          grep -Fq 'V141VpnSettingsHost(context' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -Fq 'Screen.Settings -> de.epimediahub.app.vpn.V141VpnSettingsHost' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          manifest=(Path(os.environ["PROJECT_ROOT"])/"app/src/main/AndroidManifest.xml").read_text()
+          activity=re.search(r'<activity\\b[^>]*android:name="(?:\\.MainActivity|de\\.epimediahub\\.app\\.MainActivity)"[^>]*>(.*?)</activity>',manifest,re.S)
+          assert activity and 'android.intent.action.MAIN' in activity.group(1), "MainActivity must remain launcher"
+          diag=re.search(r'<activity\\b[^>]*android:name="de.epimediahub.app.vpn.V134VpnDiagnosticActivity"[^>]*>',manifest)
+          assert diag and 'android:exported="false"' in diag.group(0), "Diagnostic is settings-only"
+          assert manifest.count('android.intent.category.LEANBACK_LAUNCHER') == 1, "Exactly one TV launcher"
+          PY
           grep -Fq 'VPN-Profil vom Fire TV laden (ADB)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnDiagnosticActivity.kt"
           grep -Fq 'getExternalFilesDir(null)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnDiagnosticActivity.kt"
           grep -Fq 'getExternalMediaDirs()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V134VpnDiagnosticActivity.kt"
@@ -253,7 +266,7 @@ jobs:
           grep -Fq 'V134VpnDiagnosticActivity' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
           grep -Fq 'GoBackend$VpnService' "$PROJECT_ROOT/app/src/main/AndroidManifest.xml"
           grep -Fq 'com.wireguard.android:tunnel:1.0.20260102' "$PROJECT_ROOT/app/build.gradle.kts"
-          # v1.0.40 must ship an ACTUAL download/upload test, not an inert button.
+          # v1.0.41 must ship an ACTUAL download/upload test, not an inert button.
           test -f "$VPN_SRC/V140SpeedTest.kt"
           test -f "$VPN_SRC/V140VpnLossMonitor.kt"
           grep -Fq 'speed.cloudflare.com' "$VPN_SRC/V140SpeedTest.kt"
@@ -271,11 +284,11 @@ jobs:
           grep -Fq '.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)' "$VPN_SRC/V140VpnLossMonitor.kt"
           # Process binding is not device-wide always-on VPN lockdown.
           mkdir -p vpn-beta-artifacts
-          cp "$RELEASE/app-arm64-v8a-release.apk" vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.40-ARM64-BETA.apk
-          cp "$RELEASE/app-armeabi-v7a-release.apk" vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.40-ARMv7-BETA.apk
+          cp "$RELEASE/app-arm64-v8a-release.apk" vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.41-ARM64-BETA.apk
+          cp "$RELEASE/app-armeabi-v7a-release.apk" vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.41-ARMv7-BETA.apk
           (cd vpn-beta-artifacts && sha256sum *.apk > SHA256SUMS.txt)
           cat > vpn-beta-artifacts/README.txt <<'EOF'
-          EpiMediaHub VPN Finland 1.0.40 - ENCRYPTED PROFILE FIRE TV BETA
+          EpiMediaHub VPN Finland 1.0.41 - ENCRYPTED PROFILE FIRE TV BETA
           This APK has a SEPARATE Android package ID and will NOT overwrite the daily EpiMediaHub app.
           VPN profile is imported once, encrypted via AndroidKeyStore AES-GCM, stored without backups.
           On-demand Speedtest measures download, upload, HTTP latency and public egress IP over the verified route.
@@ -286,30 +299,30 @@ jobs:
           Process restart, pre-existing/direct-bound library sockets and Fire TV routing still need hardware tests.
           DO NOT distribute to customers. Does NOT deploy to the in-app updater.
           EOF
-      - name: Publish separate Fire TV Downloader APK (1.0.40 beta only)
+      - name: Publish separate Fire TV Downloader APK (1.0.41 beta only)
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG=vpnfi40
+          TAG=vpnfi41
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             echo "Refusing to overwrite an existing VPN beta prerelease" >&2
             exit 1
           fi
-          cp vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.40-ARMv7-BETA.apk vpn-beta-artifacts/EpiFI.apk
+          cp vpn-beta-artifacts/EpiMediaHub-VPN-Finland-v1.0.41-ARMv7-BETA.apk vpn-beta-artifacts/EpiFI.apk
           cat > /tmp/epi-vpn-fi35-notes.md <<'EOF'
-          EpiMediaHub VPN Finland v1.0.40 Fire TV testing build.
+          EpiMediaHub VPN Finland v1.0.41 Fire TV testing build.
           Separate Android package: de.epimediahub.app.vpnbeta.
-          Includes encrypted persistent VPN profile and explicit direct fallback. v1.0.40 adds a working on-demand speed test for download/upload/HTTP latency with exit-IP validation, and VPN-bound app sockets/DNS that remain bound on transport loss until explicit direct consent.
+          Includes encrypted persistent VPN profile and explicit direct fallback. v1.0.41 adds a working on-demand speed test for download/upload/HTTP latency with exit-IP validation, and VPN-bound app sockets/DNS that remain bound on transport loss until explicit direct consent.
           This is a testing prerelease, not an update to the standard app.
-          System-level kill-switch behavior and v1.0.40 Fire TV speedtest have NOT been
+          System-level kill-switch behavior and v1.0.41 Fire TV speedtest have NOT been
           independently verified. Never distribute test WireGuard keys.
           EOF
           gh release create "$TAG" vpn-beta-artifacts/EpiFI.apk \
             --repo "$GH_REPO" --target "$GITHUB_SHA" \
-            --title "EpiMediaHub VPN Finland 1.0.40 - Speedtest and VPN network guard beta" \
+            --title "EpiMediaHub VPN Finland 1.0.41 - Speedtest and VPN network guard beta" \
             --notes-file /tmp/epi-vpn-fi35-notes.md --prerelease
           URL="https://github.com/$GH_REPO/releases/download/$TAG/EpiFI.apk"
           STATUS="$(curl --location --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 90 "$URL")"
@@ -318,7 +331,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-VPN-Finland-v1.0.40-adb-import-beta
+          name: EpiMediaHub-VPN-Finland-v1.0.41-adb-import-beta
           path: vpn-beta-artifacts/
           retention-days: 14
           if-no-files-found: error
