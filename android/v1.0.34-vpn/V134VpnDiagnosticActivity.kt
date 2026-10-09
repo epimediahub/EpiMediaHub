@@ -3,6 +3,7 @@ package de.epimediahub.app.vpn
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
+import android.content.res.ColorStateList
 import android.net.VpnService
 import android.os.Bundle
 import android.os.Handler
@@ -57,6 +58,14 @@ class V134VpnDiagnosticActivity : Activity() {
                 isAllCaps = false
                 minHeight = 64
                 setOnClickListener { click() }
+                setOnFocusChangeListener { view, hasFocus ->
+                    view.backgroundTintList = ColorStateList.valueOf(
+                        if (hasFocus) Color.rgb(255, 205, 67) else Color.rgb(236, 242, 255)
+                    )
+                    view.scaleX = if (hasFocus) 1.025f else 1f
+                    view.scaleY = if (hasFocus) 1.025f else 1f
+                }
+                setTextColor(Color.rgb(6, 17, 32))
                 layout.addView(this)
             }
         }
@@ -99,10 +108,7 @@ class V134VpnDiagnosticActivity : Activity() {
         }
         vpnButton = action("VPN Finnland verbinden und prüfen") { startVpn() }
         directButton = action("Direktverbindung herstellen und prüfen") { startDirect() }
-        openPlayer = action("Testplayer öffnen") {
-            if (route != "blocked" && !busy) startActivity(Intent(this, MainActivity::class.java))
-            else setStatus("Route nicht bestätigt. Player bleibt gesperrt.")
-        }
+        openPlayer = action("Zurück zu EpiMediaHub") { finish() }
         label("Keine Freigabe für Kunden. Der Android-VPN-Dialog erfordert deine Zustimmung. Verwende niemals den privaten VPN-Schlüssel in GitHub oder Screenshots.", 13f)
         // Android 11+ may deny adb shell access to Android/data even for this app.
         // Android/media is intended only as a short-lived ADB handoff; delete on import.
@@ -116,7 +122,7 @@ class V134VpnDiagnosticActivity : Activity() {
 
     private fun setStatus(text: String) {
         status.text = text
-        openPlayer.isEnabled = route != "blocked" && !busy
+        openPlayer.isEnabled = !busy
         vpnButton.isEnabled = !busy
         directButton.isEnabled = !busy
     }
@@ -228,14 +234,8 @@ class V134VpnDiagnosticActivity : Activity() {
         return text.replaceFirst("[Interface]", "[Interface]\nIncludedApplications = " + packageName)
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (::status.isInitialized && !busy) {
-            V134VpnSession.block()
-            route = "blocked"
-            setStatus(if (V134VpnSession.hasProfile(applicationContext))
-                "Finnland-Profil verschlüsselt gespeichert. VPN bitte verbinden und prüfen."
-            else "Kein gespeichertes Finnland-Profil. Bitte einmalig importieren.")
-        }
-    }
+    // Never invalidate the VPN session merely because the activity resumed.
+    // Android consent return is NOT a VPN transport loss; the network callback
+    // performs real tunnel-loss detection.
+
 }
