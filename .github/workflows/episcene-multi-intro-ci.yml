@@ -29,7 +29,21 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg libchromaprint1
       - name: Compile all backend Python sources
-        run: python -m compileall -q server/epimediahub_provisioning
+        run: |
+          python -m compileall -q server/epimediahub_provisioning
+          python -m py_compile server/epimediahub_provisioning/deploy/install_episcene_multi_intro_safe.py
+      - name: Verify 3-way overlay against pinned parent without losing user additions
+        run: |
+          set -euo pipefail
+          base=033271aaab94554652af866f4dadd0f06ec4d89f
+          mkdir -p /tmp/episcene-merge/baseline/templates
+          for file in skip_markers.py skip_automation.py skip_release.py skip_scene.py templates/skip_markers.html; do
+            curl -fsSL "https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$base/server/epimediahub_provisioning/$file" -o "/tmp/episcene-merge/baseline/$file"
+            printf '\n# independent_playlist_retained\n' >> "/tmp/episcene-merge/baseline/$file"
+            sed '$d' "/tmp/episcene-merge/baseline/$file" >"/tmp/episcene-merge/original"
+            diff3 -m "/tmp/episcene-merge/baseline/$file" "/tmp/episcene-merge/original" "server/epimediahub_provisioning/$file" >"/tmp/episcene-merge/merged"
+            grep -Fq 'independent_playlist_retained' "/tmp/episcene-merge/merged"
+          done
       - name: Validate deploy script syntax
         run: bash -n server/epimediahub_provisioning/deploy/install_skip_scene.sh
       - name: Test dual intro dashboard and player protocol
