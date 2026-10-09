@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from urllib.error import HTTPError, URLError
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from vpn_finland_agent import Agent, atomic
@@ -74,12 +75,29 @@ def main():
     else:
         print("Kopplung mit dem Dashboard. Das Token nicht in Chats oder GitHub einfügen.")
         url = read_dashboard_url()
-        token=getpass.getpass("VPN-Kopplungstoken vom Dashboard-Server: ")
+        token=getpass.getpass("VPN-Kopplungstoken vom Dashboard-Server: ").strip()
+        if len(token) < 32:
+            raise SystemExit("VPN-Kopplungstoken zu kurz (mindestens 32 Zeichen). "
+                             "Bitte den gesamten Inhalt der Token-Datei verwenden. Nichts installiert.")
         config={"dashboard_url":url,"token":token,"interface":"wg0"}
-    agent=Agent(config)
-    from vpn_finland_agent import validate
-    try:validate(agent.request("/v1/vpn-agent/desired"),agent.subnet)
-    except Exception as error:raise SystemExit(f"Dashboard-Kopplung fehlgeschlagen ({type(error).__name__}). Nichts installiert.") from None
+    try:
+        agent=Agent(config)
+        from vpn_finland_agent import validate
+        validate(agent.request("/v1/vpn-agent/desired"),agent.subnet)
+    except HTTPError as error:
+        # Never display headers, response bodies or authorization material.
+        message = {401:"Token stimmt nicht mit dem Dashboard ueberein.",
+                   403:"Zugriff durch Reverse Proxy/Cloudflare verweigert.",
+                   404:"Agent-API ist an dieser Dashboard-URL nicht erreichbar."}.get(
+                       error.code, "Dashboard oder Proxy hat die Anfrage abgelehnt.")
+        raise SystemExit(f"Dashboard-Kopplung fehlgeschlagen: HTTP {error.code}. "
+                         f"{message} Nichts installiert.") from None
+    except URLError:
+        raise SystemExit("Dashboard-Kopplung fehlgeschlagen: HTTPS-/Netzwerkfehler. "
+                         "DNS, Firewall und Dashboard-URL pruefen. Nichts installiert.") from None
+    except (ValueError, KeyError, TypeError) as error:
+        raise SystemExit(f"Dashboard-Kopplung fehlgeschlagen: {type(error).__name__}. "
+                         "Token, Dashboard-URL und Agent-Antwort pruefen. Nichts installiert.") from None
     print("Dashboard authentifiziert. Agent verwaltet nur dort ausdrücklich zugeordnete Geräte.")
     destination.mkdir(parents=True,exist_ok=True)
     Path("/var/lib/epimediahub-vpn").mkdir(mode=0o700,exist_ok=True)
