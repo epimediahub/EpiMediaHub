@@ -68,8 +68,13 @@ internal class V140SpeedTransfer {
      * to protect low-powered TV sticks from excessive Compose recomposition.
      * Verifying the selected route remains a separate, mandatory check.
      */
-    fun download(url: String, bytes: Int, verify: () -> Unit,
-                 onSample: (Sample) -> Unit = {}): Sample =
+    /** Keep the existing route-verification call signature unambiguous. */
+    fun download(url: String, bytes: Int, verify: () -> Unit): Sample =
+        downloadLive(url, bytes, verify) {}
+
+    /** Live sample callback is deliberately a distinct API for Kotlin trailing lambdas. */
+    fun downloadLive(url: String, bytes: Int, verify: () -> Unit,
+                     onSample: (Sample) -> Unit): Sample =
         transfer(url, verify) { conn, started ->
             check(conn.responseCode == 200) { "Download-Testserver: HTTP ${conn.responseCode}" }
             var received = 0L
@@ -95,8 +100,11 @@ internal class V140SpeedTransfer {
             received
         }
 
-    fun upload(url: String, bytes: Int, verify: () -> Unit,
-               onSample: (Sample) -> Unit = {}): Sample =
+    fun upload(url: String, bytes: Int, verify: () -> Unit): Sample =
+        uploadLive(url, bytes, verify) {}
+
+    fun uploadLive(url: String, bytes: Int, verify: () -> Unit,
+                   onSample: (Sample) -> Unit): Sample =
         transfer(url, verify) { conn, started ->
             conn.requestMethod = "POST"
             conn.doOutput = true
