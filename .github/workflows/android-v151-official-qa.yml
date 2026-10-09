@@ -4,9 +4,9 @@ on:
   push:
     branches: [fix/v151-speedtest-weather-header]
     paths:
-      - '.github/workflows/android-v150-official-qa.yml'
+      - '.github/workflows/android-v151-official-qa.yml'
       - 'android/v1.0.51/**'
-      - '.github/workflows/android-v150-official-qa.yml'
+      - '.github/workflows/android-v151-official-qa.yml'
       - '.github/workflows/v147-official-inapp-updater.yml'
       - 'android/v1.0.34-vpn/**'
   workflow_dispatch:
