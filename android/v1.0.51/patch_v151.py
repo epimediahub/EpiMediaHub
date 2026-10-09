@@ -66,7 +66,7 @@ replace(speed,
     'else if (stage == V140SpeedTest.Phase.DONE) "LETZTE MESSUNG"',
     'else if (stage == V140SpeedTest.Phase.DONE) "Ø DOWNLOAD"')
 replace(speed,
-    '                    Text("AUSGANG  ${it.route}   •   IP  ${it.ip}",',
+    'Text("AUSGANG  ${it.route}   •   IP  ${it.ip}",',
     '''                    Text("Ø = gesamte Nutzdaten / Messzeit; LIVE = gleitendes 1,2-s-Fenster. " +
                         "Die Spitze ist nicht die durchschnittliche Bandbreite.",
                         color = Color(0xFFB3C4D9), fontSize = if (isTv) 13.sp else 12.sp)
