@@ -46,6 +46,12 @@ internal class V146SpeedServerException(
     val httpStatus: Int, direction: String, val host: String
 ) : IllegalStateException("$direction-Testserver ($host): HTTP $httpStatus")
 
+/** Only the exact secure self-hosted origin may receive a speedtest bearer. */
+internal fun isSelfHostedSpeedtestOrigin(url: URL): Boolean =
+    url.protocol.equals("https", ignoreCase = true) &&
+    url.host.equals("speedtest.epimediahub.com", ignoreCase = true) &&
+    (url.port == -1 || url.port == 443)
+
 /** Actual bounded HTTP transfers, independent of Android UI and VPN credentials. */
 internal class V140SpeedTransfer(initialSelfHostedToken: String? = null) {
     data class Sample(val bytes: Long, val nanos: Long) {
@@ -126,9 +132,7 @@ internal class V140SpeedTransfer(initialSelfHostedToken: String? = null) {
         conn.setRequestProperty("Accept-Encoding", "identity")
         // Strict origin allowlist: prevents leaking the ephemeral session token
         // if a public backup provider is used. Redirects stay disabled.
-        if (conn.url.protocol == "https" &&
-            conn.url.host.equals("speedtest.epimediahub.com", ignoreCase = true)
-        ) {
+        if (isSelfHostedSpeedtestOrigin(conn.url)) {
             selfHostedToken.get()?.let {
                 conn.setRequestProperty("Authorization", "Bearer $it")
             }
