@@ -122,7 +122,11 @@ class V140SpeedTransferTest {
     @Test fun liveReadingsComeFromActualTransferredBytes() {
         val readings = mutableListOf<V140SpeedTransfer.Sample>()
         val transfer = V140SpeedTransfer()
-        val down = transfer.downloadLive("$url/down", 256 * 1024, {}, readings::add)
+        val verifiedChunks = AtomicInteger()
+        val down = transfer.downloadLive("$url/down", 256 * 1024,
+            { verifiedChunks.incrementAndGet() }, readings::add)
+        assertTrue("VPN route must be rechecked throughout the live download",
+            verifiedChunks.get() > 2)
         assertTrue(readings.isNotEmpty())
         assertEquals(down.bytes, readings.last().bytes)
         assertTrue(readings.all { it.bytes in 1L..down.bytes && it.nanos > 0L })
