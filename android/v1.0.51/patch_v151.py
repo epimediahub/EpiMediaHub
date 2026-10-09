@@ -54,14 +54,14 @@ replace(speed,
     '            val downloadRate = V151RollingSpeed()\n')
 replace(speed,
     '                    live(Live(Phase.DOWNLOAD, sample.mbps,\n',
-    '                    live(Live(Phase.DOWNLOAD, downloadRate.rate(sample) ?: 0.0,\n')
+    '                    live(Live(Phase.DOWNLOAD, downloadRate.rate(sample) ?: sample.mbps,\n')
 replace(speed,
     '        val up: V140SpeedTransfer.Sample? = try {\n',
     '        val uploadRate = V151RollingSpeed()\n'
     '        val up: V140SpeedTransfer.Sample? = try {\n')
 replace(speed,
     '                    live(Live(Phase.UPLOAD, sample.mbps,\n',
-    '                    live(Live(Phase.UPLOAD, uploadRate.rate(sample) ?: 0.0,\n')
+    '                    live(Live(Phase.UPLOAD, uploadRate.rate(sample) ?: sample.mbps,\n')
 replace(speed,
     'else if (stage == V140SpeedTest.Phase.DONE) "LETZTE MESSUNG"',
     'else if (stage == V140SpeedTest.Phase.DONE) "Ø DOWNLOAD"')
@@ -75,7 +75,17 @@ replace(speed,
 gigabit=java/"vpn/V144GigabitTransfer.kt"
 replace(gigabit,
     '        val started = System.nanoTime()\n',
-    '        val started = AtomicLong(0L)\n')
+    '        val started = AtomicLong(0L)\n'
+    '        val finishedBytesAt = AtomicLong(0L)\n')
+replace(gigabit,
+    '                        totals.set(index, snapshot.bytes)\n'
+    '                        val now = System.nanoTime()\n',
+    '                        totals.set(index, snapshot.bytes)\n'
+    '                        val now = System.nanoTime()\n'
+    '                        if ((0 until streams).sumOf { totals.get(it) } ==\n'
+    '                            bytesPerStream.toLong() * streams) {\n'
+    '                            finishedBytesAt.compareAndSet(0L, now)\n'
+    '                        }\n')
 replace(gigabit,
     'onSample(V140SpeedTransfer.Sample(count, now - started))',
     'onSample(V140SpeedTransfer.Sample(count, now - started.get()))')
@@ -84,7 +94,9 @@ replace(gigabit,
     '            started.set(System.nanoTime())\n            go.countDown()\n            val deadline = System.nanoTime()')
 replace(gigabit,
     '            val elapsed = (System.nanoTime() - started).coerceAtLeast(1L)',
-    '            val elapsed = (System.nanoTime() - started.get()).coerceAtLeast(1L)')
+    '            val completedAt = finishedBytesAt.get()\n'
+    '            check(completedAt > started.get()) { "Transferabschluss nicht erfasst" }\n'
+    '            val elapsed = (completedAt - started.get()).coerceAtLeast(1L)')
 assert 'val final = V140SpeedTransfer.Sample(received, elapsed)' in gigabit.read_text()
 shutil.copyfile(here/"V151RollingSpeedTest.kt",
                 tests/"vpn/V151RollingSpeedTest.kt")
