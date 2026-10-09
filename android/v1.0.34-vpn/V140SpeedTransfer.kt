@@ -7,6 +7,7 @@ import java.util.TimerTask
 import java.util.concurrent.CancellationException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ConcurrentHashMap
 
 /** Actual bounded HTTP transfers, independent of Android UI and VPN credentials. */
 internal class V140SpeedTransfer {
@@ -17,10 +18,23 @@ internal class V140SpeedTransfer {
     // Each click gets a new instance. A cancelled run can never be revived.
     private val cancelled = AtomicBoolean(false)
     private val active = AtomicReference<HttpURLConnection?>(null)
+    // Multi-stream benchmarks have independent sockets; cancelling a test must
+    // disconnect every worker rather than leaving an unprotected request alive.
+    private val children = ConcurrentHashMap.newKeySet<V140SpeedTransfer>()
     fun isCancelled(): Boolean = cancelled.get()
+    fun registerWorker(worker: V140SpeedTransfer) {
+        checkActive()
+        children.add(worker)
+        if (isCancelled()) {
+            worker.cancel()
+            checkActive()
+        }
+    }
+    fun unregisterWorker(worker: V140SpeedTransfer) { children.remove(worker) }
     fun cancel() {
         cancelled.set(true)
         active.getAndSet(null)?.disconnect()
+        children.forEach { it.cancel() }
     }
     fun checkActive() {
         if (cancelled.get()) throw CancellationException("Messung abgebrochen")
