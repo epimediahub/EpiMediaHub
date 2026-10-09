@@ -87,14 +87,17 @@ replace(home,
                     de.epimediahub.app.vpn.V140SpeedShortcutButton(accent, isTv, onSpeedtest)''',
 '''                    // v1.0.49: uninterrupted center clock, no permanently floating buttons.''')
 # Keep existing player, background, expiry, focus and route rules.
-replace(home,
-'''        }
-    }
-}
-
-@Composable
-private fun V083Header(''',
-'''        }
+# Insert into the BoxWithConstraints immediately before its final closing brace;
+# patched builds may have additional composable helpers before V083Header.
+home_src = home.read_text()
+marker = "\n@Composable\nprivate fun V083Header("
+assert home_src.count(marker) == 1
+pivot = home_src.index(marker)
+segment = home_src[:pivot]
+function_close = segment.rfind("\n}")
+box_close = segment.rfind("\n    }", 0, function_close)
+assert box_close > segment.index("fun V083HomeScreen("), "Home Box closing brace missing"
+drawer = """
         Box(Modifier.align(Alignment.TopCenter).zIndex(10f)) {
             V149QuickMenu(
                 open = v149QuickOpen,
@@ -108,17 +111,20 @@ private fun V083Header(''',
                 onWeather = { v149QuickOpen = false; vm.navigate(Screen.Settings) }
             )
         }
-    }
-    LaunchedEffect(v149QuickOpen, v149QuickOrigin) {
-        if (!v149QuickOpen && isTv) {
-            // Only restore after closing the drawer, not when first entering Home.
-            // Normal initial focus still belongs to the first tile.
+"""
+home_src = home_src[:box_close] + "\n" + drawer + home_src[box_close:]
+pivot = home_src.index(marker)
+function_close = home_src.rfind("\n}", 0, pivot)
+home_src = home_src[:function_close] + """
+    LaunchedEffect(v149QuickOpen) {
+        if (!v149QuickOpen && v149EverOpened && isTv) {
+            delay(85L)
+            runCatching { v149TileFocus[v149QuickOrigin].requestFocus() }
         }
     }
-}
+""" + home_src[function_close:]
+home.write_text(home_src)
 
-@Composable
-private fun V083Header(''')
 # For a closed drawer restore focus via the originating tile, unless the user is
 # entering a different screen; this runs only after a drawer was actually opened.
 replace(home, '    var v149QuickOrigin by remember { mutableIntStateOf(0) }',
@@ -130,19 +136,6 @@ replace(home,
 '''                                                v149QuickOrigin = index
                                                 v149EverOpened = true
                                                 v149QuickOpen = true''')
-replace(home,
-'''    LaunchedEffect(v149QuickOpen, v149QuickOrigin) {
-        if (!v149QuickOpen && isTv) {
-            // Only restore after closing the drawer, not when first entering Home.
-            // Normal initial focus still belongs to the first tile.
-        }
-    }''',
-'''    LaunchedEffect(v149QuickOpen) {
-        if (!v149QuickOpen && v149EverOpened && isTv) {
-            delay(85L)
-            runCatching { v149TileFocus[v149QuickOrigin].requestFocus() }
-        }
-    }''')
 replace(home,
 '''                weather?.takeIf { !compact || isTv }?.let {''',
 '''                weather?.takeIf { !compact || isTv }?.let {''') if False else None
