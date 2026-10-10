@@ -21,6 +21,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -144,8 +145,13 @@ private fun V149QuickAction(
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
+    // Prevent the two outer D-pad targets from overflowing narrow Fire TV viewports.
+    val width = if (isTv) {
+        val available = (LocalConfiguration.current.screenWidthDp - 70).coerceAtLeast(300)
+        minOf(135.dp, (available / 4).dp)
+    } else 134.dp
     Surface(
-        modifier = modifier.width(if (isTv) 135.dp else 134.dp)
+        modifier = modifier.width(width)
             .height(if (isTv) 79.dp else 67.dp)
             .onFocusChanged { focused = it.isFocused }
             .semantics { contentDescription = label }
