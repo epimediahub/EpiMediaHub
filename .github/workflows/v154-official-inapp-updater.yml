@@ -118,7 +118,7 @@ jobs:
           update={
               'version':'1.0.54',
               'versionCode':1054,
-              'notes':'v1.0.54: DIREKT-Playlists funktionieren ohne externen IP-Prüfdienst, nachdem der App-VPN-Tunnel sicher getrennt wurde. VPN-geschützte Playlists bleiben ohne bestätigtes VPN gesperrt. Speedtest, Wetter, Standort und Schnellmenü erhalten.',
+              'notes':'v1.0.54: Fire-TV-Schnellmenü mit stabiler D-Pad-Navigation, einschließlich Wetter & Ort; DIRECT-Playlists funktionieren weiterhin ohne App-VPN. VPN-Playlists bleiben geschützt. Speedtest, Wetter und Standort bleiben erhalten.',
               'apks':apks
           }
           for filename in ('latest.json','android-latest.json'):
@@ -150,7 +150,7 @@ jobs:
           timeout 5m gh release upload "$TAG" dist/latest.json --repo "$REPO" --clobber
           gh release edit "$TAG" --repo "$REPO" \
             --title 'EpiMediaHub Android v1.0.54' \
-            --notes 'EpiMediaHub v1.0.54: offizielles, signiertes und geprüftes Direkt-Playlist-Hotfix-Update. Kein externer IP-Prüfdienst mehr als Voraussetzung bei explizit ausgeschaltetem VPN. WireGuard-Tunnel und Prozessbindung werden vor Direktfreigabe geprüft; VPN-Playlists bleiben geschützt. Speedtest, Wetter, Standort, Schnellmenü, EpiScene, Registrierungen und vorhandene Playlist-Einstellungen bleiben erhalten.' \
+            --notes 'EpiMediaHub v1.0.54: offizielles, signiertes und geprüftes Fire-TV-Schnellmenü-Update mit stabiler D-Pad-Navigation, einschließlich Wetter & Ort und erneutem Öffnen des Menüs. Die funktionierende DIRECT-Wiedergabe ohne App-VPN bleibt erhalten; VPN-Playlists bleiben geschützt. Speedtest, Wetter, Standort, EpiScene, Registrierungen und Playlist-Einstellungen bleiben erhalten.' \
             --prerelease
           gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' > published-assets.txt
           for filename in EpiMediaHub_Android_v1.0.54-arm64-v8a.apk \
