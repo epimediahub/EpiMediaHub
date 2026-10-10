@@ -69,5 +69,5 @@ replace(test,
             settle()
             compose.onNodeWithTag(target).assertIsFocused()
         }''')
-assert "quick-weather\").assertIsFocused()" in test.read_text()
+assert 'compose.onNodeWithTag("quick-weather").assertIsFocused()' in test.read_text()
 print("v1.0.54: quick menu focus graph, repeated re-open navigation and Weather action guarded.")
