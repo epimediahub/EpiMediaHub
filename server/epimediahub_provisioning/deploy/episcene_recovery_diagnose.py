@@ -26,7 +26,8 @@ SERVICES = (
     "epimediahub-skip-analysis.timer",
     "epimediahub-skip-analysis.service",
     "epimediahub-skip-progress.timer",
-    "epimediahub-episcene-daily-report.timer",
+    "epimediahub-episcene-report.timer",
+    "epimediahub-episcene-report.service",
 )
 DEFAULT_COMPONENTS = (
     "skip_analysis.py", "skip_automation.py", "skip_detector_v2.py",
