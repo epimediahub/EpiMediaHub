@@ -40,6 +40,8 @@ jobs:
           for v in 149 150 151 152 153 154 155 156 157 158; do
             python3 "android/v1.0.$((10#$v - 100))/patch_v$v.py"
           done
+          python3 android/v1.0.59/patch_v159.py
+          python3 -m py_compile android/v1.0.59/patch_v159.py
       - name: Print key event source sections
         shell: bash
         run: |
