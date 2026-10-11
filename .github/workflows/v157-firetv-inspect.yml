@@ -39,6 +39,8 @@ jobs:
              (src/"ui/PlayerScreen.kt",[(60,84),(240,277),(340,511)]),
              (src/"data/V155ExactM3uLive.kt",[(1,5)]),
              (src/"ui/V088VlcVideo.kt",[(1,110)]),
+             (src/"MainViewModel.kt",[(1,115)]),
+             (src/"data/XtreamClient.kt",[(176,267),(284,377)]),
           ]
           for file,spans in targets:
             lines=file.read_text().splitlines()
@@ -46,4 +48,13 @@ jobs:
             for a,b in spans:
               for n in range(a,min(len(lines),b)+1):
                 print(f"{n}: {lines[n-1]}")
+          vm=(src/"MainViewModel.kt").read_text()
+          for term in ["private fun loadCategories(", "private fun xtreamLibrary(", "fun openCategory(", "fun setContentFilterKind(", "fun selectCategory(", "fun selectMediaKind("]:
+            p=vm.find(term)
+            if p>=0:
+              line=vm[:p].count("\\n")+1
+              lines=vm.splitlines()
+              print("FOUND",term,line)
+              for i in range(line-1,min(len(lines),line+122)):
+                print(f"{i+1}: {lines[i]}")
           PY
