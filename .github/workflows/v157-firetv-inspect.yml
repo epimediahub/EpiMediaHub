@@ -40,6 +40,7 @@ jobs:
              (src/"data/V155ExactM3uLive.kt",[(1,5)]),
              (src/"ui/V088VlcVideo.kt",[(1,110)]),
              (src/"MainViewModel.kt",[(1,115)]),
+             (src/"ui/V060CinematicHub.kt",[(1,270)]),
              (src/"data/XtreamClient.kt",[(176,267),(284,377)]),
           ]
           for file,spans in targets:
@@ -52,7 +53,7 @@ jobs:
           for term in ["private fun loadCategories(", "private fun xtreamLibrary(", "fun openCategory(", "fun setContentFilterKind(", "fun selectCategory(", "fun selectMediaKind("]:
             p=vm.find(term)
             if p>=0:
-              line=vm[:p].count("\\n")+1
+              line=vm[:p].count(chr(10))+1
               lines=vm.splitlines()
               print("FOUND",term,line)
               for i in range(line-1,min(len(lines),line+122)):
