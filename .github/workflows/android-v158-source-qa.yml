@@ -6,6 +6,8 @@ on:
     paths:
       - 'android/v1.0.58/**'
       - '.github/workflows/android-v158-source-qa.yml'
+      - '.github/workflows/android-v158-official-qa.yml'
+      - '.github/workflows/v158-official-inapp-updater.yml'
   workflow_dispatch:
 
 permissions:
@@ -96,6 +98,10 @@ jobs:
           player=(j/'ui/PlayerScreen.kt').read_text()
           assert 'val nextCandidate = activeUrl + 1' in player
           xtream=(j/'data/XtreamClient.kt').read_text()
+          assert 'V158ProviderDates.fromRow(o, kind)' in xtream
+          assert 'showContinue = continueItems.isNotEmpty()' in hub
+          assert 'title = "Weiterschauen"' in hub
+          assert (r/'app/src/test/java/de/epimediahub/app/data/V158ProviderDatesTest.kt').is_file()
           assert 'V156ExactM3uCache.resolve(' in xtream
           assert 'V156ExactM3uCache.warm(' in xtream
           assert 'V153DirectPolicy.canPlay' in (j/'vpn/V134VpnSession.kt').read_text()
