@@ -46,6 +46,27 @@ jobs:
           python3 android/v1.0.56/patch_v156.py
           python3 android/v1.0.57/patch_v157.py
           python3 android/v1.0.58/patch_v158.py
+      - name: Inspect production Xtream added-date decoding and category selection
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          root=Path(os.environ["PROJECT_ROOT"])/"app/src/main/java/de/epimediahub/app"
+          for name in ["data/XtreamClient.kt", "model/Models.kt", "ui/V060CinematicHub.kt", "MainViewModel.kt"]:
+              p=root/name
+              s=p.read_text().splitlines()
+              if name.endswith("XtreamClient.kt"):
+                  matches=[i for i,line in enumerate(s) if 'fun entries(' in line or 'addedAt =' in line or 'date_added' in line or 'optLong("added")' in line]
+              elif name.endswith("Models.kt"): matches=[i for i,line in enumerate(s) if 'addedAt:' in line]
+              elif name.endswith("V060CinematicHub.kt"): matches=[i for i,line in enumerate(s) if 'val newest =' in line or 'val visibleCategories =' in line]
+              else: matches=[i for i,line in enumerate(s) if 'V158RecentlyAdded.select' in line]
+              print("SOURCE_DIAGNOSTIC",name)
+              ranges=set()
+              for i in matches[:14]:
+                  for k in range(max(0,i-4),min(len(s),i+11)): ranges.add(k)
+              for k in sorted(ranges): print(f"{k+1}: {s[k]}")
+          PY
       - name: Validate source version, provider dates, synthetic category and playback preservation
         shell: bash
         run: |
