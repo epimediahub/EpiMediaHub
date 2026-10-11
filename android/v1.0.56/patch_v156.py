@@ -31,13 +31,13 @@ replace(client,
 '''            // M3U was already prefetched once, during Live catalogue loading.
             // A warm-cache lookup requires zero HTTP calls on each channel zap.
             // At cold start, one shared request may still be awaited.
-            val exactLive = V156ExactM3uCache.resolve(m3uStreamKey(), providerM3uUrl(), item.id)
+            val exactLive = V156ExactM3uCache.resolve(m3uStreamKey() + "|" + p.password, providerM3uUrl(), item.id)
             if (!exactLive.isNullOrBlank()) return item.copy(streamUrl = exactLive)''')
 replace(client,
 '''        val streamServer = if (kind == MediaKind.LIVE || kind == MediaKind.MOVIE) resolveStreamServer() else cachedStreamServer()''',
 '''        if (kind == MediaKind.LIVE && V155ExactM3uLive.nonFireTvDevice() &&
             providerOutputFormat() !in setOf("mpegts", "mpeg-ts")) {
-            V156ExactM3uCache.warm(m3uStreamKey(), providerM3uUrl())
+            V156ExactM3uCache.warm(m3uStreamKey() + "|" + p.password, providerM3uUrl())
         }
         val streamServer = if (kind == MediaKind.LIVE || kind == MediaKind.MOVIE) resolveStreamServer() else cachedStreamServer()''')
 
