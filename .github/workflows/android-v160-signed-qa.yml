@@ -4,6 +4,7 @@ on:
     branches: [feature/v159-live-remote-hold-seek]
     paths:
       - '.github/workflows/android-v160-signed-qa.yml'
+      - '.github/workflows/v160-official-inapp-updater.yml'
   pull_request:
     branches: [release/v157-unified-playback-recent]
     paths:
