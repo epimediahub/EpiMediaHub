@@ -42,8 +42,8 @@ jobs:
           from pathlib import Path
           src=Path(os.environ["PROJECT_ROOT"])/"app/src/main/java/de/epimediahub/app"
           targets=[
-             (src/"data/XtreamClient.kt", ["fun streamCandidates(", "fun entries("],200),
-             (src/"ui/PlayerScreen.kt",["fun PlayerScreen(", "fun openUrl(", "onPlayerError(", "V071VlcLivePlayer("],80),
+             (src/"data/XtreamClient.kt", ["fun preparePlaybackItem(", "fun canonicalMpegTsLiveUrl(", "fun cachedExactM3uUrl(", "fun prefetchExactM3uAsync(", "fun streamCandidates(", "fun entries("],105),
+             (src/"ui/PlayerScreen.kt",["fun PlayerScreen(", "fun openUrl(", "onPlayerError(", "V071VlcLivePlayer("],56),
              (src/"ui/V088VlcVideo.kt",["key(url, userAgent, referer)", "onDispose"],35),
              (src/"MainViewModel.kt",["fun playbackUrls(", "fun switchLiveChannel("],32),
           ]
