@@ -28,10 +28,10 @@ import kotlin.math.sin
  */
 @Composable
 internal fun V160IntroWorlds(elapsedMs: Long, accent: Color, unit: Float) {
-    val mediaOne = V160IntroTimeline.envelope(elapsedMs, 1600, 480, 3950, 420)
-    val mediaTwo = V160IntroTimeline.envelope(elapsedMs, 3830, 400, 5930, 370)
-    val vpn = V160IntroTimeline.envelope(elapsedMs, 5750, 420, 7730, 480)
-    val converge = V160IntroTimeline.envelope(elapsedMs, 7240, 380, 8960, 520)
+    val mediaOne = V121IntroTimeline.envelope(elapsedMs, 1600, 480, 3950, 420)
+    val mediaTwo = V121IntroTimeline.envelope(elapsedMs, 3830, 400, 5930, 370)
+    val vpn = V121IntroTimeline.envelope(elapsedMs, 5750, 420, 7730, 480)
+    val converge = V121IntroTimeline.envelope(elapsedMs, 7240, 380, 8960, 520)
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (mediaOne > 0f) {
@@ -103,7 +103,7 @@ internal fun V160IntroWorlds(elapsedMs: Long, accent: Color, unit: Float) {
         if (converge > 0f) {
             Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = converge }) {
                 val c = Offset(size.width / 2f, size.height / 2f)
-                val e = V160IntroTimeline.ease((elapsedMs - 7240L) / 1200f)
+                val e = V121IntroTimeline.ease((elapsedMs - 7240L) / 1200f)
                 val radius = size.width * (.53f - .39f * e)
                 repeat(18) { i ->
                     val angle = (i * 20f + elapsedMs * .009f) * (Math.PI / 180.0)
