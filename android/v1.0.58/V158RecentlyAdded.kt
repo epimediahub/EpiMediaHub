@@ -12,8 +12,8 @@ internal object V158RecentlyAdded {
         if (limit <= 0) return emptyList()
         return all.asSequence()
             .filter { it.addedAt > 0L }
-            .distinctBy { it.resumeKey }
             .sortedByDescending { it.addedAt }
+            .distinctBy { it.resumeKey }
             .take(limit)
             .toList()
     }
