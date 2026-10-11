@@ -34,7 +34,7 @@ for name in ("V160IntroWorlds.kt", "V160IntroWarmupPolicy.kt"):
 intro = java / "ui/V070Intro.kt"
 replace(intro,
     '        if (world > 0f) Text("The whole world\\nof multimedia",',
-    '        V160IntroWorlds(elapsedMs, accent, unit)\\n'
+    '        V160IntroWorlds(elapsedMs, accent, unit)\n'
     '        if (world > 0f) Text("The whole world\\nof multimedia",')
 
 # The final 5.8s of the soundtrack stay bit-identical to the old mix.
@@ -49,24 +49,24 @@ replace(vm,
     '    fun refreshPlaylistsAtAppStart() {',
     (here / "V160LiveWarmup.inc").read_text() + '    fun refreshPlaylistsAtAppStart() {')
 replace(vm,
-    '        if (list != _ui.value.playlists) {\\n            libraryLoadGeneration++; libraryLoadJob?.cancel()',
-    '        if (list != _ui.value.playlists) {\\n            v160CancelLiveIntroWarmup()\\n            libraryLoadGeneration++; libraryLoadJob?.cancel()')
-replace(vm, '        prefs.activePlaylistId = id\\n        back.clear()',
-    '        prefs.activePlaylistId = id\\n        v160CancelLiveIntroWarmup()\\n        back.clear()')
+    '        if (list != _ui.value.playlists) {\n            libraryLoadGeneration++; libraryLoadJob?.cancel()',
+    '        if (list != _ui.value.playlists) {\n            v160CancelLiveIntroWarmup()\n            libraryLoadGeneration++; libraryLoadJob?.cancel()')
+replace(vm, '        prefs.activePlaylistId = id\n        back.clear()',
+    '        prefs.activePlaylistId = id\n        v160CancelLiveIntroWarmup()\n        back.clear()')
 
 app = java / "EpiMediaHubApp.kt"
 replace(app,
-    '    val v134Ready = de.epimediahub.app.vpn.v134RouteReady(context, u.active?.id?.toString())\\n'
+    '    val v134Ready = de.epimediahub.app.vpn.v134RouteReady(context, u.active?.id?.toString())\n'
     '    MaterialTheme(colorScheme = scheme, shapes = shapes) {',
-    '    val v134Ready = de.epimediahub.app.vpn.v134RouteReady(context, u.active?.id?.toString())\\n'
-    '    // Start at most one low-priority metadata warmup during the intro, only\\n'
-    '    // after pairing, licensing and the existing VPN / DIRECT route gate.\\n'
-    '    LaunchedEffect(showIntro, dashboardPaired, v120LicenseState.allowsUse, v134Ready, u.active?.id) {\\n'
-    '        if (V160IntroWarmupPolicy.allowed(showIntro, dashboardPaired,\\n'
-    '                v120LicenseState.allowsUse, v134Ready, u.active != null)) {\\n'
-    '            vm.v160WarmLiveDuringIntro()\\n'
-    '        }\\n'
-    '    }\\n'
+    '    val v134Ready = de.epimediahub.app.vpn.v134RouteReady(context, u.active?.id?.toString())\n'
+    '    // Start at most one low-priority metadata warmup during the intro, only\n'
+    '    // after pairing, licensing and the existing VPN / DIRECT route gate.\n'
+    '    LaunchedEffect(showIntro, dashboardPaired, v120LicenseState.allowsUse, v134Ready, u.active?.id) {\n'
+    '        if (V160IntroWarmupPolicy.allowed(showIntro, dashboardPaired,\n'
+    '                v120LicenseState.allowsUse, v134Ready, u.active != null)) {\n'
+    '            vm.v160WarmLiveDuringIntro()\n'
+    '        }\n'
+    '    }\n'
     '    MaterialTheme(colorScheme = scheme, shapes = shapes) {')
 
 test_dir = root / "app/src/test/java/de/epimediahub/app/ui"
