@@ -39,9 +39,10 @@ def run(*command: str, timeout: int = 180) -> None:
 
 
 def active(unit: str) -> bool:
-    return subprocess.run(
-        ["systemctl", "is-active", "--quiet", unit], check=False
-    ).returncode == 0
+    # The analysis oneshot shows "activating" for the entire running batch.
+    result = subprocess.run(["systemctl", "show", unit, "-p", "ActiveState", "--value"],
+                            check=True, capture_output=True, text=True)
+    return result.stdout.strip() in ("active", "activating", "reloading")
 
 
 def sha256(data: bytes) -> str:
@@ -79,46 +80,40 @@ def patch_scene(text: str) -> str:
 
 
 def patch_orchestrator(text: str) -> str:
-    anchor = (
-        "    from skip_catalogue import advance as catalogue_advance, daily_limit\n"
+    # Live 2026-10-11 orchestrator has a thin account wrapper process_one
+    # and a separate internal _process_one that selects/claims queued jobs.
+    # Check the true internal function, not the old repository layout.
+    signature = (
+        "def _process_one(db, *, exclude_job_ids=(), on_claim=None, deadline=None, lane_id=None):\n"
     )
-    # Exact live source structure verified against GitHub source; this is
-    # specifically AFTER the independent app-capture branch, before job claim.
-    before = (
-        "def process_one(db, *, exclude_job_ids=(), on_claim=None, deadline=None):\n"
-        "    from skip_app_capture import process_one as process_capture\n"
-        "    if process_capture(db, lambda: deadline is not None and time.monotonic() >= deadline):\n"
-        "        return 'app_compared'\n"
-    )
-    if text.count(before) != 1 or text.count(anchor) != 1:
-        raise ValueError("Unexpected controller orchestrator: safe insertion point missing")
-    if "episcene_preflight=" in text or "from skip_remote_client import configured as _epi_configured" in text:
-        raise ValueError("Preflight already installed: no duplicate patches")
+    anchor = "    from skip_catalogue import advance as catalogue_advance, daily_limit\n"
+    if text.count(signature + anchor) != 1:
+        raise ValueError("Unexpected live _process_one signature/entry")
+    if "episcene_preflight=" in text:
+        raise ValueError("Preflight already installed; refusing duplicate installation")
     if text.count("def process_batch(") != 1:
-        raise ValueError("Controller batch runner not recognized")
+        raise ValueError("Live batch runner missing")
     batch = text.split("def process_batch(", 1)[1]
     if '"queued"):' not in batch:
-        raise ValueError("Batch must stop when worker preflight returns queued")
+        raise ValueError("Batch does not stop on queued")
 
     guard = (
-        "    # Check compute-worker status before taking a new analysis job.\n"
-        "    # /health validates all versioned component SHA-256 values.\n"
+        "    # Remote RPC worker must be healthy before a queued job is claimed.\n"
         "    from skip_remote_client import configured as _epi_configured\n"
         "    from skip_remote_client import health as _epi_health\n"
         "    from skip_remote_client import RemoteDeferred as _epi_deferred\n"
-        "    if _epi_configured():\n"
-        "        try:\n"
-        "            _epi_health()\n"
-        "        except _epi_deferred as error:\n"
-        "            print('episcene_preflight=worker_unreachable_or_version_mismatch', flush=True)\n"
-        "            return 'queued'\n"
+        "    if not _epi_configured():\n"
+        "        print('episcene_preflight=worker_not_configured', flush=True)\n"
+        "        return 'queued'\n"
+        "    try:\n"
+        "        _epi_health()\n"
+        "    except _epi_deferred:\n"
+        "        print('episcene_preflight=worker_unreachable_or_version_mismatch', flush=True)\n"
+        "        return 'queued'\n"
     )
-    updated = text.replace(before + anchor, before + guard + anchor, 1)
-    if updated == text:
-        raise ValueError("Exact injection point not found")
+    updated = text.replace(signature + anchor, signature + guard + anchor, 1)
     ast.parse(updated, filename="skip_analysis_worker.py")
     return updated
-
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Safe report-driven EpiScene upgrade")
@@ -134,6 +129,15 @@ def main() -> int:
         raise RuntimeError("Unknown live topology: missing " + ", ".join(missing))
 
     original = {path: path.read_bytes() for path in TARGETS}
+    # Exact SHA-256 from the user's live diagnostic; fail closed on unknown code.
+    expected_hashes = {
+        SCENE[0]: "c666e20a90d72840d2b82f1dea15faad8368f06ec5a21610fd98f26f0e02ae7a",
+        SCENE[1]: "c666e20a90d72840d2b82f1dea15faad8368f06ec5a21610fd98f26f0e02ae7a",
+        ORCHESTRATOR: "0db75c3116117f00f3ed2ca360b285ec46cbf3c842a1eb2401cfe31eec5d394f",
+    }
+    for target, data in original.items():
+        if sha256(data) != expected_hashes[target]:
+            raise RuntimeError("Live file changed since diagnosis; STOP before edits: " + str(target))
     if original[SCENE[0]] != original[SCENE[1]]:
         raise RuntimeError("Controller/compute scene files differ; do not overwrite")
 
@@ -187,13 +191,12 @@ def main() -> int:
         shutil.copy2(file, backup / (prefix + file.name))
     print("Backup:", backup, flush=True)
 
-    stopped = False
+    stopped = True
     try:
         run("systemctl", "stop", TIMER)
         # A current analysis may be interrupted; its saved windows/markers persist.
         run("systemctl", "stop", ANALYSIS)
         run("systemctl", "stop", COMPUTE_SERVICE)
-        stopped = True
 
         for path, data in desired.items():
             write_atomic(path, data)
