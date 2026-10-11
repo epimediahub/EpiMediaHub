@@ -2,7 +2,7 @@ name: EpiMediaHub v1.0.58 source integrity and recent-media regression
 
 on:
   push:
-    branches: [fix/v158-truthful-recent-version-header]
+    branches: [release/v157-unified-playback-recent]
     paths:
       - 'android/v1.0.58/**'
       - '.github/workflows/android-v158-source-qa.yml'
