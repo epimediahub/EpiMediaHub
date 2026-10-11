@@ -1,9 +1,11 @@
-name: Publish official EpiMediaHub v1.0.58 unified Android TV / Fire TV release
+name: Publish official EpiMediaHub v1.0.58 recent and continue category release
 
 on:
   push:
     branches: [release/v157-unified-playback-recent]
-    paths: ['.github/workflows/v158-official-inapp-updater.yml']
+    paths:
+      - '.github/workflows/v158-official-inapp-updater.yml'
+      - 'android/v1.0.58/**'
   workflow_dispatch:
 
 permissions:
