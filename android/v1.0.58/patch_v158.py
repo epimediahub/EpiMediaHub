@@ -31,6 +31,17 @@ vm = java / "MainViewModel.kt"
 replace_once(vm, "V157RecentlyAdded.select(all, 36)", "V158RecentlyAdded.select(all, 36)")
 replace_once(vm, "V157RecentlyAdded.select(all, 300)", "V158RecentlyAdded.select(all, 300)")
 
+# Xtream movies usually send "added"; series commonly send "last_modified".
+# v1.0.57 dropped the latter field entirely, hiding genuine recent series.
+xtream = java / "data/XtreamClient.kt"
+source = xtream.read_text()
+old_date = 'addedAt = o.optString("added").toLongOrNull() ?: 0L'
+if source.count(old_date) != 2:
+    raise SystemExit(f"Expected exactly 2 Xtream MOVIE/SERIES date fields, got {source.count(old_date)}")
+xtream.write_text(source.replace(old_date, 'addedAt = V158ProviderDates.fromRow(o, kind)'))
+shutil.copyfile(here / "V158ProviderDates.kt", java / "data/V158ProviderDates.kt")
+shutil.copyfile(here / "V158ProviderDatesTest.kt", tests / "data/V158ProviderDatesTest.kt")
+
 # Always offer the real recent section as a category as well as on the
 # movie/series overview; avoid duplicate synthetic rows in the category rail.
 hub = java / "ui/V060CinematicHub.kt"
@@ -57,6 +68,53 @@ replace_once(
     }'''
 )
 
+# Add a real remote-control shortcut to the already existing Weiterschauen
+# row. This does NOT start another playback session or download another catalog.
+replace_once(
+    hub,
+    '''    onOverview: () -> Unit,
+    onCategory: (Int, MediaCategory) -> Unit
+) {''',
+    '''    onOverview: () -> Unit,
+    onCategory: (Int, MediaCategory) -> Unit,
+    showContinue: Boolean,
+    onContinue: () -> Unit
+) {'''
+)
+replace_once(
+    hub,
+    '''            itemsIndexed(categories, key = { _, category -> "rail:" + category.id }, contentType = { _, _ -> "category" })''',
+    '''            if (showContinue) {
+                item(key = "rail-continue") {
+                    V071CategoryRailItem(
+                        title = "Weiterschauen",
+                        selected = selectedId == "__continue__",
+                        accent = accent,
+                        modifier = if (selectedId == "__continue__") Modifier.focusRequester(selectedFocus) else Modifier,
+                        onClick = onContinue
+                    )
+                }
+            }
+            itemsIndexed(categories, key = { _, category -> "rail:" + category.id }, contentType = { _, _ -> "category" })'''
+)
+replace_once(
+    hub,
+    '''                        categories = visibleCategories,
+                        selectedId = selectedCategoryId,
+                        accent = accent,
+                        onOverview = {''',
+    '''                        categories = visibleCategories,
+                        selectedId = selectedCategoryId,
+                        accent = accent,
+                        showContinue = continueItems.isNotEmpty(),
+                        onContinue = {
+                            selectedCategoryId = "__continue__"
+                            // Hero and actions precede the existing Weiterschauen row.
+                            scrollToCategory((if (hero != null) 1 else 0) + 1)
+                        },
+                        onOverview = {'''
+)
+
 # The header got stuck on 1.0.33 because it was copied from a static UI string.
 # Read the actual installed APK version instead of perpetually patching text.
 home = java / "ui/V083Home.kt"
@@ -81,7 +139,10 @@ replace_once(catalogue_test,
 
 assert "V158RecentlyAdded.select(all, 36)" in vm.read_text()
 assert "V158RecentlyAdded.select(all, 300)" in vm.read_text()
-assert "V156ExactM3uCache.resolve(" in (java / "data/XtreamClient.kt").read_text()
+assert "V158ProviderDates.fromRow(o, kind)" in xtream.read_text()
+assert "showContinue = continueItems.isNotEmpty()" in hub.read_text()
+assert 'title = "Weiterschauen"' in hub.read_text()
+assert "V156ExactM3uCache.resolve(" in xtream.read_text()
 assert "${de.epimediahub.app.BuildConfig.VERSION_NAME}" in home.read_text()
-print("v1.0.58 candidate: provider-date-only latest titles, TV category rail and real APK header version.")
+print("v1.0.58 candidate: corrected Xtream provider dates, recent category, Weiterschauen rail and real APK version.")
 print("Live TV URL handling and VPN controls were not changed.")
