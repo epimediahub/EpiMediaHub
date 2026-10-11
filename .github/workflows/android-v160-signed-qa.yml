@@ -1,9 +1,8 @@
 name: EpiMediaHub v1.0.60 signed APK pilot QA (no deployment)
 on:
   push:
-    branches: [feature/v160-live-remote-hold-seek]
+    branches: [feature/v159-live-remote-hold-seek]
     paths:
-      - '.github/workflows/android-v160-signed-qa.yml'
       - '.github/workflows/android-v160-signed-qa.yml'
   pull_request:
     branches: [release/v157-unified-playback-recent]
@@ -161,7 +160,7 @@ jobs:
             "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$src" > "$info"
             grep -F "package: name='de.epimediahub.app'" "$info"
             grep -F "versionCode='1060'" "$info"
-            grep -F "versionName='1.0.59'" "$info"
+            grep -F "versionName='1.0.60'" "$info"
             signature="$RUNNER_TEMP/$abi-signature.txt"
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$src" > "$signature"
             cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$signature" | tr '[:lower:]' '[:upper:]')"
