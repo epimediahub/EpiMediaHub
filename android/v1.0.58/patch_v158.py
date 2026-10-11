@@ -36,14 +36,25 @@ replace_once(vm, "V157RecentlyAdded.select(all, 300)", "V158RecentlyAdded.select
 hub = java / "ui/V060CinematicHub.kt"
 replace_once(
     hub,
-    '    val visibleCategories = u.categories.filter { u.catalogRows[it.id].orEmpty().isNotEmpty() }',
-    '''    val recentCategory = if ((kind == MediaKind.MOVIE || kind == MediaKind.SERIES) &&
-        u.catalogRows["__recently_added__"].orEmpty().isNotEmpty()) {
-        de.epimediahub.app.model.MediaCategory("__recently_added__", "Zuletzt hinzugefügt")
-    } else null
-    val visibleCategories = (listOfNotNull(recentCategory) +
-        u.categories.filterNot { it.id == "__recently_added__" })
-        .filter { u.catalogRows[it.id].orEmpty().isNotEmpty() }'''
+    '''    val visibleCategories = remember(u.categories, u.hiddenCategoryIds, u.catalogRows) {
+        u.categories.filter {
+            it.id != "__recently_added__" && it.id !in u.hiddenCategoryIds && u.catalogRows[it.id].orEmpty().isNotEmpty()
+        }
+    }''',
+    '''    val visibleCategories = remember(kind, u.categories, u.hiddenCategoryIds, u.catalogRows) {
+        val providerCategories = u.categories.filter {
+            it.id != "__recently_added__" &&
+                it.id !in u.hiddenCategoryIds &&
+                u.catalogRows[it.id].orEmpty().isNotEmpty()
+        }
+        val recentItems = u.catalogRows["__recently_added__"].orEmpty()
+            .filter { it.categoryId !in u.hiddenCategoryIds }
+        val recentCategory = if ((kind == MediaKind.MOVIE || kind == MediaKind.SERIES) &&
+            recentItems.isNotEmpty()) {
+            de.epimediahub.app.model.MediaCategory("__recently_added__", "Zuletzt hinzugefügt")
+        } else null
+        listOfNotNull(recentCategory) + providerCategories
+    }'''
 )
 
 # The header got stuck on 1.0.33 because it was copied from a static UI string.
