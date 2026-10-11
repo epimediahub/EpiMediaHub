@@ -2,7 +2,7 @@ name: EpiMediaHub 1.0.56 GalaBox source and bounded M3U tests
 
 on:
   push:
-    branches: [fix/v156-galabox-direct-playback]
+    branches: [fix/v156-galabox-fast-zapping]
     paths:
       - 'android/v1.0.56/**'
       - '.github/workflows/android-v156-galabox-source-qa.yml'
