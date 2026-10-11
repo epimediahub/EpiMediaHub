@@ -1,0 +1,165 @@
+name: EpiMediaHub v1.0.59 signed QA (private, no deployment)
+on:
+  push:
+    branches: [feature/v159-live-remote-hold-seek]
+    paths:
+      - 'android/v1.0.59/**'
+      - '.github/workflows/android-v159-signed-qa.yml'
+  pull_request:
+    branches: [release/v157-unified-playback-recent]
+    paths:
+      - 'android/v1.0.59/**'
+      - '.github/workflows/android-v159-signed-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+    env:
+      EPIMEDIAHUB_OFFICIAL_CANDIDATE: '1'
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct verified source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* | base64 -d > .ci-android/source.tar.gz
+          test "$(sha256sum .ci-android/source.tar.gz | awk '{print $1}')" = "192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+      - name: Pin Android toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+      - name: Apply v149 through v159 patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash build_tools/install_android_v1033_source.sh
+          python3 android/v1.0.34-vpn/patch_wireguard_spike.py
+          python3 android/v1.0.34-vpn/patch_playlist_routing.py
+          for v in 149 150 151 152 153 154 155 156 157 158 159; do
+            python3 "android/v1.0.$((10#$v - 100))/patch_v$v.py"
+          done
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Restore Android audio native cache
+        id: audio-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.PROJECT_ROOT }}/ffmpeg-audio/src/main/jni/ffmpeg/android-libs
+            ${{ env.PROJECT_ROOT }}/ffmpeg-6.1.6.tar.xz
+          key: audio-ffmpeg-6.1.6-ndk26b-api25-${{ runner.os }}-${{ hashFiles('build_tools/build_android_audio_v123.sh', 'android/v1.0.23/upstream.json') }}
+      - name: Prepare audio-only Android native dependencies
+        run: bash build_tools/build_android_audio_v123.sh
+      - name: Configure official signing from repository secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          KEYSTORE="$RUNNER_TEMP/epimediahub-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias epimediahub > /dev/null
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_ROOT'])/'app/build.gradle.kts'
+          s=p.read_text()
+          anchor='    buildTypes {\n'
+          if s.count(anchor)!=1: raise SystemExit('Unexpected build types')
+          signing='''    signingConfigs {
+              create("release") {
+                  storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))
+                  storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                  keyAlias = "epimediahub"
+                  keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+              }
+          }
+
+          '''
+          s=s.replace(anchor, signing+anchor, 1)
+          anchor='        release {\n'
+          if s.count(anchor)!=1: raise SystemExit('Unexpected release variant')
+          s=s.replace(anchor,anchor+'            signingConfig = signingConfigs.getByName("release")\n',1)
+          p.write_text(s)
+          PY
+      - name: Check compilation for v1.0.59 without any release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          gradle :app:compileDebugKotlin --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+      - name: Run complete Android unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          gradle :app:testDebugUnitTest --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+      - name: Assemble official signed APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          gradle :app:assembleRelease --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+      - name: Verify official package and signing identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-artifacts
+          RELEASE="$PROJECT_ROOT/app/build/outputs/apk/release"
+          for abi in arm64-v8a armeabi-v7a universal; do
+            src="$RELEASE/app-$abi-release.apk"
+            test -s "$src"
+            info="$RUNNER_TEMP/$abi-badging.txt"
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$src" > "$info"
+            grep -F "package: name='de.epimediahub.app'" "$info"
+            grep -F "versionCode='1059'" "$info"
+            grep -F "versionName='1.0.59'" "$info"
+            signature="$RUNNER_TEMP/$abi-signature.txt"
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$src" > "$signature"
+            cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$signature" | tr '[:lower:]' '[:upper:]')"
+            test "$cert" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+            cp "$src" "qa-artifacts/EpiMediaHub-Android-v1.0.59-$abi.apk"
+          done
+          (cd qa-artifacts && sha256sum *.apk > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-v159-official-signed-QA
+          path: qa-artifacts/
+          retention-days: 14
+          if-no-files-found: error
