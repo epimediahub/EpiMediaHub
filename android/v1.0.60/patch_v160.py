@@ -73,6 +73,7 @@ test_dir = root / "app/src/test/java/de/epimediahub/app/ui"
 test_dir.mkdir(parents=True, exist_ok=True)
 shutil.copyfile(here / "V160IntroWarmupPolicyTest.kt",
     test_dir / "V160IntroWarmupPolicyTest.kt")
+shutil.copyfile(here / "V160IntroTest.kt", test_dir / "V121IntroTest.kt")
 
 assert "V160IntroWorlds(elapsedMs, accent, unit)" in intro.read_text()
 assert "v160WarmLiveDuringIntro()" in vm.read_text()
