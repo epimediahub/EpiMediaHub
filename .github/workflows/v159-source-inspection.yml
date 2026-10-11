@@ -75,4 +75,7 @@ jobs:
           manifest=(Path(os.environ["PROJECT_ROOT"])/"app/src/main/AndroidManifest.xml").read_text()
           print("########## AndroidManifest.xml ##########")
           print(manifest[:25000])
+          gradle = Path(os.environ["PROJECT_ROOT"])/"app/build.gradle.kts"
+          print("########## app/build.gradle.kts ##########")
+          print(gradle.read_text()[:25000])
           PY
