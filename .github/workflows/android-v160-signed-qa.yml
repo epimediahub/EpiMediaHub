@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: f6e47fab58a65d14791652fe825ee08229b15acb
+          ref: 4eb73efd17b28fecbb824875137e43cede07c27f
       - name: Reconstruct verified source
         shell: bash
         run: |
