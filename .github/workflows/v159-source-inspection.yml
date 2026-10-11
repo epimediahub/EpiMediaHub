@@ -5,6 +5,10 @@ on:
     paths:
       - '.github/workflows/v159-source-inspection.yml'
   workflow_dispatch:
+  pull_request:
+    branches: [release/v157-unified-playback-recent]
+    paths:
+      - '.github/workflows/v159-source-inspection.yml'
 permissions:
   contents: read
 jobs:
