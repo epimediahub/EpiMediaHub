@@ -118,7 +118,7 @@ jobs:
           update={
               'version':'1.0.57',
               'versionCode':1057,
-              'notes':'v1.0.57: Verbesserte Live-TV-Streamauflösung mit einmaligem Adressabgleich beim ersten Sender und schnellen Folgewechseln auf Fire TV und Android TV; Filme und Serien zeigen Zuletzt hinzugefügt. 4K IPTV bleibt DIRECT, VPN-Playlists bleiben geschützt. Bestehende Kunden- und Playlist-Daten bleiben erhalten.',
+              'notes':'v1.0.57: Verbesserte Live-TV-Streamauflösung mit vorbereiteten Anbieteradressen und schnellem Senderwechsel auf Fire TV und Android TV; Filme und Serien zeigen Zuletzt hinzugefügt. 4K IPTV bleibt DIRECT, VPN-Playlists bleiben geschützt. Bestehende Kunden- und Playlist-Daten bleiben erhalten.',
               'apks':apks
           }
           for filename in ('latest.json','android-latest.json'):
