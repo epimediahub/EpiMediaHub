@@ -47,7 +47,7 @@ jobs:
           import os,re
           from pathlib import Path
           root=Path(os.environ["PROJECT_ROOT"])/"app/src/main/java/de/epimediahub/app"
-          paths=["ui/PlayerScreen.kt","EpiMediaHubApp.kt","ui/V115PlayerChrome.kt"]
+          paths=["ui/PlayerScreen.kt","EpiMediaHubApp.kt","ui/V115PlayerChrome.kt"] + [str(f.relative_to(root)) for f in (root/"ui").glob("*Vod*.kt")] + [str(f.relative_to(root)) for f in (root/"ui").glob("*Live*.kt")]
           tokens=re.compile(r'onKey|KEYCODE|Key\.|keyDown|keyUp|onPreviewKey|seek|seekTo|channel|Channel|player.*Key|Dpad|isLive|MediaKind\.LIVE|Slider|onBack',re.I)
           for name in paths:
               p=root/name
