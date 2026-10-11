@@ -2,7 +2,7 @@ name: EpiMediaHub 1.0.58 official signed complete QA
 
 on:
   push:
-    branches: [fix/v158-truthful-recent-version-header]
+    branches: [release/v157-unified-playback-recent]
     paths:
       - '.github/workflows/android-v158-official-qa.yml'
       - 'android/v1.0.58/**'
