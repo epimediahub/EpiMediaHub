@@ -116,7 +116,7 @@ jobs:
           player=(p/'app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt').read_text()
           recent=(p/'app/src/main/java/de/epimediahub/app/data/V157RecentlyAdded.kt').read_text()
           assert 'V156ExactM3uCache.resolve(' in x
-          assert 'V156ExactM3uCache.warm(' not in x
+          assert 'V156ExactM3uCache.warm(' in x
           assert 'if (item.kind == MediaKind.LIVE) {' in x
           assert 'if (item.kind == MediaKind.LIVE && V155ExactM3uLive.nonFireTvDevice())' not in x
           assert 'return if (item.kind == MediaKind.LIVE) distinct.take(10) else distinct' in x
@@ -128,5 +128,6 @@ jobs:
           assert 'dated.sortedByDescending' in recent
           assert (p/'app/src/test/java/de/epimediahub/app/data/V156ExactM3uCacheTest.kt').is_file()
           assert (p/'app/src/test/java/de/epimediahub/app/data/V157RecentlyAddedTest.kt').is_file()
+          assert 'distinctBy { it.resumeKey }' in (p/'app/src/test/java/de/epimediahub/app/ui/V128CatalogueLoadingTest.kt').read_text()
           print('v1.0.57 SOURCE QA PASSED: Fire TV + GalaBox URL precedence, movie/series recently-added, VPN preserved')
           PY
