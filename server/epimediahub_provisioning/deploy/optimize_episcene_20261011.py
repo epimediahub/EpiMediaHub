@@ -129,14 +129,15 @@ def main() -> int:
         raise RuntimeError("Unknown live topology: missing " + ", ".join(missing))
 
     original = {path: path.read_bytes() for path in TARGETS}
-    # Exact SHA-256 from the user's live diagnostic; fail closed on unknown code.
-    expected_hashes = {
-        SCENE[0]: "c666e20a90d72840d2b82f1dea15faad8368f06ec5a21610fd98f26f0e02ae7a",
-        SCENE[1]: "c666e20a90d72840d2b82f1dea15faad8368f06ec5a21610fd98f26f0e02ae7a",
-        ORCHESTRATOR: "0db75c3116117f00f3ed2ca360b285ec46cbf3c842a1eb2401cfe31eec5d394f",
+    # Compare the 16-digit SHA-256 prefixes actually shown in the live terminal
+    # diagnostic, plus strict structural anchors and private RPC versions.
+    expected_prefixes = {
+        SCENE[0]: "c666e20a90d72840",
+        SCENE[1]: "c666e20a90d72840",
+        ORCHESTRATOR: "0db75c3116117f00",
     }
     for target, data in original.items():
-        if sha256(data) != expected_hashes[target]:
+        if not sha256(data).startswith(expected_prefixes[target]):
             raise RuntimeError("Live file changed since diagnosis; STOP before edits: " + str(target))
     if original[SCENE[0]] != original[SCENE[1]]:
         raise RuntimeError("Controller/compute scene files differ; do not overwrite")
