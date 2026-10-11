@@ -24,6 +24,9 @@ replace(gradle,'versionName = "1.0.58"','versionName = "1.0.59"')
 # New opt-in preference/receiver and lightweight list dialog.
 for name in ["V159ChannelOverlay.kt","V159BootAutostart.kt"]:
     shutil.copyfile(here/name,java/"ui"/name)
+test_dir=root/"app/src/test/java/de/epimediahub/app/ui"
+test_dir.mkdir(parents=True, exist_ok=True)
+shutil.copyfile(here/"V159BootAutostartTest.kt",test_dir/"V159BootAutostartTest.kt")
 
 manifest=root/"app/src/main/AndroidManifest.xml"
 replace(manifest,
