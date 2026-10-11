@@ -100,8 +100,13 @@ jobs:
           from pathlib import Path
           p=Path(os.environ['PROJECT_ROOT'])/'app/build.gradle.kts'
           s=p.read_text()
-          anchor='    buildTypes {\n'
-          if s.count(anchor)!=1: raise SystemExit('Unexpected build types')
+          # The actual reconstructed Gradle DSL may omit buildTypes entirely.
+          # Add an explicit release signing configuration to the android extension.
+          # Do not guess indentation or depend on legacy release {} blocks.
+          anchor='android {\n'
+          if s.count(anchor)!=1: raise SystemExit('Expected exactly one Android DSL block')
+          if 'signingConfigs {' in s or 'signingConfig = ' in s:
+              raise SystemExit('Unexpected existing signing configuration; refusing to override')
           signing='''    signingConfigs {
               create("release") {
                   storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))
@@ -110,13 +115,16 @@ jobs:
                   keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
               }
           }
+          buildTypes {
+              getByName("release") {
+                  signingConfig = signingConfigs.getByName("release")
+              }
+          }
 
           '''
-          s=s.replace(anchor, signing+anchor, 1)
-          anchor='        release {\n'
-          if s.count(anchor)!=1: raise SystemExit('Unexpected release variant')
-          s=s.replace(anchor,anchor+'            signingConfig = signingConfigs.getByName("release")\n',1)
+          s=s.replace(anchor,anchor+signing,1)
           p.write_text(s)
+          print('Official release signing bound in android extension (no buildTypes assumptions)')
           PY
       - name: Check compilation for v1.0.59 without any release
         shell: bash
