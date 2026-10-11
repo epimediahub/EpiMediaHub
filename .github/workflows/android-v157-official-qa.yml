@@ -9,6 +9,7 @@ on:
       - '.github/workflows/android-v157-official-qa.yml'
       - '.github/workflows/v147-official-inapp-updater.yml'
       - '.github/workflows/v154-official-inapp-updater.yml'
+      - '.github/workflows/v157-official-inapp-updater.yml'
       - 'android/v1.0.57/**'
   workflow_dispatch:
 
@@ -389,7 +390,7 @@ jobs:
           cp "$RELEASE/app-universal-release.apk" qa-artifacts/EpiMediaHub-Official-v1.0.57-Universal-PILOT.apk
           (cd qa-artifacts && sha256sum *.apk > SHA256SUMS.txt)
           cat > qa-artifacts/README.txt <<'EOF'
-          EpiMediaHub 1.0.56 GalaBox PRIVATE TEST APK: DO NOT RELEASE TO IN-APP UPDATER
+          EpiMediaHub official 1.0.57 signed QA candidate - full tests and release gate required
           This APK uses the OFFICIAL app package de.epimediahub.app; upgrading preserves existing registration on the same signing certificate.
           VPN key is generated locally and encrypted using AndroidKeyStore; entitlement/peer assigned automatically by authorized EpiMediaHub backend.
           On-demand Speedtest measures download, upload, HTTP latency and public egress IP over the verified route.
@@ -403,7 +404,7 @@ jobs:
           EOF
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-Official-v1.0.57-PRIVATE-signed-qa
+          name: EpiMediaHub-Official-v1.0.57-unified-signed-qa
           path: qa-artifacts/
           retention-days: 14
           if-no-files-found: error
