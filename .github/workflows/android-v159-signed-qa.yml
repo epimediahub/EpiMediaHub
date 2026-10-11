@@ -104,7 +104,9 @@ jobs:
           # Add an explicit release signing configuration to the android extension.
           # Do not guess indentation or depend on legacy release {} blocks.
           anchor='android {\n'
-          if s.count(anchor)!=1: raise SystemExit('Expected exactly one Android DSL block')
+          if s.count(anchor)<1: raise SystemExit('Android DSL block missing')
+          # The project intentionally contains two android {} blocks (release optimization override).
+          # Inject into the first one only; both configure the same AGP extension.
           if 'signingConfigs {' in s or 'signingConfig = ' in s:
               raise SystemExit('Unexpected existing signing configuration; refusing to override')
           signing='''    signingConfigs {
