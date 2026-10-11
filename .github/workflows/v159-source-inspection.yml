@@ -63,6 +63,13 @@ jobs:
               for a,b in spans:
                   print(f"--- {a+1}-{b} ---")
                   for n in range(a,b): print(f"{n+1:04d}: {lines[n]}")
+          for f in root.rglob("*.kt"):
+              s=f.read_text()
+              if "fun SettingsScreen(" in s:
+                  lines=s.splitlines()
+                  idx=next(i for i,line in enumerate(lines) if "fun SettingsScreen(" in line)
+                  print("########## settings function",f.relative_to(root),"##########")
+                  for n in range(max(0,idx-30),min(len(lines),idx+190)): print(f"{n+1:04d}: {lines[n]}")
           manifest=(Path(os.environ["PROJECT_ROOT"])/"app/src/main/AndroidManifest.xml").read_text()
           print("########## AndroidManifest.xml ##########")
           print(manifest[:25000])
