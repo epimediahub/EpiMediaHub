@@ -49,6 +49,15 @@ jobs:
             for a,b in spans:
               for n in range(a,min(len(lines),b)+1):
                 print(f"{n}: {lines[n-1]}")
+          test_file=Path(os.environ["PROJECT_ROOT"])/"app/src/test/java/de/epimediahub/app/V128CatalogueLoadingTest.kt"
+          print("CATALOGUE TEST PATH EXISTS",test_file.exists())
+          if not test_file.exists():
+            found=list((Path(os.environ["PROJECT_ROOT"])/"app/src/test").rglob("*CatalogueLoadingTest*"))
+            print("LOCATED",found)
+            if found: test_file=found[0]
+          if test_file.exists():
+            print("### V128CatalogueLoadingTest.kt")
+            for i,line in enumerate(test_file.read_text().splitlines(),start=1): print(f"{i}: {line}")
           vm=(src/"MainViewModel.kt").read_text()
           for term in ["private fun loadCategories(", "private fun xtreamLibrary(", "fun openCategory(", "fun setContentFilterKind(", "fun selectCategory(", "fun selectMediaKind("]:
             p=vm.find(term)
