@@ -77,8 +77,8 @@ replace_once(
 ) {''',
     '''    onOverview: () -> Unit,
     onCategory: (Int, MediaCategory) -> Unit,
-    showContinue: Boolean,
-    onContinue: () -> Unit
+    showContinue: Boolean = false,
+    onContinue: () -> Unit = {}
 ) {'''
 )
 replace_once(
@@ -141,6 +141,8 @@ assert "V158RecentlyAdded.select(all, 36)" in vm.read_text()
 assert "V158RecentlyAdded.select(all, 300)" in vm.read_text()
 assert "V158ProviderDates.fromRow(o, kind)" in xtream.read_text()
 assert "showContinue = continueItems.isNotEmpty()" in hub.read_text()
+assert "showContinue: Boolean = false" in hub.read_text()
+assert "onContinue: () -> Unit = {}" in hub.read_text()
 assert 'title = "Weiterschauen"' in hub.read_text()
 assert "V156ExactM3uCache.resolve(" in xtream.read_text()
 assert "${de.epimediahub.app.BuildConfig.VERSION_NAME}" in home.read_text()
