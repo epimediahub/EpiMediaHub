@@ -101,10 +101,10 @@ replace(xtream,
             providerOutputFormat() !in setOf("mpegts", "mpeg-ts")) {
             V156ExactM3uCache.warm(m3uStreamKey() + "|" + p.password, providerM3uUrl())
         }''',
-'''        if (kind == MediaKind.LIVE) {
-            // Warm once for all TV devices, even MPEGTS (some require exact links).
-            V156ExactM3uCache.warm(m3uStreamKey() + "|" + p.password, providerM3uUrl())
-        }''')
+'''        // Exact-M3U index is loaded once on the first LIVE tune, not during
+        // catalogue loading. This keeps category requests at their original
+        // count and avoids unnecessary get.php downloads on mere navigation.
+''')
 
 # Media3: handle a channel that never delivers the first frame by trying
 # the next candidate before switching to LibVLC. The old code went directly
@@ -169,7 +169,7 @@ shutil.copyfile(here / "V157RecentlyAddedTest.kt", tests / "data/V157RecentlyAdd
 
 source = xtream.read_text()
 assert source.count("V156ExactM3uCache.resolve(") == 1
-assert source.count("V156ExactM3uCache.warm(") == 1
+assert source.count("V156ExactM3uCache.warm(") == 0
 assert "if (item.kind == MediaKind.LIVE && V155ExactM3uLive.nonFireTvDevice())" not in source
 assert "if (canonical.isNotBlank()) return listOf(canonical)" not in source
 assert "return if (item.kind == MediaKind.LIVE) distinct.take(10) else distinct" in source
@@ -177,6 +177,6 @@ assert "val nextCandidate = activeUrl + 1" in player.read_text()
 assert 'V157RecentlyAdded.select(all, 36)' in vm.read_text()
 assert 'V157RecentlyAdded.select(all, 300)' in vm.read_text()
 assert "V153DirectPolicy.canPlay" in (java / "vpn/V134VpnSession.kt").read_text()
-print("1.0.57 official source: Fire TV and GalaBox exact URL priority + bounded fallback")
+print("1.0.57 official source: Fire TV / GalaBox exact URLs loaded once on first tune; bounded fallback")
 print("1.0.57 movie/series recent: provider timestamp order, stable fallback, open-all fixed")
 print("User profiles / VPN fail-closed / device registration left unchanged")
