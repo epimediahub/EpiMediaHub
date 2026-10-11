@@ -378,7 +378,7 @@ jobs:
           test -f "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/data/V155ExactM3uLiveTest.kt"
           test -f "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/data/V156ExactM3uCacheTest.kt"
           grep -Fq 'V156ExactM3uCache.resolve(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
-          grep -Fq 'V156ExactM3uCache.warm(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
+          ! grep -Fq 'V156ExactM3uCache.warm(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt"
           test -f "$PROJECT_ROOT/app/src/test/java/de/epimediahub/app/data/V157RecentlyAddedTest.kt"
           grep -Fq 'V157RecentlyAdded.select(all, 36)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt"
           grep -Fq 'val nextCandidate = activeUrl + 1' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt"
