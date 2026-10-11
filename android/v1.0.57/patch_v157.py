@@ -101,10 +101,11 @@ replace(xtream,
             providerOutputFormat() !in setOf("mpegts", "mpeg-ts")) {
             V156ExactM3uCache.warm(m3uStreamKey() + "|" + p.password, providerM3uUrl())
         }''',
-'''        // Exact-M3U index is loaded once on the first LIVE tune, not during
-        // catalogue loading. This keeps category requests at their original
-        // count and avoids unnecessary get.php downloads on mere navigation.
-''')
+'''        if (kind == MediaKind.LIVE) {
+            // Warm once for all Android TV platforms; channel zaps read the
+            // bounded per-provider index instead of re-downloading get.php.
+            V156ExactM3uCache.warm(m3uStreamKey() + "|" + p.password, providerM3uUrl())
+        }''')
 
 # Media3: handle a channel that never delivers the first frame by trying
 # the next candidate before switching to LibVLC. The old code went directly
@@ -167,9 +168,20 @@ replace(vm,
 shutil.copyfile(here / "V157RecentlyAdded.kt", java / "data/V157RecentlyAdded.kt")
 shutil.copyfile(here / "V157RecentlyAddedTest.kt", tests / "data/V157RecentlyAddedTest.kt")
 
+# Catalogue entries are intentionally shown in two UI rows: the new recently
+# added row and their regular provider categories. The old V128 test counted
+# row appearances and assumed each film could occur in only one row. Preserve
+# its concurrency/re-entry network assertions but check unique media identities.
+catalogue_test = tests / "ui/V128CatalogueLoadingTest.kt"
+replace(catalogue_test,
+'''            assertEquals(2, vm.ui.value.catalogRows.values.sumOf { it.size })''',
+'''            assertEquals(2, vm.ui.value.catalogRows.values.flatMap { it }.distinctBy { it.resumeKey }.size)
+            assertEquals(2, vm.ui.value.catalogRows["__recently_added__"].orEmpty().size)''')
+
+
 source = xtream.read_text()
 assert source.count("V156ExactM3uCache.resolve(") == 1
-assert source.count("V156ExactM3uCache.warm(") == 0
+assert source.count("V156ExactM3uCache.warm(") == 1
 assert "if (item.kind == MediaKind.LIVE && V155ExactM3uLive.nonFireTvDevice())" not in source
 assert "if (canonical.isNotBlank()) return listOf(canonical)" not in source
 assert "return if (item.kind == MediaKind.LIVE) distinct.take(10) else distinct" in source
@@ -177,6 +189,6 @@ assert "val nextCandidate = activeUrl + 1" in player.read_text()
 assert 'V157RecentlyAdded.select(all, 36)' in vm.read_text()
 assert 'V157RecentlyAdded.select(all, 300)' in vm.read_text()
 assert "V153DirectPolicy.canPlay" in (java / "vpn/V134VpnSession.kt").read_text()
-print("1.0.57 official source: Fire TV / GalaBox exact URLs loaded once on first tune; bounded fallback")
+print("1.0.57 official source: Fire TV and GalaBox shared bounded warm URL cache; fallbacks")
 print("1.0.57 movie/series recent: provider timestamp order, stable fallback, open-all fixed")
 print("User profiles / VPN fail-closed / device registration left unchanged")
