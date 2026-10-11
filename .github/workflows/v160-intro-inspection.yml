@@ -1,0 +1,72 @@
+name: v160 Intro source discovery (no release)
+on:
+  push:
+    branches: [feature/v160-cinematic-launch-intro]
+    paths:
+      - '.github/workflows/v160-intro-inspection.yml'
+  workflow_dispatch:
+  pull_request:
+    branches: [release/v157-unified-playback-recent]
+    paths:
+      - '.github/workflows/v160-intro-inspection.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct patched Android source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* | base64 -d > .ci-android/source.tar.gz
+          test "$(sha256sum .ci-android/source.tar.gz | cut -d' ' -f1)" = "192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+      - name: Run existing source patches
+        shell: bash
+        env:
+          EPIMEDIAHUB_OFFICIAL_CANDIDATE: '1'
+        run: |
+          set -euo pipefail
+          bash build_tools/install_android_v1033_source.sh
+          python3 android/v1.0.34-vpn/patch_wireguard_spike.py
+          python3 android/v1.0.34-vpn/patch_playlist_routing.py
+          for v in 149 150 151 152 153 154 155 156 157 158; do
+            python3 "android/v1.0.$((10#$v - 100))/patch_v$v.py"
+          done
+          python3 android/v1.0.59/patch_v159.py
+          python3 -m py_compile android/v1.0.59/patch_v159.py
+      - name: Print launch intro source and resources
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,re
+          p=Path(os.environ['PROJECT_ROOT'])
+          java=p/'app/src/main/java/de/epimediahub/app'
+          for f in java.rglob('*.kt'):
+              ss=f.read_text(errors='ignore')
+              if re.search(r'(?i)showIntro|One App|the whole world|heartbeat|introVideo|IntroCinematic',ss):
+                  lines=ss.splitlines()
+                  if len(lines)>1200 and 'EpiMediaHubApp.kt' not in f.name: continue
+                  print("### FILE",f.relative_to(p),len(lines))
+                  idx=[i for i,x in enumerate(lines) if re.search(r'(?i)showIntro|One App|the whole world|heartbeat|introVideo|IntroCinematic',x)]
+                  windows=[]
+                  for i in idx:
+                      lo=max(0,i-16);hi=min(len(lines),i+40)
+                      if windows and lo<=windows[-1][1]: windows[-1]=(windows[-1][0],max(windows[-1][1],hi))
+                      else: windows.append((lo,hi))
+                  for lo,hi in windows:
+                      print('---',lo+1,hi)
+                      for n in range(lo,hi): print(f'{n+1}: {lines[n]}')
+          for f in (p/'app/src/main/res/raw').glob('*intro*'):
+              print('AUDIO',f.name,f.stat().st_size)
+          for f in (p/'app/src/main/res/drawable').glob('*logo*'):
+              print('LOGO',f.name,f.stat().st_size)
+          PY
