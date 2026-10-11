@@ -1,4 +1,4 @@
-name: v159 Player source inspection (development only)
+name: v159 source warmup integration inspection (temporary)
 on:
   push:
     branches: [feature/v159-live-remote-hold-seek]
@@ -42,40 +42,30 @@ jobs:
           done
           python3 android/v1.0.59/patch_v159.py
           python3 -m py_compile android/v1.0.59/patch_v159.py
-      - name: Print key event source sections
+      - name: Print full intro, startup and caching implementation
         shell: bash
         run: |
           python3 - <<'PY'
           import os,re
           from pathlib import Path
-          root=Path(os.environ["PROJECT_ROOT"])/"app/src/main/java/de/epimediahub/app"
-          paths=["ui/PlayerScreen.kt","EpiMediaHubApp.kt","ui/V115PlayerChrome.kt"] + [str(f.relative_to(root)) for f in (root/"ui").glob("*Vod*.kt")] + [str(f.relative_to(root)) for f in (root/"ui").glob("*Live*.kt")] + [str(f.relative_to(root)) for f in (root/"ui").glob("*Settings*.kt")] + [str(f.relative_to(root)) for f in root.glob("*Activity.kt")]
-          tokens=re.compile(r'onKey|KEYCODE|Key\.|keyDown|keyUp|onPreviewKey|seek|seekTo|channel|Channel|player.*Key|Dpad|isLive|MediaKind\.LIVE|Slider|onBack',re.I)
-          for name in paths:
-              p=root/name
-              if not p.exists(): print("MISSING",name);continue
+          r=Path(os.environ['PROJECT_ROOT'])/'app/src/main/java/de/epimediahub/app'
+          files=['EpiMediaHubApp.kt','MainViewModel.kt','data/PrefsRepository.kt','data/XtreamClient.kt']
+          files += [str(x.relative_to(r)) for x in r.rglob('*.kt') if 'V070IntroScreen' in x.read_text(errors='ignore')]
+          for name in sorted(set(files)):
+              p=r/name
+              print('### FILE',name)
               lines=p.read_text().splitlines()
-              print("##########",name,"LINES",len(lines),"##########")
-              matches=[n for n,v in enumerate(lines) if tokens.search(v)]
-              spans=[]
-              for n in matches:
-                  lo=max(0,n-12);hi=min(len(lines),n+22)
-                  if spans and lo<=spans[-1][1]:spans[-1]=(spans[-1][0],max(hi,spans[-1][1]))
-                  else:spans.append((lo,hi))
-              for a,b in spans:
-                  print(f"--- {a+1}-{b} ---")
-                  for n in range(a,b): print(f"{n+1:04d}: {lines[n]}")
-          for f in root.rglob("*.kt"):
-              s=f.read_text()
-              if "fun SettingsScreen(" in s:
-                  lines=s.splitlines()
-                  idx=next(i for i,line in enumerate(lines) if "fun SettingsScreen(" in line)
-                  print("########## settings function",f.relative_to(root),"##########")
-                  for n in range(max(0,idx-30),min(len(lines),idx+190)): print(f"{n+1:04d}: {lines[n]}")
-          manifest=(Path(os.environ["PROJECT_ROOT"])/"app/src/main/AndroidManifest.xml").read_text()
-          print("########## AndroidManifest.xml ##########")
-          print(manifest[:25000])
-          gradle = Path(os.environ["PROJECT_ROOT"])/"app/build.gradle.kts"
-          print("########## app/build.gradle.kts ##########")
-          print(gradle.read_text()[:25000])
+              if name.endswith('Intro.kt') or 'V070IntroScreen' in p.read_text() and name!='EpiMediaHubApp.kt':
+                  for i,x in enumerate(lines): print(f'{i+1:04d}: {x}')
+                  continue
+              pattern={'EpiMediaHubApp.kt':r'showIntro|V070IntroScreen|rememberSaveable|LaunchedEffect|refreshPlaylistsAtAppStart|Lifecycle.Event.ON_START|dashboardPaired|v120LicenseState', 'MainViewModel.kt':r'fun refreshProfiles|fun refreshPlaylistsAtAppStart|fun loadCategories|fun loadItems|fun xtreamLibrary|m3uCache|xtreamLibraryCache|V128TimedCache|data class.*Ui|private val prefs|fun play\(', 'data/PrefsRepository.kt':r'fun active|fun loadPlaylists|fun selected|fun loadHistory|playlist', 'data/XtreamClient.kt':r'fun entries\(|fun categories\(|fun stream|fun details\('}[name]
+              idx=[i for i,x in enumerate(lines) if re.search(pattern,x)]
+              ranges=[]
+              for i in idx:
+                  a=max(0,i-18);b=min(len(lines),i+40)
+                  if ranges and a<=ranges[-1][1]: ranges[-1]=(ranges[-1][0],max(ranges[-1][1],b))
+                  else: ranges.append((a,b))
+              for a,b in ranges:
+                  print('---',a+1,b)
+                  for i in range(a,b):print(f'{i+1:04d}: {lines[i]}')
           PY
