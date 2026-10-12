@@ -25,7 +25,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: 4eb73efd17b28fecbb824875137e43cede07c27f
+      - uses: actions/checkout@v4
+        with:
           ref: ${{ github.sha }}
+          path: .ci-v161-overlay
+      - name: Add v161 candidate files
+        run: cp -a .ci-v161-overlay/android/v1.0.61 android/v1.0.61
       - name: Reconstruct verified source
         shell: bash
         run: |
