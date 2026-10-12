@@ -24,6 +24,10 @@ import vpn_dashboard as vpn
 
 dashboard_install(core.app, core.db)
 vpn.install(core.app, core.db)
+# Isolated VPN tests do not mount the independent Intro dashboard module.
+# Keep its existing navigation endpoint resolvable when rendering /admin.
+core.app.add_url_rule("/admin/skip-isolated", endpoint="v082_skip_dashboard",
+                      view_func=lambda: "isolated-test-only")
 core.app.config.update(TESTING=True, SESSION_COOKIE_SECURE=False)
 KEY1 = base64.b64encode(bytes(range(32))).decode()
 KEY2 = base64.b64encode(bytes(range(1,33))).decode()
