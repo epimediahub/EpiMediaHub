@@ -33,7 +33,12 @@ replace(manager,
 replace(manager,
     '.put("platform", "android")\n',
     '.put("platform", "android")\n                .put("supported_entitlements", org.json.JSONArray().put("ANNUAL"))\n')
-replace(manager, '"EpiMediaHub-Android/1.0.20"', '"EpiMediaHub-Android/1.0.64"')
+import re
+manager_source = manager.read_text()
+manager_new, agent_count = re.subn(r'EpiMediaHub-Android/[0-9]+\.[0-9]+\.[0-9]+',
+                                    'EpiMediaHub-Android/1.0.64', manager_source)
+assert agent_count == 1, "Expected one Android license User-Agent"
+manager.write_text(manager_new)
 replace(manager,
     'cached.kind == V120LicenseKind.LIFETIME_ACTIVE || cached.kind == V120LicenseKind.TRIAL_EXPIRED',
     'cached.kind == V120LicenseKind.LIFETIME_ACTIVE || cached.kind == V120LicenseKind.TRIAL_EXPIRED || cached.kind == V120LicenseKind.ANNUAL_EXPIRED')
