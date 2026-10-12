@@ -78,6 +78,25 @@ replace(gate,
     '                if (days == 1L) "TESTVERSION · NOCH 1 TAG" else "TESTVERSION · NOCH $days TAGE"\n'
     '            },')
 
+# Separate privacy option. Disabled by default, no customer content collected.
+import shutil
+shutil.copyfile(Path(__file__).resolve().parent / "V164Diagnostics.kt", java / "ui/V164Diagnostics.kt")
+
+settings = java / "ui/Screens.kt"
+replace(settings,
+    '            item {\\n                V163BootSettingsCard(accent)\\n            }',
+    '            item {\\n                V163BootSettingsCard(accent)\\n            }\\n'
+    '            item {\\n                V164DiagnosticsCard(accent)\\n            }')
+
+entry = java / "EpiMediaHubApp.kt"
+replace(entry,
+    '    var v120LicenseRefresh by remember { mutableStateOf(0) }',
+    '    LaunchedEffect(Unit) {\\n'
+    '        de.epimediahub.app.ui.V164Diagnostics.installCrashMarker(context.applicationContext)\\n'
+    '        de.epimediahub.app.ui.V164Diagnostics.uploadPending(context.applicationContext)\\n'
+    '    }\\n'
+    '    var v120LicenseRefresh by remember { mutableStateOf(0) }')
+
 assert 'versionCode = 1064' in gradle.read_text()
 assert 'ANNUAL_ACTIVE' in manager.read_text() and 'ANNUAL_EXPIRED' in gate.read_text()
-print("Android 1.0.64 source patch: genuine annual entitlement statuses enabled")
+print("Android 1.0.64: annual license and optional anonymous crash counters enabled")
