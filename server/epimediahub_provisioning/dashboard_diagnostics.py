@@ -39,6 +39,19 @@ def dashboard_diagnostics():
             except (ValueError, TypeError):
                 agent_seen = None
         state["vpn_agent"] = "Aktuell" if agent_fresh else "Keine aktuelle Bestätigung"
+        if _table(con, "device_error_events"):
+            cutoff = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            # The frontend exposes coarse categories/counts, not device IDs or logs.
+            from datetime import timedelta
+            since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat().replace("+00:00", "Z")
+            failures = con.execute("""SELECT component,code,COUNT(*) reports
+                  FROM device_error_events WHERE reported_at>=?
+                  GROUP BY component,code ORDER BY reports DESC,component LIMIT 15""", (since,)).fetchall()
+            state["device_report_groups"] = [dict(r) for r in failures]
+            state["device_reports_7d"] = sum(r["reports"] for r in failures)
+        else:
+            state["device_report_groups"] = []
+            state["device_reports_7d"] = 0
         # Device identifiers and provider error strings are intentionally omitted.
         issues = []
         if state["sync_failed"]:
