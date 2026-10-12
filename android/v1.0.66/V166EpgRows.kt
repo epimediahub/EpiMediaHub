@@ -104,3 +104,25 @@ internal object V166EpgRows {
         return events.distinctBy { it.start to it.title }.sortedBy { it.start }
     }
 }
+
+/** A late background short guide may NOT replace a foreground guide containing NOW. */
+internal object V166EpgMerge {
+    fun merge(
+        existing: Map<String, List<EpgItem>>,
+        incoming: Map<String, List<EpgItem>>,
+        now: Long
+    ): Map<String, List<EpgItem>> {
+        if (incoming.isEmpty()) return existing
+        val result = existing.toMutableMap()
+        for ((key, newGuide) in incoming) {
+            if (newGuide.isEmpty()) continue
+            val previous = result[key].orEmpty()
+            val previousNow = V163Epg.current(previous, now)
+            val newNow = V163Epg.current(newGuide, now)
+            if (previous.isEmpty() || previousNow == null && newNow != null ||
+                previousNow == null && newNow == null && newGuide.size > previous.size
+            ) result[key] = newGuide
+        }
+        return if (result == existing) existing else result
+    }
+}
