@@ -150,6 +150,19 @@ source = source.replace('    val nowProgramme = V163EpgBanner(vm, item, u.epg[it
     LaunchedEffect(nowProgramme) {
         if (nowProgramme.isNotBlank() && !covered) controls = true
     }''')
+source = source.replace('        if (item.kind == MediaKind.LIVE && controls) {',
+    '        if (item.kind == MediaKind.LIVE && controls && !covered) {')
+# The standard Live root originally relied on implicit focus. Give it an
+# explicit return target so disposing the browser does not strand remote input.
+main_start = source.index('fun PlayerScreen(')
+main = source[main_start:]
+main = main.replace('    var controls by remember(item.resumeKey)',
+    '    val v164PlayerFocus = remember(item.resumeKey) { FocusRequester() }\n    var controls by remember(item.resumeKey)', 1)
+anchor = '            .focusable()\n    ) {\n        V121VodSurface'
+if main.count(anchor) != 1: raise SystemExit('Expected standard Live focus root')
+main = main.replace(anchor,
+    '            .focusProperties { canFocus = !covered }.focusRequester(v164PlayerFocus)\n' + anchor, 1)
+source = source[:main_start] + main
 # Returning from the browser restores the player's own focus target as well.
 main_start = source.index('fun PlayerScreen(')
 for begin, end in [(0, main_start), (main_start, len(source))][::-1]:

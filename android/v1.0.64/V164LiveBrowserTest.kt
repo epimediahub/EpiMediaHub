@@ -4,8 +4,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
@@ -24,7 +27,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
-@OptIn(ExperimentalTestApi::class)
+@OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], qualifiers = "w960dp-h540dp-land")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -73,11 +76,17 @@ class V164LiveBrowserTest {
     @Test fun autostartSwitchIsVisibleAndRemoteOkChangesItsDisplayedState() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         V159BootAutostart.setEnabled(context, false)
-        compose.setContent { V163BootSettingsCard(Color.Cyan) }
+        compose.setContent {
+            val mode = LocalInputModeManager.current
+            SideEffect { mode.requestInputMode(InputMode.Keyboard) }
+            V163BootSettingsCard(Color.Cyan)
+        }
         val state = compose.onNodeWithTag("boot-autostart-switch", useUnmergedTree = true)
         state.assertIsDisplayed().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Aus"))
         val card = compose.onNodeWithTag("boot-autostart-toggle")
         card.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.waitForIdle()
+        card.assertIsFocused()
         card.performKeyInput { keyDown(Key.Enter); keyUp(Key.Enter) }
         compose.waitForIdle()
         state.assertIsDisplayed().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Ein"))
