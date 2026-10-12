@@ -82,6 +82,9 @@ assert "V163LiveInfoPanel(" in (java / "ui/V076LiveTv.kt").read_text()
 tests = root / "app/src/test/java/de/epimediahub/app/data"
 tests.mkdir(parents=True, exist_ok=True)
 shutil.copyfile(here / "V165EpgRecoveryTest.kt", tests / "V165EpgRecoveryTest.kt")
+legacy = tests / "V164EpgTest.kt"
+replace(legacy, "clock = 1_499L", "clock = 5_999L")
+replace(legacy, "clock = 1_600L", "clock = 6_000L")
 sound = here / "epimedia_intro_v7.mp4"
 if not sound.is_file():
     raise SystemExit("Synchronized 17.5s intro v7 not generated")
