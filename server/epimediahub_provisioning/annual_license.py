@@ -162,4 +162,19 @@ def annual_aware_license_status():
 
 
 app.view_functions["license_status"] = annual_aware_license_status
+
+_previous_license_capabilities = app.view_functions["license_capabilities"]
+
+
+def annual_aware_capabilities():
+    response = _previous_license_capabilities()
+    data = response.get_json()
+    data.update(annual_license_ready=True, annual_days=YEAR_DAYS,
+                annual_device_bound=True, annual_manual_admin_grant=True)
+    result = jsonify(data)
+    result.headers["Cache-Control"] = "no-store"
+    return result
+
+
+app.view_functions["license_capabilities"] = annual_aware_capabilities
 _migrate()
