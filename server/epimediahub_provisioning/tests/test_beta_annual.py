@@ -92,7 +92,8 @@ class AnnualLicenseTest(unittest.TestCase):
             con.execute("UPDATE annual_device_licenses SET expires_at=?", (past,))
             con.execute("UPDATE license_subjects SET trial_expires_at=?",(past,))
         response = self._status(supported_entitlements=["ANNUAL"])
-        self.assertEqual(response.json["status"], "TRIAL_EXPIRED")
+        self.assertEqual(response.json["status"], "ANNUAL_EXPIRED")
+        self.assertEqual(response.json["remaining_seconds"], 0)
 
     def test_admin_only_and_revocation(self):
         other = core.app.test_client()
