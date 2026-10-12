@@ -52,3 +52,6 @@ from vpn_dashboard import install as install_vpn_dashboard
 install_vpn_dashboard(app, db)
 
 import dashboard_diagnostics  # Admin-only read-only diagnostics.
+
+from dashboard_security import install as install_dashboard_security
+install_dashboard_security(app)
