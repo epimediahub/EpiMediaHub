@@ -74,8 +74,8 @@ internal object V166EpgRows {
         val verified = Base64.encodeToString(bytes, Base64.NO_WRAP).trimEnd('=') == compact.trimEnd('=')
         if (!verified) return original
         val decoded = String(bytes, Charsets.UTF_8)
-        return decoded.takeIf { '\\uFFFD' !in it && it.none { char ->
-            Character.isISOControl(char) && char != '\\n' && char != '\\r' && char != '\\t'
+        return decoded.takeIf { '\uFFFD' !in it && it.none { char ->
+            Character.isISOControl(char) && char != '\n' && char != '\r' && char != '\t'
         } } ?: original
     }
 
