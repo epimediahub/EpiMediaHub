@@ -185,6 +185,53 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(runner.peers[KEY1],set())
         self.assertEqual(self.anonymous.post("/v1/vpn-agent/applied",headers=self.auth,json=report).status_code,200)
 
+    def test_manual_seven_day_trial_is_once_only_and_never_bills(self):
+        self.bind()
+        self.ack()  # The server has confirmed the previously suspended peer.
+        self.assertEqual(self.post("trial7", device_row_id=1).status_code, 303)
+        with core.db() as con:
+            first = con.execute("SELECT * FROM vpn_trials").fetchone()
+            account = con.execute("SELECT * FROM vpn_devices WHERE device_row_id=1").fetchone()
+            self.assertIsNotNone(first)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_credits").fetchone()[0], 0)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_audit WHERE action='trial7'").fetchone()[0], 1)
+            self.assertEqual((vpn.instant(account["expires_at"]) -
+                              vpn.instant(first["granted_at"])).total_seconds(), 7*86400)
+            expires = account["expires_at"]
+        self.post("trial7", device_row_id=1)
+        with core.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_trials").fetchone()[0], 1)
+            self.assertEqual(con.execute("SELECT expires_at FROM vpn_devices WHERE device_row_id=1").fetchone()[0], expires)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_audit WHERE action='trial7'").fetchone()[0], 1)
+        page = self.admin.get("/admin")
+        self.assertIn("VPN-Test genutzt", page.text)
+
+    def test_trial7_requires_admin_session_bound_device_and_agent(self):
+        self.assertEqual(self.post("trial7", client=self.reseller, device_row_id=1).status_code, 403)
+        self.post("trial7", device_row_id=1)
+        with core.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_trials").fetchone()[0], 0)
+        self.bind()
+        self.post("trial7", device_row_id=1)
+        with core.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_trials").fetchone()[0], 0)
+        self.ack()
+        self.post("trial7", device_row_id=1)
+        with core.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_trials").fetchone()[0], 1)
+
+    def test_dashboard_compact_shows_playlists_and_actions_on_one_page(self):
+        admin_page = self.admin.get("/admin")
+        reseller_page = self.reseller.get("/reseller")
+        self.assertEqual(admin_page.status_code, 200)
+        self.assertEqual(reseller_page.status_code, 200)
+        for page in (admin_page.text, reseller_page.text):
+            self.assertIn("beta-admin.css", page)
+            self.assertIn("beta-visible-playlists", page)
+            self.assertIn("customer-details", page)
+            self.assertNotIn('class="customer-details" hidden', page)
+        self.assertNotIn("Kunde 2", reseller_page.text)
+
     def test_escaping_and_repeated_migration_preserve_existing_data(self):
         with core.db() as con:
             con.execute("UPDATE customers SET name='<script>alert(1)</script>' WHERE id=1")
