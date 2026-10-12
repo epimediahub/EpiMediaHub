@@ -58,3 +58,5 @@ install_dashboard_security(app)
 
 import license_api  # Trial, Lifetime, reseller credit ledger.
 import annual_license  # 365-day admin entitlement; never charges Lifetime credits.
+
+import device_diagnostics  # Strict opt-in categorized device reports, no raw logs.
