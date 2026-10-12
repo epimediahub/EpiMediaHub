@@ -123,6 +123,9 @@ def package():
     return staged
 
 def stage_check(files, env, python, account, dbfile, directory):
+    # tempfile.TemporaryDirectory is root-only; stage code is tested as the service user.
+    os.chown(directory, account.pw_uid, account.pw_gid)
+    os.chmod(directory, 0o700)
     stage = directory / "code"
     stage.mkdir()
     for item in BASE.glob("*.py"):
