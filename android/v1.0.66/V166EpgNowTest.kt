@@ -1,6 +1,7 @@
 package de.epimediahub.app.data
 
 import org.junit.Assert.*
+import de.epimediahub.app.model.EpgItem
 import org.junit.Test
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -50,6 +51,24 @@ class V166EpgNowTest {
         val result = V166EpgTimes.window("$later", "${later+3600}", "", "", now, berlin)
         assertNotNull(result)
         assertFalse(result!!.contains(now))
+    }
+
+    @Test fun lateShortGuideCannotReplaceCurrentProgramme() {
+        val now = 1791806400L
+        val playing = EpgItem("Aktuell", "Beschreibung", now - 600L, now + 900L)
+        val upcoming = EpgItem("Später", "", now + 900L, now + 1800L)
+        val existing = mapOf("42" to listOf(playing, upcoming))
+        val result = V166EpgMerge.merge(existing, mapOf("42" to listOf(upcoming)), now)
+        assertEquals("Aktuell", V163Epg.current(result.getValue("42"), now)?.title)
+    }
+
+    @Test fun fullGuidePromotesCurrentOverStaleFutureOnlyList() {
+        val now = 1791806400L
+        val current = EpgItem("Live", "Info", now - 360L, now + 360L)
+        val next = EpgItem("Danach", "", now + 360L, now + 1600L)
+        val old = mapOf("42" to listOf(next))
+        val result = V166EpgMerge.merge(old, mapOf("42" to listOf(current, next)), now)
+        assertEquals("Live", V163Epg.current(result.getValue("42"), now)?.title)
     }
 
     @Test fun invalidOrUnboundedTimesAreDiscarded() {
