@@ -36,6 +36,7 @@ UPDATED = (
     "static/beta-diagnostics.css",
     "wsgi.py",
     "dashboard_security.py",
+    "device_diagnostics.py",
     "license_api.py",
     "annual_license.py",
     "templates/credits_v120.html",
@@ -118,6 +119,8 @@ def package():
                 wsgi = wsgi.rstrip() + "\n\nimport license_api  # 7-day trial and Lifetime credits.\n"
             if "import annual_license" not in wsgi:
                 wsgi = wsgi.rstrip() + "\n\nimport annual_license  # 365-day device licenses.\n"
+            if "import device_diagnostics" not in wsgi:
+                wsgi = wsgi.rstrip() + "\n\nimport device_diagnostics  # Opt-in failure counters.\n"
             if "install_dashboard_security" not in wsgi:
                 wsgi = wsgi.rstrip() + "\n\nfrom dashboard_security import install as install_dashboard_security\ninstall_dashboard_security(app)\n"
             staged[name] = wsgi
