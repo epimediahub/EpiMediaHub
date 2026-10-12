@@ -12,9 +12,8 @@ import secrets
 
 from flask import abort, current_app, request, session
 
-FORM = re.compile(r"<form\\b[^>]*>", re.I)
-METHOD_POST = re.compile(r"\\bmethod\\s*=\\s*(['\"]?)post\\1(?=\\s|>)", re.I)
-EXISTING_TOKEN = re.compile(r'name\\s*=\\s*["\']_dashboard_csrf["\']', re.I)
+FORM = re.compile(r"<form\b[^>]*>", re.I)
+METHOD_POST = re.compile(r"\bmethod\s*=\s*(['\"]?)post\1(?=\s|>)", re.I)
 SAFE_PATHS = ("/admin", "/reseller")
 VPN_OWN_CSRF = frozenset({"/admin/vpn/action", "/reseller/vpn/action"})
 FIELD = "_dashboard_csrf"
