@@ -1,0 +1,112 @@
+name: EpiMediaHub v1.0.64 annual App licensing (no public rollout)
+on:
+  pull_request:
+    branches: [ci/v164-annual-check]
+    paths:
+      - ".github/workflows/android-v164-annual-qa.yml"
+      - "android/v1.0.64/**"
+  push:
+    branches: [feature/v164-annual-license-ui]
+    paths:
+      - '.github/workflows/android-v164-annual-qa.yml'
+      - 'android/v1.0.64/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  compile-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 4eb73efd17b28fecbb824875137e43cede07c27f
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .ci-v163-overlay
+      - name: Add v164 annual candidate files
+        run: |
+          cp -a .ci-v163-overlay/android/v1.0.61 android/v1.0.61
+          cp -a .ci-v163-overlay/android/v1.0.62 android/v1.0.62
+          cp -a .ci-v163-overlay/android/v1.0.63 android/v1.0.63
+          cp -a .ci-v163-overlay/android/v1.0.64 android/v1.0.64
+      - name: Reconstruct verified source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* | base64 -d > .ci-android/source.tar.gz
+          test "$(sha256sum .ci-android/source.tar.gz | awk '{print $1}')" = "192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+      - name: Pin Android toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+      - name: Apply v149 through v164 patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash build_tools/install_android_v1033_source.sh
+          python3 android/v1.0.34-vpn/patch_wireguard_spike.py
+          python3 android/v1.0.34-vpn/patch_playlist_routing.py
+          for v in 149 150 151 152 153 154 155 156 157 158 159 160 161 162 163 164; do
+            python3 "android/v1.0.$((10#$v - 100))/patch_v$v.py"
+          done
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Restore Android audio native cache
+        id: audio-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.PROJECT_ROOT }}/ffmpeg-audio/src/main/jni/ffmpeg/android-libs
+            ${{ env.PROJECT_ROOT }}/ffmpeg-6.1.6.tar.xz
+          key: audio-ffmpeg-6.1.6-ndk26b-api25-${{ runner.os }}-${{ hashFiles('build_tools/build_android_audio_v123.sh', 'android/v1.0.23/upstream.json') }}
+      - name: Prepare audio-only Android native dependencies
+        run: bash build_tools/build_android_audio_v123.sh
+      - name: Verify annual licensing capability and app version
+        run: |
+          test "$(grep -Fc 'ANNUAL_ACTIVE' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V120LicenseManager.kt")" -ge 1
+          grep -Fq 'supported_entitlements' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V120LicenseManager.kt"
+          grep -Fq 'APP-LIZENZ' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V120LicenseGate.kt"
+          grep -Fq 'V164DiagnosticsCard' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+          grep -Fq 'V164Diagnostics.uploadPending' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
+          grep -Fq 'versionCode = 1064' "$PROJECT_ROOT/app/build.gradle.kts"
+          python3 -m py_compile android/v1.0.64/patch_v164.py
+      - name: Kotlin compile
+        run: |
+          cd "$PROJECT_ROOT"
+          gradle :app:compileDebugKotlin --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+      - name: Full Android unit tests
+        run: |
+          cd "$PROJECT_ROOT"
+          gradle :app:testDebugUnitTest --no-daemon --stacktrace -Dorg.gradle.workers.max=2
