@@ -44,3 +44,7 @@ jobs:
           assert (p/'static/beta-admin.css').is_file()
           print('Manual-only VPN seven-day beta and always-visible customer/reseller controls passed.')
           PY
+      - name: Private read-only diagnostics and deployment syntax
+        run: |
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p "test_beta_diagnostics.py" -v
+          python -m py_compile server/epimediahub_provisioning/deploy/install_control_center_beta.py
