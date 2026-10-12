@@ -21,5 +21,11 @@
 <article><span>Aktive Lifetime-Lizenzen</span><strong>{{ state.lifetime_licenses if state.lifetime_licenses is not none else 'Lizenzmodul nicht eingerichtet' }}</strong></article>
 <article><span>Finnland-Agent</span><strong>{{ state.vpn_agent }}</strong></article>
 </section>
+<section class="diagnostic-findings"><h2>Gerätefehler der letzten 7 Tage · {{ state.device_reports_7d }}</h2>
+<p>Nur ausdrücklich gesendete, kategorisierte Meldungen. Keine IP-Adressen, Filmnamen, Playlists, Stacktraces oder Gerätekennungen.</p>
+{% if state.device_report_groups %}
+<ul>{% for item in state.device_report_groups %}<li>{{ item.component }} · {{ item.code }} – {{ item.reports }} Meldung(en)</li>{% endfor %}</ul>
+{% else %}<p>Keine freiwilligen Geräteberichte vorhanden.</p>{% endif %}
+</section>
 <section class="diagnostic-findings"><h2>Hinweise</h2><ul>{% for issue in issues %}<li>{{ issue }}</li>{% endfor %}</ul><p>App-Abstürze und Player-Fehler sind hier noch nicht enthalten. Für echte Crashberichte ist die getrennte, einwilligungsbasierte Übertragung durch die App erforderlich.</p></section>
 </main></body></html>
