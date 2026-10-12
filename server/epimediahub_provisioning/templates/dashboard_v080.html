@@ -31,6 +31,7 @@
   <div class="hierarchy-topbar-actions">
     <a class="button button-ghost" href="/admin/vpn">VPN Finnland</a>
     <a class="button button-ghost" href="/admin/diagnostics">Fehlerdiagnose</a>
+    <a class="button button-ghost" href="{{ url_for('admin_credits') }}">Credits &amp; Lizenzen</a>
     <a class="button button-ghost" href="{{ reseller_portal_url }}">Reseller-Login</a>
     <a class="button button-ghost" href="{{ url_for('v082_skip_dashboard') }}">Intro &amp; Abspann</a>
     <form method="post" action="{{ url_for('logout') }}"><button class="button button-ghost" type="submit"><svg><use href="#i-logout"/></svg>Abmelden</button></form>
@@ -165,6 +166,13 @@
                 <span class="beta-status">VPN aktiv</span>
               {% else %}
                 <a class="button button-ghost button-small" href="/admin/vpn#devices" title="VPN-Gerät zuerst mit seinem öffentlichen Schlüssel zuordnen">VPN zuordnen</a>
+              {% endif %}
+              {% set annual = (annual_device_states|default({}, true)).get(device.id, {}) %}
+              {% if annual.get('active') %}
+                <span class="beta-status" title="{{ annual.expires_at }}">App 1 Jahr · aktiv bis {{ annual.expires_at[:10] }}</span>
+                <form method="post" action="/admin/devices/{{ device.id }}/revoke-year" onsubmit="return confirm('Jahreslizenz dieses Geräts wirklich beenden?')"><button class="button button-ghost button-small" type="submit">Jahreslizenz beenden</button></form>
+              {% else %}
+                <form method="post" action="/admin/devices/{{ device.id }}/grant-year" onsubmit="return confirm('App für genau 365 Tage freigeben? Keine Credits belasten.')"><button class="button button-primary button-small" type="submit">1 Jahr App Lizenz</button></form>
               {% endif %}
               <a class="button button-ghost button-small" href="/admin/vpn#devices">VPN verwalten</a>
               <form method="post" action="{{ url_for('v074_delete_device', device_id=device.id) }}" onsubmit="return confirm('Dieses Gerät wirklich endgültig löschen? Die Kunden-Playlists bleiben erhalten.')"><input type="hidden" name="confirm" value="DELETE_DEVICE:{{ device.id }}"><button class="button button-danger button-small" type="submit">Gerät löschen</button></form>
