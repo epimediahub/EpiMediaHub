@@ -93,6 +93,8 @@ jobs:
           test "$(grep -Fc 'ANNUAL_ACTIVE' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V120LicenseManager.kt")" -ge 1
           grep -Fq 'supported_entitlements' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/V120LicenseManager.kt"
           grep -Fq 'APP-LIZENZ' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V120LicenseGate.kt"
+          grep -Fq 'V164DiagnosticsCard' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
+          grep -Fq 'V164Diagnostics.uploadPending' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
           grep -Fq 'versionCode = 1064' "$PROJECT_ROOT/app/build.gradle.kts"
           python3 -m py_compile android/v1.0.64/patch_v164.py
       - name: Kotlin compile
