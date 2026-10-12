@@ -1,0 +1,72 @@
+/* Compact single-page beta administration. Desktop: one customer per row,
+   readable actions without expanding details; narrow screens: stacked rows. */
+body.beta-console .hierarchy-shell{max-width:1580px}
+body.beta-console .hierarchy-heading{margin-bottom:13px}
+body.beta-console .hierarchy-metrics{margin-bottom:12px}
+body.beta-console .customer-grid,
+body.beta-console .reseller-grid{display:grid;grid-template-columns:minmax(0,1fr)!important;gap:9px}
+body.beta-console .customer-card,
+body.beta-console .reseller-card{margin:0;border-radius:12px;padding:10px 12px}
+body.beta-console .customer-head{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:0 0 8px;flex-wrap:wrap}
+body.beta-console .customer-identity{min-width:180px;flex:0 1 auto}
+body.beta-console .customer-identity h2{font-size:15px;line-height:1.3;margin:0}
+body.beta-console .customer-identity p{font-size:11px;margin:2px 0 0}
+body.beta-console .customer-identity small{font-size:9px}
+body.beta-console .customer-actions,
+body.beta-console .reseller-actions,
+body.beta-console .device-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+body.beta-console .customer-actions form,
+body.beta-console .device-actions form,
+body.beta-console .reseller-actions form{margin:0}
+body.beta-console .button-small,
+body.beta-console .beta-btn{min-height:30px;line-height:1.15;font-size:11px;padding:6px 9px;border-radius:7px;white-space:nowrap}
+body.beta-console .button-small svg{width:13px;height:13px}
+body.beta-console .beta-visible-playlists{display:flex;flex-wrap:wrap;gap:5px;align-items:center;flex:1 1 200px;min-width:0}
+body.beta-console .beta-visible-playlists .beta-playlist-chip{font-size:10px;padding:5px 7px;border:1px solid var(--line-soft,#233040);border-radius:6px;color:var(--text,#e9f1f9);background:var(--surface-2,#111821);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.beta-console .beta-visible-playlists .beta-playlist-empty{font-size:11px;color:var(--muted,#8d99aa)}
+body.beta-console .customer-details{display:grid!important;grid-template-columns:minmax(220px,1fr) minmax(350px,1.5fr);gap:8px;padding:6px 0 0!important;border-top:1px solid var(--line-soft,#233040)}
+body.beta-console .customer-details[hidden]{display:none!important}
+body.beta-console .customer-details .reseller-owner-row{grid-column:1/-1;margin:0;padding:4px}
+body.beta-console .customer-details .playlist-stack,
+body.beta-console .customer-details .device-stack{margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
+body.beta-console .playlist-item,
+body.beta-console .device-card{border-radius:8px;padding:6px 8px;margin:0;min-width:0}
+body.beta-console .playlist-item{gap:7px}
+body.beta-console .playlist-copy{min-width:0}
+body.beta-console .playlist-copy strong{font-size:12px}
+body.beta-console .playlist-copy small{display:block;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px}
+body.beta-console .playlist-item .badge{display:none}
+body.beta-console .device-head{display:flex;gap:7px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:0}
+body.beta-console .device-title{min-width:180px;flex:1 1 215px}
+body.beta-console .device-title h3{font-size:12px;margin:1px 0}
+body.beta-console .device-title p{font-size:10px;margin:0;line-height:1.35}
+body.beta-console .beta-device-tools{display:flex;gap:5px;align-items:center;flex-wrap:wrap;width:100%;margin-top:5px}
+body.beta-console .beta-device-tools form{margin:0}
+body.beta-console .beta-status{font-size:10px;opacity:.9;margin-right:5px}
+body.beta-console .beta-mini-hint{font-size:10px;color:var(--muted,#8d99aa)}
+body.beta-console .reseller-panel{margin-bottom:12px}
+body.beta-console .reseller-card{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}
+body.beta-console .reseller-card-top{flex:1 1 230px;min-width:0}
+body.beta-console .reseller-card-top h3{font-size:14px;margin:0}
+body.beta-console .reseller-card-top p{font-size:11px;margin:2px 0}
+body.beta-console .reseller-meta{display:flex;flex:0 1 auto;gap:12px;flex-wrap:wrap;margin:0}
+body.beta-console .reseller-meta > div{min-width:42px;padding:0}
+body.beta-console .reseller-meta span{font-size:10px}
+body.beta-console .reseller-meta strong{font-size:12px}
+body.beta-console .reseller-actions{flex:0 1 auto}
+body.beta-console .hierarchy-search{margin:12px 0}
+@media(max-width:950px){
+  body.beta-console .customer-details{grid-template-columns:minmax(0,1fr)}
+  body.beta-console .customer-details .reseller-owner-row{grid-column:1}
+  body.beta-console .beta-visible-playlists{order:3;flex:1 1 100%;width:100%}
+  body.beta-console .customer-actions{order:2}
+  body.beta-console .customer-identity{order:1}
+  body.beta-console .customer-head{justify-content:flex-start}
+  body.beta-console .customer-actions .button-small{font-size:10px;padding:5px 7px}
+}
+@media(max-width:560px){
+  body.beta-console .customer-card{padding:8px}
+  body.beta-console .reseller-card{padding:8px}
+  body.beta-console .reseller-meta{width:100%;justify-content:flex-start}
+  body.beta-console .device-actions{width:100%}
+}
