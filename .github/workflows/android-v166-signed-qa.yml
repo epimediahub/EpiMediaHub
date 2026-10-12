@@ -1,7 +1,7 @@
 name: EpiMediaHub v1.0.66 EPG now repair and full-table fallback signed QA
 on:
   push:
-    branches: [fix/v166-epg-recovery-intro-sync]
+    branches: [fix/v166-epg-now-parsing-full-fallback]
     paths:
       - '.github/workflows/android-v166-signed-qa.yml'
       - '.github/workflows/v166-official-inapp-updater.yml'
@@ -218,7 +218,7 @@ jobs:
             "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$src" > "$info"
             grep -F "package: name='de.epimediahub.app'" "$info"
             grep -F "versionCode='1066'" "$info"
-            grep -F "versionName='1.0.65'" "$info"
+            grep -F "versionName='1.0.66'" "$info"
             signature="$RUNNER_TEMP/$abi-signature.txt"
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$src" > "$signature"
             cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$signature" | tr '[:lower:]' '[:upper:]')"
@@ -232,7 +232,7 @@ jobs:
           python3 - <<'PYINTRO'
           import hashlib, os, re, subprocess, zipfile
           from pathlib import Path
-          media = Path('android/v1.0.66/epimedia_intro_v7.mp4')
+          media = Path('android/v1.0.65/epimedia_intro_v7.mp4')
           expected = hashlib.sha256(media.read_bytes()).hexdigest()
           expected_size = media.stat().st_size
           project=Path(os.environ['PROJECT_ROOT'])
