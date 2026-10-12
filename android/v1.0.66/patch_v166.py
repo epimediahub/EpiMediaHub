@@ -69,6 +69,16 @@ vm = java / "MainViewModel.kt"
 replace(vm,
     'else if (p.type == PlaylistType.XTREAM) XtreamClient(p).shortEpg(item.id)',
     'else if (p.type == PlaylistType.XTREAM) XtreamClient(p).shortEpg(item.id, requireCurrent = true)')
+# A warmup response can finish AFTER the playing-channel full-table response.
+# Never let its future-only short list evict the available current event.
+replace(vm, 'set { it.copy(epgLoading = false, epg = it.epg + map) }',
+    '''set { state -> state.copy(epgLoading = false,
+        epg = V166EpgMerge.merge(state.epg, map, System.currentTimeMillis() / 1000L)) }''')
+replace(vm, 'if (list.isNotEmpty()) set { it.copy(epg = it.epg + (item.id to list)) }',
+    '''if (list.isNotEmpty()) set { state -> state.copy(
+                epg = V166EpgMerge.merge(state.epg, mapOf(item.id to list),
+                    System.currentTimeMillis() / 1000L)) }''')
+
 # The four-channel background warmup still uses one inexpensive short call.
 assert 'client.shortEpg(channel.id)' in vm.read_text()
 assert 'requireCurrent = true' in vm.read_text()
