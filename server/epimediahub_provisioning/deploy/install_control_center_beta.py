@@ -124,7 +124,14 @@ def package():
         else:
             p = ROOT / name
             require(p.is_file(), "Quelldatei fehlt: " + name)
-            new = p.read_text()
+            installed = BASE / name
+            preserved = {"license_api.py", "templates/credits_v120.html", "templates/reseller_credits_v120.html"}
+            new = installed.read_text() if name in preserved and installed.is_file() else p.read_text()
+            if name == "license_api.py":
+                require(all(marker in new for marker in (
+                    "license_subjects", "trial_key_hash", "lifetime_licenses",
+                    "def license_status", "def license_capabilities", "def admin_credits")),
+                    "Bestehendes Lizenzmodul ist nicht kompatibel, keine riskante Überschreibung.")
             if name.startswith("templates/") and name.endswith("_v080.html"):
                 new = preserve_links((BASE / name).read_text(), new)
             staged[name] = new
@@ -165,8 +172,11 @@ with c.session_transaction() as session: session['admin']=True
 assert c.get('/admin/diagnostics').status_code==200
 assert c.get('/admin').status_code==200
 assert c.get('/admin/vpn').status_code==200
-assert b'beta-visible-playlists' in c.get('/admin').data or b'ADMIN CONTROL CENTER' in c.get('/admin').data
-print('Staged dashboard, VPN and admin diagnostics passed')
+assert b'beta-visible-playlists' in c.get('/admin').data
+assert b'name="_dashboard_csrf"' in c.get('/admin').data
+assert c.get('/v1/license/capabilities').json['annual_license_ready'] is True
+assert c.post('/v1/license/status', json={}).status_code==400
+print('Staged dashboard, annual license, CSRF, VPN and admin diagnostics passed')
 """
     result = subprocess.run([str(python), "-c", program], env=test_env, cwd=stage,
                             user=account.pw_uid, group=account.pw_gid, extra_groups=[],
@@ -177,6 +187,10 @@ print('Staged dashboard, VPN and admin diagnostics passed')
             "Staging-Test würde Kunden-/Gerätedaten verändern.")
 
 def health():
+    with urllib.request.urlopen("http://127.0.0.1:8787/v1/license/capabilities", timeout=5) as response:
+        caps = json.load(response)
+        require(caps.get("annual_license_ready") is True and caps.get("annual_days") == 365,
+                "Server meldet keine einsatzbereite Jahreslizenz.")
     for path in ("/health", "/admin/diagnostics"):
         opener = urllib.request.build_opener(NoRedirect())
         try:
@@ -240,7 +254,7 @@ def install(files, dbfile, env, python, account):
         raise RuntimeError("Installation zurückgenommen; Kunden-Datenbank unberührt. Backup: " + str(backup))
     print("INSTALL OK – Dashboard-Beta und datensparsame Fehlerdiagnose aktiv.")
     print("Sicherung:", backup)
-    print("Die App-Jahreslizenz benötigt weiterhin eine separat geprüfte App-/Lizenz-API-Anbindung.")
+    print("Dashboard-Lizenzen aktiv. Android 1.0.64 bleibt ein eigener, noch freizugebender Testbuild.")
 
 def main():
     parser = argparse.ArgumentParser()
