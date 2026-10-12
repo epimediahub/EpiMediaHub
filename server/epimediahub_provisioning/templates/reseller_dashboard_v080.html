@@ -9,8 +9,9 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-v070.css', v='0.8.0') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-v080.css', v='0.8.1') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-v081.css', v='0.8.4') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='beta-admin.css', v='1') }}">
 </head>
-<body class="admin-page hierarchy-page reseller-shell">
+<body class="admin-page hierarchy-page reseller-shell beta-console">
 <svg class="svg-sprite" aria-hidden="true">
   <symbol id="i-device" viewBox="0 0 24 24"><path d="M5 3h14v18H5zM9 17h6"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM10 9l5 3-5 3z"/></symbol>
@@ -70,17 +71,24 @@
   <section id="customerGrid" class="customer-grid">
     {% for customer in customers %}
     <article id="customer-{{ customer.id }}" class="customer-card" data-customer-name="{{ customer.name|lower }}" data-search="{{ customer.name|lower }} {% for playlist in customer.playlists %}{{ playlist.name|lower }} {% endfor %}{% for device in customer.devices %}{{ device.display_name|default('', true)|lower }} {{ device.device_id|lower }} {% endfor %}">
-      <header class="customer-head" data-customer-toggle="customer-details-{{ customer.id }}">
+      <header class="customer-head">
         <div class="customer-identity"><span class="customer-avatar">{{ customer.name[:1]|upper }}</span><div><small>KUNDE #{{ customer.id }}</small><h2>{{ customer.name }}</h2><p>{{ customer.devices|length }} Gerät(e) · {{ customer.playlist_count }} Playlist(s)</p></div></div>
+        <div class="beta-visible-playlists" aria-label="Playlists von {{ customer.name }}">
+          {% for playlist in customer.playlists %}
+          <span class="beta-playlist-chip" title="{{ playlist.name }}">{{ playlist.name }}</span>
+          {% else %}
+          <span class="beta-playlist-empty">Keine Playlist</span>
+          {% endfor %}
+        </div>
         <div class="customer-actions">
           <button class="button button-primary button-small" type="button" data-open-dialog="add-customer-playlist-{{ customer.id }}"><svg><use href="#i-plus"/></svg>Playlist hinzufügen</button>
           <button class="button button-ghost button-small" type="button" data-open-dialog="rename-customer-{{ customer.id }}">Umbenennen</button>
           <form method="post" action="{{ url_for('v080_reseller_activation', customer_id=customer.id) }}"><button class="button button-secondary button-small" type="submit"><svg><use href="#i-plus"/></svg>12-stelliger Code</button></form>
           <form class="delete-customer-form" method="post" action="{{ url_for('v080_reseller_delete_customer', customer_id=customer.id) }}" onsubmit="return confirm('Diesen Kunden einschließlich aller Geräte, Playlists und Aktivierungscodes endgültig löschen?')"><input type="hidden" name="confirm" value="DELETE:{{ customer.id }}"><button class="button button-danger button-small" type="submit">Kunde löschen</button></form>
-          <button class="button button-ghost button-small customer-toggle-button" type="button" data-customer-toggle-button aria-expanded="false" aria-controls="customer-details-{{ customer.id }}"><span class="customer-toggle-label">Details</span><svg class="customer-chevron"><use href="#i-chevron"/></svg></button>
+
         </div>
       </header>
-      <div id="customer-details-{{ customer.id }}" class="customer-details" hidden>
+      <div id="customer-details-{{ customer.id }}" class="customer-details">
 
       <div class="playlist-stack customer-playlist-stack">
         {% for playlist in customer.playlists %}
@@ -147,31 +155,7 @@
   const cards = [...document.querySelectorAll('.customer-card')];
   const empty = document.getElementById('noSearchResults');
 
-  const setCustomerOpen = (card, open) => {
-    const details = card.querySelector('.customer-details');
-    const toggle = card.querySelector('[data-customer-toggle-button]');
-    if (!details) return;
-    details.hidden = !open;
-    card.classList.toggle('is-open', open);
-    if (toggle) {
-      toggle.setAttribute('aria-expanded', String(open));
-      const label = toggle.querySelector('.customer-toggle-label');
-      if (label) label.textContent = open ? 'Schließen' : 'Details';
-    }
-  };
-
-  cards.forEach(card => {
-    const head = card.querySelector('[data-customer-toggle]');
-    const toggle = card.querySelector('[data-customer-toggle-button]');
-    head?.addEventListener('click', event => {
-      if (event.target.closest('button,a,input,select,textarea,form,label')) return;
-      setCustomerOpen(card, !card.classList.contains('is-open'));
-    });
-    toggle?.addEventListener('click', event => {
-      event.stopPropagation();
-      setCustomerOpen(card, !card.classList.contains('is-open'));
-    });
-  });
+  // Customer details, playlists and controls stay visible on this page.
 
   search?.addEventListener('input', () => {
     const term = search.value.trim().toLowerCase();
@@ -179,12 +163,7 @@
     cards.forEach(card => {
       const matches = !term || card.dataset.search.includes(term);
       card.hidden = !matches;
-      if (matches) {
-        visible += 1;
-        const nameMatches = !term || (card.dataset.customerName || '').includes(term);
-        if (term && !nameMatches) setCustomerOpen(card, true);
-        if (!term) setCustomerOpen(card, false);
-      }
+      if (matches) visible += 1;
     });
     empty.hidden = visible !== 0;
   });
