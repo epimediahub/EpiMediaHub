@@ -16,6 +16,8 @@ from dashboard_v080 import install as install_dashboard, migrate_resellers
 
 install_dashboard(core.app, core.db)
 core.app.add_url_rule("/test-skip-dashboard", endpoint="v082_skip_dashboard", view_func=lambda: "ok")
+import license_api
+import annual_license
 import dashboard_diagnostics
 core.app.config.update(TESTING=True, SESSION_COOKIE_SECURE=False)
 
