@@ -55,3 +55,6 @@ import dashboard_diagnostics  # Admin-only read-only diagnostics.
 
 from dashboard_security import install as install_dashboard_security
 install_dashboard_security(app)
+
+import license_api  # Trial, Lifetime, reseller credit ledger.
+import annual_license  # 365-day admin entitlement; never charges Lifetime credits.
