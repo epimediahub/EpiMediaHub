@@ -29,6 +29,8 @@ class DiagnosticsTest(unittest.TestCase):
         core.BASE_DIR = Path(self.temp.name)
         core.DB_PATH = core.BASE_DIR / "provisioning.db"
         core.init_db()
+        license_api.ensure_license_schema()
+        annual_license._migrate()
         with core.db() as con:
             migrate_resellers(con)
             con.execute("INSERT INTO customers(name,created_at) VALUES('Testkunde','2026-10-12T18:00:00Z')")
