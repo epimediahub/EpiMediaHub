@@ -35,6 +35,7 @@ UPDATED = (
     "templates/dashboard_diagnostics.html",
     "static/beta-diagnostics.css",
     "wsgi.py",
+    "dashboard_security.py",
 )
 
 def require(condition, description):
@@ -109,6 +110,8 @@ def package():
                     "Bestehende Admin-/VPN-Registrierung unbekannt; nicht überschrieben.")
             if "import dashboard_diagnostics" not in wsgi:
                 wsgi = wsgi.rstrip() + "\n\nimport dashboard_diagnostics  # Read-only admin metrics.\n"
+            if "install_dashboard_security" not in wsgi:
+                wsgi = wsgi.rstrip() + "\\n\\nfrom dashboard_security import install as install_dashboard_security\\ninstall_dashboard_security(app)\\n"
             staged[name] = wsgi
         else:
             p = ROOT / name
