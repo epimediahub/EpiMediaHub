@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EpiMediaHub – Fehlerdiagnose</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='beta-diagnostics.css', v='1') }}">
+</head>
+<body class="diagnostic-page">
+<main class="diagnostic-shell">
+<header><div><small>EPIMEDIAHUB · ADMIN</small><h1>Fehlerdiagnose</h1><p>Datensparsame Live-Übersicht – keine Playlisten-Zugangsdaten, Tokens, Schlüssel oder Rohprotokolle.</p></div><a href="{{ url_for('dashboard') }}">← Zur Kundenverwaltung</a></header>
+<section class="diagnostic-grid">
+<article><span>Kunden</span><strong>{{ state.customers }}</strong></article>
+<article><span>Reseller</span><strong>{{ state.resellers }}</strong></article>
+<article><span>Geräte</span><strong>{{ state.devices }}</strong></article>
+<article><span>Synchronisierung: Fehler</span><strong>{{ state.sync_failed }}</strong></article>
+<article><span>Synchronisierung: ausstehend</span><strong>{{ state.sync_pending }}</strong></article>
+<article><span>Deaktivierte Geräte</span><strong>{{ state.device_disabled }}</strong></article>
+<article><span>Aktive VPN-Geräte</span><strong>{{ state.vpn_active if state.vpn_active is not none else 'Nicht eingerichtet' }}</strong></article>
+<article><span>Vergebene VPN-Tests</span><strong>{{ state.vpn_trials_used if state.vpn_trials_used is not none else 'Nicht eingerichtet' }}</strong></article>
+<article><span>Aktive Lifetime-Lizenzen</span><strong>{{ state.lifetime_licenses if state.lifetime_licenses is not none else 'Lizenzmodul nicht eingerichtet' }}</strong></article>
+<article><span>Finnland-Agent</span><strong>{{ state.vpn_agent }}</strong></article>
+</section>
+<section class="diagnostic-findings"><h2>Hinweise</h2><ul>{% for issue in issues %}<li>{{ issue }}</li>{% endfor %}</ul><p>App-Abstürze und Player-Fehler sind hier noch nicht enthalten. Für echte Crashberichte ist die getrennte, einwilligungsbasierte Übertragung durch die App erforderlich.</p></section>
+</main></body></html>
