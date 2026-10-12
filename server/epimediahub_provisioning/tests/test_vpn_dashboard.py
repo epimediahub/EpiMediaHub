@@ -24,6 +24,8 @@ import vpn_dashboard as vpn
 
 dashboard_install(core.app, core.db)
 vpn.install(core.app, core.db)
+import license_api
+import annual_license
 # Isolated VPN tests do not mount the independent Intro dashboard module.
 # Keep its existing navigation endpoint resolvable when rendering /admin.
 core.app.add_url_rule("/admin/skip-isolated", endpoint="v082_skip_dashboard",
@@ -40,6 +42,8 @@ class DashboardTests(unittest.TestCase):
         core.BASE_DIR = Path(self.temp.name)
         core.DB_PATH = core.BASE_DIR / "provisioning.db"
         core.init_db()
+        license_api.ensure_license_schema()
+        annual_license._migrate()
         with core.db() as con:
             migrate_resellers(con)
             vpn.migrate(con)
