@@ -1,27 +1,28 @@
-# EpiMediaHub Dashboard Beta – Hetzner Installation (12.10.2026)
+# EpiMediaHub Admin & Reseller – Release-Prüfung (12.10.2026)
 
-## Umfang
-- Das kompakte Kunden- und Reseller-Layout zeigt Kunden, Playlists, Geräte und Aktionen ohne zusätzliche Aufklappseiten.
-- Vorhandene 7-Tage-VPN-Tests erscheinen nur dem Administrator, nur für korrekt zugeordnete Geräte und ohne Credit-Abzug.
-- Admin-only Fehlerdiagnose unter `/admin/diagnostics` zeigt ausschließlich aggregierte Synchronisierungs- und VPN-Kennzahlen. Es werden keine Kundennamen, Playlisten-Zugangsdaten, Tokens, WireGuard-Private-Keys oder Rohlogs an die Diagnoseansicht übergeben.
-- Die App-Jahreslizenz ist **nicht Bestandteil dieser Beta**, weil das verlässliche, ablaufende Server-Entitlement und seine Android-Kompatibilität zunächst zusammen implementiert und getestet werden müssen. Nicht als Vollversion ausgeben.
-- Geräte-Crash- und Player-Berichte benötigen noch eine datensparsame, vom Kunden aktivierte App-Übermittlung. Die vorhandene Diagnose darf nicht als umfassende Absturztelemetrie bezeichnet werden.
-- Die Prüfung bestätigt **keine** vollständige DSGVO-Konformität. Dafür sind u. a. Löschkonzept, Auftragsverarbeitung, Backup-Aufbewahrung und operative Rechteprüfung nötig.
+## Fertiggestellter Entwicklungsumfang
+- Admin-/Reseller-Oberflächen zeigen Kunden, Playlists und Geräte mit kompakten Aktionen auf derselben Seite, auch mobil.
+- Der manuelle, einmalige VPN-Test für 7 Tage wird nur vom Administrator für ein zugeordnetes Gerät ausgelöst, benötigt den bestätigten Finnland-Agenten und verbraucht keine Credits.
+- Separate **365-Tage-App-Lizenz** per Admin-Button, einmalig pro aktivem Zeitraum. Sie verlängert sich **nicht automatisch** durch wiederholtes Klicken, wird dokumentiert, kann manuell entzogen werden und berührt keine Lifetime- oder Reseller-Credits.
+- Jahreslizenz ist an den bereits bekannten geheimen `trial_key_hash` des konkreten registrierten Geräts gebunden. Eine bloß kopierte Geräte-ID reicht nicht. Ohne vorherige Lizenzstatusmeldung ist der Freigabeknopf absichtlich gesperrt.
+- Bestehende Lifetime-Lizenzen haben Vorrang und werden nicht herabgestuft. Android bis v1.0.63 erkennt die Jahresberechtigung kompatibel als aktive Laufzeit; Android v1.0.64 Entwicklungszweig interpretiert `ANNUAL_ACTIVE` und `ANNUAL_EXPIRED` einschließlich korrektem Badge.
+- Geschützte Fehlerübersicht mit Synchronisierungs-, VPN- und Lizenzkennzahlen. `POST /v1/device/error-report` akzeptiert ausschließlich Kategorien mit expliziter Zustimmung und gültigem Geräte-Session-Token. Keine freien Fehlermeldungen, Stream-URLs, Stacktraces oder Zugangsdaten. Max. 25 Meldungen je Gerät/24 h, automatische Löschung der Einzelmeldungen nach 30 Tagen beim nächsten Bericht.
+- Android v1.0.64 Entwicklungszweig bietet eine standardmäßig **ausgeschaltete** Option für anonyme Absturzberichte. Ein Absturz speichert lediglich ein Ja/Nein-Flag und meldet beim nächsten gesunden Start die Kategorie CRASH/OTHER; originale Android-Crashbehandlung bleibt erhalten.
+- CSRF-Schutz mit geheimem Session-Token für Admin-/Reseller-Browserformulare, bestehender separater VPN-CSRF-Schutz bleibt intakt. Dashboard-Seiten liefern no-store und Schutz-Header; Reseller-Mandantentrennung bleibt erhalten.
 
-## Geeigneter Host
-Nur auf dem Host installieren, auf dem `epimediahub-provisioning.service`
-in `/opt/epimediahub/provisioning` läuft und der die Kundendatenbank besitzt.
-**Nicht** auf dem reinen EpiScene-Rechenserver oder dem Finnland-VPN-Gateway.
+## Wichtig: noch keine Produktionsfreigabe
+Es ist **noch nichts installiert oder für Endkunden veröffentlicht**. Vor dem ersten Produktiv-Update müssen die gesamte Android-v1.0.64-Kompilierung und Android-Unit-Tests, korrekte APK-Signierung sowie reale Fire-TV-Tests abgeschlossen sein. Die separate Dashboard-GitHub-CI prüft Python, Flask, SQLite, Authentifizierung, VPN und das kompakte Layout. Eine erfolgreiche CI allein beweist keine getestete Hetzner-Installation.
 
-## Installation
-1. Ein festes Git-Commit im Entwicklungszweig `feature/dashboard-hetzner-control-center-20261012` holen (Git sparse clone reicht).
-2. `sudo python3 server/epimediahub_provisioning/deploy/install_control_center_beta.py --check` ausführen.
-3. Nur nach `CHECK OK`: denselben Befehl mit `--apply` ausführen.
-4. Ausgabe `INSTALL OK`, `/health`, `/admin`, `/reseller` und `/admin/diagnostics` prüfen.
-5. Der Installer erstellt ein root-privates Backup in `/var/backups/epimediahub/dashboard-beta-...`, verändert keine bestehenden App- oder VPN-Credits und stellt Code bei Startfehlern wieder her. Datenbank wird vorab als konsistente SQLite-Kopie gesichert.
+Außerdem sind vor größerem Kundeneinsatz organisatorische Datenschutzaufgaben zu erledigen: TLS-/Cloudflare-Konfiguration und Zugriffsprotokolle prüfen, Backup-Retention festlegen, AV-Verträge/Datenschutzhinweise prüfen und rollenbezogene Zugriffe auf dem produktiven Server testweise verifizieren. Das ist keine pauschale DSGVO-Zertifizierung.
 
-## Sicherheitsgrenzen
-Das Skript verweigert die Installation, wenn das aktive VPN-Backend den einmaligen Test nicht kennt, die Server-Verzeichnisse abweichen, der Dienst nicht läuft oder die Vorprüfung nicht besteht. Es überschreibt **nicht** `license_api.py` oder `vpn_dashboard.py` und bewahrt vorhandene Dashboard-Navigationslinks (z. B. Credits) auf. Das Skript ist keine automatische Migration unbekannter Fremdversionen.
+## Geeigneter Installationshost
+Nur der Host, auf dem `epimediahub-provisioning.service` unter `/opt/epimediahub/provisioning` läuft und die Kundendatenbank vorhanden ist. Nicht der separate VPN-Gateway oder reine EpiScene-Rechenserver.
 
-## Offene Freigabekriterien
-Vor breitem Kundentest sind erforderlich: bestandene CI-Tests, echte Admin-/Reseller-Tests auf einem zweiten System, ein Gerätetest der VPN-Testfreigabe und eine Prüfung der gespeicherten Kundendaten und Backups. Für die App-Jahreslizenz müssen der Server- und der Android-Client dieselben ablaufenden Lizenztypen implementieren.
+## Schutzmechanismen des Installers
+`deploy/install_control_center_beta.py` hat zwei explizite Modi: `--check` (keine Produktivänderungen) und `--apply` (nach erfolgreichem Preflight mit Sicherung). Er stoppt bei unbekannten Serverversionen, fehlenden VPN-Freigaben, schwachen/flüchtigen Session-Secrets, unsicheren Cookies, fehlerhaften Lizenzrouten oder fehlgeschlagenem Datenbanksnapshot. Vorhandenes kompatibles `license_api.py` und Credit-Templates werden **nicht überschrieben**. 
+Datenbankkopie und ersetzte Dateien liegen nur für root zugänglich unter `/var/backups/epimediahub/`; bei Servicefehlern rollt der Installer geänderten Code zurück, ohne bestehende Kunden, Playlists, VPN-Credits oder Lifetime-Lizenzen zu löschen. Zusätzliche neue Tabellen werden bei einem Fehler nicht automatisch aus der Datenbank entfernt.
+
+## GitHub-Änderungen
+- Dashboard mit API-Sicherheit und Installationsschutz: PR #56, Zweig `feature/dashboard-hetzner-control-center-20261012`.
+- Android 1.0.64 mit jährlichem Lizenzstatus und Opt-in-Absturzmeldung: PR #57, Zweig `feature/v164-annual-license-ui`.
+Beide PRs bleiben Draft bis alle Validierungen und der Betreiber-Test abgeschlossen sind.
