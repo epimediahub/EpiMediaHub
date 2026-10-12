@@ -126,7 +126,7 @@ def plan(controller,compute,bodies):
               'skip_automation.py':{'analyze','analysis_phase'},
               'skip_remote_worker.py':{'validate','execute'},
               'skip_daily_reports.py':{'build_report'}}
-    for name in set(HOOKS)|{'skip_visual.py','skip_release.py'}:
+    for name in sorted(set(HOOKS)|{'skip_visual.py','skip_release.py'}):
         paths=[compute/name] if name=='skip_remote_worker.py' else [controller/name]
         if name!='skip_remote_worker.py' and (name in COMPUTE_FILES or name in ('skip_visual.py','skip_release.py')):
             paths.append(compute/name)
@@ -138,7 +138,11 @@ def plan(controller,compute,bodies):
             base=strip_hook(text,name) if already and name in HOOKS else text
             if name in PINS and sha(base.encode())!=PINS[name]:
                 raise RuntimeError('Active file differs from verified 12 October build: '+str(path))
-            functions={n.name for n in ast.parse(base).body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
+            try:
+                parsed=ast.parse(base,filename=name)
+            except SyntaxError:
+                raise RuntimeError('Invalid active Python syntax: '+str(path)) from None
+            functions={n.name for n in parsed.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
             if not required.get(name,set())<=functions:
                 raise RuntimeError('Unexpected live function layout: '+str(path))
             desired[path]=(base if name not in HOOKS else add_hook(base,name)).encode()

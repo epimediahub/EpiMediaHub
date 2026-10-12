@@ -380,10 +380,10 @@ class Installer(unittest.TestCase):
             ctl.mkdir();compute.mkdir()
             for root in (ctl,compute):
                 for name in set(self.module.HOOKS)|{'skip_visual.py','skip_release.py'}:
-                    (root/name).write_text('unexpected live source\n')
+                    (root/name).write_text('# unexpected live source\n')
             with self.assertRaises(RuntimeError):
                 self.module.plan(ctl,compute,self.module.payload())
-            self.assertEqual((ctl/'skip_scene.py').read_text(),'unexpected live source\n')
+            self.assertEqual((ctl/'skip_scene.py').read_text(),'# unexpected live source\n')
 
     def test_failed_worker_health_rolls_back_added_files_without_replacing_database(self):
         module=self.module
