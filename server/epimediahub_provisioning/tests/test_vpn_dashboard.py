@@ -208,7 +208,7 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(con.execute("SELECT expires_at FROM vpn_devices WHERE device_row_id=1").fetchone()[0], expires)
             self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_audit WHERE action='trial7'").fetchone()[0], 1)
         page = self.admin.get("/admin")
-        self.assertIn("VPN-Test genutzt", page.text)
+        self.assertIn("Test bereits genutzt", page.text)
 
     def test_trial7_requires_admin_session_bound_device_and_agent(self):
         self.assertEqual(self.post("trial7", client=self.reseller, device_row_id=1).status_code, 403)
