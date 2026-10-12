@@ -5,7 +5,6 @@ import hashlib
 import json
 from pathlib import Path
 import re
-import zlib
 
 ROOT=Path(__file__).resolve().parents[1]
 INSTALLER=Path(__file__).with_name('install_episcene_20261012.py')
@@ -13,7 +12,7 @@ MODULES=('skip_scene_reliability.py','skip_variant_reuse.py','skip_tail_check.py
 
 
 def main():
-    packed=zlib.compress(json.dumps({name:(ROOT/name).read_text() for name in MODULES},sort_keys=True,separators=(',',':')).encode(),9)
+    packed=json.dumps({name:(ROOT/name).read_text() for name in MODULES},sort_keys=True,separators=(',',':')).encode()
     text=INSTALLER.read_text()
     text,n=re.subn(r"(?m)^PAYLOAD = '[^']*'$",'PAYLOAD = '+repr(base64.b64encode(packed).decode()),text)
     if n!=1:

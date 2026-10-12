@@ -71,6 +71,17 @@ class Base(AutomationFixture,unittest.TestCase):
 
 
 class Progress(Base):
+    def test_snapshot_revision_change_blocks_automatic_publication(self):
+        reliability.install_scene(scene)
+        asset=self.asset()
+        with self.db() as con:
+            cached=scene._save(con,asset,'intro',0,15000,frames(0,30))
+            snapshot=scene._snapshot(cached,asset)
+            self.assertEqual(snapshot['source_version'],reliability.asset_version(asset))
+            con.execute("UPDATE skip_assets SET updated_at='2026-12-01T00:00:00Z' WHERE asset_key=?",(asset['asset_key'],))
+            row=dict(asset,status='pending',source='episcene',segment_type='intro')
+            self.assertFalse(scene.release_ready(con,row,{'method':'episcene_consensus','windows':[snapshot]}))
+
     def test_independent_analysis_id_never_resolves_customer_credentials(self):
         with self.db() as con:
             con.execute('CREATE TABLE skip_analysis_playlists(id INTEGER PRIMARY KEY,name TEXT,config_json TEXT)')
@@ -123,6 +134,9 @@ class Progress(Base):
         self.assertEqual(status,'partial')
         with self.db() as con:
             self.assertEqual([r[0] for r in con.execute('SELECT status FROM skip_scene_progress')],['partial','partial'])
+            errors=[json.loads(r[0]) for r in con.execute("SELECT payload FROM episcene_report_events WHERE kind='phase_error'")]
+            self.assertEqual(len({e['error_id'] for e in errors}),2)
+            self.assertEqual({e['error_code'] for e in errors},{'visual_incomplete'})
 
     def test_missing_partner_is_distinct_from_complete_negative(self):
         def analyze(db,job,busy_factory):
@@ -262,6 +276,17 @@ class Languages(Base):
 
 
 class Transfer(Base):
+    def test_human_confirmation_of_generated_marker_remains_authoritative(self):
+        self.registered(self.seed)
+        rid=self.marker(self.seed)
+        with self.db() as con:
+            con.execute("UPDATE skip_records SET source='episcene' WHERE id=?",(rid,))
+            con.execute('INSERT INTO skip_auto_evidence VALUES(?,?,1)',(rid,json.dumps({'method':'episcene_consensus','decision':{'status':'REVIEW'}})))
+            marker=con.execute('SELECT * FROM skip_records WHERE id=?',(rid,)).fetchone()
+            self.assertTrue(variants.confirmed_source(con,marker))
+            con.execute('UPDATE skip_auto_evidence SET human_review=0 WHERE record_id=?',(rid,))
+            self.assertFalse(variants.confirmed_source(con,marker))
+
     def test_conflicting_external_episode_identity_is_not_rescued_by_same_title(self):
         self.registered(self.seed)
         source=self.asset(self.seed['asset_key'])

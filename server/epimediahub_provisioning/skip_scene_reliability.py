@@ -103,6 +103,10 @@ def install_scene(scene):
     original_compare, original_analyze = scene._compare, scene.analyze
     original_refresh, original_release = scene.refresh_neighbours, scene.release_ready
     original_rows = scene._cached_rows
+    original_snapshot=scene._snapshot
+    @wraps(original_snapshot)
+    def snapshot(row,asset):
+        return dict(original_snapshot(row,asset),source_version=asset_version(asset))
 
     @wraps(original_migrate)
     def scene_migrate(con):
@@ -215,6 +219,13 @@ def install_scene(scene):
             code=error_code(error) if error else 'visual_incomplete'
             status='partial' if code in ('visual_incomplete','visual_window','visual_failed') else 'technical_error'
             state(db, asset, kind, status, code)
+            if error is not None:
+                error_id=getattr(error,'_episcene_error_id',None) or uuid.uuid4().hex
+                error._episcene_error_id=error_id
+                context=CONTEXT.get()
+                with db() as con:
+                    event(con,'phase_error',asset['asset_key'],phase='visual_'+kind,error_code=code,
+                          error_id=error_id,attempt_id=context['attempt_id'] if context else '')
 
     @wraps(original_compare)
     def compare(db, asset, kind, own, selected, busy):
@@ -286,18 +297,42 @@ def install_scene(scene):
 
     @wraps(original_release)
     def release_ready(con, row, evidence):
+        if not isinstance(evidence,dict):
+            return False
         if evidence.get('method') == 'verified_variant_reuse':
             from skip_variant_reuse import release_ready as variant_ready
             return variant_ready(con, row, evidence)
         proof = evidence.get('decision', {}).get('tail_check') if isinstance(evidence.get('decision'), dict) else None
+        if proof and not isinstance(proof,dict):
+            return False
         if proof:
             asset = con.execute('SELECT * FROM skip_assets WHERE asset_key=?', (row['asset_key'],)).fetchone()
             if not asset or proof.get('source_version') != asset_version(asset):
                 return False
+        if evidence.get('method')=='episcene_consensus':
+            windows=evidence.get('windows',[])
+            if not isinstance(windows,list) or any(not isinstance(item,dict) for item in windows):
+                return False
+            for item in windows:
+                parent=con.execute('SELECT * FROM skip_assets WHERE asset_key=?',(item.get('asset_key'),)).fetchone()
+                if not parent:
+                    return False
+                current=asset_version(parent)
+                if item.get('source_version') is None:
+                    # Approved legacy sources retain their policy only when
+                    # the cache still represents their current revision.
+                    if row['status']!='approved':
+                        return False
+                    cached=scene._cache(con,parent,row['segment_type'],item.get('offset_ms'),item.get('length_ms'))
+                    if not cached or cached['id']!=item.get('id'):
+                        return False
+                elif item['source_version']!=current:
+                    return False
         return original_release(con, row, evidence)
 
     scene.migrate, scene._cache, scene._save, scene._state = scene_migrate, cache, save, scene_state
     scene._cached_rows,scene.capture=cached_rows,capture
+    scene._snapshot=snapshot
     scene._compare, scene.analyze, scene.refresh_neighbours = compare, analyze, refresh
     scene.release_ready = release_ready
     install_remote(scene)

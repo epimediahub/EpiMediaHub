@@ -110,6 +110,18 @@ def marker_signature(marker):
                   'duration_ms','segment_type','start_ms','end_ms','reviewed_at','status','disabled','evidence_json')})
 
 
+def confirmed_source(con,marker):
+    if marker['status']!='approved' or marker['disabled']:
+        return False
+    human=con.execute('SELECT human_review,evidence_json FROM skip_auto_evidence WHERE record_id=?',(marker['id'],)).fetchone()
+    if marker['source']=='device' or human and human[0]==1:
+        return True
+    marker=dict(marker,evidence_json=human[1] if human else None)
+    from skip_release import scene_release_ready,current_reference,reviewed_release_ready,detector_release_ready
+    return (scene_release_ready(con,marker) and current_reference(con,marker)
+            and reviewed_release_ready(marker) and detector_release_ready(con,marker))
+
+
 def verify(db,source,target,marker,busy,excluded_ranges=()):
     from skip_scene_reliability import asset_version,reserve
     if not source['duration_ms'] or not target['duration_ms']:
@@ -207,9 +219,7 @@ def release_ready(con,row,evidence):
         source_evidence=json.loads(marker['evidence_json'] or '{}')
         if source_evidence.get('method')=='verified_variant_reuse':
             return False
-        from skip_release import scene_release_ready,current_reference,reviewed_release_ready,detector_release_ready
-        return (scene_release_ready(con,marker) and current_reference(con,marker)
-                and reviewed_release_ready(marker) and detector_release_ready(con,marker))
+        return confirmed_source(con,marker)
     except (KeyError,TypeError,ValueError,OverflowError):
         return False
 
@@ -248,10 +258,14 @@ def try_reuse(db,target,busy_factory,required):
             markers=con.execute('SELECT r.*,e.evidence_json FROM skip_records r LEFT JOIN skip_auto_evidence e ON e.record_id=r.id WHERE r.asset_key=? AND r.status=\'approved\' AND r.disabled=0',(source['asset_key'],)).fetchall()
             valid=[]
             for marker in markers:
-                e=json.loads(marker['evidence_json'] or '{}')
+                try:
+                    e=json.loads(marker['evidence_json'] or '{}')
+                except (ValueError,TypeError):
+                    continue
+                if not isinstance(e,dict):
+                    continue
                 if (marker['segment_type'] in required and e.get('method')!='verified_variant_reuse'
-                    and scene_release_ready(con,marker) and current_reference(con,marker)
-                    and reviewed_release_ready(marker) and detector_release_ready(con,marker)):
+                    and confirmed_source(con,marker)):
                     valid.append(dict(marker))
         busy=busy_factory(db,[target_playlist,source_playlist])
         for marker in valid:
