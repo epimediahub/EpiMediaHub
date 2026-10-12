@@ -1,0 +1,46 @@
+name: Beta compact dashboard & VPN trial validation
+on:
+  push:
+    branches: [feature/dashboard-beta-licenses-vpn-diagnostics]
+    paths:
+      - "server/epimediahub_provisioning/**"
+      - ".github/workflows/beta-dashboard-qa.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install existing dashboard dependencies
+        run: python -m pip install -r server/epimediahub_provisioning/requirements.txt
+      - name: Verify Python syntax, templates and VPN management
+        run: |
+          python -m compileall -q server/epimediahub_provisioning
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p "test_vpn_*.py" -v
+      - name: Existing customer and reseller dashboard regression
+        env:
+          EPIMEDIAHUB_EXPECTED_API_VERSION: '0.8.2'
+        run: python server/epimediahub_provisioning/tests/smoke_v080.py
+      - name: Ensure compact UI and manual trial stay behind admin authentication
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('server/epimediahub_provisioning')
+          admin=(p/'templates/dashboard_v080.html').read_text()
+          reseller=(p/'templates/reseller_dashboard_v080.html').read_text()
+          vpn=(p/'vpn_dashboard.py').read_text()
+          assert 'operation" value="trial7"' in admin
+          assert 'operation" value="trial7"' not in reseller
+          assert 'customer-details" hidden' not in admin
+          assert 'customer-details" hidden' not in reseller
+          assert 'vpn_csrf' in vpn and 'session.get("admin")' in vpn
+          assert 'vpn_trials' in vpn and 'device_key_hash' in vpn
+          assert (p/'static/beta-admin.css').is_file()
+          print('Manual-only VPN seven-day beta and always-visible customer/reseller controls passed.')
+          PY
