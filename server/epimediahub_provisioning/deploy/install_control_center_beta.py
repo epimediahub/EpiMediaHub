@@ -92,6 +92,16 @@ def base_environment():
     data = Path(env.get("EPIMEDIAHUB_DATA_DIR", "/var/lib/epimediahub"))
     require(data.is_absolute() and (data / "provisioning.db").is_file(), "Die produktive SQLite-Datenbank fehlt.")
     env["EPIMEDIAHUB_DATA_DIR"] = str(data)
+    require(len(env.get("EPIMEDIAHUB_SECRET_KEY", "")) >= 32,
+            "Dauerhafter Flask-Session-Key mit mindestens 32 Zeichen erforderlich.")
+    require(len(env.get("EPIMEDIAHUB_ADMIN_PASSWORD", "")) >= 12,
+            "Das Admin-Passwort muss mindestens 12 Zeichen besitzen.")
+    require(len(env.get("EPIMEDIAHUB_ADMIN_TOKEN", "")) >= 32,
+            "Der Admin-API-Token ist zu kurz.")
+    require(env.get("EPIMEDIAHUB_SECURE_COOKIES", "1") != "0",
+            "Unsichere Session-Cookies sind in Produktion nicht zulässig.")
+    require(env.get("EPIMEDIAHUB_PUBLIC_URL", "https://setup.epimediahub.com").startswith("https://"),
+            "Öffentliche Setup-Links dürfen nur HTTPS verwenden.")
     python = BASE / ".venv/bin/python"
     require(python.is_file(), "Die aktive Python-Umgebung fehlt.")
     return env, python, account, data / "provisioning.db"
