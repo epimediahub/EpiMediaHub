@@ -120,7 +120,7 @@ jobs:
                   'size': path.stat().st_size
               }
           update={
-              'version':'1.0.63',
+              'version':'1.0.64',
               'versionCode':1064,
               'notes':'v1.0.64: OK öffnet die normale Live-TV-Maske bei fortlaufender Senderwiedergabe; Zurück kehrt direkt ins Vollbild zurück. Normales Zurück führt weiterhin über die Kategorien ins Hauptmenü. Das Senderbanner wiederholt fehlende EPG-Abfragen selbstständig und erscheint erneut, sobald Programmdaten eintreffen; passende Sender-Qualitätsvarianten können EPG liefern. Autostart zeigt wieder einen sichtbaren Ein-/Aus-Schalter. Das 17,5-Sekunden-Intro erhält einen neuen Orchesterklang mit Herzschlägen und Rauschen.',
               'apks':apks

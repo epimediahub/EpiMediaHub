@@ -1,0 +1,70 @@
+name: Repair v1.0.64 updater version label after verified publication
+on:
+  push:
+    branches: [fix/v164-updater-metadata]
+    paths:
+      - '.github/workflows/v164-repair-updater-metadata.yml'
+      - '.github/workflows/v164-official-inapp-updater.yml'
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: epimediahub-android-rolling-updater
+  cancel-in-progress: false
+jobs:
+  repair-label:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: epimediahub/EpiMediaHub
+      TAG: v0.7.0-test
+    steps:
+      - name: Verify the already signed and tested app commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/actions/runs/38265259189" > qa.json
+          jq -e '.head_sha == "cb35e4d494539ba4ac2425c57106647a47913c65" and .status == "completed" and .conclusion == "success"' qa.json >/dev/null
+          gh api "repos/$REPO/actions/runs/38265258602" > published.json
+          jq -e '.head_sha == "cb35e4d494539ba4ac2425c57106647a47913c65" and .status == "completed" and .conclusion == "success"' published.json >/dev/null
+      - name: Correct only the label after validating every APK hash and size
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p previous corrected verified
+          gh release download "$TAG" --repo "$REPO" --pattern latest.json --pattern android-latest.json --dir previous
+          gh api "repos/$REPO/releases/tags/$TAG" > release.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          previous=json.loads(Path('previous/latest.json').read_text())
+          assert previous == json.loads(Path('previous/android-latest.json').read_text())
+          assert int(previous['versionCode']) == 1064
+          assert previous['version'] in ('1.0.63', '1.0.64')
+          assets={a['name']: a for a in json.loads(Path('release.json').read_text())['assets']}
+          assert set(previous['apks']) == {'arm64-v8a','armeabi-v7a','universal'}
+          for abi, apk in previous['apks'].items():
+              name=f'EpiMediaHub_Android_v1.0.64-{abi}.apk'
+              assert apk['url'] == 'https://download.epimediahub.com/android/'+name
+              asset=assets[name]
+              assert asset['state'] == 'uploaded'
+              assert asset['digest'] == 'sha256:'+apk['sha256']
+              assert asset['size'] == apk['size'] and apk['size'] > 10000000
+          update=dict(previous)
+          update['version']='1.0.64'
+          assert {k:v for k,v in update.items() if k!='version'} == {k:v for k,v in previous.items() if k!='version'}
+          for name in ('latest.json','android-latest.json'):
+              (Path('corrected')/name).write_text(json.dumps(update,ensure_ascii=False,indent=2)+'\n')
+          print('Verified signed APK metadata; correcting only version to 1.0.64.')
+          PY
+      - name: Publish and reread both corrected updater manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" corrected/android-latest.json corrected/latest.json --repo "$REPO" --clobber
+          gh release download "$TAG" --repo "$REPO" --pattern latest.json --pattern android-latest.json --dir verified
+          cmp corrected/latest.json verified/latest.json
+          cmp corrected/android-latest.json verified/android-latest.json
+          jq -e '.version == "1.0.64" and .versionCode == 1064' verified/latest.json >/dev/null
+          echo 'Both official updater manifests now report version 1.0.64 and versionCode 1064.'
