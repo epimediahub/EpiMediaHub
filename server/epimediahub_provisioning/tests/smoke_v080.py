@@ -23,6 +23,26 @@ r1 = app.test_client()
 r2 = app.test_client()
 anon = app.test_client()
 
+# Existing business regressions must submit the same per-session CSRF as a browser.
+def browser_posts_with_csrf(client):
+    raw_post = client.post
+    def signed_post(path, *args, **kwargs):
+        if path == "/admin" or path.startswith("/admin/") or path == "/reseller" or path.startswith("/reseller/"):
+            with client.session_transaction() as s:
+                token = s.get("_dashboard_csrf")
+            if not token:
+                client.get("/admin/login" if path.startswith("/admin") else "/reseller/login")
+                with client.session_transaction() as s:
+                    token = s["_dashboard_csrf"]
+            headers = dict(kwargs.pop("headers", {}) or {})
+            headers["X-Dashboard-CSRF"] = token
+            kwargs["headers"] = headers
+        return raw_post(path, *args, **kwargs)
+    client.post = signed_post
+
+for browser in (admin, r1, r2, anon):
+    browser_posts_with_csrf(browser)
+
 assert admin.get("/health").get_json()["api_version"] == os.environ.get("EPIMEDIAHUB_EXPECTED_API_VERSION", "0.8.0")
 assert admin.post("/admin/login", data={"password": "test-admin-password"}).status_code == 302
 
