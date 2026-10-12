@@ -14,6 +14,8 @@ on:
 permissions:
   contents: read
   actions: read
+  pull-requests: write
+  issues: write
 jobs:
   compile-test:
     runs-on: ubuntu-22.04
@@ -110,3 +112,14 @@ jobs:
         run: |
           cd "$PROJECT_ROOT"
           gradle :app:testDebugUnitTest --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+      - name: Report isolated Android QA result
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QA_RESULT: ${{ job.status }}
+          QA_SHA: ${{ github.event.pull_request.head.sha }}
+          QA_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" \
+            --body "Isolated Android v1.0.64 annual/privacy QA: $QA_RESULT | commit: $QA_SHA | run: $QA_RUN"
