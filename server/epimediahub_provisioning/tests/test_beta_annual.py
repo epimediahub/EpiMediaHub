@@ -47,6 +47,7 @@ class AnnualLicenseTest(unittest.TestCase):
         with self.admin.session_transaction() as sess:
             self.token = sess["_dashboard_csrf"]
         self.path = f"/admin/devices/{self.device}/grant-year"
+        self._status()  # Device registered its trial secret before an admin grant.
 
     def _grant(self):
         return self.admin.post(self.path, data={"_dashboard_csrf":self.token})
@@ -76,8 +77,12 @@ class AnnualLicenseTest(unittest.TestCase):
         new = self._status(supported_entitlements=["ANNUAL"])
         self.assertEqual(new.json["status"], "ANNUAL_ACTIVE")
         self.assertEqual(self.admin.get("/v1/license/capabilities").json["annual_days"],365)
-        self.assertIn(b"1 Jahr App Lizenz", self.admin.get("/admin").data) if False else None
         self.assertIn(b"App 1 Jahr", self.admin.get("/admin").data)
+
+    def test_copied_device_id_cannot_steal_year(self):
+        self._grant()
+        stolen = self._status(trial_key="c"*64)
+        self.assertNotEqual(stolen.json.get("entitlement_type"), "ANNUAL")
 
     def test_expiration_returns_authoritative_trial_state(self):
         self._grant()
