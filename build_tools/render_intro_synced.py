@@ -195,7 +195,10 @@ def main():
 
     # The audible first impulse is locked to a measured visual feature pulse,
     # not merely the nominal beginning of the soundtrack section.
-    for start, strength in zip(synced, [.65, .69, .74, .78, .81, .43, .49, 1.25]):
+    for idx, (start, strength) in enumerate(zip(synced, [.65, .69, .74, .78, .81, .43, .49, 1.25])):
+        # Do not add off-beat filler impulses where the picture has no feature pulse.
+        if idx in (5, 6) and not sync_details[idx]['detected']:
+            continue
         heartbeat(max(0., start - .018), strength)
     add(percussion, 'timpani', synced[-1], max(.1, 17.5 - synced[-1]), .38, attack=.004, release=.85)
     add(percussion, 'cymbal', synced[-1], max(.1, 17.5 - synced[-1]), .24, attack=.004, release=.9, pan=-.17)
