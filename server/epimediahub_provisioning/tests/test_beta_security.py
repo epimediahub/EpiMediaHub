@@ -13,6 +13,8 @@ os.environ["EPIMEDIAHUB_SECRET_KEY"] = "fixed-test-secret-for-browser-sessions"
 os.environ["EPIMEDIAHUB_SECURE_COOKIES"] = "0"
 import app as core
 from dashboard_v080 import install as install_dashboard
+import license_api
+import annual_license
 from dashboard_security import install as install_security
 
 install_dashboard(core.app, core.db)
@@ -28,6 +30,8 @@ class BrowserSecurity(unittest.TestCase):
         core.BASE_DIR = Path(self.temp.name)
         core.DB_PATH = core.BASE_DIR / "provisioning.db"
         core.init_db()
+        license_api.ensure_license_schema()
+        annual_license._migrate()
         self.client = core.app.test_client()
         with self.client.session_transaction() as s:
             s["admin"] = True
