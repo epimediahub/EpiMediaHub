@@ -158,10 +158,10 @@
                 <input type="hidden" name="device_row_id" value="{{ device.id }}">
                 <button class="button button-primary button-small" type="submit">VPN 7 Tage</button>
               </form>
+              {% elif vpn_state.get('trial_used') %}
+                <span class="beta-status">{{ 'VPN aktiv · Test bereits genutzt' if vpn_state.get('vpn_active') else 'VPN-Test genutzt' }}</span>
               {% elif vpn_state.get('vpn_active') %}
                 <span class="beta-status">VPN aktiv</span>
-              {% elif vpn_state.get('trial_used') %}
-                <span class="beta-status">VPN-Test genutzt</span>
               {% else %}
                 <a class="button button-ghost button-small" href="/admin/vpn#devices" title="VPN-Gerät zuerst mit seinem öffentlichen Schlüssel zuordnen">VPN zuordnen</a>
               {% endif %}
