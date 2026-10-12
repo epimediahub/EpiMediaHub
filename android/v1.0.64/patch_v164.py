@@ -152,6 +152,8 @@ source = source.replace('    val nowProgramme = V163EpgBanner(vm, item, u.epg[it
     }''')
 source = source.replace('        if (item.kind == MediaKind.LIVE && controls) {',
     '        if (item.kind == MediaKind.LIVE && controls && !covered) {')
+source = source.replace('if (!isTv && item.kind == MediaKind.LIVE) TextButton(',
+    'if (!isTv && item.kind == MediaKind.LIVE && !covered) TextButton(')
 # The standard Live root originally relied on implicit focus. Give it an
 # explicit return target so disposing the browser does not strand remote input.
 main_start = source.index('fun PlayerScreen(')
@@ -185,18 +187,27 @@ player.write_text(source)
 
 app = java / 'EpiMediaHubApp.kt'
 source = app.read_text()
+source = source.replace('u.screen is Screen.Player && !v134Ready',
+    '(u.screen is Screen.Player || u.liveBackgroundPlayer != null) && !v134Ready')
+source = source.replace('val interrupted = u.screen as? Screen.Player',
+    'val interrupted = (u.screen as? Screen.Player) ?: u.liveBackgroundPlayer\n                    if (u.liveBackgroundPlayer != null) vm.back()')
+provider = '            menuStates.SaveableStateProvider(menuStateKey) {\n'
+if source.count(provider) != 1: raise SystemExit('Expected one route saved-state provider')
+source = source.replace(provider, '', 1)
 anchor = '            when (val s = u.screen) {'
 if source.count(anchor) != 1: raise SystemExit('Expected one application screen switch')
 source = source.replace(anchor, '''            V164PlayerHost(u.screen, u.liveBackgroundPlayer,
+                menuStates = menuStates, menuStateKey = menuStateKey,
                 player = { playing, covered ->
                     PlayerScreen(vm, playing.item, playing.episodeList, accent, isTv, covered)
                 }, browser = {
             when (val s = u.screen) {''', 1)
 source = source.replace('                is Screen.Player -> PlayerScreen(vm, s.item, s.episodeList, accent, isTv)',
     '                is Screen.Player -> Unit')
-anchor = '                is Screen.Player -> Unit\n            }'
+anchor = '                is Screen.Player -> Unit\n            }\n            }'
 if source.count(anchor) != 1: raise SystemExit('Expected application player route at end of switch')
-source = source.replace(anchor, anchor + '\n            })', 1)
+source = source.replace(anchor, '                is Screen.Player -> Unit\n            }\n            })', 1)
+assert 'menuStates.SaveableStateProvider(menuStateKey)' not in source
 app.write_text(source)
 
 # Add a trailing content slot to the shared focus card; other callers keep defaults.

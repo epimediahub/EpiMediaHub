@@ -150,6 +150,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          latest_sha="$(gh api "repos/$REPO/branches/fix%2Fv164-live-background" --jq '.commit.sha')"
+          test "$latest_sha" = "$QA_SHA" || { echo 'Superseded candidate; keeping existing updater manifest'; exit 1; }
           timeout 5m gh release upload "$TAG" dist/android-latest.json --repo "$REPO" --clobber
           timeout 5m gh release upload "$TAG" dist/latest.json --repo "$REPO" --clobber
           gh release edit "$TAG" --repo "$REPO" \

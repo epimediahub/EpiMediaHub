@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.InputMode
@@ -43,7 +44,9 @@ class V164LiveBrowserTest {
         var created = 0
         var released = 0
         compose.setContent {
-            V164PlayerHost(screen, background, player = { _, covered ->
+            val menus = rememberSaveableStateHolder()
+            V164PlayerHost(screen, background, menuStates = menus,
+                menuStateKey = screen.javaClass.simpleName, player = { _, covered ->
                 DisposableEffect(Unit) { created++; onDispose { released++ } }
                 if (!covered) Column {
                     Button(onClick = { background = playing; screen = Screen.Categories(MediaKind.LIVE) }) { Text("Senderliste öffnen") }

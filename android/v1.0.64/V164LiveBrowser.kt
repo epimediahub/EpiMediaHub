@@ -3,6 +3,7 @@ package de.epimediahub.app.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.ui.Modifier
 import de.epimediahub.app.Screen
 import de.epimediahub.app.UiState
@@ -25,12 +26,18 @@ internal object V164LiveNavigation {
 internal fun V164PlayerHost(
     screen: Screen,
     background: Screen.Player?,
+    menuStates: SaveableStateHolder? = null,
+    menuStateKey: String = "",
     player: @Composable (Screen.Player, Boolean) -> Unit,
     browser: @Composable () -> Unit
 ) {
     Box(Modifier.fillMaxSize()) {
         val playing = (screen as? Screen.Player) ?: background
         if (playing != null) player(playing, background != null)
-        if (screen !is Screen.Player) browser()
+        if (screen !is Screen.Player) {
+            // Changing a menu's saved-state key must never recreate the player.
+            if (menuStates == null) browser()
+            else menuStates.SaveableStateProvider(menuStateKey) { browser() }
+        }
     }
 }
