@@ -26,3 +26,49 @@ Datenbankkopie und ersetzte Dateien liegen nur für root zugänglich unter `/var
 - Dashboard mit API-Sicherheit und Installationsschutz: PR #56, Zweig `feature/dashboard-hetzner-control-center-20261012`.
 - Android 1.0.64 mit jährlichem Lizenzstatus und Opt-in-Absturzmeldung: PR #57, Zweig `feature/v164-annual-license-ui`.
 Beide PRs bleiben Draft bis alle Validierungen und der Betreiber-Test abgeschlossen sind.
+
+## Read-only Preflight auf Hetzner (erst nach signierter APK-Qualifikation)
+
+Weil das GitHub-Repository privat ist, müssen die GitHub-Zugangsdaten auf dem
+Server einem eingeschränkten Deploy-Key oder einer bereits autorisierten
+`gh auth login`-Sitzung zugeordnet werden. Zugangstoken niemals als
+Befehlsargument, Git-URL, Shell-History oder Chat-Nachricht verwenden.
+
+Das **noch nicht ausgeführte** Preflight-Verfahren ist:
+
+```bash
+set -euo pipefail
+command -v gh >/dev/null
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+gh repo clone epimediahub/EpiMediaHub "$tmp/repo" -- \
+  --depth 1 --filter=blob:none --sparse \
+  --branch feature/dashboard-hetzner-control-center-20261012
+git -C "$tmp/repo" sparse-checkout set server/epimediahub_provisioning
+git -C "$tmp/repo" rev-parse HEAD
+sudo python3 "$tmp/repo/server/epimediahub_provisioning/deploy/install_control_center_beta.py" --check
+```
+
+Bevor `--apply` gestattet wird, den angezeigten Commit-SHA gegen die
+freigegebene GitHub-Revision vergleichen, `CHECK OK` prüfen, die
+`epimediahub-provisioning.service`-Servicekonfiguration mit Host und
+Persistenzpfad abgleichen und ein externes, getestetes Backup vorhalten.
+Niemals auf VPN-Gateway oder separatem Analyzer ausführen. Bei Fehlern
+keine automatische Ausweichinstallation versuchen.
+
+Nur nach unabhängiger Sicherheitsfreigabe kann derselbe geprüfte
+Installer mit `--apply` laufen. Er sichert vorhandene Dateien und
+`provisioning.db`, stoppt den Dienst kurz, aktualisiert Code,
+prüft `/health` und die Jahreslizenz-Capabilities und rollt Code bei
+einem Fehler zurück. Bestehende Datenbank bleibt erhalten.
+
+### Betreiber-Abnahmetest
+Mit einem isolierten Testkunden auf dem echten Dashboard prüfen:
+Kunde und Playlist anzeigen/ändern, Gerät zuordnen, einmaligen VPN-Test
+ohne Credit-Abzug starten, Jahreslizenz einmal aktivieren und anschließend
+erneuten Klick ohne Verlängerung, Laufzeit/Entzug und Sichtbarkeit in der
+Android-App. Danach unbedingt Reseller-Rollentrennung, Abmelden/Login,
+Staging-Fehlerfälle und Schutz der Playlist-Passwörter kontrollieren.
+
+Das Erfüllen der CI beweist nur automatisierte Tests, nicht die
+Erfolgsprüfung dieser betrieblichen Schritte.
