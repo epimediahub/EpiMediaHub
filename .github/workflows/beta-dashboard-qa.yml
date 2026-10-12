@@ -1,7 +1,7 @@
 name: Beta compact dashboard & VPN trial validation
 on:
   push:
-    branches: [feature/dashboard-beta-licenses-vpn-diagnostics]
+    branches: [feature/dashboard-beta-licenses-vpn-diagnostics, feature/dashboard-hetzner-control-center-20261012]
     paths:
       - "server/epimediahub_provisioning/**"
       - ".github/workflows/beta-dashboard-qa.yml"
