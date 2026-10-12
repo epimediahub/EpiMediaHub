@@ -112,6 +112,9 @@ def migrate(con):
     CREATE TABLE IF NOT EXISTS vpn_audit(
       id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL, detail_json TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS vpn_operations(id TEXT PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS vpn_trials(
+      device_row_id INTEGER PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+      granted_at TEXT NOT NULL, expires_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS vpn_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
     """)
 
@@ -164,6 +167,35 @@ def install(app, db):
         if "vpn_csrf" not in session:
             session["vpn_csrf"] = secrets.token_urlsafe(32)
         return session["vpn_csrf"]
+
+
+    @app.context_processor
+    def vpn_beta_shortcuts():
+        """Admin device cards: read-only trial state and CSRF, no VPN credentials."""
+        if request.path != "/admin" or not session.get("admin"):
+            return {}
+        with db() as con:
+            rows = con.execute("""
+                SELECT v.device_row_id,v.status,v.expires_at,t.granted_at
+                  FROM vpn_devices v LEFT JOIN vpn_trials t
+                  ON t.device_row_id=v.device_row_id
+                 WHERE v.device_row_id IS NOT NULL
+            """).fetchall()
+            states = {}
+            for row in rows:
+                expiry = instant(row["expires_at"])
+                states[int(row["device_row_id"])] = {
+                    "bound": True,
+                    "trial_used": bool(row["granted_at"]),
+                    "vpn_active": row["status"] == "ACTIVE" and
+                        expiry is not None and expiry > now(),
+                    "expires_at": row["expires_at"],
+                }
+        return {
+            "vpn_quick_states": states,
+            "vpn_quick_csrf": csrf(),
+            "vpn_quick_nonce": lambda: secrets.token_urlsafe(24),
+        }
 
     def device(con, row_id, admin):
         row = con.execute("""SELECT d.*,c.reseller_id,c.name customer_name,c.enabled customer_enabled,
@@ -232,7 +264,7 @@ def install(app, db):
         request_id = request.form.get("request_id", "")
         if not re.fullmatch(r"[A-Za-z0-9_-]{24,80}", request_id):
             abort(400)
-        allowed = {"order", "activate", "suspend", "resume"} | ({"price", "credit", "plan", "plan_update", "approve", "cancel", "bind", "grant", "transfer"} if admin else set())
+        allowed = {"order", "activate", "suspend", "resume"} | ({"price", "credit", "plan", "plan_update", "approve", "cancel", "bind", "grant", "trial7", "transfer"} if admin else set())
         if operation not in allowed:
             abort(403)
         try:
@@ -316,6 +348,22 @@ def install(app, db):
                             if not entry["expires_at"] or instant(entry["expires_at"]) <= now():
                                 raise Invalid("Die VPN-Laufzeit ist abgelaufen. Zuerst verlängern.")
                             con.execute("UPDATE vpn_devices SET status='ACTIVE',revision=revision+1 WHERE id=?", (entry["id"],))
+                        elif operation == "trial7":
+                            usable(target)
+                            if con.execute("SELECT 1 FROM vpn_trials WHERE device_row_id=?", (target["id"],)).fetchone():
+                                raise Invalid("Der einmalige VPN-Test wurde für dieses Gerät bereits verwendet.")
+                            if entry["status"] == "ACTIVE" and entry["expires_at"] and instant(entry["expires_at"]) > now():
+                                raise Invalid("Das Gerät hat bereits eine aktive VPN-Laufzeit.")
+                            if not fresh(con):
+                                raise Invalid("VPN-Server derzeit nicht bestätigt. Kein Test wurde aktiviert.")
+                            # Seven days once per enrolled device, never charges credits.
+                            current = now()
+                            expiry = stamp(current + timedelta(days=7))
+                            con.execute("INSERT INTO vpn_trials(device_row_id,granted_at,expires_at) VALUES(?,?,?)",
+                                        (target["id"], stamp(current), expiry))
+                            con.execute("""UPDATE vpn_devices SET status='ACTIVE',expires_at=?,
+                                        bound_customer_id=?,owner_reseller_id=?,revision=revision+1 WHERE id=?""",
+                                        (expiry, target["customer_id"], target["reseller_id"], entry["id"]))
                         elif operation == "transfer":
                             replacement = device(con, integer(data.get("target_device_row_id")), True)
                             usable(replacement)
@@ -352,6 +400,12 @@ def install(app, db):
             flash(str(exc), "error")
         except sqlite3.IntegrityError:
             flash("Schlüssel, Adresse oder Gerät ist bereits zugeordnet. Die Aktion wurde nicht gebucht.", "error")
+        if admin and request.form.get("return_to") == "dashboard":
+            try:
+                anchor = f"#device-{integer(request.form.get('device_row_id'))}"
+            except Invalid:
+                anchor = ""
+            return redirect("/admin" + anchor, code=303)
         return redirect("/admin/vpn" if admin else "/reseller/vpn", code=303)
 
     app.add_url_rule("/admin/vpn", "vpn_admin", lambda: page(True))
