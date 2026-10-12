@@ -60,6 +60,15 @@ class BrowserSecurity(unittest.TestCase):
         with core.db() as con:
             self.assertIsNotNone(con.execute("SELECT id FROM resellers WHERE username='secure_test'").fetchone())
 
+    def test_playlist_url_does_not_leak_credentials_in_summary(self):
+        from dashboard_v080 import _source_host_only
+        self.assertEqual(
+            _source_host_only("https://user:secret@example.org:8443/private/list?token=hidden"),
+            "https://example.org:8443")
+        self.assertEqual(_source_host_only("https://unsafe.invalid/private?password=hidden"),
+                         "https://unsafe.invalid")
+        self.assertEqual(_source_host_only("broken"), "Quelle geschützt")
+
     def test_login_forms_include_csrf_token(self):
         guest = core.app.test_client()
         page = guest.get("/admin/login")
