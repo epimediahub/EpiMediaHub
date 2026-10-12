@@ -123,7 +123,7 @@ _previous_license_status = app.view_functions["license_status"]
 
 def annual_aware_license_status():
     original = _previous_license_status()
-    if getattr(original, "status_code", 200) != 200:
+    if not hasattr(original, "get_json") or original.status_code != 200:
         return original
     payload = original.get_json(silent=True)
     if not isinstance(payload, dict) or payload.get("status") == "LIFETIME_ACTIVE":
