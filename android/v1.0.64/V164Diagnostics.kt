@@ -25,6 +25,7 @@ internal object V164Diagnostics {
     private const val PREFS = "v164_privacy_diagnostics"
     private const val OPT_IN = "explicit_opt_in"
     private const val PENDING_CRASH = "pending_crash"
+    @Volatile private var handlerInstalled = false
 
     fun enabled(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(OPT_IN, false)
@@ -37,7 +38,10 @@ internal object V164Diagnostics {
             .remove(PENDING_CRASH).apply()
     }
 
+    @Synchronized
     fun installCrashMarker(context: Context) {
+        if (handlerInstalled) return
+        handlerInstalled = true
         val app = context.applicationContext
         val old = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
