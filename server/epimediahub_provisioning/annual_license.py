@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import abort, flash, jsonify, redirect, request, session, url_for
 
-from app import app, db, iso, utcnow
+from app import app, db, digest, iso, utcnow
 from dashboard_v080 import _audit
 import license_api  # Existing credit/7-day/Lifetime routes and schema
 
@@ -31,9 +31,13 @@ def _migrate():
                 expires_at TEXT NOT NULL,
                 revoked_at TEXT,
                 renewed_at TEXT,
-                granted_by TEXT NOT NULL DEFAULT 'admin'
+                granted_by TEXT NOT NULL DEFAULT 'admin',
+                bound_trial_key_hash TEXT NOT NULL DEFAULT ''
             )
         """)
+        columns = {row[1] for row in con.execute("PRAGMA table_info(annual_device_licenses)")}
+        if "bound_trial_key_hash" not in columns:
+            con.execute("ALTER TABLE annual_device_licenses ADD COLUMN bound_trial_key_hash TEXT NOT NULL DEFAULT ''")
 
 
 def _device(con, row_id):
@@ -69,6 +73,12 @@ def admin_grant_year(row_id):
         if _lifetime(con, item["device_id"]):
             flash("Gerät besitzt bereits eine Lifetime-Lizenz. Keine Jahreslizenz gebucht.", "warning")
             return redirect(url_for("dashboard", _anchor="device-" + str(row_id)))
+        subjects = con.execute("""SELECT trial_key_hash FROM license_subjects
+             WHERE current_device_id=?""", (item["device_id"],)).fetchall()
+        if len(subjects) != 1:
+            flash("App muss einmal den Lizenzstatus prüfen; bei mehrfachen Installationen bitte zuerst die Gerätezuordnung klären.", "warning")
+            return redirect(url_for("dashboard", _anchor="device-" + str(row_id)))
+        bound_hash = subjects[0]["trial_key_hash"]
         previous = con.execute("SELECT * FROM annual_device_licenses WHERE device_id=?",
                                (item["device_id"],)).fetchone()
         now = utcnow()
@@ -76,11 +86,13 @@ def admin_grant_year(row_id):
             flash("Die Jahreslizenz ist bereits aktiv. Es wurde nichts verlängert.", "info")
             return redirect(url_for("dashboard", _anchor="device-" + str(row_id)))
         expires = iso(now + timedelta(days=YEAR_DAYS))
-        con.execute("""INSERT INTO annual_device_licenses(device_id,granted_at,expires_at,revoked_at,renewed_at)
-                       VALUES(?,?,?,?,?)
+        con.execute("""INSERT INTO annual_device_licenses(
+                            device_id,granted_at,expires_at,revoked_at,renewed_at,bound_trial_key_hash)
+                       VALUES(?,?,?,?,?,?)
                        ON CONFLICT(device_id) DO UPDATE SET
-                         expires_at=excluded.expires_at, revoked_at=NULL, renewed_at=excluded.granted_at""",
-                    (item["device_id"], iso(now), expires, None, None))
+                         expires_at=excluded.expires_at, revoked_at=NULL,
+                         renewed_at=excluded.granted_at, bound_trial_key_hash=excluded.bound_trial_key_hash""",
+                    (item["device_id"], iso(now), expires, None, None, bound_hash))
         _audit(con, "admin", None, "grant_annual_app_license", "device", row_id,
                days=YEAR_DAYS, expires_at=expires, charged_credits=0)
     flash("App-Jahreslizenz für 365 Tage aktiviert – keine Credits abgebucht.", "success")
@@ -107,14 +119,24 @@ def annual_devices_for_admin():
     if request.endpoint != "dashboard" or not session.get("admin"):
         return {}
     with db() as con:
-        data = con.execute("""SELECT d.id, a.expires_at,a.revoked_at FROM devices d
-               LEFT JOIN annual_device_licenses a ON a.device_id=d.device_id
-               WHERE a.device_id IS NOT NULL""").fetchall()
+        rows = con.execute("""SELECT d.id, s.trial_key_hash, a.expires_at, a.revoked_at,
+                     l.id lifetime_id,
+                     (SELECT COUNT(*) FROM license_subjects a2 WHERE a2.current_device_id=d.device_id) subjects
+              FROM devices d
+              LEFT JOIN license_subjects s ON s.current_device_id=d.device_id
+              LEFT JOIN annual_device_licenses a ON a.device_id=d.device_id
+                     AND a.bound_trial_key_hash=s.trial_key_hash
+              LEFT JOIN lifetime_licenses l ON l.subject_id=s.id AND l.status='ACTIVE'""").fetchall()
     now = utcnow()
     states = {}
-    for row in data:
-        active = not row["revoked_at"] and _parse(row["expires_at"]) > now
-        states[int(row["id"])] = {"active":active, "expires_at":row["expires_at"]}
+    for row in rows:
+        ready = int(row["subjects"]) == 1
+        active = bool(ready and row["expires_at"] and not row["revoked_at"]
+                      and _parse(row["expires_at"]) > now)
+        states[int(row["id"])] = {
+            "ready":ready, "lifetime":bool(row["lifetime_id"]),
+            "active":active, "expires_at":row["expires_at"] or ""
+        }
     return {"annual_device_states":states}
 
 
@@ -125,6 +147,7 @@ def annual_aware_license_status():
     original = _previous_license_status()
     if not hasattr(original, "get_json") or original.status_code != 200:
         return original
+    original.headers["Cache-Control"] = "no-store, private"
     payload = original.get_json(silent=True)
     if not isinstance(payload, dict) or payload.get("status") == "LIFETIME_ACTIVE":
         return original
@@ -132,16 +155,21 @@ def annual_aware_license_status():
     if not isinstance(body, dict):
         return original
     device_id = str(body.get("device_id", "")).strip()[:160]
-    if not device_id:
+    trial_key = str(body.get("trial_key", "")).strip().lower()
+    if not device_id or len(trial_key) < 32:
         return original
+    trial_hash = digest("trial-key-v1:" + trial_key)
     with db() as con:
         # Permit annual use only for a unique currently enabled customer device.
         eligible = con.execute("""SELECT COUNT(*) FROM devices d
             JOIN customers c ON c.id=d.customer_id
             WHERE d.device_id=? AND d.enabled=1 AND c.enabled=1""", (device_id,)).fetchone()[0]
         all_rows = con.execute("SELECT COUNT(*) FROM devices WHERE device_id=?", (device_id,)).fetchone()[0]
-        row = con.execute("""SELECT expires_at FROM annual_device_licenses
-            WHERE device_id=? AND revoked_at IS NULL""", (device_id,)).fetchone()
+        row = con.execute("""SELECT a.expires_at FROM annual_device_licenses a
+            JOIN license_subjects s ON s.trial_key_hash=a.bound_trial_key_hash
+            WHERE a.device_id=? AND a.bound_trial_key_hash=?
+              AND s.current_device_id=? AND a.revoked_at IS NULL""",
+              (device_id, trial_hash, device_id)).fetchone()
     if eligible != 1 or all_rows != 1 or row is None:
         return original
     now = utcnow()
