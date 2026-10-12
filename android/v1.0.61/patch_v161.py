@@ -75,4 +75,7 @@ assert "V161SmartEpg.enrich(" in vm.read_text()
 assert "V161PlaybackRetryPolicy.shouldTryNext(" in player.read_text()
 assert "V153DirectPolicy.canPlay" in (java / "vpn/V134VpnSession.kt").read_text()
 print("v1.0.61 source ready: safer MOVIE/SERIES/EPISODE fallback and shared EPG cache.")
-print("No deployment; V5 video integration required for release.")
+import subprocess
+import sys
+subprocess.run([sys.executable, str(here / "integrate_v161_intro.py")], check=True)
+print("v1.0.61 candidate complete: V5 video, Smart EPG, VOD fallback and verified Finland VPN banner.")

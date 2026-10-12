@@ -1,16 +1,11 @@
-name: EpiMediaHub v1.0.61 VOD/EPG signed QA (no deployment)
+name: EpiMediaHub v1.0.61 intro VPN EPG official signed QA
 on:
   push:
     branches: [feature/v161-cinema-vod-epg]
     paths:
       - '.github/workflows/android-v161-signed-qa.yml'
+      - '.github/workflows/v161-official-inapp-updater.yml'
       - 'android/v1.0.61/**'
-      - 'android/v1.0.61/**'
-  pull_request:
-    branches: [feature/v161-cinema-vod-epg]
-    paths:
-      - '.github/workflows/android-v161-signed-qa.yml'
-      - '.github/workflows/android-v161-signed-qa.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -137,7 +132,7 @@ jobs:
           p.write_text(s)
           print('Official release signing bound in android extension (no buildTypes assumptions)')
           PY
-      - name: Check compilation for v1.0.61 without any release
+      - name: Check official v1.0.61 Kotlin compilation
         shell: bash
         run: |
           set -euo pipefail
@@ -176,9 +171,24 @@ jobs:
             cp "$src" "qa-artifacts/EpiMediaHub-Android-v1.0.61-$abi.apk"
           done
           (cd qa-artifacts && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Verify exact approved intro inside every signed APK
+        shell: bash
+        run: |
+          python3 - <<'PYINTRO'
+          import hashlib, zipfile
+          from pathlib import Path
+          expected = '4b3556a5da85560f2c2668f6a32b6cdafef220b535b16ae6f807684817350a51'
+          apks = sorted(Path('qa-artifacts').glob('*.apk'))
+          assert len(apks) == 3
+          for apk in apks:
+              with zipfile.ZipFile(apk) as archive:
+                  video = archive.read('res/raw/epimedia_intro_v5.mp4')
+              assert hashlib.sha256(video).hexdigest() == expected, apk.name
+              print(apk.name, 'approved 17.5-second V5 video verified')
+          PYINTRO
       - uses: actions/upload-artifact@v4
         with:
-          name: EpiMediaHub-v161-vod-epg-signed-qa-not-released
+          name: EpiMediaHub-v161-intro-vpn-epg-official-signed
           path: qa-artifacts/
           retention-days: 14
           if-no-files-found: error
