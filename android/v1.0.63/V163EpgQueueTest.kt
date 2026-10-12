@@ -18,7 +18,7 @@ class V163EpgQueueTest {
         assertNull(V163Epg.current(listOf(next), 150))
     }
 
-    @Test fun playbackBypassesBlockedBrowsingAndPromotesWithoutDuplicateFetch() = runBlocking {
+    @Test fun playbackBypassesBlockedBrowsingAndPromotesWithoutDuplicateFetch() = runBlocking<Unit> {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         try {
             val queue = V163EpgQueue(scope, maxBackground = 2)
@@ -35,7 +35,7 @@ class V163EpgQueueTest {
         } finally { scope.cancel() }
     }
 
-    @Test fun rapidZappingOnlyRetainsLatestWaitingPlayingChannel() = runBlocking {
+    @Test fun rapidZappingOnlyRetainsLatestWaitingPlayingChannel() = runBlocking<Unit> {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         try {
             val queue = V163EpgQueue(scope)
@@ -51,7 +51,7 @@ class V163EpgQueueTest {
         } finally { scope.cancel() }
     }
 
-    @Test fun failedGuidesRetryAfterCooldownAndPlaylistResetClearsIt() = runBlocking {
+    @Test fun failedGuidesRetryAfterCooldownAndPlaylistResetClearsIt() = runBlocking<Unit> {
         var now = 0L
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         try {
@@ -65,7 +65,7 @@ class V163EpgQueueTest {
         } finally { scope.cancel() }
     }
 
-    @Test fun oldSessionCompletionCannotPoisonNewSessionRequestWithSameId() = runBlocking {
+    @Test fun oldSessionCompletionCannotPoisonNewSessionRequestWithSameId() = runBlocking<Unit> {
         var now = 0L
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         try {

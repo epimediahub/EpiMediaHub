@@ -217,6 +217,6 @@ jobs:
         if: always()
         with:
           name: EpiMediaHub-v163-ui-verification
-          path: ${{ env.PROJECT_ROOT }}/build/qa/*.png
+          path: ${{ env.PROJECT_ROOT }}/app/build/qa/*.png
           retention-days: 14
           if-no-files-found: warn
