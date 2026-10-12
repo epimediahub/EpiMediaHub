@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  actions: read
+  actions: write
 jobs:
   compile-test:
     runs-on: ubuntu-22.04
@@ -38,6 +38,16 @@ jobs:
           cp -a .ci-v164-overlay/android/v1.0.64 android/v1.0.64
           cp .ci-v164-overlay/build_tools/render_intro_orchestral_preview.py build_tools/
           cp .ci-v164-overlay/build_tools/prepare_intro_orchestral.py build_tools/
+      - name: Cancel superseded v164 builds and publication gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api 'repos/epimediahub/EpiMediaHub/actions/runs?branch=fix%2Fv164-live-background&per_page=30' > superseded-runs.json
+          jq -r --arg sha "$GITHUB_SHA" '[.workflow_runs[] | select(.head_sha != $sha and .event == "push" and .status != "completed" and (.path == ".github/workflows/android-v164-signed-qa.yml" or .path == ".github/workflows/v164-official-inapp-updater.yml"))] | .[].id' superseded-runs.json | while read -r run; do
+            gh api --method POST "repos/epimediahub/EpiMediaHub/actions/runs/$run/cancel" || true
+          done
       - name: Prepare pinned orchestral soundtrack with the approved picture
         shell: bash
         run: |

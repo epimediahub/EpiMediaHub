@@ -143,7 +143,7 @@ source = re.sub(r'(?<!\})\.focusRequester\((\w+)\)',
 source = source.replace('    LaunchedEffect(item.resumeKey) {\n        runCatching { focusRequester.requestFocus() }',
     '    LaunchedEffect(item.resumeKey, covered) {\n        if (!covered) runCatching { focusRequester.requestFocus() }')
 source = source.replace('    LaunchedEffect(item.resumeKey, controls) {',
-    '    LaunchedEffect(item.resumeKey, controls, nowProgramme) {')
+    '    LaunchedEffect(item.resumeKey, controls, nowProgramme, covered) {')
 source = source.replace('        if (controls) {', '        if (controls && !covered) {')
 source = source.replace('    val nowProgramme = V163EpgBanner(vm, item, u.epg[item.id].orEmpty())',
     '''    val nowProgramme = V163EpgBanner(vm, item, u.epg[item.id].orEmpty())
