@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write
 jobs:
   compile-test:
     runs-on: ubuntu-22.04
@@ -231,3 +232,14 @@ jobs:
           path: ${{ env.PROJECT_ROOT }}/app/build/qa/*.png
           retention-days: 14
           if-no-files-found: warn
+      - name: Record signed QA result in development PR
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QA_RESULT: ${{ job.status }}
+          QA_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh issue comment 57 --repo "${{ github.repository }}" \
+            --body "Android 1.0.64 signed private QA: $QA_RESULT. Commit: $GITHUB_SHA. Run: $QA_RUN_URL. Signing certificate, 3 APK variants, version and approved intro are included in the successful-job checks. No updater publication."
