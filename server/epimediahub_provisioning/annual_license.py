@@ -175,10 +175,18 @@ def annual_aware_license_status():
     now = utcnow()
     expiry = _parse(row["expires_at"])
     remain = max(0, int((expiry - now).total_seconds()))
-    if remain == 0:
-        return original  # Original trial expires normally; no lifetime promotion.
     supports = body.get("supported_entitlements")
     supports_annual = isinstance(supports, list) and "ANNUAL" in supports
+    if remain == 0:
+        if not supports_annual:
+            return original  # Legacy clients keep familiar trial-expired semantics.
+        payload.update(status="ANNUAL_EXPIRED", entitlement_type="ANNUAL",
+                       annual_expires_at=row["expires_at"],
+                       license_expires_at=row["expires_at"], remaining_seconds=0,
+                       lifetime=False)
+        response = jsonify(payload)
+        response.headers["Cache-Control"] = "no-store"
+        return response
     payload.update(status="ANNUAL_ACTIVE" if supports_annual else "TRIAL_ACTIVE",
                    entitlement_type="ANNUAL",
                    annual_expires_at=row["expires_at"], license_expires_at=row["expires_at"],
