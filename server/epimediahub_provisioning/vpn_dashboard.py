@@ -113,8 +113,7 @@ def migrate(con):
       id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL, detail_json TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS vpn_operations(id TEXT PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS vpn_trials(
-      device_row_id INTEGER PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
-      granted_at TEXT NOT NULL, expires_at TEXT NOT NULL);
+      device_key_hash TEXT PRIMARY KEY, granted_at TEXT NOT NULL, expires_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS vpn_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
     """)
 
@@ -176,17 +175,17 @@ def install(app, db):
             return {}
         with db() as con:
             rows = con.execute("""
-                SELECT v.device_row_id,v.status,v.expires_at,t.granted_at
-                  FROM vpn_devices v LEFT JOIN vpn_trials t
-                  ON t.device_row_id=v.device_row_id
+                SELECT v.device_row_id,v.status,v.expires_at,d.device_id
+                  FROM vpn_devices v JOIN devices d ON d.id=v.device_row_id
                  WHERE v.device_row_id IS NOT NULL
             """).fetchall()
+            used = {r["device_key_hash"] for r in con.execute("SELECT device_key_hash FROM vpn_trials")}
             states = {}
             for row in rows:
                 expiry = instant(row["expires_at"])
                 states[int(row["device_row_id"])] = {
                     "bound": True,
-                    "trial_used": bool(row["granted_at"]),
+                    "trial_used": hashlib.sha256(row["device_id"].encode("utf-8")).hexdigest() in used,
                     "vpn_active": row["status"] == "ACTIVE" and
                         expiry is not None and expiry > now(),
                     "expires_at": row["expires_at"],
@@ -350,17 +349,18 @@ def install(app, db):
                             con.execute("UPDATE vpn_devices SET status='ACTIVE',revision=revision+1 WHERE id=?", (entry["id"],))
                         elif operation == "trial7":
                             usable(target)
-                            if con.execute("SELECT 1 FROM vpn_trials WHERE device_row_id=?", (target["id"],)).fetchone():
+                            key_hash = hashlib.sha256(target["device_id"].encode("utf-8")).hexdigest()
+                            if con.execute("SELECT 1 FROM vpn_trials WHERE device_key_hash=?", (key_hash,)).fetchone():
                                 raise Invalid("Der einmalige VPN-Test wurde für dieses Gerät bereits verwendet.")
-                            if entry["status"] == "ACTIVE" and entry["expires_at"] and instant(entry["expires_at"]) > now():
+                            if entry["expires_at"] and instant(entry["expires_at"]) > now():
                                 raise Invalid("Das Gerät hat bereits eine aktive VPN-Laufzeit.")
                             if not fresh(con):
                                 raise Invalid("VPN-Server derzeit nicht bestätigt. Kein Test wurde aktiviert.")
                             # Seven days once per enrolled device, never charges credits.
                             current = now()
                             expiry = stamp(current + timedelta(days=7))
-                            con.execute("INSERT INTO vpn_trials(device_row_id,granted_at,expires_at) VALUES(?,?,?)",
-                                        (target["id"], stamp(current), expiry))
+                            con.execute("INSERT INTO vpn_trials(device_key_hash,granted_at,expires_at) VALUES(?,?,?)",
+                                        (key_hash, stamp(current), expiry))
                             con.execute("""UPDATE vpn_devices SET status='ACTIVE',expires_at=?,
                                         bound_customer_id=?,owner_reseller_id=?,revision=revision+1 WHERE id=?""",
                                         (expiry, target["customer_id"], target["reseller_id"], entry["id"]))
