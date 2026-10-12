@@ -84,17 +84,17 @@ shutil.copyfile(Path(__file__).resolve().parent / "V164Diagnostics.kt", java / "
 
 settings = java / "ui/Screens.kt"
 replace(settings,
-    '            item {\\n                V163BootSettingsCard(accent)\\n            }',
-    '            item {\\n                V163BootSettingsCard(accent)\\n            }\\n'
-    '            item {\\n                V164DiagnosticsCard(accent)\\n            }')
+    '            item {\n                V163BootSettingsCard(accent)\n            }',
+    '            item {\n                V163BootSettingsCard(accent)\n            }\n'
+    '            item {\n                V164DiagnosticsCard(accent)\n            }')
 
 entry = java / "EpiMediaHubApp.kt"
 replace(entry,
     '    var v120LicenseRefresh by remember { mutableStateOf(0) }',
-    '    LaunchedEffect(Unit) {\\n'
-    '        de.epimediahub.app.ui.V164Diagnostics.installCrashMarker(context.applicationContext)\\n'
-    '        de.epimediahub.app.ui.V164Diagnostics.uploadPending(context.applicationContext)\\n'
-    '    }\\n'
+    '    LaunchedEffect(Unit) {\n'
+    '        de.epimediahub.app.ui.V164Diagnostics.installCrashMarker(context.applicationContext)\n'
+    '        de.epimediahub.app.ui.V164Diagnostics.uploadPending(context.applicationContext)\n'
+    '    }\n'
     '    var v120LicenseRefresh by remember { mutableStateOf(0) }')
 
 assert 'versionCode = 1064' in gradle.read_text()
