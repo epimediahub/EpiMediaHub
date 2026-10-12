@@ -34,3 +34,5 @@ Vor produktiver Verteilung:
 
 Der isolierte Workflow `android-v164-annual-qa.yml` baut nur Debug und
 führt Tests aus. Er veröffentlicht nichts.
+
+CI-Isolierung: PR #57 verwendet vorübergehend `ci/v164-annual-check`, damit der Pull-Request-Test unabhängig vom offiziellen Android-v1.0.63-Zweig laufen kann.
