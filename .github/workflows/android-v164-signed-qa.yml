@@ -1,5 +1,10 @@
 name: EpiMediaHub v1.0.64 official signed APK candidate - PRIVATE QA
 on:
+  pull_request:
+    branches: [ci/v164-annual-check]
+    paths:
+      - '.github/workflows/android-v164-signed-qa.yml'
+      - 'android/v1.0.64/**'
   push:
     branches: [feature/v164-annual-license-ui]
     paths:
