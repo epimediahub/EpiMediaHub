@@ -122,7 +122,7 @@ jobs:
                   'size': path.stat().st_size
               }
           update={
-              'version':'1.0.64',
+              'version':'1.0.65',
               'versionCode':1065,
               'notes':'v1.0.65: EPG-Reparatur: Aktuelles Programm wird wieder direkt beim Anbieter abgefragt; problematische Zusatzabfragen bei Sender-Qualitätsvarianten und zu kurze Netzwerktimeouts zurückgenommen. Jetzt/Nächste bleiben zeitlich getrennt, kontrollierter Wiederholungsversuch nach fehlenden Daten. Live-TV-OK-Navigation, Autostart und alle anderen Funktionen bleiben erhalten. 17,5-Sekunden-Intro: Herzschläge anhand der sichtbaren Funktionsimpulse synchronisiert.',
               'apks':apks
@@ -152,13 +152,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          latest_sha="$(gh api "repos/$REPO/branches/fix%2Fv164-live-background" --jq '.commit.sha')"
+          latest_sha="$(gh api "repos/$REPO/branches/fix%2Fv165-epg-recovery-intro-sync" --jq '.commit.sha')"
           test "$latest_sha" = "$QA_SHA" || { echo 'Superseded candidate; keeping existing updater manifest'; exit 1; }
           timeout 5m gh release upload "$TAG" dist/android-latest.json --repo "$REPO" --clobber
           timeout 5m gh release upload "$TAG" dist/latest.json --repo "$REPO" --clobber
           gh release edit "$TAG" --repo "$REPO" \
             --title 'EpiMediaHub Android v1.0.65' \
-            --notes 'v1.0.65: OK öffnet die normale Live-TV-Maske bei fortlaufender Senderwiedergabe; Zurück kehrt direkt ins Vollbild zurück. Normales Zurück führt weiterhin über die Kategorien ins Hauptmenü. Das Senderbanner wiederholt fehlende EPG-Abfragen selbstständig und erscheint erneut, sobald Programmdaten eintreffen; passende Sender-Qualitätsvarianten können EPG liefern. Autostart zeigt wieder einen sichtbaren Ein-/Aus-Schalter. Das 17,5-Sekunden-Intro erhält einen neuen Orchesterklang mit Herzschlägen und Rauschen.' \
+            --notes 'v1.0.65: EPG: direkte Anbieterabfrage wiederhergestellt, unnötige Qualitätsvarianten-Downloads und zu knappe Zeitlimits zurückgenommen. Jetzt/Nächste bleiben zeitlich getrennt, selektiver erneuter EPG-Versuch. Das bestehende Live-TV-OK-/Zurück-Verhalten und der sichtbare Autostart-Schalter bleiben erhalten. Der Ton des 17,5-Sekunden-Intros folgt den erkannten visuellen Funktionsimpulsen.' \
             --prerelease
           gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' > published-assets.txt
           for filename in EpiMediaHub_Android_v1.0.65-arm64-v8a.apk \
