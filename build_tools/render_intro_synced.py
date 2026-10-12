@@ -102,7 +102,7 @@ def main():
     assert len(synced) == len(feature_anchors)
     assert all(abs(a - b) <= .47 for a, b in zip(feature_anchors, synced))
     args.sync_map.parent.mkdir(parents=True, exist_ok=True)
-    args.sync_map.write_text(json.dumps({'fps': 30, 'events': sync_details}, indent=2) + '\\n')
+    args.sync_map.write_text(json.dumps({'fps': 30, 'events': sync_details}, indent=2) + '\n')
     rng = np.random.default_rng(165)
     cache = {}
     strings = np.zeros((N, 2))
