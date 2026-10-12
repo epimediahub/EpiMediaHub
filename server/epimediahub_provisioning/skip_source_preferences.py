@@ -38,10 +38,35 @@ def preference(con, playlist_id):
     return row[0] if row else None
 
 
+def recover_saved_languages(con,playlist_id):
+    import skip_catalogue as catalogue
+    rows=con.execute('''SELECT e.asset_key,z.payload_json FROM skip_catalogue_episodes e
+      JOIN skip_catalogue_series z ON z.playlist_id=e.playlist_id AND z.series_id=e.series_id
+      LEFT JOIN skip_asset_languages k USING(asset_key)
+      WHERE e.playlist_id=? AND k.asset_key IS NULL LIMIT 2000''',(playlist_id,)).fetchall()
+    for row in rows:
+        try:
+            metadata=json.loads(row['payload_json'])
+        except (ValueError,TypeError):
+            continue
+        codes=declared_codes(catalogue,metadata)
+        con.execute('INSERT OR IGNORE INTO skip_asset_languages VALUES(?,?,?)',
+                    (row['asset_key'],json.dumps(sorted(codes)),'saved_provider_declaration' if codes else 'saved_language_unknown'))
+
+
+def asset_codes(row,catalogue):
+    try:
+        stored=json.loads(row['codes']) if row['codes'] else []
+    except (ValueError,TypeError):
+        stored=[]
+    return set(stored) or catalogue.label_languages(row['title'])
+
+
 def preferred_keys(con, playlist_id, excluded=(), stage=None):
     language = preference(con, playlist_id)
     if not language:
         return []
+    recover_saved_languages(con,playlist_id)
     rows = con.execute("""SELECT j.id,a.asset_key,a.title,k.codes,l.priority FROM skip_jobs j
       JOIN skip_assets a USING(asset_key) LEFT JOIN skip_asset_languages k USING(asset_key)
       LEFT JOIN skip_language_priority l USING(asset_key)
@@ -51,7 +76,7 @@ def preferred_keys(con, playlist_id, excluded=(), stage=None):
     for row in rows:
         if row['id'] in excluded or stage is not None and (row['priority'] if row['priority'] is not None else 2) != stage:
             continue
-        codes = set(json.loads(row['codes'])) if row['codes'] else catalogue.label_languages(row['title'])
+        codes = asset_codes(row,catalogue)
         if language in codes:
             result.append(row['asset_key'])
     return result
@@ -112,6 +137,10 @@ def install(catalogue=None, schedule=None):
             original_asset(con, asset_key, int(priority))
             migrate(con)
             codes = getattr(priority, 'codes', ())
+            if not codes:
+                stored=con.execute('''SELECT s.codes FROM skip_series_languages s JOIN skip_catalogue_episodes e
+                  ON e.playlist_id=s.playlist_id AND e.series_id=s.series_id WHERE e.asset_key=? LIMIT 1''',(asset_key,)).fetchone()
+                codes=json.loads(stored[0]) if stored else ()
             if codes:
                 con.execute('INSERT OR REPLACE INTO skip_asset_languages VALUES(?,?,?)',
                             (asset_key, json.dumps(sorted(codes)), 'provider_or_structured_tag'))
@@ -145,7 +174,7 @@ def install(catalogue=None, schedule=None):
                 if job is not None:
                     from skip_scene_reliability import event
                     row=con.execute('SELECT a.title,k.codes FROM skip_assets a LEFT JOIN skip_asset_languages k USING(asset_key) WHERE asset_key=?',(job['asset_key'],)).fetchone()
-                    codes=json.loads(row['codes']) if row['codes'] else sorted(catalogue.label_languages(row['title']))
+                    codes=sorted(asset_codes(row,catalogue))
                     event(con,'source_language',job['asset_key'],playlist_id=playlist_id,
                           preferred_language=preference(con,playlist_id),selection='preferred',codes=codes)
                     return job, reason
@@ -153,7 +182,7 @@ def install(catalogue=None, schedule=None):
             if job is not None and preference(con,playlist_id):
                 from skip_scene_reliability import event
                 row=con.execute('SELECT a.title,k.codes FROM skip_assets a LEFT JOIN skip_asset_languages k USING(asset_key) WHERE asset_key=?',(job['asset_key'],)).fetchone()
-                codes=json.loads(row['codes']) if row['codes'] else sorted(catalogue.label_languages(row['title']))
+                codes=sorted(asset_codes(row,catalogue))
                 event(con,'source_language',job['asset_key'],playlist_id=playlist_id,
                       preferred_language=preference(con,playlist_id),selection='fallback',codes=codes)
             return job,reason

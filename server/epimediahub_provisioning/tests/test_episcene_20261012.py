@@ -238,6 +238,28 @@ class Languages(Base):
         self.assertEqual(result.codes,{'it'})
         self.assertEqual(catalogue.language_priority({'name':'Chicago Med'}).codes,frozenset())
 
+    def test_series_language_survives_json_metadata_and_reaches_new_episodes(self):
+        self.configure()
+        data=self.language_asset(3,'it','811',2)
+        with self.db() as con:
+            con.execute('DELETE FROM skip_asset_languages WHERE asset_key=?',(data['asset_key'],))
+            catalogue.set_series_language(con,3,'701',catalogue.language_priority({'audio_language':'it'}))
+            con.execute('INSERT INTO skip_catalogue_episodes VALUES(?,?,?,?,?)',(3,'701',data['asset_key'],'signature',1))
+            catalogue.set_asset_language(con,data['asset_key'],catalogue.language_priority({},fallback=0))
+            row=con.execute('SELECT codes FROM skip_asset_languages WHERE asset_key=?',(data['asset_key'],)).fetchone()
+            self.assertEqual(json.loads(row[0]),['it'])
+
+    def test_existing_saved_provider_tag_can_prioritize_clean_asset_title(self):
+        self.configure()
+        data=self.language_asset(3,'it','812',2)
+        with self.db() as con:
+            con.execute('UPDATE skip_assets SET title=? WHERE asset_key=?',('Lie to Me',data['asset_key']))
+            con.execute('DELETE FROM skip_asset_languages WHERE asset_key=?',(data['asset_key'],))
+            con.execute('INSERT INTO skip_catalogue_series(playlist_id,series_id,payload_json,signature,seen_generation) VALUES(?,?,?,?,?)',
+                        (3,'702',json.dumps({'name':'[IT] Lie to Me','language_priority':0}),'sig',1))
+            con.execute('INSERT INTO skip_catalogue_episodes VALUES(?,?,?,?,?)',(3,'702',data['asset_key'],'signature',1))
+            self.assertIn(data['asset_key'],preferences.preferred_keys(con,3,stage=0))
+
 
 class Transfer(Base):
     def test_conflicting_external_episode_identity_is_not_rescued_by_same_title(self):
