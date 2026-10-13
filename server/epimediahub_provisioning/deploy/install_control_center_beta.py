@@ -27,8 +27,11 @@ import urllib.request
 BASE = Path("/opt/epimediahub/provisioning")
 # An older production VPN version was verified by its on-host SHA-256.
 # Never replace an unknown/local custom VPN module.
-TRUSTED_OLD_VPN_SHA256 = "1417f694f32f366ad715efad7c3cd8f76f0d6ccdcda6445cc4c8737294ee91a"
+TRUSTED_OLD_VPN_SHA256 = "1417f694f32f3b66ad715efad7c3cd8f76f0d6ccdcda6445cc4c8737294ee91a"
 REVIEWED_VPN_SHA256 = "e52391fe2c34c93f35e10fd1a3d2e4eaa351bd0ad55a47f63ec574c933c15c22"
+assert len(TRUSTED_OLD_VPN_SHA256) == 64 and len(REVIEWED_VPN_SHA256) == 64, (
+    "VPN-Fingerprints muessen 64-stellige SHA-256-Werte sein"
+)
 SERVICE = "epimediahub-provisioning.service"
 ROOT = Path(__file__).resolve().parents[1]
 UPDATED = (
