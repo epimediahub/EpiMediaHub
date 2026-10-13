@@ -219,8 +219,11 @@ print('Staged dashboard, annual license, CSRF, VPN and admin diagnostics passed'
                             capture_output=True, text=True, timeout=100)
     # Intentionally withhold logs: service imports may print private details.
     require(result.returncode == 0, "Staging-Test fehlgeschlagen. Live-System unverändert; lokale Prüfung erforderlich.")
-    require(before == hash_protected(test_db_dir / "provisioning.db"),
-            "Staging-Test würde Kunden-/Gerätedaten verändern.")
+    after = hash_protected(test_db_dir / "provisioning.db")
+    require(all(after.get(table) == original for table, original in before.items()),
+            "Staging-Test würde bestehende Kunden-/Lizenz-/VPN-Daten verändern.")
+    # New additive tables (vpn_trials, annual_device_licenses, etc.) are
+    # intentionally allowed on the staging copy, never the live DB in --check.
 
 def health():
     with urllib.request.urlopen("http://127.0.0.1:8787/v1/license/capabilities", timeout=5) as response:
