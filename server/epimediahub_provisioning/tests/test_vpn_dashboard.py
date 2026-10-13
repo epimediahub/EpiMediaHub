@@ -21,6 +21,7 @@ os.environ["EPIMEDIAHUB_VPN_AGENT_TOKEN"] = "local-agent-test-token-with-enough-
 import app as core
 from dashboard_v080 import install as dashboard_install, migrate_resellers
 import vpn_dashboard as vpn
+import vpn_auto_enroll as auto
 
 dashboard_install(core.app, core.db)
 vpn.install(core.app, core.db)
@@ -47,11 +48,12 @@ class DashboardTests(unittest.TestCase):
         with core.db() as con:
             migrate_resellers(con)
             vpn.migrate(con)
+            auto.migrate(con)
             for rid in (1,2):
                 con.execute("INSERT INTO resellers(id,name,username,password_hash,created_at,updated_at) VALUES(?,?,?,?,?,?)", (rid, f"Reseller {rid}", f"r{rid}", "unused", vpn.stamp(), vpn.stamp()))
                 con.execute("INSERT INTO customers(id,name,created_at,reseller_id) VALUES(?,?,?,?)", (rid, f"Kunde {rid}", vpn.stamp(), rid))
             for did,cid in ((1,1),(2,2),(3,1)):
-                con.execute("INSERT INTO devices(id,customer_id,device_id,display_name,platform,session_token_hash,created_at) VALUES(?,?,?,?,?,?,?)", (did,cid,f"android-{did}",f"Fire TV {did}","android",f"token-{did}",vpn.stamp()))
+                con.execute("INSERT INTO devices(id,customer_id,device_id,display_name,platform,session_token_hash,created_at) VALUES(?,?,?,?,?,?,?)", (did,cid,f"android-{did}",f"Fire TV {did}","android",core.digest(f"session-{did}-" + "x"*40),vpn.stamp()))
         self.admin = core.app.test_client()
         self.reseller = core.app.test_client()
         self.other = core.app.test_client()
@@ -85,6 +87,78 @@ class DashboardTests(unittest.TestCase):
         self.post("price", reseller_id=1, price="3,25")
         self.post("credit", reseller_id=1, amount=10, note="Testguthaben")
         self.post("plan", name="Finnland Monat", days=30, credits=2)
+
+    def device_vpn(self, did=1):
+        return {"Authorization": "Bearer session-%d-%s" % (did, "x" * 40)}
+
+    def test_automatic_vpn_trial_enrollment_and_agent_ack(self):
+        # Grant from admin first; the device never chooses its own trial days.
+        self.assertEqual(self.anonymous.get("/v1/device/vpn/status",
+                         headers=self.device_vpn()).json["status"], "NO_VPN_LICENSE")
+        self.ack()  # A recently confirmed Finland server is necessary.
+        os.environ["EPIMEDIAHUB_VPN_SERVER_PUBLIC_KEY"] = KEY2
+        os.environ["EPIMEDIAHUB_VPN_ENDPOINT"] = "vpn.example.org:51820"
+        grant = self.admin.post("/admin/vpn/trial7-auto/1")
+        self.assertEqual(grant.status_code, 303)
+        first = self.anonymous.get("/v1/device/vpn/status", headers=self.device_vpn())
+        self.assertEqual(first.json["status"], "PENDING_ENROLL")
+        self.assertNotIn("server_public_key", first.json)
+        result = self.anonymous.post("/v1/device/vpn/enroll",
+                     headers=self.device_vpn(),
+                     json={"device_id":"android-1","public_key":KEY1})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.json["status"], "PENDING_AGENT")
+        with core.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_devices").fetchone()[0],1)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_trials").fetchone()[0],1)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_credits").fetchone()[0],0)
+        self.assertEqual(self.snapshot()["peers"][0]["enabled"],True)
+        self.assertEqual(self.ack().status_code,200)
+        ready = self.anonymous.get("/v1/device/vpn/status",headers=self.device_vpn())
+        self.assertEqual(ready.json["status"],"READY")
+        self.assertTrue(ready.json["enabled"])
+        self.assertEqual(ready.json["client_address"],"10.92.0.2/32")
+        self.assertEqual(ready.json["server_public_key"],KEY2)
+        self.assertEqual(ready.json["endpoint"],"vpn.example.org:51820")
+        self.assertNotIn("PrivateKey",str(ready.json))
+        repeated = self.anonymous.post("/v1/device/vpn/enroll",
+                   headers=self.device_vpn(),
+                   json={"device_id":"android-1","public_key":KEY1})
+        self.assertEqual(repeated.status_code,200)
+        with core.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_devices").fetchone()[0],1)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_credits").fetchone()[0],0)
+        self.assertEqual(self.admin.post("/admin/vpn/trial7-auto/1").status_code,409)
+
+    def test_automatic_enrollment_rejects_other_devices_and_keys(self):
+        self.ack()
+        self.admin.post("/admin/vpn/trial7-auto/1")
+        for method in (
+            self.anonymous.get("/v1/device/vpn/status"),
+            self.anonymous.get("/v1/device/vpn/status",headers={"Authorization":"Bearer wrong"}),
+            self.anonymous.post("/v1/device/vpn/enroll",headers=self.device_vpn(2),
+                               json={"device_id":"android-1","public_key":KEY1}),
+        ):
+            self.assertIn(method.status_code,(401,403))
+        wrong = self.anonymous.post("/v1/device/vpn/enroll",
+                headers=self.device_vpn(),json={"device_id":"android-2","public_key":KEY1})
+        self.assertEqual(wrong.status_code,403)
+        good = self.anonymous.post("/v1/device/vpn/enroll",
+                headers=self.device_vpn(),json={"device_id":"android-1","public_key":KEY1})
+        self.assertEqual(good.status_code,200)
+        hijack = self.anonymous.post("/v1/device/vpn/enroll",
+                headers=self.device_vpn(),json={"device_id":"android-1","public_key":KEY2})
+        self.assertEqual(hijack.status_code,409)
+        self.assertEqual(self.anonymous.post("/v1/device/vpn/enroll",
+                headers=self.device_vpn(2),json={"device_id":"android-2","public_key":KEY2}).status_code,403)
+
+    def test_automatic_trial_rejects_unconfirmed_agent_and_remains_unused(self):
+        self.assertEqual(self.admin.post("/admin/vpn/trial7-auto/1").status_code,303)
+        with core.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_trials").fetchone()[0],0)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_devices").fetchone()[0],0)
+        self.assertIn("NO_VPN_LICENSE",self.anonymous.get(
+            "/v1/device/vpn/status",headers=self.device_vpn()).text)
 
     def test_login_and_tenant_boundaries(self):
         self.assertEqual(self.anonymous.get("/admin/vpn").status_code,302)
