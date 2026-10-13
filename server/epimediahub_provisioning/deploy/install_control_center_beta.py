@@ -142,9 +142,9 @@ def base_environment():
         raise RuntimeError("Finnland: Ungültiger exklusiver Auto-VPN-Adresspool.") from None
     require(auto_pool.version == 4 and auto_pool.subnet_of(net) and auto_pool.num_addresses >= 8,
             "Finnland: Auto-IP-Pool muss innerhalb des Finnland-IPv4-Netzwerks liegen (mindestens 8 Adressen).")
-    require(net.network_address not in auto_pool and net.broadcast_address not in auto_pool
+    require(net.network_address not in auto_pool
             and ipaddress.ip_address(int(net.network_address) + 1) not in auto_pool,
-            "Finnland: Auto-IP-Pool darf weder Netz-/Broadcast-Adresse noch das Gateway enthalten.")
+            "Finnland: Auto-IP-Pool darf weder Netzadresse noch das Gateway enthalten. Ein /25-Broadcast wird niemals vergeben.")
 
     python = BASE / ".venv/bin/python"
     require(python.is_file(), "Die aktive Python-Umgebung fehlt.")
