@@ -172,6 +172,13 @@ jobs:
           grep -Fq 'V164DiagnosticsCard' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Screens.kt"
           grep -Fq 'V164Diagnostics.uploadPending' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt"
           grep -Fq 'private const val OPT_IN = "explicit_opt_in"' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V164Diagnostics.kt"
+          # Regression gate: the built source must retain strict VPN-only
+          # binding with delayed-network recovery, never direct fallback.
+          VPN_BINDING="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/vpn/V140VpnLossMonitor.kt"
+          grep -Fq 'val deadline = SystemClock.elapsedRealtime() + 10_000' "$VPN_BINDING"
+          grep -Fq 'listOfNotNull(cm.activeNetwork) + cm.allNetworks.toList()' "$VPN_BINDING"
+          grep -Fq 'if (!cm.bindProcessToNetwork(candidate)) continue' "$VPN_BINDING"
+          grep -Fq 'if (vpnNetworksObserved) "Android-VPN-Netz nicht bindbar; kein Direkt-Fallback"' "$VPN_BINDING"
       - name: Verify official package and signing identity
         shell: bash
         run: |
