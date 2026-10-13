@@ -101,3 +101,64 @@ Staging-Fehlerfälle und Schutz der Playlist-Passwörter kontrollieren.
 
 Das Erfüllen der CI beweist nur automatisierte Tests, nicht die
 Erfolgsprüfung dieser betrieblichen Schritte.
+
+## Erweiterung 13.10.2026: automatische VPN-Einrichtung (nur Entwicklung)
+
+Der Admin kann einem **noch nicht zugeordneten** registrierten Gerät einmalig
+**VPN 7 Tage** freigeben, ohne WireGuard-Key oder Tunnel-IP einzugeben.
+Die neuen Routen sind:
+
+- \`POST /admin/vpn/trial7-auto/<device_row_id>\`: nur Admin + Sitzungs-CSRF,
+  Agent muss aktuell bestätigt sein; idempotent beim wiederholten Versuch,
+  kein Credit-Abzug. Die sieben Tage beginnen **mit dem Admin-Klick**.
+- \`GET /v1/device/vpn/status\`: nur gültiger Geräte-Bearer-Token,
+  kein anderer Kunden-/Reseller-Zugriff; zunächst \`PENDING_ENROLL\`,
+  nach Eintragung \`PENDING_AGENT\`, erst nach Agent-ACK \`READY\`.
+- \`POST /v1/device/vpn/enroll\`: registrierte Geräte-ID und selbst
+  generierter öffentlicher Schlüssel; privater Schlüssel bleibt Android-seitig
+  im AndroidKeyStore. Automatische, konfliktfreie Auswahl aus dem definierten
+  IPv4-Adresspool in einer SQLite-Schreibtransaktion.
+- Bestehende VPN-Zugänge, ihre Schlüssel, VPN-Credits, Lifetime-Lizenzen und
+  manuelle Legacy-VPN-Routen werden nicht neu erzeugt oder überschrieben.
+
+Der Android-Client \`V142VpnAutoProvision.kt\` verwendet exakt diese Status-
+und Enroll-Schnittstellen. Der Android-Systemdialog zur VPN-Genehmigung
+bleibt verpflichtend, wenn Android ihn anzeigt. Bei fehlender Bestätigung
+des Finnland-Agenten gibt es **keine** ungeschützte Ersatzverbindung.
+
+### Vorbereitete öffentliche Server-Konfiguration
+
+Vor dem nächsten \`--check\` sind am **Dashboard-Dienst** zwei nicht geheime
+Umgebungswerte für das **bestehende** Finnland-Gateway zu konfigurieren:
+
+- \`EPIMEDIAHUB_VPN_SERVER_PUBLIC_KEY\`: der echte öffentliche WireGuard-
+  Schlüssel des Finnland-Servers (44 Zeichen Base64). **Niemals** den
+  privaten Schlüssel kopieren, neu erzeugen oder im Chat mitteilen.
+- \`EPIMEDIAHUB_VPN_ENDPOINT\`: die öffentlich erreichbare, bestätigte
+  Gateway-Adresse im Format \`host:port\` (nicht die Dashboard-API).
+- Optional: \`EPIMEDIAHUB_VPN_SUBNET\`, wenn der tatsächliche WireGuard-
+  Geräteadresspool nicht \`10.92.0.0/24\` ist. Der Pool muss zum
+  bestehenden Finnland-Agenten passen und darf keine externen Adressen
+  oder anderweitig reservierten Geräteadressen enthalten.
+
+Der Installer lehnt \`--check\` und \`--apply\` bei fehlender oder fehlerhafter
+Gateway-Konfiguration ab. Das ist beabsichtigt: Die Testphase darf nicht
+vor einer funktionsfähigen automatischen Provisionierung beginnen.
+
+Bestehendes Finnland-Gateway **nur lesend** inspizieren, beispielsweise
+\`sudo wg show wg0 public-key\` auf dem tatsächlichen VPN-Host.
+Die gültige öffentliche IP/DNS-Adresse und WireGuard-Port sind separat
+aus der vorhandenen, funktionierenden Serverkonfiguration zu bestätigen;
+niemals raten oder neue VPN-Server-Schlüssel erzeugen.
+
+### Tests vor Produktiv-Upgrade
+
+GitHub-CI prüft Token-Isolation, keine fremden Geräte-IDs, einen einzigen
+VPN-Test pro Gerät, keine Credits, konfliktfreie automatische IP-Vergabe,
+kein verdeckter Privatschlüssel, den Status \`PENDING_AGENT\` und die Freigabe
+\`READY\` erst nach Agent-ACK. Staging-Installer verwendet weiterhin eine
+SQLite-Sicherung und verändert \`--check\` keine produktiven Datensätze.
+Betriebstest mit **Daniel Handy** und der bereits vorhandenen App erst
+nach korrekter Finnland-Konfiguration durchführen. Kunden noch nicht
+automatisch aktualisieren.
+
