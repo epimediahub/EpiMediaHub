@@ -162,3 +162,25 @@ Betriebstest mit **Daniel Handy** und der bereits vorhandenen App erst
 nach korrekter Finnland-Konfiguration durchführen. Kunden noch nicht
 automatisch aktualisieren.
 
+
+### Sicherheitsregel 13.10.: Exklusiver VPN-Adressbereich für automatische Geräte
+
+Auf dem realen Finnland-Server wurden bereits zwei belegte WireGuard-Adressen
+bestätigt: 10.92.0.2/32 und 10.92.0.3/32. Die erste automatische Fassung
+suchte im gesamten Netz und könnte eine dieser Adressen versehentlich neu
+vergeben, wenn der zugehörige Peer nicht in der Dashboard-Datenbank steht.
+
+**Verbindliche Korrektur:** Die zusätzliche Dashboard-Dienstvariable
+`EPIMEDIAHUB_VPN_AUTO_POOL=10.92.0.128/25` muss vor der Installation in
+`/etc/epimediahub/provisioning.env` gesetzt und der Dienst neu gestartet
+werden. Die automatische Auswahl beginnt damit bei 10.92.0.129/32 und
+weicht allen vorhandenen Dashboard-Zuordnungen sowie früher verwendeten
+Adressen innerhalb des reservierten Bereichs aus. Die bereits vergebenen
+Adressen .2 und .3 sind außerhalb dieses Bereichs. Der /25-Adressbereich
+muss **dauerhaft ausschließlich für die automatische Dashboard-Vergabe**
+reserviert bleiben und darf nicht zusätzlich manuell auf dem Gateway vergeben
+werden. Die WireGuard-Agenten-Kollisionsprüfung bleibt aktiv.
+
+Der Installer führt jetzt die explizite Prüfung der dritten Variable durch.
+Ohne konfigurierte, zu Finnland passende Exklusivreserve: **kein Deploy und
+keine Aktivierung des sieben Tage dauernden Tests.**
