@@ -102,6 +102,78 @@ replace(entry,
     '    }\n'
     '    var v120LicenseRefresh by remember { mutableStateOf(0) }')
 
+
+# Finland VPN: WireGuard's successful UP/handshake can precede Android's
+# Network registration. Fire OS/Android can also briefly expose a stale VPN
+# Network first, which causes bindProcessToNetwork to return false. Never
+# disable process pinning or quietly switch to the physical network. Retry
+# only confirmed TRANSPORT_VPN candidates with priority for the app's active
+# Network, stopping playback if none becomes valid within the deadline.
+monitor = java / "vpn/V140VpnLossMonitor.kt"
+monitor_source = monitor.read_text()
+start_marker = "    /** Called on the serialized route worker after GoBackend reports UP. */\\n    @Synchronized\\n    fun start(context: Context) {".replace("\\\\n", "\\n")
+end_marker = "\\n    fun isPinned(context: Context): Boolean {"
+assert monitor_source.count(start_marker) == 1 and monitor_source.count(end_marker) == 1, (
+    "Unexpected VPN binding source; refusing to modify VPN safety logic"
+)
+begin = monitor_source.index(start_marker)
+end = monitor_source.index(end_marker, begin)
+old = monitor_source[begin:end]
+assert 'check(cm.bindProcessToNetwork(network)) { "VPN-Netz konnte nicht gebunden werden" }' in old
+assert 'pinned = network' in old and 'cm.registerNetworkCallback(request(), cb)' in old
+
+replacement = """    /** Called after GoBackend reports UP; wait for the VPN Network to be valid. */
+    @Synchronized
+    fun start(context: Context) {
+        stop()
+        val cm = context.applicationContext
+            .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val deadline = SystemClock.elapsedRealtime() + 10_000
+        var selected: Network? = null
+        var vpnNetworksObserved = false
+        do {
+            // On some Android versions allNetworks initially includes a stale
+            // VPN handle. Prefer the app's active VPN, then other VPN candidates.
+            val candidates = (listOfNotNull(cm.activeNetwork) + cm.allNetworks.toList()).distinct()
+            for (candidate in candidates) {
+                val capabilities = cm.getNetworkCapabilities(candidate)
+                if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) != true) continue
+                vpnNetworksObserved = true
+                // A false result is NOT success and must NEVER fall back to direct.
+                if (!cm.bindProcessToNetwork(candidate)) continue
+                if (cm.boundNetworkForProcess != candidate ||
+                    cm.getNetworkCapabilities(candidate)
+                        ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) != true) continue
+                selected = candidate
+                break
+            }
+            if (selected == null && SystemClock.elapsedRealtime() < deadline) {
+                Thread.sleep(100)
+            }
+        } while (selected == null && SystemClock.elapsedRealtime() < deadline)
+
+        val network = checkNotNull(selected) {
+            if (vpnNetworksObserved) "Android-VPN-Netz nicht bindbar; kein Direkt-Fallback"
+            else "Android-VPN-Netz nicht verfügbar; kein Direkt-Fallback"
+        }
+        pinned = network
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onLost(network: Network) {
+                if (pinned == network) {
+                    // Keep process pinning even if transport disappears.
+                    V134VpnSession.onVpnTransportLost()
+                }
+            }
+        }
+        manager = cm
+        callback = cb
+        cm.registerNetworkCallback(request(), cb)
+        check(isPinned(context)) { "VPN-Netz während der Bindung verloren" }
+    }
+"""
+monitor.write_text(monitor_source[:begin] + replacement + monitor_source[end:])
+
+
 assert 'versionCode = 1064' in gradle.read_text()
 assert 'ANNUAL_ACTIVE' in manager.read_text() and 'ANNUAL_EXPIRED' in gate.read_text()
 print("Android 1.0.64: annual license and optional anonymous crash counters enabled")
