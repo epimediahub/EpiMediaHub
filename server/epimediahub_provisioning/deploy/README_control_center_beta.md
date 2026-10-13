@@ -25,7 +25,7 @@ Datenbankkopie und ersetzte Dateien liegen nur für root zugänglich unter `/var
 ## Nachtrag: vorhandene ältere VPN-Installation
 
 Die produktive VPN-Datei vom 13.10.2026 hat den SHA-256-Fingerprint
-`1417f694f32f366ad715efad7c3cd8f76f0d6ccdcda6445cc4c8737294ee91a`
+`1417f694f32f3b66ad715efad7c3cd8f76f0d6ccdcda6445cc4c8737294ee91a`
 und enthält noch keinen einmaligen 7-Tage-Test. Diese exakt geprüfte alte
 Version ist im Installer nun explizit zugelassen; andere Abweichungen werden
 abgewiesen. Die geprüfte neue VPN-Datei hat den Fingerprint
