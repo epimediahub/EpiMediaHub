@@ -165,7 +165,14 @@
               {% elif vpn_state.get('vpn_active') %}
                 <span class="beta-status">VPN aktiv</span>
               {% else %}
-                <a class="button button-ghost button-small" href="/admin/vpn#devices" title="VPN-Gerät zuerst mit seinem öffentlichen Schlüssel zuordnen">VPN zuordnen</a>
+                {% set auto_state = (vpn_auto_states|default({}, true)).get(device.id, {}) %}
+                {% if auto_state.get('trial_used') %}
+                  <span class="beta-status">VPN-Test vergeben · App-Anmeldung ausstehend</span>
+                {% else %}
+                  <form method="post" action="/admin/vpn/trial7-auto/{{ device.id }}" onsubmit="return confirm('VPN 7 Tage für dieses Gerät freigeben? Die App richtet den Zugang automatisch ein. Keine Credits.')">
+                    <button class="button button-primary button-small" type="submit">VPN 7 Tage</button>
+                  </form>
+                {% endif %}
               {% endif %}
               {% set annual = (annual_device_states|default({}, true)).get(device.id, {}) %}
               {% if annual.get('lifetime') %}
