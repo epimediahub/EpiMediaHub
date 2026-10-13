@@ -34,6 +34,8 @@ core.app.add_url_rule("/admin/skip-isolated", endpoint="v082_skip_dashboard",
 core.app.config.update(TESTING=True, SESSION_COOKIE_SECURE=False)
 KEY1 = base64.b64encode(bytes(range(32))).decode()
 KEY2 = base64.b64encode(bytes(range(1,33))).decode()
+os.environ["EPIMEDIAHUB_VPN_SERVER_PUBLIC_KEY"] = KEY2
+os.environ["EPIMEDIAHUB_VPN_ENDPOINT"] = "vpn.example.org:51820"
 
 
 class DashboardTests(unittest.TestCase):
@@ -151,6 +153,16 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(hijack.status_code,409)
         self.assertEqual(self.anonymous.post("/v1/device/vpn/enroll",
                 headers=self.device_vpn(2),json={"device_id":"android-2","public_key":KEY2}).status_code,403)
+
+    def test_auto_trial_not_consumed_without_public_gateway_configuration(self):
+        from unittest.mock import patch
+        self.ack()
+        with patch.dict(os.environ, {"EPIMEDIAHUB_VPN_SERVER_PUBLIC_KEY": ""}):
+            result = self.admin.post("/admin/vpn/trial7-auto/1")
+            self.assertEqual(result.status_code, 303)
+        with core.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_trials").fetchone()[0], 0)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_trial_authorizations").fetchone()[0], 0)
 
     def test_automatic_trial_rejects_unconfirmed_agent_and_remains_unused(self):
         self.assertEqual(self.admin.post("/admin/vpn/trial7-auto/1").status_code,303)
