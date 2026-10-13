@@ -202,6 +202,21 @@ def grant_trial_auto(device_row_id):
     return redirect("/admin#device-" + str(device_row_id), code=303)
 
 
+@app.context_processor
+def vpn_auto_quick_actions():
+    """Only admin: whether an unbound device already consumed its one trial."""
+    if request.endpoint != "dashboard" or not session.get("admin"):
+        return {}
+    with db() as con:
+        used = {row["device_key_hash"] for row in
+                con.execute("SELECT device_key_hash FROM vpn_trials")}
+        rows = con.execute("SELECT id,device_id FROM devices").fetchall()
+    return {"vpn_auto_states": {
+        row["id"]: {"trial_used": hashlib.sha256(row["device_id"].encode("utf-8")).hexdigest() in used}
+        for row in rows
+    }}
+
+
 @app.get("/v1/device/vpn/status")
 def device_vpn_status():
     device = _client()
