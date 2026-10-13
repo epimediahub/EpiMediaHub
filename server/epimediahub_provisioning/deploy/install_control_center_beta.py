@@ -131,6 +131,20 @@ def base_environment():
     net = ipaddress.ip_network(env.get("EPIMEDIAHUB_VPN_SUBNET", "10.92.0.0/24"), strict=True)
     require(net.version == 4 and net.num_addresses <= 4096 and net.prefixlen <= 29,
             "Finnland: VPN-Adresspool ungültig (IPv4, 8 bis 4096 Adressen).")
+    # Deliberately reserve a non-overlapping part of the real Finland network:
+    # gateway peers absent from vpn_devices may already use 10.92.0.2/.3.
+    raw_auto_pool = env.get("EPIMEDIAHUB_VPN_AUTO_POOL", "").strip()
+    require(bool(raw_auto_pool),
+            "Finnland: EPIMEDIAHUB_VPN_AUTO_POOL fehlt. Exklusiven, vorher am WireGuard-Server geprüften Adresspool festlegen.")
+    try:
+        auto_pool = ipaddress.ip_network(raw_auto_pool, strict=True)
+    except ValueError:
+        raise RuntimeError("Finnland: Ungültiger exklusiver Auto-VPN-Adresspool.") from None
+    require(auto_pool.version == 4 and auto_pool.subnet_of(net) and auto_pool.num_addresses >= 8,
+            "Finnland: Auto-IP-Pool muss innerhalb des Finnland-IPv4-Netzwerks liegen (mindestens 8 Adressen).")
+    require(net.network_address not in auto_pool and net.broadcast_address not in auto_pool
+            and ipaddress.ip_address(int(net.network_address) + 1) not in auto_pool,
+            "Finnland: Auto-IP-Pool darf weder Netz-/Broadcast-Adresse noch das Gateway enthalten.")
 
     python = BASE / ".venv/bin/python"
     require(python.is_file(), "Die aktive Python-Umgebung fehlt.")
