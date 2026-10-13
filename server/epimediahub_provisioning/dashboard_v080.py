@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import timedelta
+from urllib.parse import urlsplit
 
 from flask import abort, flash, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -36,6 +37,21 @@ def _request_host():
 
 def _is_managed_public_host(host):
     return host == "epimediahub.com" or host.endswith(".epimediahub.com")
+
+
+def _source_host_only(source):
+    """Show only provider host/port, never URL userinfo, paths, tokens or queries."""
+    try:
+        parts = urlsplit(str(source or "").strip())
+        if parts.scheme not in {"http", "https"} or not parts.hostname:
+            return "Quelle geschützt"
+        host = parts.hostname
+        if ":" in host:  # IPv6 authority must stay bracketed.
+            host = "[" + host + "]"
+        port = f":{parts.port}" if parts.port else ""
+        return parts.scheme + "://" + host + port
+    except (TypeError, ValueError):
+        return "Quelle geschützt"
 
 
 def migrate_resellers(con):
@@ -188,7 +204,7 @@ def _dashboard_rows(con, where_sql="", params=()):
         item = dict(row)
         cfg = _config(row)
         item.update(cfg)
-        item["source_display"] = str(cfg.get("xtream_server") or cfg.get("playlist_url") or "").split("?", 1)[0]
+        item["source_display"] = _source_host_only(cfg.get("xtream_server") or cfg.get("playlist_url"))
         playlists_by_customer.setdefault(int(row["customer_id"]), []).append(item)
 
     devices_by_customer = {}

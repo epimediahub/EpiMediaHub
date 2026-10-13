@@ -50,3 +50,14 @@ install_skip_markers(app, db)
 
 from vpn_dashboard import install as install_vpn_dashboard
 install_vpn_dashboard(app, db)
+
+import dashboard_diagnostics  # Admin-only read-only diagnostics.
+
+from dashboard_security import install as install_dashboard_security
+install_dashboard_security(app)
+
+import license_api  # Trial, Lifetime, reseller credit ledger.
+import annual_license  # 365-day admin entitlement; never charges Lifetime credits.
+
+import device_diagnostics  # Strict opt-in categorized device reports, no raw logs.
+import vpn_auto_enroll  # Enrol only after a manual admin trial grant.

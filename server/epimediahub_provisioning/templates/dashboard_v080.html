@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-v070.css', v='0.8.0') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-v080.css', v='0.8.1') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-v081.css', v='0.8.4') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='beta-admin.css', v='1') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='beta-admin.css', v='2') }}">
 </head>
 <body class="admin-page hierarchy-page beta-console">
 <svg class="svg-sprite" aria-hidden="true">
@@ -30,6 +30,8 @@
   </div>
   <div class="hierarchy-topbar-actions">
     <a class="button button-ghost" href="/admin/vpn">VPN Finnland</a>
+    <a class="button button-ghost" href="/admin/diagnostics">Fehlerdiagnose</a>
+    <a class="button button-ghost" href="{{ url_for('admin_credits') }}">Credits &amp; Lizenzen</a>
     <a class="button button-ghost" href="{{ reseller_portal_url }}">Reseller-Login</a>
     <a class="button button-ghost" href="{{ url_for('v082_skip_dashboard') }}">Intro &amp; Abspann</a>
     <form method="post" action="{{ url_for('logout') }}"><button class="button button-ghost" type="submit"><svg><use href="#i-logout"/></svg>Abmelden</button></form>
@@ -163,7 +165,25 @@
               {% elif vpn_state.get('vpn_active') %}
                 <span class="beta-status">VPN aktiv</span>
               {% else %}
-                <a class="button button-ghost button-small" href="/admin/vpn#devices" title="VPN-Gerät zuerst mit seinem öffentlichen Schlüssel zuordnen">VPN zuordnen</a>
+                {% set auto_state = (vpn_auto_states|default({}, true)).get(device.id, {}) %}
+                {% if auto_state.get('trial_used') %}
+                  <span class="beta-status">VPN-Test vergeben · App-Anmeldung ausstehend</span>
+                {% else %}
+                  <form method="post" action="/admin/vpn/trial7-auto/{{ device.id }}" onsubmit="return confirm('VPN 7 Tage für dieses Gerät freigeben? Die App richtet den Zugang automatisch ein. Keine Credits.')">
+                    <button class="button button-primary button-small" type="submit">VPN 7 Tage</button>
+                  </form>
+                {% endif %}
+              {% endif %}
+              {% set annual = (annual_device_states|default({}, true)).get(device.id, {}) %}
+              {% if annual.get('lifetime') %}
+                <span class="beta-status">App Lifetime aktiv</span>
+              {% elif annual.get('active') %}
+                <span class="beta-status" title="{{ annual.expires_at }}">App 1 Jahr · aktiv bis {{ annual.expires_at[:10] }}</span>
+                <form method="post" action="/admin/devices/{{ device.id }}/revoke-year" onsubmit="return confirm('Jahreslizenz dieses Geräts wirklich beenden?')"><button class="button button-ghost button-small" type="submit">Jahreslizenz beenden</button></form>
+              {% elif annual.get('ready') %}
+                <form method="post" action="/admin/devices/{{ device.id }}/grant-year" onsubmit="return confirm('App für genau 365 Tage freigeben? Keine Credits belasten.')"><button class="button button-primary button-small" type="submit">1 Jahr App Lizenz</button></form>
+              {% else %}
+                <span class="beta-status" title="Die App muss sich einmal beim Lizenzserver melden">App-Lizenzstatus abwarten</span>
               {% endif %}
               <a class="button button-ghost button-small" href="/admin/vpn#devices">VPN verwalten</a>
               <form method="post" action="{{ url_for('v074_delete_device', device_id=device.id) }}" onsubmit="return confirm('Dieses Gerät wirklich endgültig löschen? Die Kunden-Playlists bleiben erhalten.')"><input type="hidden" name="confirm" value="DELETE_DEVICE:{{ device.id }}"><button class="button button-danger button-small" type="submit">Gerät löschen</button></form>

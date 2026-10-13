@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-v070.css', v='0.8.0') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-v080.css', v='0.8.1') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-v081.css', v='0.8.4') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='beta-admin.css', v='1') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='beta-admin.css', v='2') }}">
 </head>
 <body class="admin-page hierarchy-page reseller-shell beta-console">
 <svg class="svg-sprite" aria-hidden="true">
@@ -30,6 +30,7 @@
   </div>
   <div class="hierarchy-topbar-actions">
     <a class="button button-ghost" href="/reseller/vpn">VPN Finnland</a>
+    <a class="button button-ghost" href="{{ url_for('reseller_dashboard') }}">Credits &amp; Lizenzen</a>
     <form method="post" action="{{ url_for('v080_reseller_logout') }}"><button class="button button-ghost" type="submit"><svg><use href="#i-logout"/></svg>Abmelden</button></form>
   </div>
 </header>

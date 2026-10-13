@@ -1,7 +1,12 @@
 name: Beta compact dashboard & VPN trial validation
 on:
-  push:
+  pull_request:
     branches: [feature/dashboard-beta-licenses-vpn-diagnostics]
+    paths:
+      - "server/epimediahub_provisioning/**"
+      - ".github/workflows/beta-dashboard-qa.yml"
+  push:
+    branches: [feature/dashboard-beta-licenses-vpn-diagnostics, feature/dashboard-hetzner-control-center-20261012]
     paths:
       - "server/epimediahub_provisioning/**"
       - ".github/workflows/beta-dashboard-qa.yml"
@@ -42,5 +47,16 @@ jobs:
           assert 'vpn_csrf' in vpn and 'session.get("admin")' in vpn
           assert 'vpn_trials' in vpn and 'device_key_hash' in vpn
           assert (p/'static/beta-admin.css').is_file()
-          print('Manual-only VPN seven-day beta and always-visible customer/reseller controls passed.')
+          assert '1 Jahr App Lizenz' in admin
+          assert 'href="/admin/diagnostics"' in admin
+          assert (p/'templates/dashboard_diagnostics.html').is_file()
+          print('VPN seven-day, annual App licensing and always-visible customer/reseller controls passed.')
           PY
+      - name: Private read-only diagnostics and deployment syntax
+        run: |
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p "test_beta_diagnostics.py" -v
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p "test_beta_security.py" -v
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p "test_beta_annual.py" -v
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p "test_beta_device_diagnostics.py" -v
+          python -m py_compile server/epimediahub_provisioning/license_api.py server/epimediahub_provisioning/annual_license.py server/epimediahub_provisioning/dashboard_security.py server/epimediahub_provisioning/device_diagnostics.py
+          python -m py_compile server/epimediahub_provisioning/deploy/install_control_center_beta.py

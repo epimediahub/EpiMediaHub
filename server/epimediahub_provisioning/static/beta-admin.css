@@ -70,3 +70,68 @@ body.beta-console .hierarchy-search{margin:12px 0}
   body.beta-console .reseller-meta{width:100%;justify-content:flex-start}
   body.beta-console .device-actions{width:100%}
 }
+
+/* Compact phone devices: override the legacy v070 mobile form-width and
+   flex-column rules. Keep all customer/device actions visible, in 2 columns. */
+@media (max-width:800px) {
+  body.beta-console .device-stack .device-card {
+    min-height:0!important;
+    height:auto!important;
+    align-self:stretch;
+  }
+  body.beta-console .device-stack .device-head {
+    display:block!important;
+    min-height:0!important;
+    height:auto!important;
+    padding:0!important;
+    border-bottom:0;
+  }
+  body.beta-console .device-title {
+    display:flex;
+    width:100%;
+    min-width:0;
+    align-items:flex-start;
+  }
+  body.beta-console .device-title > div {min-width:0;overflow-wrap:anywhere}
+  body.beta-console .device-title p {line-height:1.35;overflow-wrap:anywhere}
+  body.beta-console .device-actions {
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    align-items:start;
+    width:100%;
+    gap:6px;
+    margin-top:9px;
+    justify-content:start;
+  }
+  body.beta-console .device-actions > .sync-state,
+  body.beta-console .device-actions > .beta-status {
+    grid-column:1/-1;
+    justify-self:start;
+  }
+  body.beta-console .device-actions > form,
+  body.beta-console .device-actions > a,
+  body.beta-console .device-actions > button {
+    box-sizing:border-box;
+    width:100%!important;
+    min-width:0;
+    margin:0!important;
+  }
+  body.beta-console .device-actions > form > .button {
+    width:100%!important;
+    min-width:0;
+  }
+  body.beta-console .device-actions .button {
+    min-height:34px;
+    font-size:11px;
+    padding:7px 6px;
+    line-height:1.2;
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+  body.beta-console .playlist-item {grid-template-columns:31px minmax(0,1fr)}
+  body.beta-console .playlist-item > .button {
+    grid-column:2;
+    width:auto!important;
+    justify-self:start;
+  }
+}
