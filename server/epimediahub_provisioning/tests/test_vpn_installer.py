@@ -25,7 +25,7 @@ class InstallerTests(unittest.TestCase):
         for name in ("templates","static"):shutil.copytree(ROOT/name,self.base/name)
         (self.base/"vpn_dashboard.py").unlink()
         wsgi=self.base/"wsgi.py"
-        wsgi.write_text(wsgi.read_text().replace("\nfrom vpn_dashboard import install as install_vpn_dashboard\ninstall_vpn_dashboard(app, db)\n","\n")+"\n# Preserve local credit/daily-report additions\n")
+        wsgi.write_text(wsgi.read_text().replace("\nfrom vpn_dashboard import install as install_vpn_dashboard\ninstall_vpn_dashboard(app, db)\n","\n").replace("\nimport vpn_auto_enroll  # Enrol only after a manual admin trial grant.\n","\n")+"\n# Preserve local credit/daily-report additions\n")
         for name,url in (("dashboard_v080.html","/admin/vpn"),("reseller_dashboard_v080.html","/reseller/vpn")):
             path=self.base/"templates"/name
             path.write_text(path.read_text().replace(f'    <a class="button button-ghost" href="{url}">VPN Finnland</a>\n',""))
