@@ -114,6 +114,24 @@ def base_environment():
             "Unsichere Session-Cookies sind in Produktion nicht zulässig.")
     require(env.get("EPIMEDIAHUB_PUBLIC_URL", "https://setup.epimediahub.com").startswith("https://"),
             "Öffentliche Setup-Links dürfen nur HTTPS verwenden.")
+    # Automatic WireGuard enrollment must never start consuming trial days
+    # until the correct Finland gateway PUBLIC metadata is provisioned.
+    import base64
+    import ipaddress
+    vpn_key = env.get("EPIMEDIAHUB_VPN_SERVER_PUBLIC_KEY", "").strip()
+    vpn_endpoint = env.get("EPIMEDIAHUB_VPN_ENDPOINT", "").strip()
+    try:
+        decoded = base64.b64decode(vpn_key, validate=True)
+        key_ready = len(decoded) == 32 and any(decoded) and base64.b64encode(decoded).decode() == vpn_key
+    except (ValueError, TypeError):
+        key_ready = False
+    require(key_ready, "Finnland: EPIMEDIAHUB_VPN_SERVER_PUBLIC_KEY muss der öffentliche 44-stellige WireGuard-Schlüssel des BESTEHENDEN Gateways sein.")
+    require(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]{0,251}:[0-9]{2,5}", vpn_endpoint),
+            "Finnland: EPIMEDIAHUB_VPN_ENDPOINT muss den bestätigten Host:Port des BESTEHENDEN Gateways enthalten.")
+    net = ipaddress.ip_network(env.get("EPIMEDIAHUB_VPN_SUBNET", "10.92.0.0/24"), strict=True)
+    require(net.version == 4 and net.num_addresses <= 4096 and net.prefixlen <= 29,
+            "Finnland: VPN-Adresspool ungültig (IPv4, 8 bis 4096 Adressen).")
+
     python = BASE / ".venv/bin/python"
     require(python.is_file(), "Die aktive Python-Umgebung fehlt.")
     return env, python, account, data / "provisioning.db"
@@ -215,6 +233,9 @@ assert b'beta-visible-playlists' in c.get('/admin').data
 assert b'name="_dashboard_csrf"' in c.get('/admin').data
 assert c.get('/v1/license/capabilities').json['annual_license_ready'] is True
 assert c.post('/v1/license/status', json={}).status_code==400
+assert c.get('/v1/device/vpn/status').status_code==401
+assert c.post('/v1/device/vpn/enroll', json={}).status_code==401
+assert '/admin/vpn/trial7-auto/<int:device_row_id>' in [rule.rule for rule in app.url_map.iter_rules()]
 print('Staged dashboard, annual license, CSRF, VPN and admin diagnostics passed')
 """
     result = subprocess.run([str(python), "-c", program], env=test_env, cwd=stage,
@@ -233,14 +254,15 @@ def health():
         caps = json.load(response)
         require(caps.get("annual_license_ready") is True and caps.get("annual_days") == 365,
                 "Server meldet keine einsatzbereite Jahreslizenz.")
-    for path in ("/health", "/admin/diagnostics"):
+    for path in ("/health", "/admin/diagnostics", "/v1/device/vpn/status"):
         opener = urllib.request.build_opener(NoRedirect())
         try:
             with opener.open("http://127.0.0.1:8787" + path, timeout=5) as response:
                 code = response.status
         except urllib.error.HTTPError as exc:
             code = exc.code
-        require(code == (200 if path == "/health" else 302), "Endpoint nicht bereit: " + path)
+        expected = 200 if path == "/health" else (401 if path == "/v1/device/vpn/status" else 302)
+        require(code == expected, "Endpoint nicht bereit: " + path)
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
