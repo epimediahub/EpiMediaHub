@@ -85,8 +85,11 @@ def _auto_pool():
     network = _network()
     if pool.version != 4 or not pool.subnet_of(network) or pool.num_addresses < 8:
         raise RuntimeError("Automatic VPN subnet must be IPv4 within the WireGuard network")
-    if network.network_address in pool or network.broadcast_address in pool:
-        raise RuntimeError("Automatic VPN subnet must exclude WireGuard network/broadcast")
+    # pool.hosts() excludes .255 when this /25 shares its broadcast with
+    # the parent /24, so including the parent broadcast in the subnet is
+    # harmless. The allocator never picks its network/broadcast addresses.
+    if network.network_address in pool:
+        raise RuntimeError("Automatic VPN subnet must exclude the WireGuard network address")
     if ipaddress.ip_address(int(network.network_address) + 1) in pool:
         raise RuntimeError("Automatic VPN subnet must exclude the WireGuard gateway")
     return pool
