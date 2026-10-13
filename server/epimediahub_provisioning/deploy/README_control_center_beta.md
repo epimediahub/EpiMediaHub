@@ -22,6 +22,35 @@ Nur der Host, auf dem `epimediahub-provisioning.service` unter `/opt/epimediahub
 `deploy/install_control_center_beta.py` hat zwei explizite Modi: `--check` (keine Produktivänderungen) und `--apply` (nach erfolgreichem Preflight mit Sicherung). Er stoppt bei unbekannten Serverversionen, fehlenden VPN-Freigaben, schwachen/flüchtigen Session-Secrets, unsicheren Cookies, fehlerhaften Lizenzrouten oder fehlgeschlagenem Datenbanksnapshot. Vorhandenes kompatibles `license_api.py` und Credit-Templates werden **nicht überschrieben**. 
 Datenbankkopie und ersetzte Dateien liegen nur für root zugänglich unter `/var/backups/epimediahub/`; bei Servicefehlern rollt der Installer geänderten Code zurück, ohne bestehende Kunden, Playlists, VPN-Credits oder Lifetime-Lizenzen zu löschen. Zusätzliche neue Tabellen werden bei einem Fehler nicht automatisch aus der Datenbank entfernt.
 
+## Nachtrag: vorhandene ältere VPN-Installation
+
+Die produktive VPN-Datei vom 13.10.2026 hat den SHA-256-Fingerprint
+`1417f694f32f366ad715efad7c3cd8f76f0d6ccdcda6445cc4c8737294ee91a`
+und enthält noch keinen einmaligen 7-Tage-Test. Diese exakt geprüfte alte
+Version ist im Installer nun explizit zugelassen; andere Abweichungen werden
+abgewiesen. Die geprüfte neue VPN-Datei hat den Fingerprint
+`e52391fe2c34c93f35e10fd1a3d2e4eaa351bd0ad55a47f63ec574c933c15c22`.
+
+Der Installer nimmt `vpn_dashboard.py` in seine gesicherten Dateien auf und
+testet zunächst ausschließlich auf einem SQLite-Snapshot. Dabei vergleicht
+er vorhandene Kunden-, Lizenz-, Geräte- **und VPN-/Credit-Tabellen** vor und
+nach dem Test. Existierende VPN-Geräte, Guthaben und Zuordnungen dürfen
+sich dabei nicht verändern. Die neue Tabelle `vpn_trials` ist additiv;
+keine bestehende VPN-Laufzeit wird automatisch verlängert. Ohne erfolgreiche
+Prüfung kein `--apply`.
+
+Prüfung der aktualisierten Version auf dem Dashboard-Host:
+
+```bash
+git -C /root/epimediahub-check pull --ff-only
+git -C /root/epimediahub-check rev-parse HEAD
+python3 /root/epimediahub-check/server/epimediahub_provisioning/deploy/install_control_center_beta.py --check
+```
+
+Alle Befehle einzeln ausführen. **Kein `set -e` in der interaktiven SSH-Sitzung**
+und noch kein `--apply`. Fehlertext zur Diagnose ohne Session-Keys,
+Tokens oder Kundeninhalte mitteilen.
+
 ## GitHub-Änderungen
 - Dashboard mit API-Sicherheit und Installationsschutz: PR #56, Zweig `feature/dashboard-hetzner-control-center-20261012`.
 - Android 1.0.64 mit jährlichem Lizenzstatus und Opt-in-Absturzmeldung: PR #57, Zweig `feature/v164-annual-license-ui`.
