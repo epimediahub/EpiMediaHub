@@ -43,6 +43,7 @@ UPDATED = (
     "static/beta-diagnostics.css",
     "wsgi.py",
     "vpn_dashboard.py",
+    "vpn_auto_enroll.py",
     "dashboard_security.py",
     "device_diagnostics.py",
     "license_api.py",
@@ -142,6 +143,8 @@ def package():
                 wsgi = wsgi.rstrip() + "\n\nimport annual_license  # 365-day device licenses.\n"
             if "import device_diagnostics" not in wsgi:
                 wsgi = wsgi.rstrip() + "\n\nimport device_diagnostics  # Opt-in failure counters.\n"
+            if "import vpn_auto_enroll" not in wsgi:
+                wsgi = wsgi.rstrip() + "\n\nimport vpn_auto_enroll  # Manually approved VPN auto enrollment.\n"
             if "install_dashboard_security" not in wsgi:
                 wsgi = wsgi.rstrip() + "\n\nfrom dashboard_security import install as install_dashboard_security\ninstall_dashboard_security(app)\n"
             staged[name] = wsgi
