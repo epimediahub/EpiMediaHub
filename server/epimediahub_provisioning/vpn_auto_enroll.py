@@ -156,6 +156,14 @@ def _response(con, device):
 def grant_trial_auto(device_row_id):
     if not session.get("admin"):
         abort(403)
+    # Fail closed before the trial clock starts if the app could not fetch
+    # an authenticated public WireGuard gateway configuration.
+    try:
+        _public_settings()
+        _network()
+    except (RuntimeError, ValueError):
+        flash("Automatische VPN-Einrichtung noch nicht konfiguriert: Finnland-Endpunkt und öffentlicher Server-Schlüssel prüfen.", "warning")
+        return redirect("/admin#device-" + str(device_row_id), code=303)
     with db() as con:
         con.execute("BEGIN IMMEDIATE")
         migrate(con)
