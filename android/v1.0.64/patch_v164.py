@@ -111,8 +111,11 @@ replace(entry,
 # Network, stopping playback if none becomes valid within the deadline.
 monitor = java / "vpn/V140VpnLossMonitor.kt"
 monitor_source = monitor.read_text()
-start_marker = "    /** Called on the serialized route worker after GoBackend reports UP. */\\n    @Synchronized\\n    fun start(context: Context) {".replace("\\\\n", "\\n")
-end_marker = "\\n    fun isPinned(context: Context): Boolean {"
+start_marker = """    /** Called on the serialized route worker after GoBackend reports UP. */
+    @Synchronized
+    fun start(context: Context) {"""
+end_marker = """
+    fun isPinned(context: Context): Boolean {"""
 assert monitor_source.count(start_marker) == 1 and monitor_source.count(end_marker) == 1, (
     "Unexpected VPN binding source; refusing to modify VPN safety logic"
 )
