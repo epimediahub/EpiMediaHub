@@ -77,6 +77,7 @@ class BrowserSecurity(unittest.TestCase):
         with patch.dict(os.environ, {
             "EPIMEDIAHUB_VPN_SERVER_PUBLIC_KEY": key,
             "EPIMEDIAHUB_VPN_ENDPOINT": "vpn.example.org:51820",
+            "EPIMEDIAHUB_VPN_AUTO_POOL": "10.92.0.128/25",
         }):
             self.assertEqual(
                 self.client.post("/admin/vpn/trial7-auto/123",
