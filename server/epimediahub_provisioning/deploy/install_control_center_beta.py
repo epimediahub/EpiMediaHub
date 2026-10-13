@@ -25,6 +25,10 @@ import urllib.error
 import urllib.request
 
 BASE = Path("/opt/epimediahub/provisioning")
+# An older production VPN version was verified by its on-host SHA-256.
+# Never replace an unknown/local custom VPN module.
+TRUSTED_OLD_VPN_SHA256 = "1417f694f32f366ad715efad7c3cd8f76f0d6ccdcda6445cc4c8737294ee91a"
+REVIEWED_VPN_SHA256 = "e52391fe2c34c93f35e10fd1a3d2e4eaa351bd0ad55a47f63ec574c933c15c22"
 SERVICE = "epimediahub-provisioning.service"
 ROOT = Path(__file__).resolve().parents[1]
 UPDATED = (
@@ -35,6 +39,7 @@ UPDATED = (
     "templates/dashboard_diagnostics.html",
     "static/beta-diagnostics.css",
     "wsgi.py",
+    "vpn_dashboard.py",
     "dashboard_security.py",
     "device_diagnostics.py",
     "license_api.py",
@@ -58,7 +63,11 @@ def snapshot(source: Path, dest: Path):
 def hash_protected(database: Path):
     checks = {}
     with sqlite3.connect("file:" + str(database) + "?mode=ro", uri=True) as con:
-        for name in ("customers", "resellers", "devices", "activations", "pairings", "customer_playlists"):
+        for name in ("customers", "resellers", "devices", "activations", "pairings",
+                     "customer_playlists", "vpn_devices", "vpn_trials", "vpn_credits",
+                     "vpn_accounts", "vpn_orders", "vpn_operations", "vpn_plans",
+                     "vpn_audit", "vpn_meta", "lifetime_licenses", "license_subjects",
+                     "credit_ledger", "reseller_credit_ledger"):
             if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone():
                 continue
             cols = [c[1] for c in con.execute('PRAGMA table_info("' + name + '")')]
@@ -76,9 +85,8 @@ def base_environment():
     require(BASE.joinpath("wsgi.py").is_file(), "Dies ist nicht der Dashboard-Server: " + str(BASE))
     require(BASE.joinpath("dashboard_v080.py").is_file(), "Dashboard-Version 0.8.x fehlt.")
     require(BASE.joinpath("vpn_dashboard.py").is_file(), "VPN-Modul fehlt. Zuerst VPN-Dashboard prüfen.")
-    vpn = BASE.joinpath("vpn_dashboard.py").read_text()
-    require("vpn_trials" in vpn and 'trial7' in vpn,
-            "Der 7-Tage-VPN-Test fehlt im installierten Backend; keine unsichere Überschreibung.")
+    # Older installs do not yet have the manual trial feature. The module
+    # version guard and migration test run before any live changes.
     require(command("systemctl", "is-active", SERVICE) == "active", "Dashboard-Dienst läuft nicht.")
     require(command("systemctl", "show", SERVICE, "-p", "WorkingDirectory", "--value") == str(BASE),
             "Der Dienst läuft an einem unerwarteten Ort.")
@@ -140,6 +148,18 @@ def package():
             installed = BASE / name
             preserved = {"license_api.py", "templates/credits_v120.html", "templates/reseller_credits_v120.html"}
             new = installed.read_text() if name in preserved and installed.is_file() else p.read_text()
+            if name == "vpn_dashboard.py":
+                current_hash = hashlib.sha256(installed.read_bytes()).hexdigest()
+                source_hash = hashlib.sha256(p.read_bytes()).hexdigest()
+                require(source_hash == REVIEWED_VPN_SHA256,
+                        "Die geprüfte VPN-Quelldatei stimmt nicht mit der Release-Version überein.")
+                require(current_hash in {TRUSTED_OLD_VPN_SHA256, REVIEWED_VPN_SHA256},
+                        "Unbekannte VPN-Produktivversion: kein automatischer Austausch. Zuerst Diff und Datenbankschema prüfen.")
+                # Preserve identical production code; upgrade only the known
+                # older fingerprint. All changes are tested on a DB snapshot.
+                new = installed.read_text() if current_hash == REVIEWED_VPN_SHA256 else p.read_text()
+                require("vpn_trials" in new and "trial7" in new,
+                        "Die vorbereitete VPN-Version enthält den 7-Tage-Test nicht.")
             if name == "license_api.py":
                 require(all(marker in new for marker in (
                     "license_subjects", "trial_key_hash", "lifetime_licenses",
