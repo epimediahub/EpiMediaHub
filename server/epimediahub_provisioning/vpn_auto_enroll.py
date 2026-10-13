@@ -67,6 +67,31 @@ def _network():
     return subnet
 
 
+def _auto_pool():
+    """Reserved, dedicated allocation range: never borrow legacy customer IPs.
+
+    Explicit configuration is compulsory. WireGuard's external peers are not
+    represented in the dashboard DB, so an implicit scan of .2, .3, ... is
+    unsafe. The administrator must choose a range known to be unused on wg0,
+    and reserve it exclusively for dashboard automatic enrollments.
+    """
+    raw = os.environ.get("EPIMEDIAHUB_VPN_AUTO_POOL", "").strip()
+    if not raw:
+        raise RuntimeError("Dedicated automatic VPN subnet is not configured")
+    try:
+        pool = ipaddress.ip_network(raw, strict=True)
+    except ValueError:
+        raise RuntimeError("Invalid automatic VPN subnet") from None
+    network = _network()
+    if pool.version != 4 or not pool.subnet_of(network) or pool.num_addresses < 8:
+        raise RuntimeError("Automatic VPN subnet must be IPv4 within the WireGuard network")
+    if network.network_address in pool or network.broadcast_address in pool:
+        raise RuntimeError("Automatic VPN subnet must exclude WireGuard network/broadcast")
+    if ipaddress.ip_address(int(network.network_address) + 1) in pool:
+        raise RuntimeError("Automatic VPN subnet must exclude the WireGuard gateway")
+    return pool
+
+
 def _public_settings():
     """Only WireGuard's PUBLIC key/endpoint. No private key leaves the gateway."""
     key = os.environ.get("EPIMEDIAHUB_VPN_SERVER_PUBLIC_KEY", "").strip()
@@ -78,12 +103,12 @@ def _public_settings():
 
 
 def _address(con):
-    network = _network()
+    pool = _auto_pool()
     assigned = {row[0] for row in con.execute("SELECT client_address FROM vpn_devices")}
-    # Never reuse any address from retired peers; agent safety comes first.
-    for host in network.hosts():
-        if int(host) <= int(network.network_address) + 1:
-            continue  # .1 is the WireGuard gateway.
+    # Include retired historical peers; never recycle their IPs.
+    # A dedicated /25 range also keeps unknown legacy gateway peers
+    # outside the auto-allocated address pool.
+    for host in pool.hosts():
         candidate = str(host) + "/32"
         if candidate not in assigned:
             return candidate
@@ -160,9 +185,9 @@ def grant_trial_auto(device_row_id):
     # an authenticated public WireGuard gateway configuration.
     try:
         _public_settings()
-        _network()
+        _auto_pool()
     except (RuntimeError, ValueError):
-        flash("Automatische VPN-Einrichtung noch nicht konfiguriert: Finnland-Endpunkt und öffentlicher Server-Schlüssel prüfen.", "warning")
+        flash("Automatische VPN-Einrichtung noch nicht vollständig konfiguriert: Finnland-Endpunkt, öffentlicher Server-Schlüssel und reservierter Auto-IP-Pool prüfen.", "warning")
         return redirect("/admin#device-" + str(device_row_id), code=303)
     with db() as con:
         con.execute("BEGIN IMMEDIATE")
