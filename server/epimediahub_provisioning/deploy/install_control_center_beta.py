@@ -68,7 +68,7 @@ def hash_protected(database: Path):
     checks = {}
     with sqlite3.connect("file:" + str(database) + "?mode=ro", uri=True) as con:
         for name in ("customers", "resellers", "devices", "activations", "pairings",
-                     "customer_playlists", "vpn_devices", "vpn_trials", "vpn_credits",
+                     "customer_playlists", "vpn_devices", "vpn_trials", "vpn_trial_authorizations", "vpn_credits",
                      "vpn_accounts", "vpn_orders", "vpn_operations", "vpn_plans",
                      "vpn_audit", "vpn_meta", "lifetime_licenses", "license_subjects",
                      "credit_ledger", "reseller_credit_ledger"):
