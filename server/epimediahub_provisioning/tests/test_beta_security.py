@@ -15,6 +15,9 @@ import app as core
 from dashboard_v080 import install as install_dashboard
 import license_api
 import annual_license
+import vpn_dashboard as vpn
+vpn.install(core.app, core.db)
+import vpn_auto_enroll as auto
 from dashboard_security import install as install_security
 
 install_dashboard(core.app, core.db)
@@ -32,6 +35,9 @@ class BrowserSecurity(unittest.TestCase):
         core.init_db()
         license_api.ensure_license_schema()
         annual_license._migrate()
+        with core.db() as con:
+            vpn.migrate(con)
+            auto.migrate(con)
         self.client = core.app.test_client()
         with self.client.session_transaction() as s:
             s["admin"] = True
@@ -59,6 +65,22 @@ class BrowserSecurity(unittest.TestCase):
         self.assertIn(valid.status_code, (302, 303))
         with core.db() as con:
             self.assertIsNotNone(con.execute("SELECT id FROM resellers WHERE username='secure_test'").fetchone())
+
+    def test_one_click_vpn_trial_requires_session_csrf(self):
+        import base64
+        from unittest.mock import patch
+        key = base64.b64encode(bytes(range(1, 33))).decode()
+        self.assertEqual(
+            self.client.post("/admin/vpn/trial7-auto/123", data={}).status_code,
+            403)
+        token = self.token(self.client)
+        with patch.dict(os.environ, {
+            "EPIMEDIAHUB_VPN_SERVER_PUBLIC_KEY": key,
+            "EPIMEDIAHUB_VPN_ENDPOINT": "vpn.example.org:51820",
+        }):
+            self.assertEqual(
+                self.client.post("/admin/vpn/trial7-auto/123",
+                    headers={"X-Dashboard-CSRF": token}).status_code, 404)
 
     def test_playlist_url_does_not_leak_credentials_in_summary(self):
         from dashboard_v080 import _source_host_only
