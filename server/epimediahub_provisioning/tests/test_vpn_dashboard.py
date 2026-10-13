@@ -36,6 +36,7 @@ KEY1 = base64.b64encode(bytes(range(32))).decode()
 KEY2 = base64.b64encode(bytes(range(1,33))).decode()
 os.environ["EPIMEDIAHUB_VPN_SERVER_PUBLIC_KEY"] = KEY2
 os.environ["EPIMEDIAHUB_VPN_ENDPOINT"] = "vpn.example.org:51820"
+os.environ["EPIMEDIAHUB_VPN_AUTO_POOL"] = "10.92.0.128/25"
 
 
 class DashboardTests(unittest.TestCase):
@@ -119,7 +120,7 @@ class DashboardTests(unittest.TestCase):
         ready = self.anonymous.get("/v1/device/vpn/status",headers=self.device_vpn())
         self.assertEqual(ready.json["status"],"READY")
         self.assertTrue(ready.json["enabled"])
-        self.assertEqual(ready.json["client_address"],"10.92.0.2/32")
+        self.assertEqual(ready.json["client_address"],"10.92.0.129/32")
         self.assertEqual(ready.json["server_public_key"],KEY2)
         self.assertEqual(ready.json["endpoint"],"vpn.example.org:51820")
         self.assertNotIn("PrivateKey",str(ready.json))
@@ -153,6 +154,33 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(hijack.status_code,409)
         self.assertEqual(self.anonymous.post("/v1/device/vpn/enroll",
                 headers=self.device_vpn(2),json={"device_id":"android-2","public_key":KEY2}).status_code,403)
+
+    def test_automatic_pool_ignores_existing_legacy_addrs_and_assigned_peers(self):
+        # The physical WireGuard gateway already uses .2 and .3 outside the
+        # dashboard: auto-enrollment MUST start in the separate /25 pool.
+        self.bind(3, KEY2, "10.92.0.129")
+        self.ack()
+        self.assertEqual(self.admin.post("/admin/vpn/trial7-auto/1").status_code,303)
+        result = self.anonymous.post("/v1/device/vpn/enroll",
+                  headers=self.device_vpn(),
+                  json={"device_id":"android-1","public_key":KEY1})
+        self.assertEqual(result.status_code,200)
+        with core.db() as con:
+            allocated = con.execute("SELECT client_address FROM vpn_devices WHERE device_row_id=1").fetchone()[0]
+            original = con.execute("SELECT client_address FROM vpn_devices WHERE device_row_id=3").fetchone()[0]
+        self.assertEqual(original,"10.92.0.129/32")
+        self.assertEqual(allocated,"10.92.0.130/32")
+
+    def test_auto_trial_refuses_without_dedicated_pool_and_preserves_days(self):
+        from unittest.mock import patch
+        self.ack()
+        for invalid in ("", "10.92.0.0/24", "192.168.0.0/24",
+                        "10.92.0.0/25", "10.92.0.255/32"):
+            with patch.dict(os.environ, {"EPIMEDIAHUB_VPN_AUTO_POOL": invalid}):
+                self.assertEqual(self.admin.post("/admin/vpn/trial7-auto/1").status_code,303)
+                with core.db() as con:
+                    self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_trials").fetchone()[0],0)
+                    self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_devices").fetchone()[0],0)
 
     def test_auto_trial_not_consumed_without_public_gateway_configuration(self):
         from unittest.mock import patch
