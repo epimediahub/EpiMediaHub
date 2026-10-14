@@ -30,7 +30,7 @@ def patch(source):
             return source,False
         raise ValueError('Unexpected code version: cannot determine existing scene patch')
     if (source.count(OLD_JOIN)!=2 or source.count(OLD_PLAYLIST)!=1
-            or source.count(OLD_WINDOW)!=1 or NEW_WINDOW in source
+            or source.count(OLD_WINDOW)!=1 or source.count('    if audio:\n')!=1 or NEW_WINDOW in source
             or NEW_JOIN in source or NEW_PLAYLIST in source):
         raise ValueError('Unexpected live scene revision; no modification')
     result=(source.replace(OLD_JOIN,NEW_JOIN)
