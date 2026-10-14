@@ -220,5 +220,25 @@ def requeue(con,limit=MAX_NEW_PER_RUN):
 original.requeue=requeue
 
 
+def audit():
+    if str(original.CODE) not in sys.path:
+        sys.path.insert(0,str(original.CODE))
+    with sqlite3.connect(original.DB.resolve().as_uri()+'?mode=ro',uri=True,timeout=10) as db:
+        db.row_factory=sqlite3.Row
+        db.execute('PRAGMA query_only=ON')
+        candidates=collect(db)
+        ready=plan(db,candidates)
+        print(json.dumps(dict(mode='READ_ONLY_VISUAL_PEER_PREFLIGHT',
+            candidate_assets=len(candidates),
+            distinct_series_season_kinds=len({(r['playlist_id'],r['source_key'],
+                                               r['season'],r['kind']) for r in candidates}),
+            eligible_to_requeue_now=len(ready),
+            by_playlist={str(p):sum(x['playlist_id']==p for x in ready) for p in (8,10)},
+            no_provider_reads=True,no_marker_approvals=True),indent=2))
+
+
 if __name__=='__main__':
-    original.main()
+    if len(sys.argv)==2 and sys.argv[1]=='--audit-peers':
+        audit()
+    else:
+        original.main()
