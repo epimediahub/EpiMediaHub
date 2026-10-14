@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from pathlib import Path
 import sqlite3
+from statistics import median
 
 SOURCE = Path("/var/lib/epimediahub/provisioning.db")
 SHOWS = {
@@ -18,6 +19,27 @@ SHOWS = {
 }
 USER_ORIGINS = {"device", "manual", "user", "app"}
 MAX_DETAIL_PER_SHOW = 45
+SEGMENT_TYPES = ('intro', 'recap', 'outro')
+
+
+def durations_ms(rows):
+    result = []
+    for row in rows:
+        try:
+            value = int(row['end_ms']) - int(row['start_ms'])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if 0 < value <= 86_400_000:
+            result.append(value)
+    return result
+
+
+def summarize_group(rows):
+    seconds = [x / 1000 for x in durations_ms(rows)]
+    if not seconds:
+        return '0 Markierungen'
+    return (f'{len(seconds)} Markierungen | Median {median(seconds):.1f}s | '
+            f'Spanne {min(seconds):.1f}-{max(seconds):.1f}s')
 
 
 def stamp(ms):
@@ -122,7 +144,22 @@ def audit(conn):
         breakdown = Counter((str(r["source"]), str(r["status"])) for r in rows)
         for (src, status), n in sorted(breakdown.items()):
             print(f"  {src} / {status}: {n}")
-        candidates = [r for r in rows if str(r["source"]).lower() in USER_ORIGINS]
+        print('--- Segmenttypen (Intro / Rückblick / Abspann), getrennte Statistik ---')
+        for kind in SEGMENT_TYPES:
+            matching = [r for r in rows if str(r['segment_type']).lower() == kind]
+            manually_marked = [r for r in matching
+                               if str(r['source']).lower() in USER_ORIGINS
+                               and str(r['status']).lower() != 'superseded']
+            automatic = [r for r in matching
+                         if str(r['source']).lower() not in USER_ORIGINS
+                         and str(r['status']).lower() != 'superseded']
+            print(f'{kind}: manuell/geraet {summarize_group(manually_marked)}; '
+                  f'automatische Vorschlaege {summarize_group(automatic)}')
+        print('Laufzeiten sind Beobachtungen, keine globalen Grenzwerte oder beweisbaren Freigaben.')
+        candidates = sorted([r for r in rows if str(r["source"]).lower() in USER_ORIGINS],
+                            key=lambda x: (str(x['segment_type']), str(x['title']),
+                                           int(x['season'] or 0), int(x['episode'] or 0),
+                                           int(x['id'])))
         print(f"MANUELLE/GERAETE-QUELLEN: {len(candidates)}")
         print("HINWEIS: 'device' und 'reviewed_at' beweisen alleine nicht, wer markiert hat.")
         print("Spalten: ID | Playlist | Staffel/Folge | Typ | Start - Ende | Dauer | Status | Quelle | reviewed_at? | human_review?")
