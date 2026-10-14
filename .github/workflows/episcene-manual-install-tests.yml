@@ -1,0 +1,17 @@
+name: EpiScene manual-submit guarded installer tests
+on:
+  pull_request:
+    paths:
+      - 'tools/episcene-learning-v1/manual-release/**'
+      - '.github/workflows/episcene-manual-install-tests.yml'
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Python installer syntax and patch/rollback regression tests
+        working-directory: tools/episcene-learning-v1/manual-release
+        run: |
+          python3 -m py_compile install_manual_release_fix.py
+          python3 -m unittest -v test_install_manual_release_fix.py
