@@ -153,6 +153,42 @@ def valid_range(kind, start, end, duration, disabled=False):
     return kind in KINDS and (disabled or (0 <= start < end <= duration and 5000 <= end - start <= KINDS[kind]))
 
 
+def verified_manual_submission(con, raw, data, device):
+    """Check an authenticated device owns the exact media provider identity.
+
+    Unlike machine detections, a deliberate manual mark must not depend on
+    the playlist's automatic-release or analysis toggles. No registration or
+    learning privileges are fabricated for unverified provider inputs.
+    """
+    from skip_analysis import authorized_playlist, provider_asset_key, source_url
+    playlist_id = raw.get("playlist_id")
+    stream = raw.get("stream_id")
+    extension = raw.get("extension")
+    if (type(playlist_id) is not int or not isinstance(stream, str)
+            or not re.fullmatch(r"[0-9]{1,12}", stream)
+            or extension not in ("mp4", "mkv", "m4v", "avi", "ts", "mpeg", "mpg")):
+        return False
+    playlist = authorized_playlist(con, device, playlist_id)
+    if playlist is None:
+        return False
+    try:
+        actual = provider_asset_key(
+            source_url(playlist, dict(data, stream_id=stream, extension=extension)),
+            data["media_type"])
+    except (ValueError, TypeError, KeyError):
+        return False
+    if actual != data["asset_key"]:
+        return False
+    known = con.execute("SELECT * FROM skip_assets WHERE asset_key=?",
+                        (data["asset_key"],)).fetchone()
+    if known and (known["playlist_id"] != playlist_id
+                  or any(known[k] != data[k] for k in
+                         ("source_key", "media_type", "season", "episode"))
+                  or abs(known["duration_ms"] - data["duration_ms"]) > 2000):
+        return False
+    return True
+
+
 def add_record(con, data, kind, start, end, disabled, device=None, source="device", confidence=1.0):
     key_data = [device["id"] if device else None, data["asset_key"], data["source_key"], data["duration_ms"], kind, start, end, disabled, source, data["imdb_id"], data["tmdb_id"]]
     key = hashlib.sha256(json.dumps(key_data, separators=(",", ":")).encode()).hexdigest()
@@ -341,10 +377,11 @@ def install(app, db):
                 return jsonify(error="rate_limited"), 429
             registered = register_asset(con, raw, data, row)
             saved = add_record(con, data, kind, start, end, off, row)
-            from skip_release import enabled as release_enabled
-            asset = con.execute('SELECT * FROM skip_assets WHERE asset_key=?', (data['asset_key'],)).fetchone() if registered else None
-            if (asset and release_enabled(con, asset['playlist_id']) and saved['status'] == 'pending'
-                    and all(asset[key] == data[key] for key in ('source_key','media_type','season','episode','duration_ms'))):
+            # An authenticated manual action is a direct human instruction.
+            # Do not require the automatic-machine-release toggle or a second
+            # dashboard confirmation. Unverifiable file identities stay pending.
+            if (saved['status'] == 'pending'
+                    and verified_manual_submission(con, raw, data, row)):
                 record = con.execute('SELECT * FROM skip_records WHERE id=?', (saved['id'],)).fetchone()
                 review_record(con, record, 'approve', start, end, off)
                 saved = dict(id=saved['id'], status='approved')
