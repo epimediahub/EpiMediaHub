@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-shot EpiScene safe release maintenance, then bounded six-hour follow-up.
+"""One-shot EpiScene safe release maintenance plus hourly bounded feedback learning.
 
 Retroactively confirms ONLY old, authenticated, still-owned exact manual-file
 submissions. Re-runs the ORIGINAL production automatic evidence gates and
@@ -29,6 +29,7 @@ MAX_REQUEUE_PER_DAY=8
 MAX_REQUEUE_PER_RUN=4
 RETRY_PLAYLISTS=(8,10)
 RETRY_KINDS=('intro','recap','outro')
+KIND_LIMITS={'intro':300_000,'recap':300_000,'outro':900_000}
 MACHINE=('audio','chapter','theintrodb','audio_repetition','auto_audio','episcene')
 
 
@@ -113,7 +114,7 @@ def manual_plan(con, rows, identity_key=None, validate=None):
             reject('INVALID_DISABLED_VALUE')
             continue
         if not r['disabled'] and (not 0<=r['start_ms']<r['end_ms']<=r['duration_ms']
-                                 or r['end_ms']-r['start_ms']<5000):
+                                 or not 5000<=r['end_ms']-r['start_ms']<=KIND_LIMITS[r['segment_type']]):
             reject('INVALID_BOUNDS')
             continue
         if con.execute("""SELECT 1 FROM skip_records x
@@ -201,7 +202,8 @@ def requeue(con, limit=MAX_REQUEUE_PER_RUN):
         if evidence.get('audio_visual_disagreement') is True:continue
         if not (evidence.get('episcene_required') is True or
                 evidence.get('method')=='episcene_consensus'):continue
-        if evidence.get('decision',{}).get('status')=='NO_MATCH' if isinstance(evidence.get('decision'),dict) else False:
+        decision=evidence.get('decision')
+        if isinstance(decision,dict) and decision.get('status')=='NO_MATCH':
             continue
         if con.execute("""SELECT 1 FROM skip_records m WHERE
              m.asset_key=? AND m.segment_type=? AND m.status='pending'
@@ -304,7 +306,11 @@ def main():
             if args.check:con.execute('PRAGMA query_only=ON')
             result=run(con,apply=args.apply)
             if args.apply:con.commit()
-            print(json.dumps(result,indent=2,ensure_ascii=False),flush=True)
+        # Preserve old human decisions, negative feedback and comparisons.
+        # The exporter itself opens the original database READ ONLY.
+        from feedback_learning import run as feedback_run
+        result['feedback_learning']=feedback_run(persist=args.apply)
+        print(json.dumps(result,indent=2,ensure_ascii=False),flush=True)
     finally:
         if guard:guard.close()
 
