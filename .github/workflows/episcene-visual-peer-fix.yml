@@ -1,0 +1,18 @@
+name: EpiScene safe independent visual peers and original-gate releases
+on:
+  pull_request:
+    paths:
+      - 'tools/episcene-learning-v1/visual-peer-fix/**'
+      - '.github/workflows/episcene-visual-peer-fix.yml'
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify visual SQL scoping and protected peer requeue
+        working-directory: tools/episcene-learning-v1/visual-peer-fix
+        run: |
+          python3 -m py_compile scene_fix.py safe_release_rollout_v2.py
+          python3 -m unittest -v test_visual_peer_fix.py
+          if test -f install_visual_peer_fix.sh; then bash -n install_visual_peer_fix.sh; fi
