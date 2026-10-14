@@ -80,6 +80,7 @@ class DrainTests(unittest.TestCase):
         self.addCleanup(lambda: [p.stop() for p in reversed(patchers)])
         self.addCleanup(temp.cleanup)
         reload.PENDING.write_text('')
+        reload.WORKER_LOCK.write_bytes(b'')
         fake=FakeSystemctl()
         context=patch.object(reload,'call',side_effect=fake)
         context.start()
@@ -105,6 +106,29 @@ class DrainTests(unittest.TestCase):
         # A stale SQLite running row must not block a restart forever.
         with sqlite3.connect(reload.DB) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM skip_jobs WHERE status='running'").fetchone()[0],3)
+
+    def test_new_playback_restores_timer_after_it_was_paused(self):
+        _,ctl=self.exercise()
+        with patch('builtins.print'):
+            reload.finish()
+        self.assertTrue(reload.PAUSED.exists())
+        with sqlite3.connect(reload.DB) as db:
+            db.execute('INSERT INTO skip_presence VALUES(4102444800)')
+        with patch('builtins.print'):
+            reload.finish()
+        self.assertFalse(reload.PAUSED.exists())
+        self.assertTrue(ctl.states[reload.ANALYSIS_TIMER])
+        self.assertTrue(reload.PENDING.exists())
+
+    def test_missing_worker_lock_fails_closed_without_root_owned_creation(self):
+        _,ctl=self.exercise()
+        ctl.states[reload.ANALYSIS]=False
+        reload.WORKER_LOCK.unlink()
+        with patch('builtins.print'):
+            reload.finish()
+        self.assertTrue(reload.PENDING.exists())
+        self.assertFalse(reload.WORKER_LOCK.exists())
+        self.assertFalse(ctl.action('restart',reload.COMPUTE))
 
     def test_playback_does_not_pause_analyzer_or_restart_anything(self):
         _,ctl=self.exercise(leases=1)
