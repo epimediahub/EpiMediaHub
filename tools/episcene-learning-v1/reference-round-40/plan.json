@@ -1,0 +1,298 @@
+{
+  "schema": 1,
+  "batch_id": "episcene-reference-2026-10-14-40",
+  "evidence": "EpiScene reports 2026-10-09 through 2026-10-14; exact series and season/episode combinations observed",
+  "policy": {
+    "types": [
+      "intro",
+      "recap",
+      "outro"
+    ],
+    "mark_if_present": true,
+    "do_not_invent_absent_segments": true,
+    "do_not_auto_publish": true,
+    "manual_annotation_not_verified_by_source_field_alone": true
+  },
+  "episodes": [
+    {
+      "id": "REF-01",
+      "playlist_id": 8,
+      "series": "MobLand",
+      "season": 1,
+      "episode": 2
+    },
+    {
+      "id": "REF-02",
+      "playlist_id": 8,
+      "series": "MobLand",
+      "season": 1,
+      "episode": 4
+    },
+    {
+      "id": "REF-03",
+      "playlist_id": 8,
+      "series": "MobLand",
+      "season": 1,
+      "episode": 5
+    },
+    {
+      "id": "REF-04",
+      "playlist_id": 8,
+      "series": "MobLand",
+      "season": 1,
+      "episode": 6
+    },
+    {
+      "id": "REF-05",
+      "playlist_id": 8,
+      "series": "MobLand",
+      "season": 1,
+      "episode": 7
+    },
+    {
+      "id": "REF-06",
+      "playlist_id": 8,
+      "series": "The Lincoln Lawyer",
+      "season": 1,
+      "episode": 6
+    },
+    {
+      "id": "REF-07",
+      "playlist_id": 8,
+      "series": "The Lincoln Lawyer",
+      "season": 1,
+      "episode": 7
+    },
+    {
+      "id": "REF-08",
+      "playlist_id": 8,
+      "series": "The Lincoln Lawyer",
+      "season": 1,
+      "episode": 8
+    },
+    {
+      "id": "REF-09",
+      "playlist_id": 8,
+      "series": "The Lincoln Lawyer",
+      "season": 2,
+      "episode": 1
+    },
+    {
+      "id": "REF-10",
+      "playlist_id": 8,
+      "series": "The Lincoln Lawyer",
+      "season": 2,
+      "episode": 2
+    },
+    {
+      "id": "REF-11",
+      "playlist_id": 8,
+      "series": "The Lincoln Lawyer",
+      "season": 3,
+      "episode": 1
+    },
+    {
+      "id": "REF-12",
+      "playlist_id": 8,
+      "series": "Chicago Med",
+      "season": 1,
+      "episode": 1
+    },
+    {
+      "id": "REF-13",
+      "playlist_id": 8,
+      "series": "Chicago Med",
+      "season": 1,
+      "episode": 2
+    },
+    {
+      "id": "REF-14",
+      "playlist_id": 8,
+      "series": "Chicago Med",
+      "season": 1,
+      "episode": 3
+    },
+    {
+      "id": "REF-15",
+      "playlist_id": 8,
+      "series": "Chicago Med",
+      "season": 2,
+      "episode": 1
+    },
+    {
+      "id": "REF-16",
+      "playlist_id": 8,
+      "series": "Chicago Med",
+      "season": 2,
+      "episode": 2
+    },
+    {
+      "id": "REF-17",
+      "playlist_id": 8,
+      "series": "Fire Country",
+      "season": 1,
+      "episode": 1
+    },
+    {
+      "id": "REF-18",
+      "playlist_id": 8,
+      "series": "Fire Country",
+      "season": 1,
+      "episode": 2
+    },
+    {
+      "id": "REF-19",
+      "playlist_id": 8,
+      "series": "Fire Country",
+      "season": 1,
+      "episode": 3
+    },
+    {
+      "id": "REF-20",
+      "playlist_id": 8,
+      "series": "Fire Country",
+      "season": 1,
+      "episode": 4
+    },
+    {
+      "id": "REF-21",
+      "playlist_id": 10,
+      "series": "Il bello delle donne (IT)",
+      "season": 1,
+      "episode": 1
+    },
+    {
+      "id": "REF-22",
+      "playlist_id": 10,
+      "series": "Il bello delle donne (IT)",
+      "season": 1,
+      "episode": 2
+    },
+    {
+      "id": "REF-23",
+      "playlist_id": 10,
+      "series": "Il bello delle donne (IT)",
+      "season": 1,
+      "episode": 3
+    },
+    {
+      "id": "REF-24",
+      "playlist_id": 10,
+      "series": "Il bello delle donne (IT)",
+      "season": 1,
+      "episode": 6
+    },
+    {
+      "id": "REF-25",
+      "playlist_id": 10,
+      "series": "Il bello delle donne (IT)",
+      "season": 2,
+      "episode": 1
+    },
+    {
+      "id": "REF-26",
+      "playlist_id": 10,
+      "series": "Il bello delle donne (IT)",
+      "season": 2,
+      "episode": 2
+    },
+    {
+      "id": "REF-27",
+      "playlist_id": 10,
+      "series": "Il bello delle donne (IT)",
+      "season": 3,
+      "episode": 1
+    },
+    {
+      "id": "REF-28",
+      "playlist_id": 10,
+      "series": "Il bello delle donne (IT)",
+      "season": 4,
+      "episode": 1
+    },
+    {
+      "id": "REF-29",
+      "playlist_id": 10,
+      "series": "Berlino (Italiano)",
+      "season": 1,
+      "episode": 1
+    },
+    {
+      "id": "REF-30",
+      "playlist_id": 10,
+      "series": "Berlino (Italiano)",
+      "season": 1,
+      "episode": 2
+    },
+    {
+      "id": "REF-31",
+      "playlist_id": 10,
+      "series": "Berlino (Italiano)",
+      "season": 1,
+      "episode": 3
+    },
+    {
+      "id": "REF-32",
+      "playlist_id": 10,
+      "series": "Berlino (Italiano)",
+      "season": 1,
+      "episode": 4
+    },
+    {
+      "id": "REF-33",
+      "playlist_id": 10,
+      "series": "Berlino (Italiano)",
+      "season": 1,
+      "episode": 5
+    },
+    {
+      "id": "REF-34",
+      "playlist_id": 10,
+      "series": "Bridgerton",
+      "season": 1,
+      "episode": 1
+    },
+    {
+      "id": "REF-35",
+      "playlist_id": 10,
+      "series": "Bridgerton",
+      "season": 1,
+      "episode": 2
+    },
+    {
+      "id": "REF-36",
+      "playlist_id": 10,
+      "series": "Bridgerton",
+      "season": 1,
+      "episode": 3
+    },
+    {
+      "id": "REF-37",
+      "playlist_id": 10,
+      "series": "Bridgerton",
+      "season": 2,
+      "episode": 1
+    },
+    {
+      "id": "REF-38",
+      "playlist_id": 10,
+      "series": "Processo al male: Hitler e i nazisti",
+      "season": 1,
+      "episode": 1
+    },
+    {
+      "id": "REF-39",
+      "playlist_id": 10,
+      "series": "Processo al male: Hitler e i nazisti",
+      "season": 1,
+      "episode": 2
+    },
+    {
+      "id": "REF-40",
+      "playlist_id": 10,
+      "series": "Processo al male: Hitler e i nazisti",
+      "season": 1,
+      "episode": 3
+    }
+  ]
+}
