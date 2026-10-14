@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """EpiScene: one privacy-preserving, fully READ-ONLY root-cause report.
 
-Three separate release/learning failure domains:
+Four separate release/learning failure domains:
   1. Old device markers: original device/customer/asset relation, not guesses.
   2. Machine marks: live first blocker, and exact requeue eligibility funnel.
-  3. Learning: whether approved/rejected corrections actually reach the
+  3. Separate analysis inventory: never confuse it with customer Playlists.\n  4. Learning: whether approved/rejected corrections actually reach the
      production analyzer rather than staying in a private shadow SQLite.
 
 No writes, no network, no account URLs, no tokens, no asset hashes, no names.
@@ -293,6 +293,178 @@ def learning():
     return result
 
 
+def analysis_inventory(db):
+    """Inspect the *independent* source inventory used by the live EpiScene wrapper.
+
+    Customer playlists are never valid evidence that analysis source IDs were
+    deleted. No configurations, credentials or source identities are emitted.
+    """
+    if not present(db,'skip_analysis_playlists'):
+        return {'status':'INDEPENDENT_ANALYSIS_INVENTORY_ABSENT',
+                'warning':'This deployment might use the original customer inventory.'}
+    fields=cols(db,'skip_analysis_playlists')
+    if 'id' not in fields:
+        return {'status':'INVENTORY_ID_COLUMN_MISSING'}
+    ids=db.execute('SELECT id FROM skip_analysis_playlists WHERE id IN (8,10)').fetchall()
+    output={}
+    for found in ids:
+        pid=found['id']
+        flags={}
+        for column in ('archived','enabled','active','paused'):
+            if column in fields:
+                flags[column]=db.execute('SELECT '+column+' FROM skip_analysis_playlists WHERE id=?',
+                                          (pid,)).fetchone()[0]
+        for table,name in (('skip_analysis_sources','analysis_enabled'),
+                           ('skip_auto_settings','automatic_enabled'),
+                           ('skip_release_settings','release_enabled')):
+            if present(db,table) and {'playlist_id','enabled'}<=cols(db,table):
+                row=db.execute('SELECT enabled FROM '+table+' WHERE playlist_id=?',(pid,)).fetchone()
+                flags[name]=None if row is None else bool(row[0])
+        flags['assets']=db.execute('SELECT COUNT(*) FROM skip_assets WHERE playlist_id=?',(pid,)).fetchone()[0]
+        flags['queued_jobs']=db.execute("""SELECT COUNT(*) FROM skip_jobs j
+          JOIN skip_assets a ON a.asset_key=j.asset_key
+          WHERE a.playlist_id=? AND j.status='queued'""",(pid,)).fetchone()[0]
+        flags['manual_pending']=db.execute("""SELECT COUNT(*) FROM skip_records r
+          JOIN skip_assets a ON a.asset_key=r.asset_key
+          WHERE a.playlist_id=? AND r.status='pending' AND r.source='device'""",(pid,)).fetchone()[0]
+        output[str(pid)]=flags
+    missing=sorted({8,10}-{x['id'] for x in ids})
+    return {
+        'analysis_inventory_present':True,
+        'expected_analysis_sources':output,
+        'missing_from_independent_inventory':missing,
+        'id_column_only':True,
+        'has_config_json_column':'config_json' in fields,
+        'customer_playlist_lookup_is_inapplicable_to_independent_sources':True,
+        'notes':'No customer account reactivation or playlist recreation is justified by a missing customer_playlists row.'}
+
+
+def independent_visual_funnel(db):
+    """Quantify live visual prerequisites against the actual analysis source table."""
+    if not present(db,'skip_analysis_playlists'):
+        return {'status':'NO_INDEPENDENT_TABLE'}
+    necessary=('skip_jobs','skip_assets','skip_records','skip_auto_evidence',
+               'skip_analysis_sources','skip_auto_settings','skip_release_settings')
+    if not all(present(db,x) for x in necessary):
+        return {'status':'MISSING_TABLES','missing':[x for x in necessary if not present(db,x)]}
+    attributes=cols(db,'skip_analysis_playlists')
+    if 'id' not in attributes:return {'status':'NO_ANALYSIS_ID'}
+    rows=[dict(x) for x in db.execute("""
+       SELECT j.id job_id,j.asset_key,j.status job_status,a.playlist_id,
+              a.source_key,a.season,a.episode,r.segment_type,e.evidence_json,
+              s.enabled analysis_on,x.enabled automatic_on,z.enabled release_on
+       FROM skip_jobs j
+       JOIN skip_assets a ON a.asset_key=j.asset_key
+       JOIN skip_analysis_playlists p ON p.id=a.playlist_id
+       JOIN skip_records r ON r.asset_key=a.asset_key AND r.status='pending'
+            AND r.source IN ('audio','audio_repetition','episcene','theintrodb','chapter')
+       LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
+       LEFT JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id
+       LEFT JOIN skip_auto_settings x ON x.playlist_id=a.playlist_id
+       LEFT JOIN skip_release_settings z ON z.playlist_id=a.playlist_id
+       WHERE a.playlist_id IN (8,10) AND a.media_type='episode'
+         AND a.duration_ms>0 AND j.status IN ('no_reference','no_match','review','done')
+       ORDER BY j.id,r.segment_type LIMIT 2500
+    """)]
+    reference=defaultdict(set)
+    for r in db.execute("""SELECT DISTINCT r.source_key,r.season,r.segment_type,r.episode
+       FROM skip_records r JOIN skip_assets a ON a.asset_key=r.asset_key
+       JOIN skip_analysis_playlists p ON p.id=a.playlist_id
+       WHERE r.status='approved' AND r.source='device' AND r.disabled=0
+         AND a.source_key=r.source_key AND a.season=r.season
+         AND a.episode=r.episode AND a.media_type='episode'
+         AND ABS(a.duration_ms-r.duration_ms)<=2000"""):
+        reference[(r['source_key'],r['season'],r['segment_type'])].add(r['episode'])
+    duplicate=defaultdict(set)
+    for r in db.execute("SELECT asset_key,segment_type FROM skip_records WHERE status='pending' AND source='device'"):
+        duplicate[r['asset_key']].add(r['segment_type'])
+    played=set()
+    if present(db,'skip_presence'):
+        played={r['playlist_id'] for r in db.execute('SELECT playlist_id FROM skip_presence WHERE expires_at>?',(int(time.time()),))}
+    retry=set()
+    if present(db,'episcene_safe_release_retries'):
+        retry={r['asset_key'] for r in db.execute('SELECT asset_key FROM episcene_safe_release_retries')}
+    flags={}
+    for r in db.execute('SELECT id FROM skip_analysis_playlists WHERE id IN (8,10)'):
+        pid=r['id']
+        flags[pid]={}
+        for col in ('archived','enabled','active','paused'):
+            if col in attributes:
+                flags[pid][col]=db.execute('SELECT '+col+' FROM skip_analysis_playlists WHERE id=?',(pid,)).fetchone()[0]
+    blockers=Counter()
+    kinds=Counter()
+    eligible=set()
+    distinct={r['asset_key'] for r in rows}
+    for r in rows:
+        if r['asset_key'] in eligible:continue
+        kinds[r['segment_type']]+=1
+        flag=flags.get(r['playlist_id'],{})
+        if flag.get('archived')==1:
+            reason='SOURCE_ARCHIVED'
+        elif flag.get('paused')==1:
+            reason='SOURCE_PAUSED'
+        elif flag.get('enabled')==0 or flag.get('active')==0:
+            reason='SOURCE_INVENTORY_INACTIVE'
+        elif r['analysis_on']!=1:
+            reason='ANALYSIS_SWITCH_OFF'
+        elif r['automatic_on']!=1:
+            reason='AUTOMATIC_ANALYSIS_SWITCH_OFF'
+        elif r['release_on']==0:
+            reason='AUTO_RELEASE_SWITCH_OFF'
+        elif r['asset_key'] in retry:
+            reason='ALREADY_REQUEUED'
+        else:
+            evidence=parse(r['evidence_json'])
+            if evidence.get('audio_visual_disagreement') is True:
+                reason='AUDIO_VISUAL_DISAGREEMENT'
+            elif not (evidence.get('episcene_required') is True or evidence.get('method')=='episcene_consensus'):
+                reason='NOT_VISUAL_PENDING'
+            elif isinstance(evidence.get('decision'),dict) and evidence['decision'].get('status')=='NO_MATCH':
+                reason='VISUAL_NO_MATCH'
+            elif r['segment_type'] in duplicate[r['asset_key']]:
+                reason='PENDING_MANUAL_MARKER'
+            elif r['playlist_id'] in played:
+                reason='PLAYBACK_GUARD'
+            elif not (reference[(r['source_key'],r['season'],r['segment_type'])]-{r['episode']}):
+                reason='NO_VALID_APPROVED_SIBLING'
+            else:
+                reason='REQUEUE_ELIGIBLE_BEFORE_BUDGET_AND_RATE'
+                eligible.add(r['asset_key'])
+        blockers[reason]+=1
+    return {
+        'joined_machine_rows':len(rows),
+        'distinct_candidate_assets':len(distinct),
+        'first_visible_blocker_counts':dict(blockers),
+        'candidate_kinds_examined':dict(kinds),
+        'approved_manual_reference_groups':len(reference),
+        'candidate_assets_eligible_before_budget':len(eligible),
+        'qualification':'Read-only approximate funnel, not proof that provider/video analysis or production release succeeded.'}
+
+
+def production_code_inventory_mismatch():
+    table={}
+    pairs={
+        'skip_release.py':('JOIN customer_playlists','skip_analysis_playlists'),
+        'skip_schedule.py':('JOIN customer_playlists','skip_analysis_playlists'),
+        'skip_catalogue.py':('JOIN customer_playlists','skip_analysis_playlists'),
+        'skip_scene_reliability.py':('analysis_playlist','skip_analysis_playlists'),
+    }
+    if not APP.is_dir() or APP.is_symlink():
+        return {'status':'APP_FOLDER_MISSING'}
+    for name,(old,new) in pairs.items():
+        path=APP/name
+        if not path.is_file() or path.is_symlink():
+            table[name]={'status':'MISSING'};continue
+        try:
+            data=path.read_text(encoding='utf8')
+        except (OSError,UnicodeDecodeError):
+            table[name]={'status':'UNREADABLE'};continue
+        table[name]={
+            'legacy_customer_joins':data.count(old),
+            'independent_source_mentions':data.count(new),
+        }
+    return dict(production_modules=table,notes='Static matches point to possible outdated SQL joins; source-level review is required before deployment.')
+
 def services():
     names=('episcene-safe-release-learning.timer',
            'episcene-owner-learning-shadow.timer',
@@ -315,6 +487,9 @@ def report(db):
                 timestamp_utc=datetime.now(timezone.utc).isoformat(),
                 legacy_manual=ownership(db),
                 playlist_settings=release_settings(db),
+                independent_analysis_inventory=analysis_inventory(db),
+                independent_visual_queue=independent_visual_funnel(db),
+                production_code_inventory=production_code_inventory_mismatch(),
                 machine_evidence=evidence_breakdown(db),
                 visual_requeue=queue_funnel(db),
                 learning=learning(),background_services=services(),

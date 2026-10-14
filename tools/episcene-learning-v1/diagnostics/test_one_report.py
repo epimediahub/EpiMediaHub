@@ -25,7 +25,7 @@ def fixture(root):
         CREATE TABLE skip_assets(
           asset_key TEXT PRIMARY KEY,playlist_id INTEGER,source_key TEXT,
           media_type TEXT,season INTEGER,episode INTEGER,duration_ms INTEGER,title TEXT);
-        CREATE TABLE skip_analysis_sources(playlist_id INTEGER,enabled INTEGER);
+        CREATE TABLE skip_analysis_playlists(id INTEGER PRIMARY KEY,archived INTEGER,enabled INTEGER,paused INTEGER);\n        CREATE TABLE skip_analysis_sources(playlist_id INTEGER,enabled INTEGER);
         CREATE TABLE skip_auto_settings(playlist_id INTEGER,enabled INTEGER);
         CREATE TABLE skip_release_settings(playlist_id INTEGER,enabled INTEGER);
         CREATE TABLE skip_auto_evidence(record_id INTEGER,evidence_json TEXT);
@@ -35,7 +35,7 @@ def fixture(root):
         CREATE TABLE episcene_safe_release_retries(
           asset_key TEXT PRIMARY KEY,last_requeued_utc TEXT,attempt_count INTEGER,
           original_job_status TEXT);
-        INSERT INTO customers VALUES(12,1);
+        INSERT INTO skip_analysis_playlists VALUES(8,0,1,0),(10,0,1,0);\n        INSERT INTO customers VALUES(12,1);
         INSERT INTO customer_playlists VALUES(8,12),(10,12);
         INSERT INTO devices VALUES(1,12,1);
         INSERT INTO skip_analysis_sources VALUES(8,1),(10,1);
@@ -98,6 +98,39 @@ class Diagnostics(unittest.TestCase):
             with d.open_readonly(original) as db:
                 result=d.queue_funnel(db)
             self.assertEqual(result['first_queue_requeue_blockers']['AUTOMATIC_RELEASE_OFF'],1)
+
+    def test_independent_inventory_keeps_sources_distinct_from_customer_records(self):
+        with tempfile.TemporaryDirectory() as td:
+            original=fixture(Path(td))
+            with d.open_readonly(original) as db:
+                info=d.analysis_inventory(db)
+                self.assertTrue(info['analysis_inventory_present'])
+                self.assertEqual(info['missing_from_independent_inventory'],[])
+                self.assertEqual(info['expected_analysis_sources']['8']['assets'],2)
+                self.assertTrue(info['customer_playlist_lookup_is_inapplicable_to_independent_sources'])
+                funnel=d.independent_visual_funnel(db)
+                self.assertEqual(funnel['candidate_assets_eligible_before_budget'],1)
+                self.assertEqual(funnel['first_visible_blocker_counts']['REQUEUE_ELIGIBLE_BEFORE_BUDGET_AND_RATE'],1)
+
+    def test_archived_independent_source_prevents_fresh_visual_analysis(self):
+        with tempfile.TemporaryDirectory() as td:
+            original=fixture(Path(td))
+            with sqlite3.connect(original) as db:
+                db.execute('UPDATE skip_analysis_playlists SET archived=1 WHERE id=8')
+            with d.open_readonly(original) as db:
+                result=d.independent_visual_funnel(db)
+            self.assertEqual(result['candidate_assets_eligible_before_budget'],0)
+            self.assertEqual(result['first_visible_blocker_counts']['SOURCE_ARCHIVED'],1)
+
+    def test_no_assumption_that_analysis_inventory_matches_customer_table(self):
+        with tempfile.TemporaryDirectory() as td:
+            original=fixture(Path(td))
+            with sqlite3.connect(original) as db:
+                db.execute('DELETE FROM customer_playlists')
+            with d.open_readonly(original) as db:
+                info=d.analysis_inventory(db)
+                self.assertEqual(info['missing_from_independent_inventory'],[])
+                self.assertEqual(info['expected_analysis_sources']['8']['assets'],2)
 
     def test_no_machine_customer_or_provider_data_in_report(self):
         with tempfile.TemporaryDirectory() as td:
