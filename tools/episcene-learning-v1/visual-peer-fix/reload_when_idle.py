@@ -10,6 +10,7 @@ import time
 DB=Path('/var/lib/epimediahub/provisioning.db')
 PENDING=Path('/var/lib/epimediahub/episcene-visual-peer-reload-pending')
 SERVICES=('epimediahub-analysis-worker.service','epimediahub-provisioning.service')
+OPTIONAL_ANALYZER='epimediahub-skip-analysis.service'
 
 
 def idle(con):
@@ -47,7 +48,15 @@ def main():
                               stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=8)
         if active.returncode != 0:
             raise SystemExit('RELOAD_DEFERRED: service '+service+' not active')
-    for service in SERVICES:
+    stage=subprocess.run(['systemctl','show',OPTIONAL_ANALYZER,'--property=ActiveState','--value'],
+                         text=True,capture_output=True,timeout=8,check=False)
+    stage_state=stage.stdout.strip()
+    if stage_state not in ('active','inactive'):
+        raise SystemExit('RELOAD_DEFERRED: analysis scheduler state '+stage_state[:32])
+    # Optional analysis service may be inactive between timer runs. Restart
+    # only an already active service: do not start a provider scan on deploy.
+    units=(SERVICES[0],)+( (OPTIONAL_ANALYZER,) if stage_state=='active' else () )+(SERVICES[1],)
+    for service in units:
         subprocess.run(['systemctl','restart',service],check=True,timeout=75)
         if subprocess.run(['systemctl','is-active','--quiet',service],
                           timeout=8).returncode!=0:
