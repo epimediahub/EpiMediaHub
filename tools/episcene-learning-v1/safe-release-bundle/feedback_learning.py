@@ -20,6 +20,7 @@ from statistics import median
 ORIGINAL=Path('/var/lib/epimediahub/provisioning.db')
 OUTPUT=Path('/var/lib/episcene-learning/reference-round-40/feedback.sqlite3')
 MANUAL_KINDS={'intro','recap','outro'}
+REJECTED_HISTORICAL_MARKER_IDS={2282}
 MACHINE_SOURCES={'audio','chapter','theintrodb','audio_repetition','auto_audio','episcene'}
 SOURCE_VERSION_KEYS=('asset_key','source_key','playlist_id','stream_id','extension',
                      'duration_ms','season','episode','updated_at','content_version','etag')
@@ -92,7 +93,8 @@ def valid_identity(r):
 
 
 def current_human(r):
-    if not valid_identity(r) or r['status'] not in ('approved','rejected'):
+    if (r['id'] in REJECTED_HISTORICAL_MARKER_IDS or
+            not valid_identity(r) or r['status'] not in ('approved','rejected')):
         return None
     if iso_date(r['reviewed_at']) is None:
         return None
