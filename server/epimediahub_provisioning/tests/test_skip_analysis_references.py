@@ -220,10 +220,14 @@ class ReferenceRouteTest(ReferenceFixture, unittest.TestCase):
         mark = self.seed | dict(segment_type="intro", start_ms=283043, end_ms=309573, disabled=False)
         response = self.client.post("/v1/device/skip/submit", json=mark, headers=self.headers)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["status"], "pending")
+        self.assertEqual(response.get_json()["status"], "approved")
         with self.db() as con:
             self.assertIsNotNone(con.execute("SELECT * FROM skip_assets WHERE asset_key=?",
                                             (self.seed["asset_key"],)).fetchone())
+            confirmed=con.execute("SELECT status,source,reviewed_at FROM skip_records WHERE id=?",
+                                 (response.get_json()["id"],)).fetchone()
+            self.assertEqual((confirmed["status"],confirmed["source"]),("approved","device"))
+            self.assertIsNotNone(confirmed["reviewed_at"])
 
     def test_lookup_of_existing_reference_wakes_followup_without_reapproval(self):
         self.marker()
@@ -232,6 +236,54 @@ class ReferenceRouteTest(ReferenceFixture, unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.get_json()["segments"]), 1)
         self.assertEqual(self.job()["status"], "queued")
+
+    def test_manual_approval_does_not_depend_on_machine_auto_release(self):
+        # Fixture has skip_release_settings enabled=0 on playlist 1.
+        mark=self.seed | dict(segment_type="outro",start_ms=2300000,
+                             end_ms=2390000,disabled=False)
+        result=self.client.post("/v1/device/skip/submit",json=mark,headers=self.headers)
+        self.assertEqual(result.status_code,200)
+        self.assertEqual(result.get_json()["status"],"approved")
+        again=self.client.post("/v1/device/skip/submit",json=mark,headers=self.headers)
+        self.assertEqual(again.get_json(),result.get_json())
+        found=self.client.post("/v1/device/skip/lookup",json=self.seed,headers=self.headers)
+        self.assertEqual(found.status_code,200)
+        self.assertTrue(any(x["segment_type"]=="outro" and x["status"]=="approved"
+                            for x in found.get_json()["segments"]))
+
+    def test_manual_approval_with_analysis_disabled_but_owned_playlist(self):
+        mark=self.descriptor("96",12,playlist_id=3) | dict(
+            segment_type="intro",start_ms=283043,end_ms=309573,disabled=False)
+        result=self.client.post("/v1/device/skip/submit",json=mark,headers=self.headers)
+        self.assertEqual(result.status_code,200)
+        self.assertEqual(result.get_json()["status"],"approved")
+        with self.db() as con:
+            self.assertIsNone(con.execute("SELECT 1 FROM skip_assets WHERE asset_key=?",
+                                          (mark["asset_key"],)).fetchone())
+        found=self.client.post("/v1/device/skip/lookup",json=mark,headers=self.headers)
+        self.assertTrue(any(x["status"]=="approved" for x in found.get_json()["segments"]))
+
+    def test_manual_submission_never_approves_unowned_or_forged_sources(self):
+        mark=self.seed | dict(segment_type="intro",start_ms=283043,
+                              end_ms=309573,disabled=False)
+        for mutation in ({"playlist_id":2},{"asset_key":"f"*64},
+                         {"stream_id":"bad"},{"playlist_id":0}):
+            with self.subTest(mutation=mutation):
+                r=self.client.post("/v1/device/skip/submit",
+                                   json=mark | mutation,headers=self.headers)
+                self.assertEqual(r.status_code,200)
+                self.assertEqual(r.get_json()["status"],"pending")
+
+    def test_manual_disabled_marker_is_decision_not_machine_proposal(self):
+        mark=self.seed | dict(segment_type="intro",start_ms=283043,
+                              end_ms=309573,disabled=True)
+        r=self.client.post("/v1/device/skip/submit",json=mark,headers=self.headers)
+        self.assertEqual(r.status_code,200)
+        self.assertEqual(r.get_json()["status"],"approved")
+        with self.db() as con:
+            row=con.execute("SELECT status,disabled FROM skip_records WHERE id=?",
+                            (r.get_json()["id"],)).fetchone()
+            self.assertEqual((row["status"],row["disabled"]),("approved",1))
 
     def test_manual_markers_without_valid_analysis_source_remain_usable(self):
         for index, playlist in enumerate((0, 2, 3)):
