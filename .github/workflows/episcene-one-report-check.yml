@@ -1,0 +1,17 @@
+name: EpiScene one-read-only-report diagnostics
+on:
+  pull_request:
+    paths:
+      - 'tools/episcene-learning-v1/diagnostics/**'
+      - '.github/workflows/episcene-one-report-check.yml'
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check read-only data privacy, ownership and rerun-gate diagnostics
+        working-directory: tools/episcene-learning-v1/diagnostics
+        run: |
+          python3 -m py_compile one_report.py
+          python3 -m unittest -v test_one_report.py
