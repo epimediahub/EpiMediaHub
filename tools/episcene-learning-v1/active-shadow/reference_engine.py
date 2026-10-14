@@ -15,7 +15,7 @@ from statistics import median
 
 ANALYZER=Path('/var/lib/epimediahub/provisioning.db')
 ROUND=Path('/var/lib/episcene-learning/reference-round-40')
-OUTPUT=Path('/var/lib/episcene-learning/attested-reference-shadow.sqlite3')
+OUTPUT=Path('/var/lib/episcene-learning/reference-round-40/shadow.sqlite3')
 EXCLUDE={2282}
 
 
