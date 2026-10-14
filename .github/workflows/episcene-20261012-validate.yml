@@ -1,0 +1,33 @@
+name: EpiScene evidence and language validation
+on:
+  workflow_dispatch:
+  push:
+    branches: ['fix/episcene-20261012-evidence-progress']
+    paths: ['server/epimediahub_provisioning/**', '.github/workflows/episcene-20261012-validate.yml']
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        python: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: |
+          python -m pip install -r server/epimediahub_provisioning/requirements.txt
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg libchromaprint1 libchromaprint-tools
+      - name: Validate payload, real tail decode and installer rollback
+        run: |
+          python -m py_compile server/epimediahub_provisioning/skip_scene_reliability.py server/epimediahub_provisioning/skip_variant_reuse.py server/epimediahub_provisioning/skip_tail_check.py server/epimediahub_provisioning/skip_source_preferences.py
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p test_episcene_20261012.py -v
+      - name: Existing analysis, release, schedule and private RPC regressions
+        run: |
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_analysis*.py' -q
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_remote*.py' -q
+          python -m unittest discover -s server/epimediahub_provisioning/tests -p 'test_skip_daily_reports.py' -q
