@@ -42,16 +42,30 @@ _AUDIO_RE=re.compile(
 
 
 def source_shape(source):
-    """Safe structural counts for failure diagnostics (no source lines/credentials)."""
+    """No provider URLs or code snippets; only safe function-level counts."""
     try:
-        tree=ast.parse(source)
-        names={n.name for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
+        lines=source.splitlines(keepends=True)
+        nodes={node.name:node for node in ast.parse(source).body
+               if isinstance(node,ast.FunctionDef)}
     except SyntaxError:
-        names=set()
-    return {k:{
-        'function_present':k in names,
-        'old_customer_joins':source.count(OLD_JOIN) if k=='_cached_rows' else None
-    } for k in ('capture','_cached_rows','release_ready','analyze')}
+        return {'source_syntax':'INVALID'}
+    report={}
+    for name in ('capture','_cached_rows','release_ready','analyze'):
+        node=nodes.get(name)
+        if not node:
+            report[name]={'present':False}
+            continue
+        body=''.join(lines[node.lineno-1:node.end_lineno])
+        report[name]={
+            'present':True,
+            'legacy_source_joins':len(_JOIN_RE.findall(body)),
+            'analysis_source_joins':len(_ANALYSIS_RE.findall(body)),
+            'old_playlist_selects':len(_SELECT_RE.findall(body)),
+            'analysis_playlist_mentions':body.count('skip_analysis_playlists'),
+            'original_audio_search':len(_AUDIO_RE.findall(body)),
+            'outro_window_extended':"begin -= 55000" in body,
+        }
+    return report
 
 
 def _target_functions(source):
