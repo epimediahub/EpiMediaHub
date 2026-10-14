@@ -12,15 +12,15 @@ from unittest import mock
 
 import scene_fix
 
-old_code=("def capture_demo():\n    sql='SELECT * FROM customer_playlists WHERE id=?'\n"
+old_code=("def capture():\n    sql='SELECT * FROM customer_playlists WHERE id=?'\n"
           "    return sql\n\n"
-          "def cache_demo():\n"
+          "def _cached_rows():\n"
           "    sql='''JOIN customer_playlists p ON p.id=a.playlist_id JOIN customers c ON c.id=p.customer_id AND c.enabled=1'''\n"
           "    return sql\n\n"
-          "def release_demo():\n"
+          "def release_ready():\n"
           "    sql='''JOIN customer_playlists p ON p.id=a.playlist_id JOIN customers c ON c.id=p.customer_id AND c.enabled=1'''\n"
           "    return sql\n\n"
-          "def visual_demo(audio,kind):\n"
+          "def analyze(audio,kind):\n"
           "    if audio:\n"
           "        begin, end = audio[0]['start_ms'] - 6000, audio[0]['end_ms'] + 6000\n"
           "    else:\n"
@@ -83,10 +83,39 @@ class SceneSafety(unittest.TestCase):
         self.assertEqual(scene_fix.patch(patched),(patched,False))
         symbols={}
         exec(patched,symbols)
-        cut=symbols['visual_demo']([dict(start_ms=3200000,end_ms=3520000)],'outro')
+        cut=symbols['analyze']([dict(start_ms=3200000,end_ms=3520000)],'outro')
         self.assertEqual(cut,(3139000,3526000))
         same=symbols['visual_demo']([dict(start_ms=30000,end_ms=60000)],'intro')
         self.assertEqual(same,(24000,66000))
+
+    def test_partially_upgraded_live_code_is_patched_without_duplication(self):
+        mixed=old_code.replace(scene_fix.OLD_PLAYLIST,scene_fix.NEW_PLAYLIST)
+        mixed=mixed.replace(scene_fix.OLD_JOIN,scene_fix.NEW_JOIN,1)
+        patched,changed=scene_fix.patch(mixed)
+        self.assertTrue(changed)
+        self.assertNotIn(scene_fix.OLD_JOIN,patched)
+        self.assertNotIn(scene_fix.OLD_PLAYLIST,patched)
+        self.assertEqual(scene_fix.patch(patched),(patched,False))
+
+    def test_whitespace_drift_inside_sql_join_is_supported(self):
+        whitespace=scene_fix.OLD_JOIN.replace(
+            'JOIN customers c','\\n      JOIN customers c')
+        # Python string literals embedded in the synthetic SQL must stay valid.
+        whitespace=whitespace.replace('\\n',' ' * 3)
+        variant=old_code.replace(scene_fix.OLD_JOIN,whitespace)
+        patched,changed=scene_fix.patch(variant)
+        self.assertTrue(changed)
+        self.assertEqual(patched.count(scene_fix.NEW_JOIN),2)
+
+    def test_existing_custom_audio_window_is_preserved(self):
+        variant=old_code.replace(
+            scene_fix.OLD_WINDOW,
+            "        begin, end = audio[0]['start_ms'] - 80000, audio[0]['end_ms'] + 6000")
+        patched,changed=scene_fix.patch(variant)
+        self.assertTrue(changed)
+        self.assertIn("- 80000",patched)
+        self.assertNotIn('begin -= 55000',patched)
+        self.assertEqual(scene_fix.patch(patched),(patched,False))
 
     def test_reject_unexpected_live_revision(self):
         for inp in (old_code.replace('customer_playlists','changed_table'),
