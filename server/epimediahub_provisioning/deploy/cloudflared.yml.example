@@ -1,0 +1,15 @@
+# Copy to /etc/cloudflared/config.yml after creating the tunnel in Cloudflare.
+# Replace TUNNEL_UUID and credential path with the values Cloudflare provides.
+tunnel: TUNNEL_UUID
+credentials-file: /etc/cloudflared/TUNNEL_UUID.json
+
+ingress:
+  - hostname: setup.epimediahub.com
+    service: http://127.0.0.1:8787
+  - hostname: admin.epimediahub.com
+    service: http://127.0.0.1:8787
+  - hostname: api.epimediahub.com
+    service: http://127.0.0.1:8787
+  - hostname: reseller.epimediahub.com
+    service: http://127.0.0.1:8787
+  - service: http_status:404

@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="de">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Auto-Sync aktivieren · EpiMediaHub</title><link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}"></head>
+<body>
+<header class="topbar"><div class="brand"><span class="brandmark">E</span><div><strong>EpiMediaHub</strong><small>Bestandsgerät verbinden</small></div></div><a class="ghost linkbutton" href="{{ url_for('dashboard') }}">Zurück</a></header>
+<main class="shell narrow"><section class="activation-card"><span class="eyebrow">AUTO-SYNC</span><h1>{{ device.device_id }}</h1><p class="muted">Einmaliger Bootstrap für {{ device.customer_name }}. Dieser Code ist nur dafür gedacht, ein bereits bestehendes Gerät auf die normale Session-Token-Synchronisierung umzustellen.</p><div class="code">{{ bootstrap_token }}</div><div class="urlbox"><label>Server</label><div>{{ server_url }}</div></div><p class="hint">Den Bootstrap-Token nur am zugehörigen Gerät verwenden. Ein erneuter Klick erzeugt einen neuen Token und macht den vorherigen ungültig.</p></section></main>
+</body>
+</html>

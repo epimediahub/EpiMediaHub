@@ -1,0 +1,17 @@
+[Unit]
+Description=EpiMediaHub Android release sync
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=-/etc/default/epimediahub-android-sync
+ExecStart=/usr/local/lib/epimediahub/sync_android_release.py
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+
+[Install]
+WantedBy=multi-user.target
