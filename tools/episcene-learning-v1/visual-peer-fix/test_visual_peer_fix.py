@@ -85,7 +85,7 @@ class SceneSafety(unittest.TestCase):
         exec(patched,symbols)
         cut=symbols['analyze']([dict(start_ms=3200000,end_ms=3520000)],'outro')
         self.assertEqual(cut,(3139000,3526000))
-        same=symbols['visual_demo']([dict(start_ms=30000,end_ms=60000)],'intro')
+        same=symbols['analyze']([dict(start_ms=30000,end_ms=60000)],'intro')
         self.assertEqual(same,(24000,66000))
 
     def test_partially_upgraded_live_code_is_patched_without_duplication(self):
