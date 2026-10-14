@@ -196,6 +196,7 @@ def queue_funnel(db):
        ORDER BY j.id,r.segment_type LIMIT 2000
     """)]
     counts['potential_job_marker_pairs']=len(allrows)
+    counts['distinct_assets_considered']=len({r['asset_key'] for r in allrows})
     by_asset=defaultdict(set)
     for x in db.execute("""SELECT asset_key,segment_type FROM skip_records
                             WHERE status='pending' AND source='device'"""):
@@ -213,7 +214,6 @@ def queue_funnel(db):
         asset=r['asset_key']
         if asset in seen:
             stage['REPEAT_ASSET_SKIPPED']+=1;continue
-        counts['distinct_assets_considered']+=1
         if r['source_on']!=1:
             stage['ANALYSIS_SOURCE_OFF']+=1;continue
         if r['auto_on']!=1:
