@@ -11,6 +11,7 @@ button,a.button{background:#26364c;color:#f5f7fa;border:1px solid #72839b;border
 {% if episcene_reports_enabled|default(false) %}{% include "skip_daily_report_launcher.html" %}{% endif %}
 {% include "skip_schedule.html" %}
 {% include "skip_progress.html" %}
+<div class="card"><strong>40er-Referenzrunde:</strong> Bereits geprüfte Marker können nach einer genauen Vorschau mit einer einzigen Administrator-Bestätigung freigegeben werden. <a class="button" href="{{ url_for('episcene_round40_preview') }}">Referenzen prüfen</a></div>
 <nav class="tools">{% for value,label in [('pending','Zur Prüfung'),('approved','Freigegeben'),('rejected','Abgelehnt'),('superseded','Ersetzt')] %}<a class="button" href="{{ url_for('v082_skip_dashboard',state=value) }}">{{ label }}</a>{% endfor %}</nav>
 {% macro marker_card(row) %}<article class="card marker-card" data-record-id="{{ row.id }}">
 <h4>{{ {"intro":"Intro","recap":"Rückblick","outro":"Abspann"}[row.segment_type] }}</h4>
