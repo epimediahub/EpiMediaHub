@@ -1,0 +1,17 @@
+name: EpiScene one-shot safe release and feedback learning
+on:
+  pull_request:
+    paths:
+      - 'tools/episcene-learning-v1/safe-release-bundle/**'
+      - '.github/workflows/episcene-safe-release-learning.yml'
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and isolated SQLite regression tests
+        working-directory: tools/episcene-learning-v1/safe-release-bundle
+        run: |
+          python3 -m py_compile safe_release_rollout.py feedback_learning.py
+          python3 -m unittest -v test_safe_release_rollout.py test_feedback_learning.py
