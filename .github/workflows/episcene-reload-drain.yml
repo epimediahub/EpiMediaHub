@@ -1,0 +1,20 @@
+name: EpiScene safe deferred scene reload
+on:
+  pull_request:
+    paths:
+      - 'tools/episcene-learning-v1/visual-peer-fix/reload_when_idle_v2.py'
+      - 'tools/episcene-learning-v1/visual-peer-fix/test_reload_when_idle_v2.py'
+      - 'tools/episcene-learning-v1/visual-peer-fix/install_reload_drain.sh'
+      - '.github/workflows/episcene-reload-drain.yml'
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check quiescent worker drain, playback safety, stale running rows and rollback
+        working-directory: tools/episcene-learning-v1/visual-peer-fix
+        run: |
+          python3 -m py_compile reload_when_idle_v2.py
+          python3 -m unittest -v test_reload_when_idle_v2.py
+          if test -f install_reload_drain.sh; then bash -n install_reload_drain.sh; fi
