@@ -108,19 +108,27 @@ def finish():
         log_status('RELOAD_DEFERRED','required_compute_or_web_not_active')
         return
     if presence():
+        # If a viewer became active after we paused the timer, restore normal
+        # analyses while waiting for a genuine maintenance window. Never
+        # leave EpiScene without new work because someone is watching TV.
+        if PAUSED.exists():
+            call('systemctl','start',ANALYSIS_TIMER,timeout=30,check=True)
+            if not is_active(ANALYSIS_TIMER):
+                raise RuntimeError('Could not restore analysis timer for playback')
+            PAUSED.unlink()
         log_status('RELOAD_DEFERRED','active_viewer_or_playback_lease')
         return
 
     # Quiesce the producer rather than waiting forever for coincidental idle
     # between batches. Stop the timer only; do NOT stop/kill the current job.
     if is_active(ANALYSIS_TIMER):
-        call('systemctl','stop',ANALYSIS_TIMER,timeout=30,check=True)
-        if is_active(ANALYSIS_TIMER):
-            raise RuntimeError('Could not pause new analysis jobs')
         if not PAUSED.exists():
             with PAUSED.open('x') as f:
                 f.write('timer_paused_by_episcene_visual_peer_reload\n')
             os.chmod(PAUSED,0o600)
+        call('systemctl','stop',ANALYSIS_TIMER,timeout=30,check=True)
+        if is_active(ANALYSIS_TIMER):
+            raise RuntimeError('Could not pause new analysis jobs')
     elif not PAUSED.exists():
         # Analysis timer was intentionally disabled before our task.
         # Do not silently enable it during the subsequent restart.
