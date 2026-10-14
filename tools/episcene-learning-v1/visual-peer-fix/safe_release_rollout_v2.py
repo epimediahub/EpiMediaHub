@@ -172,7 +172,7 @@ def plan(con, candidates, max_jobs=MAX_NEW_PER_RUN, *, models=None):
             episodic=epis.setdefault(r['episode'],r)
             if r['language_priority']<episodic['language_priority']:
                 epis[r['episode']]=r
-        if len(set(epis)|seeded[key])<2 and key not in references:
+        if len(set(epis)|seeded[key])<3 and key not in references:
             continue
         roster=sorted(epis.values(),key=lambda x:(x['language_priority'],x['episode'],x['job_id']))
         priority=(not bool(seeded[key]),key not in models,key not in references,
