@@ -1,0 +1,21 @@
+name: EpiScene manual device immediate approval
+on:
+  pull_request:
+    paths:
+      - 'server/epimediahub_provisioning/skip_markers.py'
+      - 'server/epimediahub_provisioning/tests/test_skip_analysis_references.py'
+      - '.github/workflows/episcene-manual-submit.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install reference integration dependencies
+        run: python3 -m pip install -r server/epimediahub_provisioning/requirements.txt
+      - name: Test immediate manual approvals and source ownership
+        working-directory: server/epimediahub_provisioning
+        run: python3 -m unittest discover -s tests -p test_skip_analysis_references.py -v
+      - name: Verify source syntax
+        working-directory: server/epimediahub_provisioning
+        run: python3 -m py_compile skip_markers.py
