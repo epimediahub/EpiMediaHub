@@ -152,8 +152,19 @@ def plan(con, candidates, max_jobs=MAX_NEW_PER_RUN, *, models=None):
           AND r.season=a.season AND r.episode=a.episode
           AND ABS(r.duration_ms-a.duration_ms)<=500"""):
         references.add(tuple(r))
-    # Prefer a family where independent episodes can provide 3-way
-    # visual consensus. Isolated singletons cannot auto-approve.
+    # Continue a family already started on a previous hour before selecting
+    # new groups. Three independent episodes may require multiple passes under
+    # the per-playlist rate limit, and requeued ones leave the candidate pool.
+    seeded=defaultdict(set)
+    for item in con.execute("""SELECT DISTINCT a.playlist_id,a.source_key,a.season,
+                r.segment_type,a.episode FROM episcene_safe_release_retries z
+          JOIN skip_assets a ON a.asset_key=z.asset_key
+          JOIN skip_records r ON r.asset_key=a.asset_key AND r.status='pending'
+          WHERE a.playlist_id IN (8,10)
+            AND r.segment_type IN ('intro','recap','outro')"""):
+        seeded[tuple(item[:4])].add(item[4])
+    # Prefer an in-progress family where independent episodes can provide
+    # 3-way visual consensus. Isolated singletons cannot auto-approve.
     queue=[]
     for key,rows in families.items():
         epis={}
@@ -161,11 +172,12 @@ def plan(con, candidates, max_jobs=MAX_NEW_PER_RUN, *, models=None):
             episodic=epis.setdefault(r['episode'],r)
             if r['language_priority']<episodic['language_priority']:
                 epis[r['episode']]=r
-        if len(epis)<2 and key not in references:
+        if len(set(epis)|seeded[key])<2 and key not in references:
             continue
         roster=sorted(epis.values(),key=lambda x:(x['language_priority'],x['episode'],x['job_id']))
-        priority=(key not in models,key not in references,-len(epis),
-                  min(r['language_priority'] for r in roster),key[0],roster[0]['job_id'])
+        priority=(not bool(seeded[key]),key not in models,key not in references,
+                  -len(set(epis)|seeded[key]),min(r['language_priority'] for r in roster),
+                  key[0],roster[0]['job_id'])
         queue.append((priority,key,roster))
     queue.sort(key=lambda x:x[0])
     output=[];taken=set();by_playlist=Counter()
