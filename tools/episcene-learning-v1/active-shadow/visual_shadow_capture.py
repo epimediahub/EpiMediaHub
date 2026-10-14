@@ -185,12 +185,16 @@ def run(source=ORIGINAL,shadow=SHADOW,destination=OUTPUT,fetcher=None):
         live=db.execute('''SELECT r.source,r.status,r.start_ms,r.end_ms,a.* FROM skip_records r
           JOIN skip_assets a ON a.asset_key=r.asset_key WHERE r.id=?''',
           (task['record_id'],)).fetchone()
-        if live is None or asset_version(dict(live))!=task['version']:
-            raise RuntimeError('Asset changed during capture – no evidence stored')
+        if (live is None or asset_version(dict(live))!=task['version']
+                or live['source']!=task['asset']['source']
+                or live['status']!=task['asset']['status']
+                or live['start_ms']!=task['asset']['record_start']
+                or live['end_ms']!=task['asset']['record_end']):
+            raise RuntimeError('Asset or marker changed during capture – no evidence stored')
     with sqlite3.connect(destination,timeout=15) as out:
         migrate(out)
         out.execute('''INSERT OR REPLACE INTO frames
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,'SHADOW_ONLY')''',
+          VALUES(?,?,?,?,?,?,?,?,?,?,'SHADOW_ONLY')''',
           (task['record_id'],task['type'],task['asset_key'],task['version'],
            task['start_ms'],task['length_ms'],STEP_MS,payload,
            sha256(payload.encode()).hexdigest(),int(time.time())))
