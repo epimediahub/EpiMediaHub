@@ -24,7 +24,10 @@ done
     echo "Bestehende EpiScene Installation oder Baseline fehlt; keine Aenderung." >&2
     exit 2
 }
-[[ "$(stat -c %u "$ROOT")" == 0 ]] || {
+[[ "$(stat -c %u "$ROOT")" == 0 && "$(stat -c %a "$ROOT")" == 700 &&
+   "$(stat -c %u /opt/episcene-learning)" == 0 &&
+   ! -L "$ROOT/plan.json" && ! -L "$ROOT/baseline.json" &&
+   ! -L "$ROOT/shadow.sqlite3" && ! -L "$TARGET" ]] || {
     echo "Referenzordner muss root gehoeren; kein root-Schreibzugriff in Nutzerordner." >&2
     exit 2
 }
@@ -38,6 +41,16 @@ echo "=== Tests gegen separate SQLite-Testdatenbank ==="
 (cd "$TMP" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q test_reference_engine)
 echo "=== Live-Referenzlauf VOR Installation (Originaldatenbank nur lesen) ==="
 python3 "$TMP/reference_engine.py" --dest "$TMP/check.sqlite3"
+python3 - "$TMP/check.sqlite3" <<'PY_PREFLIGHT'
+import sqlite3,sys
+with sqlite3.connect(sys.argv[1]) as db:
+    count=db.execute('SELECT COUNT(*) FROM owner_attested_round40').fetchone()[0]
+    verified=db.execute('SELECT COUNT(*) FROM owner_attested_round40 WHERE verified_backend<>0').fetchone()[0]
+    published=db.execute('SELECT COUNT(*) FROM shadow_outro_models WHERE publish_allowed<>0').fetchone()[0]
+if count < 60 or verified or published:
+    raise SystemExit(f'PREFLIGHT STOP: {count} owner-attested rows; verified={verified}; released={published}. No installation.')
+print(f'PREFLIGHT OK: {count} user-attested references, zero forged verification, zero publishing')
+PY_PREFLIGHT
 echo "=== Installation ==="
 if [[ -e "$TARGET" || -L "$TARGET" ]]; then
     cmp -s "$TARGET" "$TMP/reference_engine.py" || {
