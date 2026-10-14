@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EpiScene · Referenzrunde 40 prüfen</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='admin.css') }}">
+<style>
+body{background:#0b1018;color:#f1f5f9;font:16px system-ui}main{max-width:1000px;margin:30px auto;padding:20px}
+.card{background:#17202e;border:1px solid #344156;border-radius:12px;margin:14px 0;padding:18px}
+a{color:#9fc9ff}button{border:1px solid #b2bcd0;background:#435b82;border-radius:7px;padding:12px;color:white;cursor:pointer}
+button:disabled{opacity:.4}input{background:#0b1018;color:white;border:1px solid #8294ab;padding:10px;width:100%;max-width:450px}
+table{width:100%;border-collapse:collapse}td,th{padding:8px;border-bottom:1px solid #344156;text-align:left}
+small{color:#b8c4d3}.warn{color:#ffd69a}p{line-height:1.5}
+</style></head><body><main>
+<p><a href="{{ url_for('v082_skip_dashboard') }}">← Zurück zu Zeitmarken</a></p>
+<h1>EpiScene · Deine Referenzrunde bestätigen</h1>
+<p>Diese Funktion prüft ausschließlich die in deiner 40er-Runde gespeicherten, noch ausstehenden <strong>manuellen Geräte-Marker</strong>. Sie gibt keine unbekannten Maschinen-Vorschläge frei.</p>
+{% if request.args.get('approved') %}<div class="card" role="status"><strong>{{ request.args.get('approved') }} Referenzmarker wurden über die authentifizierte Administratorsitzung bestätigt.</strong></div>{% endif %}
+{% if request.args.get('changed') %}<p class="card warn" role="alert">Die Daten haben sich geändert. Bitte die neue Vorschau prüfen.</p>{% endif %}
+{% if batch.error %}
+<div class="card warn" role="alert">{{ batch.error }}</div>
+{% else %}
+<div class="card"><h2>Prüfergebnis</h2><p><strong>{{ batch.totals.eligible }}</strong> genau zugeordnete Marker bereit zur Bestätigung · <strong>{{ batch.totals.excluded }}</strong> ausgeschlossen / bereits bearbeitet</p>
+<p>Davon {{ batch.totals.intro }} Intros, {{ batch.totals.recap }} Rückblicke, {{ batch.totals.outro }} Abspänne.</p>
+<p>Die falsch markierte Berlino-Zeit #2282 ist nicht in der Referenzsammlung. Mehrdeutige oder unverbundene Einträge werden ausdrücklich nicht übernommen.</p></div>
+<details class="card"><summary>Alle zur Bestätigung vorgesehenen Markierungen anzeigen</summary>
+<table><thead><tr><th>Marker</th><th>Serie</th><th>Folge</th><th>Typ</th><th>Zeiten (Sek.)</th></tr></thead><tbody>
+{% for item in batch.eligible %}
+<tr><td>#{{ item.id }}</td><td>{{ item.title }}</td><td>S{{ item.season }}E{{ item.episode }}</td><td>{{ item.kind }}</td><td>{{ "%.2f"|format(item.start_ms/1000) }}–{{ "%.2f"|format(item.end_ms/1000) }}</td></tr>
+{% endfor %}
+</tbody></table></details>
+{% if batch.excluded %}<details class="card"><summary>{{ batch.excluded|length }} nicht übernommene Einträge und Gründe</summary>
+<table><thead><tr><th>Marker</th><th>Grund</th></tr></thead><tbody>
+{% for item in batch.excluded %}<tr><td>#{{ item.id }}</td><td>{{ item.reason }}</td></tr>{% endfor %}
+</tbody></table></details>{% endif %}
+<div class="card"><h2>Eine bewusste Administrator-Bestätigung</h2>
+<p>Nur durchführen, wenn du die angezeigten Zeitmarken wirklich geprüft hast. Die Freigabe ist produktiv: Andere Folgen derselben Staffel dürfen diese Marker danach als menschlich bestätigte Referenz verwenden. Sie garantiert <strong>keine automatische Freigabe</strong> unsicherer Bild- oder Tonvorschläge.</p>
+{% if batch.eligible %}
+<form method="post" action="{{ url_for('episcene_round40_confirm') }}">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<input type="hidden" name="snapshot" value="{{ batch.digest }}">
+<input type="hidden" name="count" value="{{ batch.eligible|length }}">
+<label>Zur Bestätigung <strong>REFERENZEN BESTÄTIGEN</strong> eingeben:
+<input name="confirmation" required autocomplete="off" placeholder="REFERENZEN BESTÄTIGEN"></label>
+<p><button type="submit">Genau diese {{ batch.eligible|length }} geprüften Referenzen freigeben</button></p></form>
+{% else %}<p>Keine geeigneten offenen Marker übrig.</p>{% endif %}
+</div>
+{% endif %}
+</main></body></html>
