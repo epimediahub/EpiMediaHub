@@ -23,4 +23,4 @@ jobs:
         run: python3 -m py_compile reference_engine.py visual_gate_readonly.py visual_shadow_capture.py
       - name: Validate installer shell syntax
         working-directory: tools/episcene-learning-v1/active-shadow
-        run: bash -n install.sh
+        run: bash -n install.sh install_visual_capture.sh
