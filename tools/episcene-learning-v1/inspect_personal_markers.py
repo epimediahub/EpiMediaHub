@@ -3,6 +3,8 @@
 
 Run as: python3 inspect_personal_markers.py
 The source database is never modified. No labels are auto-approved.
+Searches all playlists for the named series, since personal app marks can be
+outside the two designated analysis playlists. Customer IDs are never printed.
 """
 from __future__ import annotations
 
@@ -83,8 +85,7 @@ def audit(conn):
                r.end_ms, r.status, r.source, r.reviewed_at
         FROM skip_records AS r
         LEFT JOIN skip_assets AS a ON r.asset_key=a.asset_key
-        WHERE (a.playlist_id IN (8,10) OR a.asset_key IS NULL)
-          AND (
+        WHERE (
               lower(COALESCE(a.title,r.title)) LIKE '%lie to me%'
               OR lower(COALESCE(a.title,r.title)) LIKE '%lincoln lawyer%'
               OR lower(COALESCE(a.title,r.title)) LIKE '%mobland%'
@@ -107,8 +108,7 @@ def audit(conn):
             SELECT e.record_id, e.human_review
             FROM skip_auto_evidence e JOIN skip_records r ON r.id=e.record_id
             LEFT JOIN skip_assets a ON a.asset_key=r.asset_key
-            WHERE (a.playlist_id IN (8,10) OR a.asset_key IS NULL)
-              AND (lower(COALESCE(a.title,r.title)) LIKE '%lie to me%'
+            WHERE (lower(COALESCE(a.title,r.title)) LIKE '%lie to me%'
                 OR lower(COALESCE(a.title,r.title)) LIKE '%lincoln lawyer%'
                 OR lower(COALESCE(a.title,r.title)) LIKE '%mobland%'
                 OR lower(COALESCE(a.title,r.title)) LIKE '%mob land%')
@@ -122,8 +122,7 @@ def audit(conn):
             SELECT a.title, COUNT(*) AS cnt
             FROM skip_app_windows w
             JOIN skip_assets a ON a.asset_key=w.asset_key
-            WHERE a.playlist_id IN (8,10)
-              AND (lower(a.title) LIKE '%lie to me%'
+            WHERE (lower(a.title) LIKE '%lie to me%'
                 OR lower(a.title) LIKE '%lincoln lawyer%'
                 OR lower(a.title) LIKE '%mobland%'
                 OR lower(a.title) LIKE '%mob land%')
