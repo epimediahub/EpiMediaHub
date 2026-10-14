@@ -100,7 +100,7 @@ def current_human(r):
         return None
     if r['source']=='device':
         if (r['device_id'] is None or r['customer_id'] is None
-            or r['device_enabled']!=1 or r['device_owner']!=r['customer_id']
+            or r['as_device_enabled']!=1 or r['as_device_owner']!=r['customer_id']
             or r['as_playlist_owner']!=r['customer_id']):
             return None
         provenance='device_authenticated_direct'
