@@ -135,7 +135,7 @@ def import_candidates(source_path, target_path):
         db.executescript(DDL)
         imported=0;apps=0
         marker_sql='''INSERT INTO legacy_marker_snapshots VALUES (
-            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'unverified_source_status',?)
+            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'unverified_source_status',?)
             ON CONFLICT(source_record_id) DO UPDATE SET
             asset_key=excluded.asset_key,playlist_id=excluded.playlist_id,
             source_key=excluded.source_key,series_title=excluded.series_title,
