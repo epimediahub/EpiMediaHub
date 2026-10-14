@@ -234,7 +234,7 @@ def write(output,humans,comparisons,models,conflicts):
         """)
         db.execute('UPDATE feedback_versions SET active=0')
         moment=iso()
-        db.executemany("""INSERT INTO feedback_versions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)
+        db.executemany("""INSERT INTO feedback_versions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)
             ON CONFLICT(marker_id,revision_sha256) DO UPDATE SET active=1""",
             [(h['marker_id'],h['revision_sha256'],h['outcome'],h['segment_type'],
               h['provenance'],h['asset_key'],h['asset_version'],h['playlist_id'],
