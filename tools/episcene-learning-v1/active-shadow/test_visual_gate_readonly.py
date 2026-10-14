@@ -6,7 +6,7 @@ import unittest
 import visual_gate_readonly as mod
 
 
-def fixture():
+def fixture(*, cached=False, stale=False, different=False):
     db=sqlite3.connect(':memory:');shadow=sqlite3.connect(':memory:')
     db.execute("""CREATE TABLE skip_assets(
         asset_key TEXT PRIMARY KEY,playlist_id INTEGER,title TEXT,source_key TEXT,
@@ -33,6 +33,16 @@ def fixture():
     db.execute("INSERT INTO skip_records VALUES(1315,'earlier',3547378,3589000,'audio_repetition','outro','pending')")
     shadow.execute("INSERT INTO shadow_outro_models VALUES('mobland',1,8,35133,5,668,'shadow_only',0)")
     shadow.execute("INSERT INTO shadow_outro_candidates VALUES(2020,'a','mobland',1,8,8,2350133,2315000,2390000,35133,'SHADOW_REVIEW_ONLY')")
+    if different:
+        db.execute("UPDATE skip_records SET asset_key='different' WHERE id=1315")
+    if cached:
+        db.row_factory=sqlite3.Row
+        asset=dict(db.execute("SELECT * FROM skip_assets WHERE asset_key='a'").fetchone())
+        db.execute("INSERT INTO skip_scene_windows VALUES(1,'a','outro',2300000,80000,2400000,1760460000)")
+        db.execute("INSERT INTO skip_scene_window_versions VALUES(1,?)",(mod.asset_version(asset),))
+    if stale:
+        db.execute("UPDATE skip_assets SET updated_at='2026-10-15' WHERE asset_key='a'")
+    db.commit();shadow.commit()
     return db,shadow
 
 
@@ -48,24 +58,20 @@ class VisualGateTest(unittest.TestCase):
             self.assertAlmostEqual(status['independent_episode_one_check']['difference_from_round_model_seconds'],-.078,places=3)
 
     def test_only_exact_revision_window_counts_as_coverage(self):
-        db,shadow=fixture()
+        db,shadow=fixture(cached=True)
         with db,shadow:
-            db.row_factory=sqlite3.Row
-            asset=dict(db.execute("SELECT * FROM skip_assets WHERE asset_key='a'").fetchone())
-            db.execute("INSERT INTO skip_scene_windows VALUES(1,'a','outro',2300000,80000,2400000,1760460000)")
-            db.execute("INSERT INTO skip_scene_window_versions VALUES(1,?)",(mod.asset_version(asset),))
             ok=mod.inspect(db,shadow)
             self.assertTrue(ok['candidates'][0]['earlier_boundary_covered_by_valid_cache'])
             self.assertTrue(ok['candidates'][0]['original_boundary_covered_by_valid_cache'])
-            db.execute("UPDATE skip_assets SET updated_at='2026-10-15' WHERE asset_key='a'")
-            stale=mod.inspect(db,shadow)
-            self.assertFalse(stale['candidates'][0]['earlier_boundary_covered_by_valid_cache'])
-            self.assertEqual(stale['candidates'][0]['unverified_or_stale_windows'],1)
+        db,shadow=fixture(cached=True,stale=True)
+        with db,shadow:
+            result=mod.inspect(db,shadow)
+            self.assertFalse(result['candidates'][0]['earlier_boundary_covered_by_valid_cache'])
+            self.assertEqual(result['candidates'][0]['unverified_or_stale_windows'],1)
 
     def test_different_assets_do_not_count_as_prior_confirmation(self):
-        db,shadow=fixture()
+        db,shadow=fixture(different=True)
         with db,shadow:
-            db.execute("UPDATE skip_records SET asset_key='different' WHERE id=1315")
             status=mod.inspect(db,shadow)
             self.assertEqual(status['independent_episode_one_check']['status'],'NOT_TESTABLE')
             self.assertEqual(status['new_auto_approvals'],0)
