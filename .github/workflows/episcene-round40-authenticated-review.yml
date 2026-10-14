@@ -1,0 +1,22 @@
+name: EpiScene authenticated reference batch preview tests
+on:
+  pull_request:
+    paths:
+      - 'server/epimediahub_provisioning/skip_reference_round40_admin.py'
+      - 'server/epimediahub_provisioning/tests/test_skip_reference_round40_admin.py'
+      - 'server/epimediahub_provisioning/templates/skip_reference_round40.html'
+      - 'server/epimediahub_provisioning/templates/skip_markers.html'
+      - 'server/epimediahub_provisioning/skip_markers.py'
+      - '.github/workflows/episcene-round40-authenticated-review.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Isolated exact-ID, provenance and atomicity tests
+        working-directory: server/epimediahub_provisioning
+        run: python3 -m unittest discover -s tests -p test_skip_reference_round40_admin.py -v
+      - name: Verify module syntax
+        working-directory: server/epimediahub_provisioning
+        run: python3 -m py_compile skip_reference_round40_admin.py
