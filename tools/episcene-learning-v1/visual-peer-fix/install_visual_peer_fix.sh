@@ -5,7 +5,7 @@ set -Eeuo pipefail
 umask 077
 
 [[ "$EUID" -eq 0 ]] || { echo 'STOP: root required';exit 2; }
-REV=0e2a9a037048bdfbe85436248e792ad3025dce0d
+REV=9fb9e408449034b61e6e21fbba2c6ab03a8914e5
 ROOT="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$REV/tools/episcene-learning-v1/visual-peer-fix"
 APP=/opt/epimediahub/provisioning
 ENGINE=/opt/episcene-learning
@@ -39,10 +39,10 @@ get() {
   curl -fsSL --retry 2 --max-time 45 "$ROOT/$f" -o "$TMP/$f"
   printf '%s  %s\n' "$hash" "$TMP/$f" | sha256sum -c -
 }
-get scene_fix.py 17e6758bc89a0b84824fde457799c2cb5e908419786df1fd1a8f77a60467a808
+get scene_fix.py 6864a04c667806902cc35ea81d64ed26ee6b0b236cdba01b8ffa793859a66c05
 get safe_release_rollout_v2.py 6653aab53d22d5c2fa08a2163f42487bf7bd92b0a4658b6ef150156bf5fa49d2
-get test_visual_peer_fix.py 49ea807a4db5b3ade03bda15acdda1619ce7cff90efc3585de9f206b3bf21edc
-get reload_when_idle.py 98f0bc9bebedeaa3f3c7b03ef1ad7e870c47c48b0b9a64e22489bb604528c965
+get test_visual_peer_fix.py 60849cfe3a9cf4d0d6c2781b0a27fbaef837c4028b534c421d77803557f814cb
+get reload_when_idle.py 33d7516dd0277f6be943b763711f7a76b4ac3983e81ce1ff326a73c2d14941ea
 
 echo '=== Alle isolierten Regressionstests ==='
 (cd "$TMP" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q test_visual_peer_fix)
@@ -57,7 +57,14 @@ scene=pathlib.Path(sys.argv[1])
 folder=pathlib.Path(sys.argv[2])
 spec=importlib.util.spec_from_file_location('scene_fix',folder/'scene_fix.py')
 mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
-patch,changed=mod.patch(scene.read_text(encoding='utf-8'))
+source=scene.read_text(encoding='utf-8')
+try:
+    patch,changed=mod.patch(source)
+except (ValueError,SyntaxError) as e:
+    import json
+    print('SCENE PREFLIGHT STOP:',type(e).__name__+': '+str(e))
+    print('SCENE STRUCTURAL COUNTS (no secrets):',json.dumps(mod.source_shape(source),sort_keys=True))
+    raise SystemExit(3)
 (folder/'skip_scene.patched.py').write_text(patch,encoding='utf-8')
 print('SCENE PREFLIGHT OK:', 'PATCH_REQUIRED' if changed else 'ALREADY_FIXED')
 PY_CHECK
