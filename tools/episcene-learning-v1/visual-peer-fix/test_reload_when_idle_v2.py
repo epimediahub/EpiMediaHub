@@ -39,7 +39,8 @@ class FakeSystemctl:
         unit=args[-1]
         if args[:3]==('systemctl','is-active','--quiet'):
             return SimpleNamespace(returncode=0 if self.states[unit] else 3,stdout='')
-        if args[:3]==('systemctl','show',unit):
+        if args[:2]==('systemctl','show'):
+            unit=args[2]
             return SimpleNamespace(returncode=0,stdout='active\n' if self.states[unit] else 'inactive\n')
         if args[:2]==('systemctl','stop'):
             if self.fail==('stop',unit):
