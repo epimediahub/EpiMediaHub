@@ -147,7 +147,10 @@ def finish():
     # The worker holds this lock through its entire batch, even if systemd
     # is racing to update the unit state. Holding our lock prevents a new
     # periodic or manually spawned worker from acquiring it during restart.
-    with WORKER_LOCK.open('a') as lock:
+    if not WORKER_LOCK.is_file():
+        log_status('RELOAD_DEFERRED','original_analysis_worker_lock_missing')
+        return
+    with WORKER_LOCK.open('rb') as lock:
         try:
             fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:
