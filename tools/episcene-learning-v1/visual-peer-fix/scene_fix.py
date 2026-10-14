@@ -106,7 +106,9 @@ def _analyze(text):
         return text,False
     candidates=list(_AUDIO_RE.finditer(text))
     if len(candidates)==1:
-        if not re.search(r'(?m)^[ \t]*if audio:\s*
+        if not re.search(r'(?m)^[ \t]*if audio:[ \t]*$',text):
+            raise ValueError('Unexpected audio-condition shape; no time-window change')
+        match=candidates[0]
         indent=match.group(1)
         original=match.group(2)
         replacement=(
