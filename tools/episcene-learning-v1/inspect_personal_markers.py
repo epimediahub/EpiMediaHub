@@ -55,17 +55,18 @@ def audit(conn):
         raise RuntimeError("skip_assets: fehlende Spalten")
 
     records = conn.execute("""
-        SELECT r.id, r.asset_key, a.title, a.playlist_id,
-               a.season, a.episode, r.segment_type, r.start_ms,
+        SELECT r.id, r.asset_key, COALESCE(a.title, r.title) AS title, a.playlist_id,
+               COALESCE(a.season, r.season) AS season,
+               COALESCE(a.episode, r.episode) AS episode, r.segment_type, r.start_ms,
                r.end_ms, r.status, r.source, r.reviewed_at
         FROM skip_records AS r
-        JOIN skip_assets AS a ON r.asset_key=a.asset_key
-        WHERE a.playlist_id IN (8,10)
+        LEFT JOIN skip_assets AS a ON r.asset_key=a.asset_key
+        WHERE (a.playlist_id IN (8,10) OR a.asset_key IS NULL)
           AND (
-              lower(a.title) LIKE '%lie to me%'
-              OR lower(a.title) LIKE '%lincoln lawyer%'
-              OR lower(a.title) LIKE '%mobland%'
-              OR lower(a.title) LIKE '%mob land%'
+              lower(COALESCE(a.title,r.title)) LIKE '%lie to me%'
+              OR lower(COALESCE(a.title,r.title)) LIKE '%lincoln lawyer%'
+              OR lower(COALESCE(a.title,r.title)) LIKE '%mobland%'
+              OR lower(COALESCE(a.title,r.title)) LIKE '%mob land%'
           )
         ORDER BY a.title, a.season, a.episode, r.id
     """).fetchall()
@@ -83,12 +84,12 @@ def audit(conn):
         for row in conn.execute("""
             SELECT e.record_id, e.human_review
             FROM skip_auto_evidence e JOIN skip_records r ON r.id=e.record_id
-            JOIN skip_assets a ON a.asset_key=r.asset_key
-            WHERE a.playlist_id IN (8,10)
-              AND (lower(a.title) LIKE '%lie to me%'
-                OR lower(a.title) LIKE '%lincoln lawyer%'
-                OR lower(a.title) LIKE '%mobland%'
-                OR lower(a.title) LIKE '%mob land%')
+            LEFT JOIN skip_assets a ON a.asset_key=r.asset_key
+            WHERE (a.playlist_id IN (8,10) OR a.asset_key IS NULL)
+              AND (lower(COALESCE(a.title,r.title)) LIKE '%lie to me%'
+                OR lower(COALESCE(a.title,r.title)) LIKE '%lincoln lawyer%'
+                OR lower(COALESCE(a.title,r.title)) LIKE '%mobland%'
+                OR lower(COALESCE(a.title,r.title)) LIKE '%mob land%')
         """):
             v = row[1]
             # Provenance flag is metadata, not independently verified user identity.
@@ -116,6 +117,7 @@ def audit(conn):
         rows = groups[show]
         print("\n### " + show)
         print(f"Gesamte Markerdatensaetze aktuell: {len(rows)}")
+        print(f"Davon ohne aktuellen skip_assets-Eintrag: {sum(1 for r in rows if r['playlist_id'] is None)}")
         print(f"App-Fenstereintraege: {app_counts[show]}")
         breakdown = Counter((str(r["source"]), str(r["status"])) for r in rows)
         for (src, status), n in sorted(breakdown.items()):
