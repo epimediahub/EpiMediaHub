@@ -23,12 +23,13 @@ NEW_WINDOW="""        # Human postprocessing found that some actual end credits 
 
 
 def patch(source):
-    if (OLD_JOIN not in source and OLD_PLAYLIST not in source
-            and OLD_WINDOW not in source):
-        if (NEW_JOIN in source and NEW_PLAYLIST in source and NEW_WINDOW in source):
-            ast.parse(source)
-            return source,False
-        raise ValueError('Unexpected code version: cannot determine existing scene patch')
+    # The expanded window contains the original assignment as a substring:
+    # check the fully-patched state BEFORE looking for legacy anchors.
+    if (source.count(NEW_JOIN)==2 and source.count(NEW_PLAYLIST)==1
+            and source.count(NEW_WINDOW)==1
+            and OLD_JOIN not in source and OLD_PLAYLIST not in source):
+        ast.parse(source)
+        return source,False
     if (source.count(OLD_JOIN)!=2 or source.count(OLD_PLAYLIST)!=1
             or source.count(OLD_WINDOW)!=1 or source.count('    if audio:\n')!=1 or NEW_WINDOW in source
             or NEW_JOIN in source or NEW_PLAYLIST in source):
