@@ -27,7 +27,8 @@ def as_json(s):
 def query_database(con):
     con.row_factory=sqlite3.Row
     con.execute('PRAGMA query_only=ON')
-    con.execute('BEGIN')
+    if not con.in_transaction:
+        con.execute('BEGIN')
     cols={r[1] for r in con.execute('PRAGMA table_info(skip_records)')}
     required={'id','asset_key','status','segment_type','source','duration_ms','start_ms','end_ms'}
     if not required<=cols:
