@@ -747,3 +747,5 @@ def install(app, db):
                                 skip_episcene=True)
         return jsonify(data)
     app.view_functions["health"] = health
+    from skip_reference_round40_admin import install as install_round40_reference_review
+    install_round40_reference_review(app, db, web_auth)
