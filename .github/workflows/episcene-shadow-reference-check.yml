@@ -1,0 +1,26 @@
+name: EpiScene shadow reference engine tests
+on:
+  pull_request:
+    paths:
+      - 'tools/episcene-learning-v1/active-shadow/**'
+      - '.github/workflows/episcene-shadow-reference-check.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'tools/episcene-learning-v1/active-shadow/**'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test owner-attested shadow learning and read-only safety
+        working-directory: tools/episcene-learning-v1/active-shadow
+        run: python3 -m unittest -v test_reference_engine.py
+      - name: Check module syntax
+        working-directory: tools/episcene-learning-v1/active-shadow
+        run: python3 -m py_compile reference_engine.py
+      - name: Validate installer shell syntax
+        working-directory: tools/episcene-learning-v1/active-shadow
+        run: bash -n install.sh
