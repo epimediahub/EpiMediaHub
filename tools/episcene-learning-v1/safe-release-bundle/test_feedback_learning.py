@@ -89,7 +89,7 @@ class FeedbackLearningSafety(unittest.TestCase):
             fb.run(p,d)
             with sqlite3.connect(p) as con:
                 con.execute("UPDATE skip_records SET status='superseded' WHERE id=201")
-                con.execute("UPDATE skip_records SET end_ms=2395000,reviewed_at='2026-10-15T09:00:00Z' WHERE id=202")
+                con.execute("UPDATE skip_records SET start_ms=2280000,reviewed_at='2026-10-15T09:00:00Z' WHERE id=202")
             fb.run(p,d)
             fb.run(p,d)
             with sqlite3.connect(d) as con:
