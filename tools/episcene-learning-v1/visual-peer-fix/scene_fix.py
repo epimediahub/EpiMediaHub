@@ -106,6 +106,71 @@ def _analyze(text):
         return text,False
     candidates=list(_AUDIO_RE.finditer(text))
     if len(candidates)==1:
+        if not re.search(r'(?m)^[ \t]*if audio:\s*
+        indent=match.group(1)
+        original=match.group(2)
+        replacement=(
+            indent+'# Expand the visual inspection 55s earlier for outro only; no approval or time shift\n'
+            +indent+original+'\n'
+            +indent+"if kind == 'outro':\n"
+            +indent+'    begin -= 55000')
+        return text[:match.start()]+replacement+text[match.end():],True
+    if len(candidates)>1:
+        raise ValueError('Ambiguous audio search assignment in analyze')
+    # Existing customized search logic is preserved. Crucially, the SQL
+    # repair can still go live without overwriting other performance patches.
+    return text,False
+
+
+def patch(source):
+    lines,nodes=_target_functions(source)
+    stages={}
+    flags={}
+    for name in ('capture','_cached_rows','release_ready','analyze'):
+        node=nodes[name]
+        block=''.join(lines[node.lineno-1:node.end_lineno])
+        if name=='capture':
+            updated,modified=_capture(block)
+        elif name in ('_cached_rows','release_ready'):
+            updated,modified=_join(block,name)
+        else:
+            updated,modified=_analyze(block)
+        stages[name]=(node.lineno-1,node.end_lineno,updated)
+        flags[name]=modified
+    updated=list(lines)
+    # Apply bottom-up to preserve the original AST line ranges.
+    for start,end,block in sorted(stages.values(),key=lambda x:-x[0]):
+        replacement=block.splitlines(keepends=True)
+        if updated[end-1].endswith('\n') and not replacement[-1].endswith('\n'):
+            replacement[-1]+='\n'
+        updated[start:end]=replacement
+    patched=''.join(updated)
+    ast.parse(patched)
+    patched_lines,patched_nodes=_target_functions(patched)
+    for name in ('_cached_rows','release_ready'):
+        node=patched_nodes[name]
+        block=''.join(patched_lines[node.lineno-1:node.end_lineno])
+        if re.search(r'JOIN\s+customer_playlists\b',block):
+            raise ValueError('Unconverted legacy customer source join in '+name)
+    # Verify no other functions changed: parse ASTs and compare all untouched
+    # top-level definitions (including other security/auto-release functions).
+    initial=ast.parse(source)
+    final=ast.parse(patched)
+    before={n.name:ast.dump(n,include_attributes=False)
+            for n in initial.body if isinstance(n,ast.FunctionDef)
+            and n.name not in stages}
+    after={n.name:ast.dump(n,include_attributes=False)
+           for n in final.body if isinstance(n,ast.FunctionDef)
+           and n.name not in stages}
+    if before!=after:
+        raise ValueError('Unexpected change outside allowlisted scene functions')
+    return patched,patched!=source
+
+
+if __name__=='__main__':
+    raise SystemExit('Import and call patch(); this helper never writes a file.')
+,text):
+            raise ValueError('Unexpected audio-condition shape; no time-window change')
         match=candidates[0]
         indent=match.group(1)
         original=match.group(2)
