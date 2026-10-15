@@ -90,7 +90,7 @@ internal object V173GalaBoxKeyCompat {
                 throw IllegalStateException("GalaBox: geschützter RSA-Keystore ebenfalls nicht verfügbar", e)
             }
             val wrap = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
-            wrap.init(Cipher.ENCRYPT_MODE, rsa.public)
+            wrap.init(Cipher.ENCRYPT_MODE, rsa.getPublic())
             val wrapped = wrap.doFinal(aesKey)
             require(wrapped.size in 128..512)
             val aes = Cipher.getInstance("AES/GCM/NoPadding")
@@ -126,7 +126,7 @@ internal object V173GalaBoxKeyCompat {
         try {
             val pair = keyPair(alias)
             val unwrap = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
-            unwrap.init(Cipher.DECRYPT_MODE, pair.private)
+            unwrap.init(Cipher.DECRYPT_MODE, pair.getPrivate())
             val aesKey = unwrap.doFinal(wrapped)
             try {
                 require(aesKey.size == AES_BYTES)
