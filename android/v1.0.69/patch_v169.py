@@ -36,22 +36,35 @@ surface = ui / "V121VodSurface.kt"
 replace_once(surface, 'private const val FRAME_RATE_KEY = "match_vod_frame_rate"',
     'private const val FRAME_RATE_KEY = "match_vod_frame_rate"\n'
     'private const val CINEMA_1080_KEY = "cinema_allow_1080p_fallback"')
-replace_once(surface, '    TextButton(onClick = {\n        enabled = !enabled',
-    '    var allow1080p by remember { mutableStateOf(prefs.getBoolean(CINEMA_1080_KEY, true)) }\n'
-    '    TextButton(onClick = {\n        enabled = !enabled')
-replace_once(surface, '"Nahtlose Bildanpassung: "',
-    '"Cinema-Bildtakt für Filme und Serien: "')
-replace_once(surface,
-    'Text("Nur nahtlose Anpassungen. Kein HDMI-Moduswechsel beim Zappen.", color = Color.LightGray, fontSize = 12.sp)',
-    'Text("Nur bei Filmen/Serien: 24 Hz können einen kurzen schwarzen HDMI-Umschaltmoment verursachen. Live-TV bleibt unberührt.", color = Color.LightGray, fontSize = 12.sp)\n'
-    '    TextButton(onClick = {\n'
-    '        allow1080p = !allow1080p\n'
-    '        prefs.edit().putBoolean(CINEMA_1080_KEY, allow1080p).apply()\n'
-    '    }, modifier = Modifier.fillMaxWidth().v114FocusRing().testTag("cinema-1080p-fallback")) {\n'
-    '        Text("1080p nur falls kein 4K-Kinomodus: " + if (allow1080p) "Ein" else "Aus",\n'
-    '            color = Color.White, fontSize = 17.sp)\n'
-    '    }\n'
-    '    Text("Der Ausweichmodus ist optional und wird beim nächsten Videostart geprüft.", color = Color.LightGray, fontSize = 12.sp)')
+replace_once(surface, '''    TextButton(onClick = {
+        enabled = !enabled
+        prefs.edit().putBoolean(FRAME_RATE_KEY, enabled).apply()
+    }, modifier = Modifier.fillMaxWidth().v114FocusRing().testTag("vod-match-frame-rate")) {
+        Text("Nahtlose Bildanpassung: " + if (enabled) "Automatisch" else "Aus",
+            color = Color.White, fontSize = 17.sp)
+    }
+    Text("Nur nahtlose Anpassungen. Kein HDMI-Moduswechsel beim Zappen.", color = Color.LightGray, fontSize = 12.sp)''',
+    '''    var allow1080p by remember { mutableStateOf(prefs.getBoolean(CINEMA_1080_KEY, true)) }
+    TextButton(onClick = {
+        // Cycle through settings with ONE focusable control; audio/skip dialogs
+        // must keep their existing remote focus chain.
+        val next = when {
+            !enabled -> 1
+            !allow1080p -> 2
+            else -> 0
+        }
+        enabled = next != 0
+        allow1080p = next == 2
+        prefs.edit().putBoolean(FRAME_RATE_KEY, enabled)
+            .putBoolean(CINEMA_1080_KEY, allow1080p).apply()
+    }, modifier = Modifier.fillMaxWidth().v114FocusRing().testTag("vod-match-frame-rate")) {
+        Text("Cinema-Bildtakt (nur Filme und Serien): " + when {
+            !enabled -> "Aus"
+            allow1080p -> "4K / 1080p-Fallback"
+            else -> "Nur 4K"
+        }, color = Color.White, fontSize = 17.sp)
+    }
+    Text("Ein kurzer schwarzer HDMI-Wechsel ist möglich. Live-TV bleibt unverändert. Wähle Aus, Nur 4K oder 4K / 1080p-Fallback.", color = Color.LightGray, fontSize = 12.sp)''')
 replace_once(surface, 
     'internal fun V121VodSurface(player: Player, isTv: Boolean, modifier: Modifier = Modifier)',
     'internal fun V121VodSurface(player: Player, isTv: Boolean, modifier: Modifier = Modifier, cinemaVod: Boolean = false)')
