@@ -342,6 +342,66 @@ class DashboardTests(unittest.TestCase):
         with core.db() as con:
             self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_trials").fetchone()[0], 1)
 
+    def vpn_year(self, did=1, client=None, csrf=None):
+        client = client or self.admin
+        if csrf is None:
+            page = client.get("/admin")
+            csrf = re.search(r'name="csrf" value="([^"]+)"', page.text)[1]
+        return client.post(f"/admin/vpn/year365/{did}", data={"csrf": csrf})
+
+    def test_admin_vpn_year_auto_grant_enroll_no_trial_or_credits(self):
+        self.assertEqual(self.anonymous.post("/admin/vpn/year365/1").status_code, 403)
+        self.assertEqual(self.admin.post("/admin/vpn/year365/1").status_code, 403)
+        self.ack()
+        page = self.admin.get("/admin")
+        self.assertIn('VPN 1 Jahr', page.text)
+        self.assertIn('/admin/vpn/year365/1', page.text)
+        result = self.vpn_year()
+        self.assertEqual(result.status_code, 303)
+        pending = self.anonymous.get("/v1/device/vpn/status", headers=self.device_vpn())
+        self.assertEqual(pending.json["status"], "PENDING_ENROLL")
+        year_expiry = vpn.instant(pending.json["expires_at"])
+        self.assertGreater((year_expiry - vpn.now()).days, 363)
+        with core.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_trials").fetchone()[0],0)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_credits").fetchone()[0],0)
+        enrolled = self.anonymous.post("/v1/device/vpn/enroll", headers=self.device_vpn(),
+                 json={"device_id": "android-1", "public_key": KEY1})
+        self.assertEqual(enrolled.status_code,200)
+        self.ack()
+        ready = self.anonymous.get("/v1/device/vpn/status", headers=self.device_vpn())
+        self.assertEqual(ready.json["status"], "READY")
+        self.assertEqual(ready.json["server_public_key"], KEY2)
+        with core.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_trials").fetchone()[0],0)
+
+    def test_admin_year_renews_bound_profile_without_changing_key_or_address(self):
+        self.bind()
+        self.ack()
+        self.assertEqual(self.vpn_year().status_code,303)
+        with core.db() as con:
+            before=con.execute("SELECT public_key,client_address,expires_at,status FROM vpn_devices WHERE device_row_id=1").fetchone()
+            self.assertEqual(before["public_key"],KEY1)
+            self.assertEqual(before["status"],"ACTIVE")
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_credits").fetchone()[0],0)
+        self.assertEqual(self.vpn_year().status_code,303)
+        with core.db() as con:
+            after=con.execute("SELECT public_key,client_address,expires_at FROM vpn_devices WHERE device_row_id=1").fetchone()
+            self.assertEqual((after["public_key"],after["client_address"]),
+                             (before["public_key"],before["client_address"]))
+            self.assertEqual((vpn.instant(after["expires_at"]) - vpn.instant(before["expires_at"])).days,365)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_credits").fetchone()[0],0)
+
+    def test_admin_year_rejects_stale_server_and_invalid_csrf(self):
+        self.assertEqual(self.admin.post("/admin/vpn/year365/1",data={"csrf":"wrong"}).status_code,403)
+        page=self.admin.get("/admin")
+        csrf=re.search(r'name="csrf" value="([^"]+)"',page.text)[1]
+        response=self.vpn_year(csrf=csrf)
+        self.assertEqual(response.status_code,303)
+        with core.db() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_annual_authorizations").fetchone()[0],0)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_devices").fetchone()[0],0)
+
     def test_dashboard_compact_shows_playlists_and_actions_on_one_page(self):
         admin_page = self.admin.get("/admin")
         reseller_page = self.reseller.get("/reseller")
