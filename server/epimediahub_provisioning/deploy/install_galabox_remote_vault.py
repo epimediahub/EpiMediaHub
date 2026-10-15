@@ -63,7 +63,8 @@ def system():
         master = data/MASTER
         meta = master.lstat()
         require(stat.S_ISREG(meta.st_mode) and meta.st_mode & 0o077 == 0
-                and master.stat().st_size == 32, "Existing GalaBox master key invalid.")
+                and meta.st_uid == user.pw_uid and master.stat().st_size == 32,
+                "Existing GalaBox master key unreadable by provisioning service or invalid.")
     elif "import vpn_galabox_remote_vault" in WSGI.read_text():
         raise RuntimeError("Previously installed GalaBox vault master is missing; RESTORE BACKUP, never rotate.")
     text = WSGI.read_text()
