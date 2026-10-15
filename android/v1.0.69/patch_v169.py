@@ -66,7 +66,7 @@ replace_once(surface,
     '    private var television = false\n    private var cinema = false\n')
 replace_once(surface,
     '    fun bind(next: Player, isTv: Boolean) {\n        if (boundPlayer === next && television == isTv) return',
-    '    fun bind(next: Player, isTv: Boolean, cinemaVod: Boolean) {\n'
+    '    fun bind(next: Player, isTv: Boolean, cinemaVod: Boolean = false) {\n'
     '        if (boundPlayer === next && television == isTv && cinema == cinemaVod) return')
 replace_once(surface,
     '        television = isTv\n        player = next',
