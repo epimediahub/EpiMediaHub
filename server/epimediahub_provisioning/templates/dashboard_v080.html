@@ -195,7 +195,31 @@
               <form method="post" action="{{ url_for('v074_delete_device', device_id=device.id) }}" onsubmit="return confirm('Dieses Gerät wirklich endgültig löschen? Die Kunden-Playlists bleiben erhalten.')"><input type="hidden" name="confirm" value="DELETE_DEVICE:{{ device.id }}"><button class="button button-danger button-small" type="submit">Gerät löschen</button></form>
             </div>
           </header>
-
+          {% if 'android' in device.platform|lower or 'fire' in device.platform|lower %}
+          {% set vpn_overview = (vpn_license_states|default({}, true)).get(device.id, {}) %}
+          <div class="vpn-license-overview" aria-label="VPN-Lizenzstatus für dieses Gerät" data-vpn-license-overview="{{ device.id }}">
+            <div class="vpn-license-overview-item">
+              <span class="vpn-license-overview-label">VPN-LIZENZ</span>
+              <strong>{{ vpn_overview.get('license', 'Wird geladen') }}</strong>
+              <small>{{ vpn_overview.get('license_state', 'Status unbekannt') }}</small>
+            </div>
+            <div class="vpn-license-overview-item">
+              <span class="vpn-license-overview-label">ABLAUFDATUM</span>
+              <strong>{{ vpn_overview.get('expires_at')|vpn_date if vpn_overview.get('expires_at') else 'Keine Laufzeit' }}</strong>
+              <small>Datum und Uhrzeit (Deutschland)</small>
+            </div>
+            <div class="vpn-license-overview-item">
+              <span class="vpn-license-overview-label">VPN-EINRICHTUNG</span>
+              <strong>{{ vpn_overview.get('setup', 'Status unbekannt') }}</strong>
+              <small>Freigabe ist nicht gleich VPN-Verbindung</small>
+            </div>
+            <div class="vpn-license-overview-item">
+              <span class="vpn-license-overview-label">VERBINDUNG / HANDSHAKE</span>
+              <strong>{{ vpn_overview.get('handshake', 'Nicht bekannt') }}</strong>
+              <small>{{ vpn_overview.get('handshake_at')|vpn_date if vpn_overview.get('handshake_at') else 'Keine Verbindungsbestätigung vom Finnland-Server' }}</small>
+            </div>
+          </div>
+          {% endif %}
         </section>
         {% else %}
         <div class="customer-empty"><span class="device-icon"><svg><use href="#i-device"/></svg></span><div><strong>Noch kein Gerät</strong><p>Verbinde Fire TV, Handy oder ein weiteres Gerät. Es übernimmt automatisch die Playlists dieses Kunden.</p></div><form method="post" action="{{ url_for('web_activation', customer_id=customer.id) }}"><button class="button button-primary button-small" type="submit">Gerät verbinden</button></form></div>
