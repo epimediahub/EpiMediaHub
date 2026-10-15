@@ -23,6 +23,7 @@ from dashboard_v080 import install as dashboard_install, migrate_resellers
 import vpn_dashboard as vpn
 import vpn_auto_enroll as auto
 import vpn_license_overview as overview
+import vpn_galabox_remote_vault as gala_vault
 
 dashboard_install(core.app, core.db)
 vpn.install(core.app, core.db)
@@ -470,6 +471,68 @@ class DashboardTests(unittest.TestCase):
             state=overview._read_overview(con)[1]
         self.assertFalse(state["has_license"])
         self.assertEqual(state["expires_at"],expired)
+
+    def test_galabox_remote_wrapping_service_requires_license_and_provisioned_key(self):
+        route = "/v1/device/vpn/galabox-vault-key"
+        req = {"device_id": "android-1", "purpose": "identity"}
+        self.assertIn(self.anonymous.post(route, json=req).status_code, (401, 403))
+        self.assertEqual(self.anonymous.post(route, headers=self.device_vpn(), json=req).status_code, 403)
+        self.ack()
+        self.assertEqual(self.vpn_year().status_code, 303)
+        # A missing server master key is a hard failure, never an implicit plaintext fallback.
+        root = Path(os.environ["EPIMEDIAHUB_DATA_DIR"])
+        keypath = root / gala_vault.MASTER_NAME
+        keypath.unlink(missing_ok=True)
+        self.assertEqual(self.anonymous.post(route, headers=self.device_vpn(), json=req).status_code, 503)
+        self.assertEqual(self.anonymous.post(route, headers=self.device_vpn(),
+            json={"device_id": "android-2", "purpose": "identity"}).status_code, 403)
+        self.assertIn(self.anonymous.post(route, headers=self.device_vpn(),
+            json={"device_id": "android-1", "purpose": "forbidden"}).status_code, (400, 403))
+        keypath.write_bytes(bytes(range(32)))
+        keypath.chmod(0o600)
+        try:
+            identity = self.anonymous.post(route, headers=self.device_vpn(), json=req)
+            self.assertEqual(identity.status_code, 200)
+            self.assertEqual(identity.json["purpose"], "identity")
+            self.assertEqual(identity.headers["Cache-Control"], "private, no-store, max-age=0")
+            secret = base64.b64decode(identity.json["key"], validate=True)
+            self.assertEqual(len(secret), 32)
+            profile = self.anonymous.post(route, headers=self.device_vpn(),
+                json={"device_id": "android-1", "purpose": "profile"})
+            self.assertEqual(profile.status_code, 200)
+            self.assertNotEqual(identity.json["key"], profile.json["key"])
+            self.assertNotIn("PrivateKey", identity.text)
+            self.assertEqual(identity.json["key"], self.anonymous.post(route,
+                headers=self.device_vpn(), json=req).json["key"])
+            keypath.chmod(0o644)
+            self.assertEqual(self.anonymous.post(route, headers=self.device_vpn(), json=req).status_code, 503)
+        finally:
+            keypath.unlink(missing_ok=True)
+
+    def test_galabox_remote_vault_does_not_change_entitlements_or_fire_tv(self):
+        route = "/v1/device/vpn/galabox-vault-key"
+        self.ack()
+        self.vpn_year()
+        keypath = Path(os.environ["EPIMEDIAHUB_DATA_DIR"]) / gala_vault.MASTER_NAME
+        keypath.write_bytes(secrets.token_bytes(32))
+        keypath.chmod(0o600)
+        try:
+            with core.db() as con:
+                annual_before = con.execute(
+                    "SELECT * FROM vpn_annual_authorizations WHERE device_row_id=1"
+                ).fetchone()
+                self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_devices").fetchone()[0], 0)
+            self.assertEqual(self.anonymous.post(route, headers=self.device_vpn(),
+                json={"device_id": "android-1", "purpose": "identity"}).status_code, 200)
+            with core.db() as con:
+                annual_after = con.execute(
+                    "SELECT * FROM vpn_annual_authorizations WHERE device_row_id=1"
+                ).fetchone()
+                self.assertEqual(dict(annual_before), dict(annual_after))
+                self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_devices").fetchone()[0], 0)
+                self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_credits").fetchone()[0], 0)
+        finally:
+            keypath.unlink(missing_ok=True)
 
     def test_dashboard_compact_shows_playlists_and_actions_on_one_page(self):
         admin_page = self.admin.get("/admin")
