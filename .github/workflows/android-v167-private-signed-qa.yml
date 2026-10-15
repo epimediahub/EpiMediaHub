@@ -1,7 +1,7 @@
 name: EpiMediaHub v1.0.67 private playback-history VPN signed QA
 on:
-  push:
-    branches: [feature/v167-private-playback-vpn-qa]
+  pull_request:
+    branches: [fix/v166-epg-now-parsing-full-fallback]
     paths:
       - '.github/workflows/android-v167-private-signed-qa.yml'
       - 'android/v1.0.67/**'
