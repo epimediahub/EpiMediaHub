@@ -88,7 +88,10 @@ def health():
     opener = urllib.request.build_opener(_NoRedirect())
     for path in ("/health", "/v1/device/vpn/status", "/v1/device/vpn/galabox-vault-key"):
         try:
-            with opener.open("http://127.0.0.1:8787" + path, timeout=5) as response:
+            req = urllib.request.Request("http://127.0.0.1:8787" + path,
+                data=b"{}" if path.endswith("/galabox-vault-key") else None,
+                method="POST" if path.endswith("/galabox-vault-key") else "GET")
+            with opener.open(req, timeout=5) as response:
                 status = response.status
         except urllib.error.HTTPError as exc:
             status = exc.code
@@ -139,8 +142,9 @@ def apply(user, data):
         os.chown(staged, user.pw_uid, user.pw_gid)
         staged.chmod(0o644)
         os.replace(staged, DEST)
+        changed = True
         text = old_wsgi.decode("utf-8")
-        if IMPORT_LINE.strip() not in text:
+        if "import vpn_galabox_remote_vault" not in text:
             text = text.rstrip() + "\n\n" + IMPORT_LINE
         tmp = WSGI.with_name("wsgi.galabox-new.py")
         tmp.write_text(text, encoding="utf-8")
