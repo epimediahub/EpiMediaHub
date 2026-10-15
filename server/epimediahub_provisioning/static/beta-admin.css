@@ -135,3 +135,23 @@ body.beta-console .hierarchy-search{margin:12px 0}
     justify-self:start;
   }
 }
+
+/* Read-only VPN license overview; narrow cards remain legible on Fire TV/tablet. */
+body.beta-console .vpn-license-overview {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px;
+  border-top:1px solid rgba(148,163,184,.18); margin:3px 16px 12px;
+  padding-top:10px;
+}
+body.beta-console .vpn-license-overview-item {
+  background:rgba(15,23,42,.48);border:1px solid rgba(148,163,184,.14);
+  border-radius:11px; padding:10px 12px;min-width:0;overflow-wrap:anywhere;
+  display:flex;flex-direction:column;gap:4px;
+}
+body.beta-console .vpn-license-overview-label {
+  font-size:10px; font-weight:800;letter-spacing:.07em;opacity:.73;
+}
+body.beta-console .vpn-license-overview-item strong { font-size:13px;line-height:1.35; }
+body.beta-console .vpn-license-overview-item small {font-size:11px;line-height:1.35;opacity:.72;}
+@media(max-width:640px){
+ body.beta-console .vpn-license-overview { grid-template-columns:1fr; margin-left:8px;margin-right:8px; }
+}
