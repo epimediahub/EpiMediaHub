@@ -1,4 +1,4 @@
-name: EpiMediaHub v1.0.73 GalaBox secure VPN pilot private player diagnosis UI cleanup signed QA
+name: EpiMediaHub v1.0.73 GalaBox secure VPN pilot signed QA
 on:
   push:
     branches: [fix/v173-galabox-secure-keystore-pilot]
@@ -38,7 +38,7 @@ jobs:
           cp -a .ci-v164-overlay/android/v1.0.69 android/v1.0.69
           cp -a .ci-v164-overlay/android/v1.0.70 android/v1.0.70
           cp -a .ci-v164-overlay/android/v1.0.71 android/v1.0.71
-          cp -a .ci-v164-overlay/android/v1.0.73 android/v1.0.73
+          cp -a .ci-v164-overlay/android/v1.0.72 android/v1.0.72
           cp -a .ci-v164-overlay/android/v1.0.73 android/v1.0.73
           cp .ci-v164-overlay/build_tools/render_intro_synced.py build_tools/
           cp .ci-v164-overlay/build_tools/prepare_intro_synced.py build_tools/
@@ -113,7 +113,7 @@ jobs:
           python3 android/v1.0.69/patch_v169.py
           python3 android/v1.0.70/patch_v170.py
           python3 android/v1.0.71/patch_v171.py
-          python3 android/v1.0.73/patch_v172.py
+          python3 android/v1.0.72/patch_v172.py
           python3 android/v1.0.73/patch_v173.py
       - uses: actions/setup-java@v5
         with:
@@ -325,7 +325,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="v1.0.73-diagnostics-test-20261015"
+          tag="v1.0.73-galabox-keystore-test-20261015"
           apk="qa-artifacts/EpiMediaHub-Android-v1.0.73-universal.apk"
           (cd qa-artifacts && sha256sum --check SHA256SUMS.txt)
           test -s "$apk"
