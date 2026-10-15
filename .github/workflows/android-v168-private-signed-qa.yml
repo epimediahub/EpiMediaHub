@@ -7,7 +7,7 @@ on:
       - 'android/v1.0.68/**'
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
   actions: read
 jobs:
   compile-test:
@@ -285,3 +285,26 @@ jobs:
           path: ${{ env.PROJECT_ROOT }}/app/build/qa/*.png
           retention-days: 14
           if-no-files-found: warn
+
+      - name: Publish isolated Downloader test APK after all compile, test and signing gates
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="v1.0.68-vod-test-20261015"
+          apk="qa-artifacts/EpiMediaHub-Android-v1.0.68-universal.apk"
+          sha256sum --check qa-artifacts/SHA256SUMS.txt
+          test -s "$apk"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::The isolated test tag already exists; refusing to overwrite it."
+            exit 1
+          fi
+          gh release create "$tag" "$apk" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "EpiMediaHub 1.0.68 - VOD playback diagnostic test only" \
+            --notes "Separate signed test APK: VLC vs Media3 player comparison for movies and episodes, no public app updater modification, no customer rollout, no EpiScene changes. Do not promote to production before manual Fire TV and GalaBox QA."
+          echo "Downloader URL: https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/EpiMediaHub-Android-v1.0.68-universal.apk" >> "$GITHUB_STEP_SUMMARY"
