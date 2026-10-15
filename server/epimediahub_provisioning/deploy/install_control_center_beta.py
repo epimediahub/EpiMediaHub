@@ -44,6 +44,7 @@ UPDATED = (
     "wsgi.py",
     "vpn_dashboard.py",
     "vpn_auto_enroll.py",
+    "vpn_license_overview.py",
     "dashboard_security.py",
     "device_diagnostics.py",
     "license_api.py",
@@ -68,7 +69,7 @@ def hash_protected(database: Path):
     checks = {}
     with sqlite3.connect("file:" + str(database) + "?mode=ro", uri=True) as con:
         for name in ("customers", "resellers", "devices", "activations", "pairings",
-                     "customer_playlists", "vpn_devices", "vpn_trials", "vpn_trial_authorizations", "vpn_credits",
+                     "customer_playlists", "vpn_devices", "vpn_trials", "vpn_trial_authorizations", "vpn_annual_authorizations", "vpn_credits",
                      "vpn_accounts", "vpn_orders", "vpn_operations", "vpn_plans",
                      "vpn_audit", "vpn_meta", "lifetime_licenses", "license_subjects",
                      "credit_ledger", "reseller_credit_ledger"):
@@ -177,6 +178,8 @@ def package():
                 wsgi = wsgi.rstrip() + "\n\nimport device_diagnostics  # Opt-in failure counters.\n"
             if "import vpn_auto_enroll" not in wsgi:
                 wsgi = wsgi.rstrip() + "\n\nimport vpn_auto_enroll  # Manually approved VPN auto enrollment.\n"
+            if "import vpn_license_overview" not in wsgi:
+                wsgi = wsgi.rstrip() + "\n\nimport vpn_license_overview  # Read-only admin VPN license, expiry and handshake overview.\n"
             if "install_dashboard_security" not in wsgi:
                 wsgi = wsgi.rstrip() + "\n\nfrom dashboard_security import install as install_dashboard_security\ninstall_dashboard_security(app)\n"
             staged[name] = wsgi
@@ -211,6 +214,8 @@ def package():
     require("operation\" value=\"trial7\"" in staged["templates/dashboard_v080.html"], "VPN-Test fehlt.")
     require('/admin/vpn/year365/' in staged["templates/dashboard_v080.html"], "VPN 1 Jahr Button fehlt.")
     require('def grant_year_auto(' in staged["vpn_auto_enroll.py"], "VPN 365-Tage-Freigabe fehlt.")
+    require('class="vpn-license-overview"' in staged["templates/dashboard_v080.html"], "VPN-Statusanzeige im Admin-Dashboard fehlt.")
+    require('def _read_overview(' in staged["vpn_license_overview.py"], "VPN-Lizenzübersicht fehlt.")
     return staged
 
 def stage_check(files, env, python, account, dbfile, directory):
@@ -245,6 +250,14 @@ with c.session_transaction() as session: session['admin']=True
 assert c.get('/admin/diagnostics').status_code==200
 assert c.get('/admin').status_code==200
 assert c.get('/admin/vpn').status_code==200
+from vpn_license_overview import _read_overview
+from app import db
+with db() as con:
+    snapshot = _read_overview(con)
+    assert isinstance(snapshot, dict)
+    assert all('expires_at' in row and 'setup' in row and 'handshake' in row
+               and 'public_key' not in row and 'device_id' not in row
+               for row in snapshot.values())
 assert b'beta-visible-playlists' in c.get('/admin').data
 assert b'name="_dashboard_csrf"' in c.get('/admin').data
 assert c.get('/v1/license/capabilities').json['annual_license_ready'] is True
@@ -333,9 +346,9 @@ def install(files, dbfile, env, python, account):
                 dest.unlink(missing_ok=True)
         command("systemctl", "start", SERVICE)
         raise RuntimeError("Installation zurückgenommen; Kunden-Datenbank unberührt. Backup: " + str(backup))
-    print("INSTALL OK – Dashboard-Beta und datensparsame Fehlerdiagnose aktiv.")
+    print("INSTALL OK – Dashboard mit VPN-Lizenzstatus, Ablaufdatum und Handshake-Übersicht aktiv.")
     print("Sicherung:", backup)
-    print("Dashboard-Lizenzen aktiv. Android 1.0.64 bleibt ein eigener, noch freizugebender Testbuild.")
+    print("VPN-Jahresfreigaben und 7-Tage-Test werden getrennt von der WireGuard-Verbindungsbestätigung angezeigt.")
 
 def main():
     parser = argparse.ArgumentParser()
