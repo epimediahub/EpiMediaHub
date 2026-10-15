@@ -33,6 +33,16 @@ def migrate(con):
             granted_at TEXT NOT NULL
         )
     """)
+    # Separate authorization from the free seven-day trial: granting a full
+    # year must NOT consume or reset the one-time trial entitlement.
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS vpn_annual_authorizations(
+            device_row_id INTEGER PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+            device_key_hash TEXT NOT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
+            granted_at TEXT NOT NULL
+        )
+    """)
 
 
 def _client():
@@ -127,7 +137,17 @@ def _authorization(con, device):
            AND EXISTS (SELECT 1 FROM vpn_trials t
                         WHERE t.device_key_hash=a.device_key_hash AND t.expires_at=a.expires_at)
     """, (device["id"], device_hash)).fetchone()
-    return row["expires_at"] if row else None
+    trial_expiry = row["expires_at"] if row else None
+    annual = con.execute("""
+        SELECT expires_at FROM vpn_annual_authorizations
+         WHERE device_row_id=? AND device_key_hash=?
+    """, (device["id"], device_hash)).fetchone()
+    annual_expiry = annual["expires_at"] if annual else None
+    # An approved annual entitlement also authorizes VPN enrolment; the
+    # longer, valid entitlement wins without changing historical trials.
+    if annual_expiry and (not trial_expiry or vpn.instant(annual_expiry) > vpn.instant(trial_expiry)):
+        return annual_expiry
+    return trial_expiry
 
 
 def _entry(con, device):
@@ -236,6 +256,82 @@ def grant_trial_auto(device_row_id):
                      vpn.stamp(now)))
     flash("7-Tage-VPN-Test freigegeben. Das Gerät meldet sich in der App automatisch an.", "success")
     return redirect("/admin#device-" + str(device_row_id), code=303)
+
+
+
+@app.post("/admin/vpn/year365/<int:device_row_id>")
+def grant_year_auto(device_row_id):
+    """Manual admin-only 365-day VPN grant for bound or auto-enrolled devices."""
+    if not session.get("admin"):
+        abort(403)
+    csrf_expected = session.get("vpn_csrf", "")
+    csrf_received = request.form.get("csrf", "")
+    if not csrf_expected or not hmac.compare_digest(csrf_expected, csrf_received):
+        abort(403)
+    target_url = "/admin#device-" + str(device_row_id)
+    with db() as con:
+        con.execute("BEGIN IMMEDIATE")
+        migrate(con)
+        row = con.execute("""
+            SELECT d.id,d.device_id,d.customer_id,d.platform,d.enabled,
+                   c.enabled customer_enabled,c.reseller_id,r.enabled reseller_enabled
+              FROM devices d JOIN customers c ON c.id=d.customer_id
+              LEFT JOIN resellers r ON r.id=c.reseller_id
+             WHERE d.id=?
+        """, (device_row_id,)).fetchone()
+        if row is None:
+            abort(404)
+        device = dict(row)
+        if not device["enabled"] or not device["customer_enabled"] or (
+            device["reseller_id"] is not None and not device["reseller_enabled"]
+        ):
+            abort(409)
+        if not any(k in device["platform"].lower() for k in ("android", "fire")):
+            abort(409)
+        if con.execute("SELECT COUNT(*) FROM devices WHERE device_id=?",
+                       (device["device_id"],)).fetchone()[0] != 1:
+            abort(409)
+        if not vpn.fresh(con):
+            flash("Finnland-Agent nicht bestätigt. Keine VPN-Jahreslizenz aktiviert.", "warning")
+            return redirect(target_url, code=303)
+        entry = con.execute("SELECT * FROM vpn_devices WHERE device_row_id=?",
+                            (device_row_id,)).fetchone()
+        stamp_now = vpn.now()
+        if entry:
+            # Existing WireGuard key/address always stay bound to this device.
+            if entry["bound_customer_id"] != device["customer_id"] or (
+                entry["owner_reseller_id"] != device["reseller_id"]
+            ) or entry["status"] == "RETIRED":
+                abort(409)
+            existing_end = vpn.instant(entry["expires_at"]) if entry["expires_at"] else None
+            start = max(stamp_now, existing_end) if existing_end else stamp_now
+            expiry = vpn.stamp(start + timedelta(days=365))
+            con.execute("""UPDATE vpn_devices SET status='ACTIVE',expires_at=?,
+                revision=revision+1 WHERE id=?""", (expiry, entry["id"]))
+        else:
+            # Pending device uses authenticated app enrolment with its own
+            # locally-generated public key. Never create VPN private keys here.
+            try:
+                _public_settings()
+                _auto_pool()
+            except (RuntimeError, ValueError):
+                flash("Automatische VPN-Einrichtung nicht vollständig konfiguriert.", "warning")
+                return redirect(target_url, code=303)
+            expiry = vpn.stamp(stamp_now + timedelta(days=365))
+            key_hash = hashlib.sha256(device["device_id"].encode("utf-8")).hexdigest()
+            con.execute("""INSERT INTO vpn_annual_authorizations(
+                device_row_id,device_key_hash,expires_at,granted_at)
+                VALUES(?,?,?,?)
+                ON CONFLICT(device_row_id) DO UPDATE SET
+                    device_key_hash=excluded.device_key_hash,
+                    expires_at=excluded.expires_at,granted_at=excluded.granted_at""",
+                (device_row_id, key_hash, expiry, vpn.stamp(stamp_now)))
+        con.execute("""INSERT INTO vpn_audit(actor,action,detail_json,created_at)
+            VALUES(?,?,?,?)""", ("admin", "grant_year365",
+            '{"device_row_id":%d,"days":365,"credits":0}' % device_row_id,
+            vpn.stamp(stamp_now)))
+    flash("VPN für 365 Tage freigegeben. Keine VPN-Credits abgezogen.", "success")
+    return redirect(target_url, code=303)
 
 
 @app.context_processor
