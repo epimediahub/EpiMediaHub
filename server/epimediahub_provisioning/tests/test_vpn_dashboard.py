@@ -402,6 +402,74 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_annual_authorizations").fetchone()[0],0)
             self.assertEqual(con.execute("SELECT COUNT(*) FROM vpn_devices").fetchone()[0],0)
 
+    def test_vpn_trial_overview_shows_end_date_and_pending_app_enrolment(self):
+        self.ack()
+        self.assertEqual(self.admin.post("/admin/vpn/trial7-auto/1").status_code,303)
+        page=self.admin.get("/admin")
+        self.assertEqual(page.status_code,200)
+        self.assertIn('VPN-LIZENZ',page.text)
+        self.assertIn('VPN 7 Tage Test',page.text)
+        self.assertIn('Wartet auf VPN-Einrichtung in der App',page.text)
+        self.assertIn('Noch kein VPN-Profil',page.text)
+        with core.db() as con:
+            state=__import__("vpn_license_overview")._read_overview(con)[1]
+            expiry=con.execute("SELECT expires_at FROM vpn_trial_authorizations WHERE device_row_id=1").fetchone()[0]
+        self.assertEqual(state["expires_at"],expiry)
+        self.assertEqual(state["license"],"VPN 7 Tage Test")
+        self.assertFalse(state["has_license"] is False)
+
+    def test_vpn_annual_overview_distinguishes_grant_from_real_vpn_connection(self):
+        self.ack()
+        self.assertEqual(self.vpn_year().status_code,303)
+        page=self.admin.get("/admin")
+        self.assertIn('VPN 1 Jahr',page.text)
+        self.assertIn('Wartet auf VPN-Einrichtung in der App',page.text)
+        self.assertIn('Noch kein VPN-Profil',page.text)
+        with core.db() as con:
+            state=__import__("vpn_license_overview")._read_overview(con)[1]
+            granted=con.execute("SELECT expires_at FROM vpn_annual_authorizations WHERE device_row_id=1").fetchone()[0]
+        self.assertEqual(state["expires_at"],granted)
+        self.assertTrue(state["has_license"])
+        self.assertEqual(state["license"],"VPN 1 Jahr")
+        self.assertEqual(state["handshake_at"],None)
+
+    def test_vpn_annual_overview_for_bound_device_keeps_type_and_shows_handshake(self):
+        self.bind()
+        self.ack()
+        self.assertEqual(self.vpn_year().status_code,303)
+        self.assertEqual(self.ack().status_code,200)
+        now=int(vpn.now().timestamp())-15
+        with core.db() as con:
+            con.execute("UPDATE vpn_devices SET last_handshake=? WHERE device_row_id=1",(now,))
+        page=self.admin.get("/admin")
+        self.assertEqual(page.status_code,200)
+        self.assertIn('VPN 1 Jahr',page.text)
+        self.assertIn('Finnland-Server bereit',page.text)
+        self.assertIn('Handshake kürzlich bestätigt',page.text)
+        self.assertNotIn(KEY1,page.text)
+        with core.db() as con:
+            state=__import__("vpn_license_overview")._read_overview(con)[1]
+        self.assertEqual(state["license"],"VPN 1 Jahr")
+        self.assertIsNotNone(state["handshake_at"])
+        self.assertNotIn("public_key",state)
+        self.assertNotIn("device_id",state)
+
+    def test_vpn_overview_shows_expired_trial_without_claiming_connection(self):
+        self.ack()
+        self.admin.post("/admin/vpn/trial7-auto/1")
+        expired=vpn.stamp(vpn.now()-timedelta(hours=2))
+        with core.db() as con:
+            con.execute("UPDATE vpn_trials SET expires_at=?",(expired,))
+            con.execute("UPDATE vpn_trial_authorizations SET expires_at=?",(expired,))
+        page=self.admin.get("/admin")
+        self.assertIn('VPN 7 Tage Test',page.text)
+        self.assertIn('Abgelaufen',page.text)
+        self.assertIn('Lizenz abgelaufen',page.text)
+        with core.db() as con:
+            state=__import__("vpn_license_overview")._read_overview(con)[1]
+        self.assertFalse(state["has_license"])
+        self.assertEqual(state["expires_at"],expired)
+
     def test_dashboard_compact_shows_playlists_and_actions_on_one_page(self):
         admin_page = self.admin.get("/admin")
         reseller_page = self.reseller.get("/reseller")
