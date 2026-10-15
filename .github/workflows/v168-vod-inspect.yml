@@ -3,7 +3,7 @@ on:
   push:
     branches: [feature/v168-vod-player-diagnostics]
     paths:
-      - '.github/workflows/v167-source-review.yml'
+      - '.github/workflows/v168-vod-inspect.yml'
   pull_request:
     branches: [fix/v166-epg-now-parsing-full-fallback]
   workflow_dispatch:
