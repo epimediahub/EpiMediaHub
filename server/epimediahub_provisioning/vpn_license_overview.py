@@ -128,7 +128,12 @@ def _read_overview(con):
                 and bound["applied_generation"] == desired["generation"]
                 and (at - vpn.instant(bound["applied_at"])) < timedelta(seconds=vpn.LEASE_SECONDS)
             )
-            setup = "Finnland-Server bereit" if agent_confirmed else "Wartet auf Finnland-Bestätigung"
+            if not desired["enabled"]:
+                setup = "Geräte-/Kundenzuordnung prüfen"
+            elif not agent_fresh:
+                setup = "Finnland-Agent meldet sich nicht"
+            else:
+                setup = "Finnland-Server bereit" if agent_confirmed else "Wartet auf Finnland-Bestätigung"
 
         if bound is None:
             handshake = "Noch kein VPN-Profil"
