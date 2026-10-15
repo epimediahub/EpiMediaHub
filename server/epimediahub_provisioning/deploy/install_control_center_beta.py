@@ -209,6 +209,8 @@ def package():
     require("beta-visible-playlists" in staged["templates/dashboard_v080.html"], "Kompakte Kundenansicht fehlt.")
     require("beta-visible-playlists" in staged["templates/reseller_dashboard_v080.html"], "Kompakte Reselleransicht fehlt.")
     require("operation\" value=\"trial7\"" in staged["templates/dashboard_v080.html"], "VPN-Test fehlt.")
+    require('/admin/vpn/year365/' in staged["templates/dashboard_v080.html"], "VPN 1 Jahr Button fehlt.")
+    require('def grant_year_auto(' in staged["vpn_auto_enroll.py"], "VPN 365-Tage-Freigabe fehlt.")
     return staged
 
 def stage_check(files, env, python, account, dbfile, directory):
@@ -250,6 +252,7 @@ assert c.post('/v1/license/status', json={}).status_code==400
 assert c.get('/v1/device/vpn/status').status_code==401
 assert c.post('/v1/device/vpn/enroll', json={}).status_code==401
 assert '/admin/vpn/trial7-auto/<int:device_row_id>' in [rule.rule for rule in app.url_map.iter_rules()]
+assert '/admin/vpn/year365/<int:device_row_id>' in [rule.rule for rule in app.url_map.iter_rules()]
 print('Staged dashboard, annual license, CSRF, VPN and admin diagnostics passed')
 """
     result = subprocess.run([str(python), "-c", program], env=test_env, cwd=stage,
