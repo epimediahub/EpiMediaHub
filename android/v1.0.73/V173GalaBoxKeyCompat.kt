@@ -113,7 +113,7 @@ internal object V173GalaBoxKeyCompat {
         require(stored.size in 160..16_000 && stored[0] == VERSION)
         val buffer = ByteBuffer.wrap(stored)
         buffer.get()
-        val wrappedLength = buffer.short.toInt() and 0xffff
+        val wrappedLength = buffer.getShort().toInt() and 0xffff
         require(wrappedLength in 128..512 && buffer.remaining() >= wrappedLength + IV_BYTES + 16) {
             "GalaBox: gesicherte VPN-Datei ungültig"
         }
