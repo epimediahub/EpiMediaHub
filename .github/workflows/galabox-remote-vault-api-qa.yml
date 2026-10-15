@@ -1,0 +1,36 @@
+name: GalaBox Remote Vault API security and regression QA
+on:
+  push:
+    branches: [feature/galabox-remote-vault-server-20261015]
+    paths:
+      - ".github/workflows/galabox-remote-vault-api-qa.yml"
+      - "server/epimediahub_provisioning/vpn_galabox_remote_vault.py"
+      - "server/epimediahub_provisioning/tests/test_vpn_dashboard.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend test dependencies
+        run: pip install -r server/epimediahub_provisioning/requirements.txt
+      - name: Validate syntax and disallow built-in wrapping master
+        run: |
+          python3 -m py_compile server/epimediahub_provisioning/vpn_galabox_remote_vault.py
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path("server/epimediahub_provisioning/vpn_galabox_remote_vault.py").read_text()
+          assert 'O_NOFOLLOW' in src
+          assert 'Cache-Control' in src and 'no-store' in src
+          assert 'stat.S_ISREG' in src and 'meta.st_mode & 0o077' in src
+          assert 'auto._client()' in src and 'auto._authorization' in src
+          assert 'create' not in src.split('def _master():')[1].split('def derive(')[0].lower()
+          PY
+      - name: Full VPN endpoint and license regression
+        run: python3 -m unittest discover -s server/epimediahub_provisioning/tests -p "test_vpn_dashboard.py" -v
