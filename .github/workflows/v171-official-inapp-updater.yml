@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     env:
-      GH_TOKEN: \${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
       REPO: epimediahub/EpiMediaHub
       BRANCH: release/v171-official-inapp
       TAG: v0.7.0-test
