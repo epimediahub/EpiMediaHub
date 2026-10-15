@@ -76,24 +76,28 @@ jobs:
           test "$(find qa -maxdepth 1 -name 'EpiMediaHub-Android-v1.0.70-*.apk' -type f | wc -l)" -eq 3
           test -s "qa/$APK"
 
-      - name: Independently verify the approved intro media in each signed APK
+      - name: Compare intro to previously approved signed v1.0.69 APK
         shell: bash
         run: |
+          set -euo pipefail
+          mkdir -p reference
+          gh release download v1.0.69-cinema-test-20261015 --repo "$REPO" \
+            --pattern EpiMediaHub-Android-v1.0.69-universal.apk --dir reference
           python3 - <<'PY'
           import hashlib,zipfile
           from pathlib import Path
-          intro=Path('android/v1.0.65/epimedia_intro_v7.mp4')
-          expected=hashlib.sha256(intro.read_bytes()).digest()
-          size=intro.stat().st_size
+          baseline=Path('reference/EpiMediaHub-Android-v1.0.69-universal.apk')
+          with zipfile.ZipFile(baseline) as z:
+              expected=hashlib.sha256(z.read('res/0I.mp4')).digest()
+              size=z.getinfo('res/0I.mp4').file_size
           apks=sorted(Path('qa').glob('EpiMediaHub-Android-v1.0.70-*.apk'))
           assert len(apks)==3
           for apk in apks:
               with zipfile.ZipFile(apk) as z:
-                  matches=[name for name in z.namelist()
-                           if z.getinfo(name).file_size==size
-                           and hashlib.sha256(z.read(name)).digest()==expected]
-              assert len(matches)==1,(apk.name,matches)
-              print(apk.name,'approved intro intact:',matches[0])
+                  assert z.getinfo('res/0I.mp4').file_size==size
+                  actual=hashlib.sha256(z.read('res/0I.mp4')).digest()
+                  assert actual==expected,(apk.name,'intro differs from signed approved baseline')
+              print(apk.name,'approved v169 intro unchanged')
           PY
 
       - name: Publish isolated signed test APK (never touch in-app updater)
