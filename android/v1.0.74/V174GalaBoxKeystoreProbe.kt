@@ -91,10 +91,10 @@ internal object V174GalaBoxKeystoreProbe {
             val key = ByteArray(32).also { SecureRandom().nextBytes(it) }
             try {
                 val encrypted = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
-                encrypted.init(Cipher.ENCRYPT_MODE, pair.public)
+                encrypted.init(Cipher.ENCRYPT_MODE, pair.getPublic())
                 val wrapped = encrypted.doFinal(key)
                 val decrypt = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
-                decrypt.init(Cipher.DECRYPT_MODE, pair.private)
+                decrypt.init(Cipher.DECRYPT_MODE, pair.getPrivate())
                 val result = decrypt.doFinal(wrapped)
                 try { check(result.contentEquals(key)) } finally {
                     wrapped.fill(0)
