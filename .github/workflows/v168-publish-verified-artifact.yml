@@ -1,0 +1,77 @@
+name: v168 publish isolated APK from verified signed QA artifact
+on:
+  push:
+    branches: [feature/v168-vod-player-diagnostics]
+    paths:
+      - '.github/workflows/v168-publish-verified-artifact.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish-verified-v168:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: epimediahub/EpiMediaHub
+      QA_RUN: '38707765541'
+      QA_JOB: '116331323749'
+      QA_SHA: '5e47329ccb95f63cc77b43e77f82d36995c3dc3f'
+      ARTIFACT: EpiMediaHub-v168-private-epg-recovery-official-signed
+      TAG: v1.0.68-vod-test-20261015
+      APK: EpiMediaHub-Android-v1.0.68-universal.apk
+    steps:
+      - name: Verify immutable source and all signed QA gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "$REPO"
+          gh api "repos/$REPO/actions/runs/$QA_RUN" > run.json
+          gh api "repos/$REPO/actions/jobs/$QA_JOB" > job.json
+          python3 - <<'PY'
+          import json, os
+          run=json.load(open('run.json'))
+          job=json.load(open('job.json'))
+          assert run['head_sha']==os.environ['QA_SHA'], 'Not the approved QA source'
+          assert run['status']=='completed', 'QA is still running'
+          assert job['id']==int(os.environ['QA_JOB']), 'Wrong QA job'
+          assert job['run_id']==int(os.environ['QA_RUN']), 'Wrong QA run'
+          steps={s['name']:s['conclusion'] for s in job['steps']}
+          required=[
+            'Check official v1.0.66 Kotlin compilation',
+            'Run complete Android unit tests',
+            'Assemble official signed APKs',
+            'Verify official package and signing identity',
+            'Verify v168 VOD controls and no-HDMI-blackout, grouped history and VPN pinning',
+            'Verify exact approved intro through Android resource IDs in every signed APK'
+          ]
+          for name in required:
+            assert steps.get(name)=='success',(name,steps.get(name))
+          assert steps.get('Publish isolated Downloader test APK after all compile, test and signing gates')=='failure', 'Unexpected failed-step signature'
+          print('All six immutable signed QA gates passed. Prior job failed exclusively at packaging/release.')
+          PY
+      - name: Reuse and verify exact signed APK artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download "$QA_RUN" --repo "$REPO" --name "$ARTIFACT" --dir qa
+          (cd qa && sha256sum --check SHA256SUMS.txt)
+          test -s "qa/$APK"
+          test "$(find qa -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 3
+      - name: Publish versioned test pre-release without touching the public updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "::error::Release already exists; refusing to overwrite"
+            exit 1
+          fi
+          gh release create "$TAG" "qa/$APK" \
+            --repo "$REPO" \
+            --target "$QA_SHA" \
+            --prerelease \
+            --title "EpiMediaHub 1.0.68 – isolated VOD player comparison" \
+            --notes "Independent signed test APK for Media3 vs VLC comparison on films and series. Manual installation only. No public updater change, no customer rollout, no EpiScene changes. The underlying source passed compile, unit, signer, no-HDMI-change, and intro QA in GitHub run 38707765541; that workflow was marked failed only because of an artifact checksum working-directory error in the final publish step."
+          gh release view "$TAG" --repo "$REPO" --json isDraft,isPrerelease,assets --jq '{isDraft,isPrerelease,assets:[.assets[]|{name,size}]}'
+          echo "Download (Fire TV Downloader): https://github.com/$REPO/releases/download/$TAG/$APK" >> "$GITHUB_STEP_SUMMARY"
