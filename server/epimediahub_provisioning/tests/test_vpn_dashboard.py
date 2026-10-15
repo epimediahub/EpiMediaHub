@@ -22,6 +22,7 @@ import app as core
 from dashboard_v080 import install as dashboard_install, migrate_resellers
 import vpn_dashboard as vpn
 import vpn_auto_enroll as auto
+import vpn_license_overview as overview
 
 dashboard_install(core.app, core.db)
 vpn.install(core.app, core.db)
@@ -412,11 +413,11 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('Wartet auf VPN-Einrichtung in der App',page.text)
         self.assertIn('Noch kein VPN-Profil',page.text)
         with core.db() as con:
-            state=__import__("vpn_license_overview")._read_overview(con)[1]
+            state=overview._read_overview(con)[1]
             expiry=con.execute("SELECT expires_at FROM vpn_trial_authorizations WHERE device_row_id=1").fetchone()[0]
         self.assertEqual(state["expires_at"],expiry)
         self.assertEqual(state["license"],"VPN 7 Tage Test")
-        self.assertFalse(state["has_license"] is False)
+        self.assertTrue(state["has_license"])
 
     def test_vpn_annual_overview_distinguishes_grant_from_real_vpn_connection(self):
         self.ack()
@@ -426,7 +427,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('Wartet auf VPN-Einrichtung in der App',page.text)
         self.assertIn('Noch kein VPN-Profil',page.text)
         with core.db() as con:
-            state=__import__("vpn_license_overview")._read_overview(con)[1]
+            state=overview._read_overview(con)[1]
             granted=con.execute("SELECT expires_at FROM vpn_annual_authorizations WHERE device_row_id=1").fetchone()[0]
         self.assertEqual(state["expires_at"],granted)
         self.assertTrue(state["has_license"])
@@ -448,7 +449,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('Handshake kürzlich bestätigt',page.text)
         self.assertNotIn(KEY1,page.text)
         with core.db() as con:
-            state=__import__("vpn_license_overview")._read_overview(con)[1]
+            state=overview._read_overview(con)[1]
         self.assertEqual(state["license"],"VPN 1 Jahr")
         self.assertIsNotNone(state["handshake_at"])
         self.assertNotIn("public_key",state)
@@ -466,7 +467,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('Abgelaufen',page.text)
         self.assertIn('Lizenz abgelaufen',page.text)
         with core.db() as con:
-            state=__import__("vpn_license_overview")._read_overview(con)[1]
+            state=overview._read_overview(con)[1]
         self.assertFalse(state["has_license"])
         self.assertEqual(state["expires_at"],expired)
 
