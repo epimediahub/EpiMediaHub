@@ -120,3 +120,25 @@ jobs:
                   print('===',path.relative_to(root),'LENGTH',len(ls),'===')
                   for i in sorted(take): print(f'{i+1}: {ls[i][:240]}')
           PY
+      - name: Inspect watch history persistence and video surface definitions
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,os,re
+          root=pathlib.Path(os.environ['PROJECT_ROOT'])/'app/src/main/java/de/epimediahub/app'
+          anchors=('fun loadContinue(', 'fun loadRecentlyWatched(', 'fun recordRecentlyWatched(',
+                   'fun savePlayback(', 'fun V121VodSurface(', 'fun ContinueWatchingScreen(',
+                   'fun V060RecentlyWatchedScreen(', 'fun V060CinematicHubScreen(',
+                   'fun V071VlcLivePlayer(', 'fun V071VlcPlayer(',
+                   'val player = remember(', 'PlayerView(context)', 'PlayerView(',
+                   'fun loadRecently', 'fun loadContinue')
+          for path in root.rglob('*.kt'):
+              lines=path.read_text().splitlines()
+              indices=[i for i,line in enumerate(lines) if any(a in line for a in anchors)]
+              if not indices: continue
+              print('===FILE===',path.relative_to(root),len(lines))
+              selected=set()
+              for i in indices[:12]:
+                  selected.update(range(max(0,i-10),min(len(lines),i+125)))
+              for i in sorted(selected): print(str(i+1)+': '+lines[i][:260])
+          PY
