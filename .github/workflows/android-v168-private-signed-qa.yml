@@ -33,7 +33,7 @@ jobs:
           cp -a .ci-v164-overlay/android/v1.0.64 android/v1.0.64
           cp -a .ci-v164-overlay/android/v1.0.65 android/v1.0.65
           cp -a .ci-v164-overlay/android/v1.0.66 android/v1.0.66
-          cp -a .ci-v164-overlay/android/v1.0.68 android/v1.0.68
+          cp -a .ci-v164-overlay/android/v1.0.67 android/v1.0.67
           cp -a .ci-v164-overlay/android/v1.0.68 android/v1.0.68
           cp .ci-v164-overlay/build_tools/render_intro_synced.py build_tools/
           cp .ci-v164-overlay/build_tools/prepare_intro_synced.py build_tools/
@@ -103,7 +103,7 @@ jobs:
           python3 android/v1.0.64/patch_v164.py
           python3 android/v1.0.65/patch_v165.py
           python3 android/v1.0.66/patch_v166.py
-          python3 android/v1.0.68/patch_v167.py
+          python3 android/v1.0.67/patch_v167.py
           python3 android/v1.0.68/patch_v168.py
       - uses: actions/setup-java@v5
         with:
