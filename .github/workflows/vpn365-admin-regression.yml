@@ -1,0 +1,36 @@
+name: VPN annual admin dashboard regression
+
+on:
+  push:
+    branches: [feature/vpn365-admin-quick-action-20261015]
+    paths:
+      - 'server/epimediahub_provisioning/vpn_auto_enroll.py'
+      - 'server/epimediahub_provisioning/templates/dashboard_v080.html'
+      - 'server/epimediahub_provisioning/tests/test_vpn_dashboard.py'
+      - '.github/workflows/vpn365-admin-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-vpn-365:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Python dashboard requirements
+        run: |
+          python -m pip install -r server/epimediahub_provisioning/requirements.txt
+          python -m pip install pytest
+      - name: Static Python syntax check
+        run: |
+          python -m py_compile server/epimediahub_provisioning/vpn_auto_enroll.py
+          python -m py_compile server/epimediahub_provisioning/tests/test_vpn_dashboard.py
+      - name: VPN integration including 365-day no-credit grants
+        run: |
+          cd server/epimediahub_provisioning
+          python -m unittest discover -s tests -p test_vpn_dashboard.py -v
