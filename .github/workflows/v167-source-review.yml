@@ -142,3 +142,22 @@ jobs:
                   selected.update(range(max(0,i-10),min(len(lines),i+125)))
               for i in sorted(selected): print(str(i+1)+': '+lines[i][:260])
           PY
+      - name: Inspect series identity and exact active video surface
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,os,re
+          root=pathlib.Path(os.environ['PROJECT_ROOT'])/'app/src/main/java/de/epimediahub/app'
+          pref=root/'data/PrefsRepository.kt'
+          for i,line in enumerate(pref.read_text().splitlines()[:90],1): print('PREF',str(i)+':',line[:300])
+          reg=re.compile(r'V121VodSurface|continueIdentity|ContinueWatchingScreen|V060RecentlyWatchedScreen|PlayerView\(|setEnableComposeSurfaceSyncWorkaround|VIDEO_CHANGE_FRAME_RATE_STRATEGY')
+          for path in root.rglob('*.kt'):
+              lines=path.read_text().splitlines()
+              hits=[i for i,line in enumerate(lines) if reg.search(line)]
+              if hits:
+                  print('SOURCEREF',path.relative_to(root),[(i+1,lines[i][:160]) for i in hits[:25]])
+                  if any('V121VodSurface' in lines[i] for i in hits):
+                      for i in hits[:8]:
+                          if 'fun V121VodSurface' in lines[i]:
+                              for j in range(max(0,i-12),min(len(lines),i+58)): print('SURFACE',j+1,lines[j][:250])
+          PY
