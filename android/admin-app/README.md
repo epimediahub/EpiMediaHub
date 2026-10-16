@@ -30,15 +30,53 @@ Ohne diese Konfiguration startet die App mit Dashboard, aber Push bleibt
 deaktiviert. Nur ein Backend mit autorisierter Firebase-Cloud-Messaging-
 Serveridentität darf Benachrichtigungen senden.
 
-## Noch vor echter Produktion
+## Verbindung zum Backend – vorbereitet, NICHT installiert
 
-Backend-Routen `GET /admin/mobile/bootstrap` und
-`POST /admin/mobile/register` müssen auf dem **Admin-Dashboard-Host**
-nach geschützter Prüfung installiert sein. Eine bloß lokal oder in GitHub
-kompilierte APK aktiviert keine Servermeldungen. Die Alert-Datenadapter,
-FCM-Serverversand, dauerhafte Vorfallhistorie, externe Ausfallüberwachung,
-serverseitige Mehrfaktoranmeldung und signierte APK fehlen zum Teil noch
-und dürfen nicht als einsatzbereit gelten.
+Im selben Entwicklungszweig liegen unter `tools/epimediahub-admin/`:
+- `mobile_flask.py`: geschützte Admin-Sitzungsrouten
+  `GET /admin/mobile/bootstrap`, `POST /admin/mobile/register`,
+  `POST /admin/mobile/unregister`, `GET /admin/mobile/alerts`
+  und `POST /admin/mobile/ack/<key>`. CSRF ist für jeden Schreibzugriff
+  erforderlich. Die bestehende Web-Admin-Anmeldung bleibt die Autorität.
+- `mobile_registry.py`: max. 20 Admin-Geräte; private SQLite-Registrierung,
+  per Geräteaktion widerrufbar; persistente Push-Outbox für Retry.
+- `monitor_rules.py` und `incident_store.py`: die sieben abgestimmten
+  Kategorien, Deduplizierung, Bestätigung und Historie.
+- `fcm_sender.py`: Google FCM HTTP v1 nur auf dem Server via
+  `google-auth`, niemals mit Service-Account-Schlüssel in der APK.
+- `live_analysis_snapshot.py`: schreibgeschützter Live-Adapter für
+  EpiScene-Lanes 8/10, **ohne** IPTV-Zugangsdaten.
+- `monitor_cycle.py`: verifiziert eine ausschließlich numerische,
+  frische und private Snapshot-Datei und versendet kategorische Alarme
+  an ausdrücklich registrierte Admin-Geräte. Fehler bleiben in der Outbox.
+
+Alle diese Teile sind ausschließlich **GitHub-Code**. Der bestehende
+`epimediahub-provisioning.service` wurde bislang nicht geändert.
+Für automatische Meldungen ist noch ein geprüftes Monitoring-Schedule am
+tatsächlichen Dashboard-Host erforderlich; für komplette Server-Ausfälle
+braucht es einen **externen** Health-Check, nicht nur die interne Prüfung.
+
+## Vor der produktiven Freigabe
+
+1. Backend-Zielhost, HTTPS, bestehende Dashboard-Session und die
+   vollständige Rollen-/CSRF-Trennung abnehmen. Die API darf nicht
+   öffentlich ohne Admin-Login erreichbar werden.
+2. Firebase-Projekt **nur für** `de.epimediahub.admin` einrichten;
+   FCM-Serverzugang ausschließlich auf dem geschützten Hetzner-Host.
+   Privates Service-Account-JSON nie ins Repo, Handy oder Chat kopieren.
+3. Die sieben Metrikquellen anbinden und separat testen: EpiScene-
+   Fortschritt (vorbereitet), Playlistablauf, Worker-Version,
+   externe API-Verfügbarkeit, GitHub Builds/Sync, anonyme aggregierte
+   Wiedergabefehler sowie Berlin-Tagesbericht.
+4. Server-Betreiber-MFA, Backup/Restore, Logs/Retention, Push-Austritt,
+   Fehlalarmtests, Benachrichtigungsberechtigung und physisches Android-
+   Gerät testen; insbesondere Wiedergabefehler nur aus wirklich ausreichend
+   aggregierten anonymisierten Zählwerten ableiten.
+5. Eigener dauerhafter Android-Admin-Release-Key und
+   unternehmensinterne private Verteilung. Keine Signatur teilen und
+   niemals den Kunden-Updater für diese App verwenden.
+
+**Keine globale Produktivfreigabe**, bevor diese Punkte abgeschlossen sind.
 
 ## Tests
 
