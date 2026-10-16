@@ -1,5 +1,7 @@
 """Real Flask test-client checks for private Admin mobile authorization."""
 import os
+import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -88,6 +90,52 @@ class TestPrivateAdminMobile(unittest.TestCase):
         self.assertIn(b"&lt;script&gt;",view.data)
         self.assertNotIn(b"<script>alert(123)",view.data)
         self.assertEqual(view.headers["Cache-Control"],"no-store, private")
+
+    def test_admin_updates_require_login_and_private_digest(self):
+        self.assertEqual(self.client.get("/admin/mobile/update/status").status_code,401)
+        self.assertEqual(self.client.get("/admin/mobile/update/apk").status_code,401)
+        self.signin()
+        self.assertEqual(self.client.get("/admin/mobile/update/status").get_json(),
+                         {"available":False})
+        self.assertEqual(self.client.get("/admin/mobile/update/apk").status_code,404)
+        private=Path(self.temp.name)/"admin-mobile"
+        private.mkdir(mode=0o700)
+        private.chmod(0o700)
+        folder=private/"releases"
+        folder.mkdir(mode=0o700)
+        content=b"TEST_NOT_A_REAL_APK"*1024
+        (folder/"current.apk").write_bytes(content)
+        (folder/"current.apk").chmod(0o600)
+        payload={"package":"de.epimediahub.admin","version_code":25,
+                 "version_name":"1.0.25",
+                 "sha256":hashlib.sha256(content).hexdigest(),
+                 "size_bytes":len(content)}
+        (folder/"current.json").write_text(json.dumps(payload))
+        (folder/"current.json").chmod(0o600)
+        status=self.client.get("/admin/mobile/update/status")
+        self.assertEqual(status.status_code,200)
+        self.assertEqual(status.get_json()["version_code"],25)
+        self.assertEqual(status.headers["Cache-Control"],"private, no-store")
+        apk=self.client.get("/admin/mobile/update/apk")
+        self.assertEqual(apk.status_code,200)
+        self.assertEqual(apk.data,content)
+        self.assertEqual(apk.headers["Cache-Control"],"private, no-store")
+        self.assertEqual(apk.headers["X-Admin-APK-SHA256"],payload["sha256"])
+        (folder/"current.apk").write_bytes(b"BAD"+content)
+        invalid=self.client.get("/admin/mobile/update/status")
+        self.assertEqual(invalid.status_code,503)
+        self.assertNotIn("private_key",str(invalid.get_json()))
+
+    def test_symlinked_private_update_file_never_served(self):
+        self.signin()
+        private=Path(self.temp.name)/"admin-mobile"
+        private.mkdir(mode=0o700)
+        folder=private/"releases"
+        folder.mkdir(mode=0o700)
+        (folder/"current.apk").symlink_to(Path(self.temp.name)/"outside.apk")
+        (folder/"current.json").write_text("{}")
+        (folder/"current.json").chmod(0o600)
+        self.assertEqual(self.client.get("/admin/mobile/update/apk").status_code,503)
 
     def test_login_required_for_acknowledgements(self):
         self.signin()
