@@ -49,6 +49,10 @@ class TestAutonomyPilot(unittest.TestCase):
         before=p.total_changes
         data=r.report(p,l)
         self.assertEqual(data['active_verified_labels'],{'positive':2,'negative':1})
+        self.assertEqual(data['negative_training'],1)
+        self.assertEqual(data['source_model_counts'],{'8':1})
+        self.assertIn('NO_LEARNED_MODEL_FOR_ANALYSIS_PLAYLIST_10',
+                      data['automatic_model_publication_blockers'])
         self.assertEqual(data['pilot_summary']['pilot_model_groups'],1)
         self.assertEqual(data['pilot_summary']['episodes'],3)
         self.assertEqual(data['pilot_summary']['human_references'],1)
@@ -67,6 +71,15 @@ class TestAutonomyPilot(unittest.TestCase):
         data=r.report(p,l)
         self.assertEqual(data['pilot_summary'].get('pilot_model_groups',0),0)
         self.assertEqual(data['pilot_summary']['models_not_eligible_for_pilot'],1)
+
+    def test_all_positive_labels_are_not_a_safety_clearance(self):
+        p,l=dbs()
+        l.execute("UPDATE feedback_versions SET active=0 WHERE decision='negative'")
+        data=r.report(p,l)
+        self.assertEqual(data['negative_training'],0)
+        self.assertIn('NO_VERIFIED_NEGATIVE_TRAINING_EXAMPLES',
+                      data['automatic_model_publication_blockers'])
+        self.assertEqual(data['new_markers_approved'],0)
 
     def test_human_reviewed_machine_is_reference(self):
         p,l=dbs()
