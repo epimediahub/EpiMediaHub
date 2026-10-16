@@ -35,6 +35,33 @@ object AdminPushRegistration {
         } finally { connection.disconnect() }
     }
 
+    fun unregister(context: Context, cookie: String, onDone: (String) -> Unit) {
+        val application=context.applicationContext
+        val handler=Handler(Looper.getMainLooper())
+        thread(name="admin-push-unregister") {
+            val prefs=application.getSharedPreferences("admin-push",Context.MODE_PRIVATE)
+            val installId=prefs.getString("installation_id",null)
+            val outcome=if (installId==null) {
+                "Dieses Gerät ist nicht als Push-Gerät registriert."
+            } else {
+                try {
+                    val (status,body)=call("/admin/mobile/bootstrap",cookie)
+                    if (status!=200) "Bitte im Admin-Dashboard anmelden."
+                    else {
+                        val csrf=JSONObject(body).getString("csrf")
+                        val data=JSONObject().put("installation_id",installId)
+                        val (code,_)=call("/admin/mobile/unregister",cookie,data,csrf)
+                        if (code==200) {
+                            prefs.edit().putBoolean("registered",false).apply()
+                            "Push-Gerät wurde vom Admin-Server abgemeldet."
+                        } else "Abmeldung fehlgeschlagen (HTTP $code)."
+                    }
+                } catch (_:Exception) { "Abmeldung konnte Server nicht sicher erreichen." }
+            }
+            handler.post { onDone(outcome) }
+        }
+    }
+
     fun register(context: Context, token: String, cookie: String, onDone: (String) -> Unit) {
         val application = context.applicationContext
         val handler = Handler(Looper.getMainLooper())
