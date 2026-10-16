@@ -55,6 +55,8 @@ def read_release(data_directory: Path) -> Release | None:
         raise PermissionError("Unsafe release directory")
     manifest = release_dir / "current.json"
     apk = release_dir / "current.apk"
+    if manifest.is_symlink() or apk.is_symlink():
+        raise PermissionError("Unsafe linked private release")
     if not manifest.exists() or not apk.exists():
         return None
     if not _private(manifest) or not _private(apk):
