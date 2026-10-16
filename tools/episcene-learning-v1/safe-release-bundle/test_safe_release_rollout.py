@@ -174,6 +174,9 @@ class SafeRelease(unittest.TestCase):
                 expected={'asset_key':'a-1'}
                 def source_url(playlist,media):
                     self.assertEqual(playlist['config_json'],'{}')
+                    self.assertEqual(playlist['id'],8)
+                    self.assertEqual(media['asset_key'],'a-1')
+                    self.assertEqual(media['playlist_id'],8)
                     self.assertEqual(media['stream_id'],'1')
                     self.assertEqual(media['extension'],'mkv')
                     self.assertEqual(media['source_key'],'series')
@@ -185,7 +188,7 @@ class SafeRelease(unittest.TestCase):
                 fake=types.SimpleNamespace(
                     source_url=source_url, provider_asset_key=provider_asset_key)
                 with mock.patch.dict(sys.modules,{'skip_analysis':fake}):
-                    verify=r.trusted_validator()
+                    verify=r.trusted_validator(con)
                     self.assertTrue(verify(r101))
                     expected['asset_key']='different'
                     self.assertFalse(verify(r101))
