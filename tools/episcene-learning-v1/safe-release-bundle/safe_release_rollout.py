@@ -41,6 +41,7 @@ def schema(con):
       'skip_assets':{'asset_key','playlist_id','source_key','stream_id','extension',
           'media_type','duration_ms','season','episode','title'},
       'customer_playlists':{'id','customer_id','config_json'},
+      'skip_analysis_playlists':{'id','archived','config_json'},
       'customers':{'id','enabled'},
       'devices':{'id','customer_id','enabled'},
       'skip_jobs':{'id','asset_key','status','attempts','updated_at'},
@@ -63,12 +64,16 @@ def manual_rows(con):
         a.extension mapped_extension,a.title mapped_title,
         d.customer_id device_customer,d.enabled device_enabled,
         c.enabled customer_enabled,p.customer_id playlist_customer,
-        p.config_json playlist_config
+        p.config_json playlist_config,
+        ap.id analysis_playlist,ap.archived analysis_archived,
+        ap.config_json analysis_config,s.enabled analysis_source_on
       FROM skip_records r
       LEFT JOIN devices d ON d.id=r.device_id
       LEFT JOIN customers c ON c.id=d.customer_id
       LEFT JOIN skip_assets a ON a.asset_key=r.asset_key
       LEFT JOIN customer_playlists p ON p.id=a.playlist_id
+      LEFT JOIN skip_analysis_playlists ap ON ap.id=a.playlist_id
+      LEFT JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id
       WHERE r.status='pending' AND r.source='device'
       ORDER BY r.id
     """)]
@@ -89,12 +94,25 @@ def manual_plan(con, rows, identity_key=None, validate=None):
         if r['id'] in BAD_REFERENCE_IDS:
             reject('KNOWN_INVALID_REFERENCE')
             continue
+        # Device identity must remain proven. Only the playlist-owner check
+        # differs for independent ANALYSIS sources, which intentionally have
+        # no row in customer_playlists. Never authorize orphaned device marks.
         if (r['device_id'] is None or r['customer_id'] is None or
-            not r['device_enabled'] or not r['customer_enabled'] or
+            r['device_enabled']!=1 or r['customer_enabled']!=1 or
             r['device_customer']!=r['customer_id'] or
-            r['mapped_playlist'] is None or
-            r['playlist_customer']!=r['customer_id']):
+            r['mapped_playlist'] is None):
             reject('MISSING_CURRENT_DEVICE_OWNERSHIP')
+            continue
+        customer_owned=(r['playlist_customer']==r['customer_id'])
+        independent_analysis=(
+            r['mapped_playlist'] in RETRY_PLAYLISTS
+            and r['analysis_playlist']==r['mapped_playlist']
+            and r['analysis_archived']==0
+            and r['analysis_source_on']==1
+            and r['playlist_customer'] is None
+        )
+        if not (customer_owned or independent_analysis):
+            reject('MISSING_VALID_PLAYLIST_OR_ANALYSIS_SOURCE')
             continue
         if len(groups[(r['asset_key'],r['segment_type'])]) != 1:
             reject('CONFLICTING_PENDING_MANUAL_MARKERS')
@@ -151,7 +169,13 @@ def trusted_validator():
         if ext not in ('mp4','mkv','m4v','avi','ts','mpeg','mpg'):
             return False
         try:
-            playlist={'config_json':r['playlist_config']}
+            # The provider config of independent analysis sources is NOT
+            # stored in customer_playlists. Resolve with the correct config.
+            owned=(r['playlist_customer']==r['customer_id'])
+            config=r['playlist_config'] if owned else r['analysis_config']
+            if not isinstance(config,str) or not config:
+                return False
+            playlist={'config_json':config}
             actual=provider_asset_key(source_url(playlist,r),r['media_type'])
             return actual==r['asset_key']
         except (TypeError,ValueError,KeyError,IndexError):
