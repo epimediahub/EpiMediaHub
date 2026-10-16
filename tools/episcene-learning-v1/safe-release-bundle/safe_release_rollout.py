@@ -41,6 +41,7 @@ def schema(con):
       'skip_assets':{'asset_key','playlist_id','source_key','stream_id','extension',
           'media_type','duration_ms','season','episode','title'},
       'customer_playlists':{'id','customer_id','config_json'},
+      'skip_analysis_playlists':{'id','archived','config_json'},
       'customers':{'id','enabled'},
       'devices':{'id','customer_id','enabled'},
       'skip_jobs':{'id','asset_key','status','attempts','updated_at'},
@@ -63,12 +64,16 @@ def manual_rows(con):
         a.extension mapped_extension,a.title mapped_title,
         d.customer_id device_customer,d.enabled device_enabled,
         c.enabled customer_enabled,p.customer_id playlist_customer,
-        p.config_json playlist_config
+        p.config_json playlist_config,
+        ap.id analysis_playlist,ap.archived analysis_archived,
+        ap.config_json analysis_config,s.enabled analysis_source_on
       FROM skip_records r
       LEFT JOIN devices d ON d.id=r.device_id
       LEFT JOIN customers c ON c.id=d.customer_id
       LEFT JOIN skip_assets a ON a.asset_key=r.asset_key
       LEFT JOIN customer_playlists p ON p.id=a.playlist_id
+      LEFT JOIN skip_analysis_playlists ap ON ap.id=a.playlist_id
+      LEFT JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id
       WHERE r.status='pending' AND r.source='device'
       ORDER BY r.id
     """)]
@@ -89,12 +94,25 @@ def manual_plan(con, rows, identity_key=None, validate=None):
         if r['id'] in BAD_REFERENCE_IDS:
             reject('KNOWN_INVALID_REFERENCE')
             continue
+        # Device identity must remain proven. Only the playlist-owner check
+        # differs for independent ANALYSIS sources, which intentionally have
+        # no row in customer_playlists. Never authorize orphaned device marks.
         if (r['device_id'] is None or r['customer_id'] is None or
-            not r['device_enabled'] or not r['customer_enabled'] or
+            r['device_enabled']!=1 or r['customer_enabled']!=1 or
             r['device_customer']!=r['customer_id'] or
-            r['mapped_playlist'] is None or
-            r['playlist_customer']!=r['customer_id']):
+            r['mapped_playlist'] is None):
             reject('MISSING_CURRENT_DEVICE_OWNERSHIP')
+            continue
+        customer_owned=(r['playlist_customer']==r['customer_id'])
+        independent_analysis=(
+            r['mapped_playlist'] in RETRY_PLAYLISTS
+            and r['analysis_playlist']==r['mapped_playlist']
+            and r['analysis_archived']==0
+            and r['analysis_source_on']==1
+            and r['playlist_customer'] is None
+        )
+        if not (customer_owned or independent_analysis):
+            reject('MISSING_VALID_PLAYLIST_OR_ANALYSIS_SOURCE')
             continue
         if len(groups[(r['asset_key'],r['segment_type'])]) != 1:
             reject('CONFLICTING_PENDING_MANUAL_MARKERS')
@@ -140,7 +158,12 @@ def manual_plan(con, rows, identity_key=None, validate=None):
     return accepted,dict(excluded)
 
 
-def trusted_validator():
+def trusted_validator(con):
+    """Verify exact provider identity using genuine stored playlist+asset rows.
+
+    source_url() accepts a provider playlist and asset object, not the marker
+    join aliases. Never fabricate account fields or ignore asset-key changes.
+    """
     if str(CODE) not in sys.path:sys.path.insert(0,str(CODE))
     from skip_analysis import source_url,provider_asset_key
     def verify(r):
@@ -151,13 +174,38 @@ def trusted_validator():
         if ext not in ('mp4','mkv','m4v','avi','ts','mpeg','mpg'):
             return False
         try:
-            playlist={'config_json':r['playlist_config']}
-            actual=provider_asset_key(source_url(playlist,r),r['media_type'])
+            pid=r['mapped_playlist']
+            if r['playlist_customer']==r['customer_id']:
+                table='customer_playlists'
+            elif (pid in RETRY_PLAYLISTS and r['analysis_playlist']==pid
+                  and r['analysis_archived']==0 and r['analysis_source_on']==1):
+                table='skip_analysis_playlists'
+            else:
+                return False
+            playlist=con.execute(
+                'SELECT * FROM '+table+' WHERE id=?',(pid,)
+            ).fetchone()
+            media=con.execute(
+                'SELECT * FROM skip_assets WHERE asset_key=? AND playlist_id=?',
+                (r['asset_key'],pid)
+            ).fetchone()
+            if playlist is None or media is None:
+                return False
+            provider=dict(playlist)
+            asset=dict(media)
+            # Prevent races and source swaps after the original manual plan.
+            if (asset.get('stream_id')!=stream or
+                asset.get('extension')!=ext or
+                asset.get('source_key')!=r['source_key'] or
+                asset.get('media_type')!=r['media_type']):
+                return False
+            if not isinstance(provider.get('config_json'),str):
+                return False
+            actual=provider_asset_key(source_url(provider,asset),r['media_type'])
             return actual==r['asset_key']
-        except (TypeError,ValueError,KeyError,IndexError):
+        except (TypeError,ValueError,KeyError,IndexError,AttributeError,sqlite3.Error):
             return False
     return verify
-
 
 def ensure_retry_table(con):
     con.execute("""CREATE TABLE IF NOT EXISTS episcene_safe_release_retries(
@@ -242,7 +290,7 @@ def run(con, *, apply=False,validate=None):
     if not con.execute("SELECT 1 FROM sqlite_master WHERE name='skip_auto_blocks' AND type='table'").fetchone():
         raise RuntimeError('Original approval blocks missing')
     rows=manual_rows(con)
-    selected,reasons=manual_plan(con,rows,validate=validate or trusted_validator())
+    selected,reasons=manual_plan(con,rows,validate=validate or trusted_validator(con))
     if not apply:
         return {'mode':'PREFLIGHT_READ_ONLY','old_manual_pending':len(rows),
             'eligible_exact_manual_marks':len(selected),
@@ -250,7 +298,7 @@ def run(con, *, apply=False,validate=None):
     # Begin the write transaction only after preflight against current sources.
     con.execute('BEGIN IMMEDIATE')
     fresh=manual_rows(con)
-    eligible,again=manual_plan(con,fresh,validate=validate or trusted_validator())
+    eligible,again=manual_plan(con,fresh,validate=validate or trusted_validator(con))
     if ({r['id'] for r in eligible}!={r['id'] for r in selected} or again!=reasons):
         raise RuntimeError('Backlog changed during preflight, no modifications')
     from skip_markers import review_record,wake_reference_jobs

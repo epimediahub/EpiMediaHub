@@ -56,6 +56,8 @@ def records(db):
           'title','duration_ms','stream_id','extension'},
       'devices':{'id','customer_id','enabled'},
       'customer_playlists':{'id','customer_id'},
+      'skip_analysis_playlists':{'id','archived'},
+      'skip_analysis_sources':{'playlist_id','enabled'},
       'skip_auto_evidence':{'record_id','human_review'},
     }
     for table,fields in needed.items():
@@ -70,11 +72,15 @@ def records(db):
         a.stream_id as_asset_stream,a.extension as_asset_extension,
         a.updated_at as_asset_updated_at,
         p.customer_id as_playlist_owner,
+        ap.id as_analysis_playlist,ap.archived as_analysis_archived,
+        ss.enabled as_analysis_source_on,
         d.customer_id as_device_owner,d.enabled as_device_enabled
       FROM skip_records r
       LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
       LEFT JOIN skip_assets a ON a.asset_key=r.asset_key
       LEFT JOIN customer_playlists p ON p.id=a.playlist_id
+      LEFT JOIN skip_analysis_playlists ap ON ap.id=a.playlist_id
+      LEFT JOIN skip_analysis_sources ss ON ss.playlist_id=a.playlist_id
       LEFT JOIN devices d ON d.id=r.device_id
       WHERE r.media_type='episode' AND r.segment_type IN ('intro','recap','outro')
         AND (r.source='device' OR r.source IN
@@ -100,8 +106,17 @@ def current_human(r):
         return None
     if r['source']=='device':
         if (r['device_id'] is None or r['customer_id'] is None
-            or r['as_device_enabled']!=1 or r['as_device_owner']!=r['customer_id']
-            or r['as_playlist_owner']!=r['customer_id']):
+            or r['as_device_enabled']!=1 or r['as_device_owner']!=r['customer_id']):
+            return None
+        ordinary=(r['as_playlist_owner']==r['customer_id'])
+        independent=(
+            r['as_asset_playlist'] in (8,10)
+            and r['as_playlist_owner'] is None
+            and r['as_analysis_playlist']==r['as_asset_playlist']
+            and r['as_analysis_archived']==0
+            and r['as_analysis_source_on']==1
+        )
+        if not (ordinary or independent):
             return None
         provenance='device_authenticated_direct'
     elif r['source'] in MACHINE_SOURCES and r['human_review']==1:
