@@ -10,7 +10,7 @@ import live_analysis_snapshot as adapter
 from monitor_rules import evaluate
 from monitor_cycle import read_snapshot
 
-NOW=1781654400
+NOW=int(datetime(2026,10,16,12,25,tzinfo=timezone.utc).timestamp())
 
 
 def fixture():
