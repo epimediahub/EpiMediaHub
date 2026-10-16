@@ -19,8 +19,14 @@ android {
         applicationId = "de.epimediahub.admin"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0-private-qa"
+        val releaseCode = System.getenv("EPI_ADMIN_RELEASE_VERSION_CODE")?.toIntOrNull() ?: 3
+        require(releaseCode in 1..2147483646) { "Invalid release version code" }
+        versionCode = releaseCode
+        val releaseName = System.getenv("EPI_ADMIN_RELEASE_VERSION_NAME") ?: "0.3.0-private-qa"
+        require(releaseName.matches(Regex("[A-Za-z0-9._-]{1,48}"))) {
+            "Invalid release version name"
+        }
+        versionName = releaseName
         val appId = firebaseVariable("EPI_ADMIN_FIREBASE_APP_ID")
         val apiKey = firebaseVariable("EPI_ADMIN_FIREBASE_API_KEY")
         val projectId = firebaseVariable("EPI_ADMIN_FIREBASE_PROJECT_ID")
@@ -29,6 +35,25 @@ android {
         buildConfigField("String", "FIREBASE_API_KEY", "\"$apiKey\"")
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"$projectId\"")
         buildConfigField("String", "FIREBASE_SENDER_ID", "\"$senderId\"")
+    }
+    val releaseKeystore = System.getenv("EPI_ADMIN_RELEASE_KEYSTORE_FILE") ?: ""
+    signingConfigs {
+        create("adminRelease") {
+            if (releaseKeystore.isNotBlank()) {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("EPI_ADMIN_RELEASE_STORE_PASSWORD")
+                keyAlias = System.getenv("EPI_ADMIN_RELEASE_KEY_ALIAS")
+                keyPassword = System.getenv("EPI_ADMIN_RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            if (releaseKeystore.isNotBlank()) {
+                signingConfig = signingConfigs.getByName("adminRelease")
+            }
+        }
     }
     buildFeatures {
         compose = true
