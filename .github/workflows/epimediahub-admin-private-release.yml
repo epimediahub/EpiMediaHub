@@ -1,0 +1,121 @@
+name: EpiMediaHub Admin private signed release
+on:
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: 'Monotonic Android version code (greater than installed)'
+        required: true
+        type: string
+      version_name:
+        description: 'Android version name, e.g. 1.0.0'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  verified-private-release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER" && test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Validate stable-signing and Firebase secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.EPI_ADMIN_RELEASE_KEYSTORE_B64 }}
+          STORE_PASS: ${{ secrets.EPI_ADMIN_RELEASE_STORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.EPI_ADMIN_RELEASE_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.EPI_ADMIN_RELEASE_KEY_ALIAS }}
+          SIGNER_SHA: ${{ secrets.EPI_ADMIN_RELEASE_CERT_SHA256 }}
+          FIREBASE_CLIENT_JSON: ${{ secrets.EPI_ADMIN_FIREBASE_CLIENT_JSON }}
+          EPI_ADMIN_RELEASE_VERSION_CODE: ${{ inputs.version_code }}
+          EPI_ADMIN_RELEASE_VERSION_NAME: ${{ inputs.version_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import json,os,re
+          value=os.environ
+          if (not re.fullmatch(r'[1-9][0-9]{0,8}',value['EPI_ADMIN_RELEASE_VERSION_CODE'])
+              or not re.fullmatch(r'[A-Za-z0-9._-]{1,48}',value['EPI_ADMIN_RELEASE_VERSION_NAME'])):
+              raise SystemExit('Invalid release version')
+          for name in ('KEYSTORE_B64','STORE_PASS','KEY_PASS','KEY_ALIAS','SIGNER_SHA','FIREBASE_CLIENT_JSON'):
+              if not value[name]: raise SystemExit('Missing private build secret: '+name)
+          if not re.fullmatch(r'[0-9a-fA-F]{64}',value['SIGNER_SHA']):
+              raise SystemExit('Pinned release signing fingerprint missing')
+          data=json.loads(value['FIREBASE_CLIENT_JSON'])
+          if data.get('type')=='service_account' or 'private_key' in data:
+              raise SystemExit('Service account forbidden in Android app')
+          clients=[c for c in data['client']
+              if c['client_info']['android_client_info']['package_name']=='de.epimediahub.admin']
+          if len(clients)!=1:raise SystemExit('Admin Firebase package mismatch')
+          c=clients[0]
+          cfg={'EPI_ADMIN_FIREBASE_APP_ID':c['client_info']['mobilesdk_app_id'],
+               'EPI_ADMIN_FIREBASE_API_KEY':c['api_key'][0]['current_key'],
+               'EPI_ADMIN_FIREBASE_PROJECT_ID':data['project_info']['project_id'],
+               'EPI_ADMIN_FIREBASE_SENDER_ID':data['project_info']['project_number']}
+          with open(value['GITHUB_ENV'],'a',encoding='utf8') as out:
+              for key,part in cfg.items():
+                  if not isinstance(part,str) or not re.fullmatch(r'[A-Za-z0-9:._-]{1,180}',part):
+                      raise SystemExit('Malformed Firebase metadata: '+key)
+                  print(key+'='+part,file=out)
+              print('EPI_ADMIN_RELEASE_VERSION_CODE='+value['EPI_ADMIN_RELEASE_VERSION_CODE'],file=out)
+              print('EPI_ADMIN_RELEASE_VERSION_NAME='+value['EPI_ADMIN_RELEASE_VERSION_NAME'],file=out)
+              print('EPI_ADMIN_RELEASE_KEY_ALIAS='+value['KEY_ALIAS'],file=out)
+              print('EPI_ADMIN_RELEASE_STORE_PASSWORD='+value['STORE_PASS'],file=out)
+              print('EPI_ADMIN_RELEASE_KEY_PASSWORD='+value['KEY_PASS'],file=out)
+              print('EPI_ADMIN_RELEASE_KEYSTORE_FILE='+value['RUNNER_TEMP']+'/epi-admin.jks',file=out)
+          PY
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/epi-admin.jks"
+          test -s "$RUNNER_TEMP/epi-admin.jks"
+          echo 'Private release signer and Firebase Android metadata prepared.'
+      - name: Compile signed private Admin release and lint
+        working-directory: android/admin-app
+        run: gradle --no-daemon :app:assembleRelease :app:lintRelease
+      - name: Check signature, package and prepare manifest
+        env:
+          SIGNER_SHA: ${{ secrets.EPI_ADMIN_RELEASE_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          APK=android/admin-app/app/build/outputs/apk/release/app-release.apk
+          test -s "$APK"
+          SIGNER="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" |
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)"
+          test -n "$SIGNER" && test "${SIGNER,,}" = "${SIGNER_SHA,,}"
+          mkdir -p "$RUNNER_TEMP/admin-release"
+          cp "$APK" "$RUNNER_TEMP/admin-release/current.apk"
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'admin-release'
+          apk=root/'current.apk'
+          meta={'package':'de.epimediahub.admin',
+                'version_code':int(os.environ['EPI_ADMIN_RELEASE_VERSION_CODE']),
+                'version_name':os.environ['EPI_ADMIN_RELEASE_VERSION_NAME'],
+                'size_bytes':apk.stat().st_size,
+                'sha256':hashlib.sha256(apk.read_bytes()).hexdigest()}
+          (root/'current.json').write_text(json.dumps(meta,separators=(',',':')))
+          print('APK signature pinned; authenticated update bundle prepared.')
+          PY
+      - name: Upload short-lived private server deployment bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: epimediahub-admin-signed-private-server-bundle
+          path: ${{ runner.temp }}/admin-release/
+          retention-days: 3
+          if-no-files-found: error
+      - name: Erase temporary release keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/epi-admin.jks"
