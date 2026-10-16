@@ -25,6 +25,8 @@ def fixture(root):
         CREATE TABLE devices(id INTEGER PRIMARY KEY,customer_id INTEGER,enabled INTEGER);
         CREATE TABLE customers(id INTEGER PRIMARY KEY,enabled INTEGER);
         CREATE TABLE customer_playlists(id INTEGER PRIMARY KEY,customer_id INTEGER,config_json TEXT);
+        CREATE TABLE skip_analysis_playlists(id INTEGER PRIMARY KEY,
+            archived INTEGER,config_json TEXT);
         CREATE TABLE skip_jobs(id INTEGER PRIMARY KEY,asset_key TEXT,status TEXT,
           attempts INTEGER,updated_at TEXT,detail TEXT);
         CREATE TABLE skip_analysis_sources(playlist_id INTEGER,enabled INTEGER);
@@ -35,6 +37,7 @@ def fixture(root):
         INSERT INTO devices VALUES(99,12,1),(55,20,1);
         INSERT INTO customers VALUES(12,1),(20,1);
         INSERT INTO customer_playlists VALUES(8,12,'{}');
+        INSERT INTO skip_analysis_playlists VALUES(8,0,'{}');
         INSERT INTO skip_analysis_sources VALUES(8,1);
         INSERT INTO skip_auto_settings VALUES(8,1);
         """)
@@ -133,6 +136,35 @@ class SafeRelease(unittest.TestCase):
                 con.commit()
                 second,_=r.manual_plan(con,r.manual_rows(con),validate=lambda row:True)
                 self.assertEqual(len(second),12)
+
+    def test_independent_analysis_source_uses_device_proof_not_customer_join(self):
+        with tempfile.TemporaryDirectory() as td:
+            path=fixture(Path(td))
+            with connect(path) as con:
+                con.execute("DELETE FROM customer_playlists WHERE id=8")
+                valid,excluded=r.manual_plan(con,r.manual_rows(con),validate=lambda _:True)
+                self.assertEqual({x['id'] for x in valid},{101,102})
+                self.assertEqual(excluded.get('KNOWN_INVALID_REFERENCE'),1)
+                self.assertEqual(excluded.get('MISSING_CURRENT_DEVICE_OWNERSHIP'),1)
+                self.assertEqual(valid[0]['analysis_playlist'],8)
+                self.assertEqual(valid[0]['analysis_config'],'{}')
+                con.execute('UPDATE skip_analysis_playlists SET archived=1 WHERE id=8')
+                valid,excluded=r.manual_plan(con,r.manual_rows(con),validate=lambda _:True)
+                self.assertEqual(valid,[])
+                self.assertEqual(excluded.get('MISSING_VALID_PLAYLIST_OR_ANALYSIS_SOURCE'),2)
+
+    def test_orphaned_device_cannot_be_recovered_by_analysis_fallback(self):
+        with tempfile.TemporaryDirectory() as td:
+            path=fixture(Path(td))
+            with connect(path) as con:
+                con.execute("DELETE FROM customer_playlists WHERE id=8")
+                con.execute("UPDATE skip_records SET device_id=NULL WHERE id=101")
+                valid,excluded=r.manual_plan(con,r.manual_rows(con),validate=lambda _:True)
+                self.assertEqual({x['id'] for x in valid},{102})
+                self.assertEqual(excluded.get('MISSING_CURRENT_DEVICE_OWNERSHIP'),2)
+                con.execute("UPDATE skip_analysis_sources SET enabled=0 WHERE playlist_id=8")
+                valid,_=r.manual_plan(con,r.manual_rows(con),validate=lambda _:True)
+                self.assertEqual(valid,[])
 
     def test_no_approval_when_exact_provider_file_not_verified(self):
         with tempfile.TemporaryDirectory() as td:
