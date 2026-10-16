@@ -88,11 +88,12 @@ object AdminUpdater {
     private fun signaturesMatch(context: Context, apk: File, version: Long): Boolean {
         val manager = context.packageManager
         @Suppress("DEPRECATION")
-        val installed = manager.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+        val flags = if (Build.VERSION.SDK_INT >= 28)
+            PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
         @Suppress("DEPRECATION")
-        val candidate = manager.getPackageArchiveInfo(
-            apk.absolutePath, PackageManager.GET_SIGNING_CERTIFICATES
-        ) ?: return false
+        val installed = manager.getPackageInfo(context.packageName, flags)
+        @Suppress("DEPRECATION")
+        val candidate = manager.getPackageArchiveInfo(apk.absolutePath, flags) ?: return false
         if (candidate.packageName != context.packageName) return false
         @Suppress("DEPRECATION")
         val code = if (Build.VERSION.SDK_INT >= 28) candidate.longVersionCode
@@ -134,7 +135,8 @@ object AdminUpdater {
             try {
                 val dir = File(app.cacheDir, "admin-updates")
                 if (!dir.isDirectory && !dir.mkdirs()) throw IllegalStateException("No private cache")
-                file = File(dir, "epimediahub-admin-next.apk")
+                val targetFile = File(dir, "epimediahub-admin-next.apk")
+                file = targetFile
                 con = connection("/admin/mobile/update/apk", cookie)
                 if (con.responseCode != 200 ||
                     con.contentType?.substringBefore(";") != "application/vnd.android.package-archive") {
@@ -143,7 +145,7 @@ object AdminUpdater {
                 val digest = MessageDigest.getInstance("SHA-256")
                 var total = 0L
                 con.inputStream.use { source ->
-                    file.outputStream().use { target ->
+                    targetFile.outputStream().use { target ->
                         val buffer = ByteArray(64 * 1024)
                         while (true) {
                             val len = source.read(buffer)
@@ -159,11 +161,11 @@ object AdminUpdater {
                 }
                 val actual = digest.digest().joinToString("") { "%02x".format(it) }
                 if (total != release.bytes || actual != release.sha256 ||
-                    !signaturesMatch(app, file, release.versionCode)) {
+                    !signaturesMatch(app, targetFile, release.versionCode)) {
                     throw SecurityException("Update identity failed")
                 }
                 val uri = FileProvider.getUriForFile(
-                    app, app.packageName + ".adminupdates", file
+                    app, app.packageName + ".adminupdates", targetFile
                 )
                 val installer = Intent(Intent.ACTION_VIEW).apply {
                     setDataAndType(uri, "application/vnd.android.package-archive")
