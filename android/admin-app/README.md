@@ -21,14 +21,32 @@ Geräteentsperrung/Biometrie und einer opt-in FCM-Registrierung.
 
 ## Firebase/FCM: ausschließlich private App
 
-Diese vier Build-Variablen müssen auf der privaten Release-Pipeline gesetzt sein
-(keine Service-Account-JSON in der App, keine Schlüssel für FCM-Versand):
+**Privates Firebase-Client-Setup für den GitHub-QA-Build:**
+
+1. In GitHub `epimediahub/EpiMediaHub` unter **Settings → Secrets and variables → Actions → New repository secret** ein Secret namens `EPI_ADMIN_FIREBASE_CLIENT_JSON` erstellen.
+2. Den **vollständigen Inhalt** der aus Firebase geladenen Android-Datei `google-services.json` in das Secret-Feld einfügen; **nicht** in GitHub-Code, Pull-Request-Kommentare oder öffentliche Logs kopieren.
+3. Die Datei muss das Android-Paket `de.epimediahub.admin` enthalten. Ein Server-Service-Account-JSON (`private_key`) wird vom Build abgelehnt.
+4. Den privaten Admin-Android-QA-Workflow im PR erneut starten (oder den nächsten Commit abwarten). Das Artefakt **`epimediahub-admin-firebase-configured-debug-qa`** enthält dann die Firebase-Client-Einstellungen. Das Artefakt `epimediahub-admin-qa-without-push` signalisiert, dass das Secret fehlte.
+
+Die GitHub-Actions-Pipeline extrahiert die folgenden vier normalen
+Firebase-**Client-Metadaten** ausschließlich auf dem Build-Runner:
 `EPI_ADMIN_FIREBASE_APP_ID`, `EPI_ADMIN_FIREBASE_API_KEY`,
 `EPI_ADMIN_FIREBASE_PROJECT_ID`, `EPI_ADMIN_FIREBASE_SENDER_ID`.
+Sie werden über `BuildConfig` in die Android-APK eingebettet, wie bei einer
+Firebase-Client-Anwendung üblich. Obwohl es keine privaten Server-Schlüssel
+sind, sollte der API-Key gegen unerwünschte Nutzung gemäß Firebase/Google-Cloud-
+Empfehlungen eingeschränkt werden.
+
+Das öffentliche EpiMediaHub-Repository enthält **keine** `google-services.json`.
+Das Firebase-Secret wird weder geloggt noch als Android-Servicekonto ausgeliefert.
+Nur ein Backend mit autorisierter Firebase-Cloud-Messaging-Serveridentität
+darf Benachrichtigungen senden.
 
 Ohne diese Konfiguration startet die App mit Dashboard, aber Push bleibt
-deaktiviert. Nur ein Backend mit autorisierter Firebase-Cloud-Messaging-
-Serveridentität darf Benachrichtigungen senden.
+deaktiviert. Mit konfiguriertem Firebase-Client ist **nur die Android-Seite**
+bereit: echtes Push erfordert weiterhin die geschützte Backend-Installation,
+eine ausdrücklich registrierte Admin-Sitzung und serverseitige Google-
+Anwendungsanmeldeinformationen.
 
 ## Verbindung zum Backend – vorbereitet, NICHT installiert
 
