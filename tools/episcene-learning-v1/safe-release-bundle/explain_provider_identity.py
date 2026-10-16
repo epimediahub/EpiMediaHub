@@ -22,8 +22,8 @@ EXTENSIONS={'mp4','mkv','m4v','avi','ts','mpeg','mpg'}
 
 
 def reason(record, source_url, provider_asset_key):
-    stream=record['stream_id']
-    extension=record['extension']
+    stream=record['mapped_stream']
+    extension=record['mapped_extension']
     config=record['config_json']
     if not isinstance(stream,str) or not re.fullmatch(r'[0-9]{1,12}',stream):
         return 'STREAM_ID_UNUSABLE'
@@ -54,7 +54,8 @@ def audit(con, source_url, provider_asset_key):
                a.playlist_id,a.asset_key AS matched_asset,a.media_type AS asset_media,
                a.source_key AS asset_source,a.season AS asset_season,
                a.episode AS asset_episode,a.duration_ms AS asset_duration,
-               a.title AS asset_title,a.stream_id,a.extension,
+               a.title AS asset_title,
+               a.stream_id AS mapped_stream,a.extension AS mapped_extension,
                d.customer_id AS device_owner,d.enabled AS device_active,
                c.enabled AS customer_active,
                p.customer_id AS customer_playlist_owner,
