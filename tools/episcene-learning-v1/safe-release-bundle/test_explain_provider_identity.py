@@ -12,6 +12,8 @@ class ProviderIdentityAuditTests(unittest.TestCase):
              'media_type':'episode','asset_key':'OLD_HASH'}
         def source_url(config,r):
             self.assertIn('SECRET_PASS',config['config_json'])
+            self.assertEqual(r['stream_id'],'123')
+            self.assertEqual(r['extension'],'mkv')
             return 'https://secret.invalid/SECRET_USER/SECRET_PASS/123.mkv'
         def hash_key(url,kind):
             self.assertIn('SECRET_PASS',url)
@@ -32,7 +34,7 @@ class ProviderIdentityAuditTests(unittest.TestCase):
              'config_json':'TOP_SECRET_CONFIG','media_type':'episode','asset_key':'old'}
         def broken(*args):
             raise ValueError('https://secret.example/USER/PASS')
-        self.assertEqual('PROVIDER_RESOLVER_REJECTED',
+        self.assertEqual('SOURCE_URL_INVALID_INPUT',
                          mod.reason(row,broken,lambda u,k:u))
 
     def test_output_contains_only_aggregate_reasons(self):
