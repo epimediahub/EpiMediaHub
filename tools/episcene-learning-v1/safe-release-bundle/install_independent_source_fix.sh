@@ -9,7 +9,7 @@ for cmd in curl python3 systemctl install cp mv stat df flock awk;do
   command -v "$cmd" >/dev/null || { echo "STOP: missing $cmd";exit 2; }
 done
 
-REV=36e6fb0e9b7caf1a99812505beaa261e77c16ba9
+REV=5ca55e01716702284f83b4011d8c3dc8b2c1caab
 BASE=https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$REV/tools/episcene-learning-v1/safe-release-bundle
 CODE=/opt/episcene-learning
 APP=/opt/epimediahub/provisioning
@@ -22,10 +22,10 @@ FEEDBACK=$CODE/feedback_learning.py
 PEER=$CODE/safe_release_rollout_v2.py
 
 OLD_ORIGINAL=946f251068fc462678f64249103a8e07c75147c6
-NEW_ORIGINAL=b1795614ce65d05dd2359a920c22441e2d20cef8
+NEW_ORIGINAL=4c21164cfbfd7e1f660403cd589cb4ad361faea6
 OLD_FEEDBACK=1480af391d48226f76cb34ee4c43381184f5954b
 NEW_FEEDBACK=8f02ddf6d034ed698ae484e7d96ca695db3ea17f
-PROVIDER_DIAGNOSTIC=ef468a5b52575ef487408a5f7b2d50d233c41a2d
+PROVIDER_DIAGNOSTIC=ed0a7e2c861f1c81dcbc7fa8b409b78754c8880f
 REQUIRED_PEER=1351d2b41cf3159ca8fdfd2f3fb7bc5b97221d1e
 
 work="$(mktemp -d -t episcene-source-fix.XXXXXXXX)"
