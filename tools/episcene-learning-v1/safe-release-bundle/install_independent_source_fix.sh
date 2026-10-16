@@ -9,7 +9,7 @@ for cmd in curl python3 systemctl install cp mv stat df flock awk;do
   command -v "$cmd" >/dev/null || { echo "STOP: missing $cmd";exit 2; }
 done
 
-REV=a280113ae36586ec05b18a988ff597e372c57453
+REV=36e6fb0e9b7caf1a99812505beaa261e77c16ba9
 BASE=https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$REV/tools/episcene-learning-v1/safe-release-bundle
 CODE=/opt/episcene-learning
 APP=/opt/epimediahub/provisioning
@@ -22,9 +22,10 @@ FEEDBACK=$CODE/feedback_learning.py
 PEER=$CODE/safe_release_rollout_v2.py
 
 OLD_ORIGINAL=946f251068fc462678f64249103a8e07c75147c6
-NEW_ORIGINAL=b18a584d8af5d9d95d4ffe8960d828c28ac8dbc3
+NEW_ORIGINAL=b1795614ce65d05dd2359a920c22441e2d20cef8
 OLD_FEEDBACK=1480af391d48226f76cb34ee4c43381184f5954b
 NEW_FEEDBACK=8f02ddf6d034ed698ae484e7d96ca695db3ea17f
+PROVIDER_DIAGNOSTIC=ef468a5b52575ef487408a5f7b2d50d233c41a2d
 REQUIRED_PEER=1351d2b41cf3159ca8fdfd2f3fb7bc5b97221d1e
 
 work="$(mktemp -d -t episcene-source-fix.XXXXXXXX)"
@@ -77,7 +78,8 @@ if [[ "$current_o" == "$NEW_ORIGINAL" && "$current_f" == "$NEW_FEEDBACK" ]];then
 fi
 fetch safe_release_rollout.py "$NEW_ORIGINAL"
 fetch feedback_learning.py "$NEW_FEEDBACK"
-"$PY" -m py_compile "$work/safe_release_rollout.py" "$work/feedback_learning.py"
+fetch explain_provider_identity.py "$PROVIDER_DIAGNOSTIC"
+"$PY" -m py_compile "$work/safe_release_rollout.py" "$work/feedback_learning.py" "$work/explain_provider_identity.py"
 
 echo '=== Production evidence preflight (no writes) ==='
 PYTHONPATH="$work:$CODE:$APP" PYTHONDONTWRITEBYTECODE=1 \
@@ -95,12 +97,19 @@ print('Manuelle Einträge:',m.get('old_manual_pending'),
 print('Nicht freigabefähig (aggregiert):',
       json.dumps(m.get('excluded',{}),sort_keys=True))
 print('Verwertbare Lernmarkierungen:',l.get('eligible'))
-if not m.get('eligible_exact_manual_marks',0):
-    print('STOP: Noch immer keine sicher bestätigbare manuelle Markierung.')
-    print('Keine Installation; keine Freigaben. Ursache liegt in fehlender')
-    print('Geräteherkunft oder einer nicht nachweisbaren Provider-Datei.')
-    raise SystemExit(4)
 PY
+eligible="$(python3 - "$work/preflight.json" <<'PYSUB'
+import json,sys
+print(int(json.load(open(sys.argv[1])).get('eligible_exact_manual_marks',0)))
+PYSUB
+)"
+if ((eligible==0));then
+  echo '=== Stage-by-stage provider resolver checks (read-only) ==='
+  PYTHONPATH="$CODE:$APP" PYTHONDONTWRITEBYTECODE=1 \
+    "$PY" "$work/explain_provider_identity.py" || true
+  echo 'STOP: Still zero verifiable old manual markers. No deployment.'
+  exit 4
+fi
 
 echo '=== Safe backup and bounded apply ==='
 exec 9>/var/lib/epimediahub/.episcene-independent-source-installer.lock
