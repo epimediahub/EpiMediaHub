@@ -12,9 +12,10 @@ import os
 from pathlib import Path
 import secrets
 
-from flask import Blueprint, abort, jsonify, redirect, render_template_string, request, session, url_for
+from flask import Blueprint, abort, jsonify, redirect, render_template_string, request, session, url_for, send_file
 from incident_store import IncidentStore
 from mobile_registry import AdminMobileRegistry
+from mobile_updates import read_release
 
 bp=Blueprint("epimediahub_admin_mobile",__name__)
 ALLOWED_KEYS=frozenset({"installation_id","fcm_token","platform"})
@@ -155,6 +156,43 @@ def ack(key):
 def alerts_json():
     _require_admin()
     return _response({"incidents":_incidents().open_incidents()[:120]})
+
+
+@bp.get("/admin/mobile/update/status")
+def update_status():
+    _require_admin()
+    try:
+        release=read_release(_base())
+    except (ValueError, PermissionError, OSError):
+        return _response({"available":False,"error":"release_unavailable"},503)
+    if release is None:
+        return _response({"available":False})
+    return _response({
+        "available":True,
+        "package":"de.epimediahub.admin",
+        "version_code":release.version_code,
+        "version_name":release.version_name,
+        "size_bytes":release.size_bytes,
+        "sha256":release.sha256,
+    })
+
+
+@bp.get("/admin/mobile/update/apk")
+def update_apk():
+    _require_admin()
+    try:
+        release=read_release(_base())
+    except (ValueError, PermissionError, OSError):
+        abort(503)
+    if release is None:
+        abort(404)
+    response=send_file(release.path, mimetype="application/vnd.android.package-archive",
+                       as_attachment=True, download_name="epimediahub-admin.apk",
+                       conditional=False, max_age=0)
+    response.headers["Cache-Control"]="private, no-store"
+    response.headers["X-Content-Type-Options"]="nosniff"
+    response.headers["X-Admin-APK-SHA256"]=release.sha256
+    return response
 
 def install(app):
     if "epimediahub_admin_mobile" not in app.blueprints:
