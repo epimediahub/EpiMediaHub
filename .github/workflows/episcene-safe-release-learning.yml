@@ -13,7 +13,7 @@ jobs:
       - name: Syntax and isolated SQLite regression tests
         working-directory: tools/episcene-learning-v1/safe-release-bundle
         run: |
-          python3 -m py_compile safe_release_rollout.py feedback_learning.py
-          python3 -m unittest -v test_safe_release_rollout.py test_feedback_learning.py
+          python3 -m py_compile safe_release_rollout.py feedback_learning.py explain_provider_identity.py
+          python3 -m unittest -v test_safe_release_rollout.py test_feedback_learning.py test_explain_provider_identity.py
           bash -n install_all.sh
           bash -n install_independent_source_fix.sh
