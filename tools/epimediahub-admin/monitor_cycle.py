@@ -129,8 +129,8 @@ def main():
     p.add_argument("--snapshot",type=Path,required=True)
     p.add_argument("--data-dir",type=Path,required=True)
     a=p.parse_args()
-    if a.data_dir.is_symlink() or not a.data_dir.is_dir() or
-        a.data_dir.stat().st_mode & 0o077:
+    if (a.data_dir.is_symlink() or not a.data_dir.is_dir()
+            or a.data_dir.stat().st_mode & 0o077):
         raise SystemExit("Private admin data directory required")
     print(json.dumps(run_once(a.snapshot,a.data_dir,int(time.time())),
                      sort_keys=True))
