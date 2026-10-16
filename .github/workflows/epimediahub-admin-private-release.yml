@@ -34,11 +34,7 @@ jobs:
           gradle-version: '8.9'
       - name: Validate stable-signing and Firebase secrets
         env:
-          KEYSTORE_B64: ${{ secrets.EPI_ADMIN_RELEASE_KEYSTORE_B64 }}
-          STORE_PASS: ${{ secrets.EPI_ADMIN_RELEASE_STORE_PASSWORD }}
-          KEY_PASS: ${{ secrets.EPI_ADMIN_RELEASE_KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.EPI_ADMIN_RELEASE_KEY_ALIAS }}
-          SIGNER_SHA: ${{ secrets.EPI_ADMIN_RELEASE_CERT_SHA256 }}
+          SIGNING_JSON: ${{ secrets.EPI_ADMIN_RELEASE_SIGNING_JSON }}
           FIREBASE_CLIENT_JSON: ${{ secrets.EPI_ADMIN_FIREBASE_CLIENT_JSON }}
           EPI_ADMIN_RELEASE_VERSION_CODE: ${{ inputs.version_code }}
           EPI_ADMIN_RELEASE_VERSION_NAME: ${{ inputs.version_name }}
@@ -47,15 +43,33 @@ jobs:
           set -euo pipefail
           umask 077
           python3 - <<'PY'
-          import json,os,re
+          import base64,json,os,re
           value=os.environ
           if (not re.fullmatch(r'[1-9][0-9]{0,8}',value['EPI_ADMIN_RELEASE_VERSION_CODE'])
               or not re.fullmatch(r'[A-Za-z0-9._-]{1,48}',value['EPI_ADMIN_RELEASE_VERSION_NAME'])):
               raise SystemExit('Invalid release version')
-          for name in ('KEYSTORE_B64','STORE_PASS','KEY_PASS','KEY_ALIAS','SIGNER_SHA','FIREBASE_CLIENT_JSON'):
+          for name in ('SIGNING_JSON','FIREBASE_CLIENT_JSON'):
               if not value[name]: raise SystemExit('Missing private build secret: '+name)
-          if not re.fullmatch(r'[0-9a-fA-F]{64}',value['SIGNER_SHA']):
+          signing=json.loads(value['SIGNING_JSON'])
+          if not isinstance(signing,dict) or set(signing)!={
+              'keystore_base64','store_password','key_password','key_alias','cert_sha256'}:
+              raise SystemExit('Invalid release signing bundle')
+          if not re.fullmatch(r'[0-9a-fA-F]{64}',signing['cert_sha256']):
               raise SystemExit('Pinned release signing fingerprint missing')
+          for name in ('store_password','key_password','key_alias'):
+              if not isinstance(signing[name],str) or not re.fullmatch(
+                  r'[A-Za-z0-9._-]{8,128}',signing[name]):
+                  raise SystemExit('Unsafe release signing value: '+name)
+          try:
+              keystore=base64.b64decode(signing['keystore_base64'],validate=True)
+          except (ValueError,TypeError):
+              raise SystemExit('Invalid release keystore encoding')
+          if not 1024<=len(keystore)<=200000:
+              raise SystemExit('Unexpected private release keystore size')
+          keystore_path=value['RUNNER_TEMP']+'/epi-admin.jks'
+          with open(keystore_path,'wb') as output:
+              os.fchmod(output.fileno(),0o600)
+              output.write(keystore)
           data=json.loads(value['FIREBASE_CLIENT_JSON'])
           if data.get('type')=='service_account' or 'private_key' in data:
               raise SystemExit('Service account forbidden in Android app')
@@ -74,27 +88,25 @@ jobs:
                   print(key+'='+part,file=out)
               print('EPI_ADMIN_RELEASE_VERSION_CODE='+value['EPI_ADMIN_RELEASE_VERSION_CODE'],file=out)
               print('EPI_ADMIN_RELEASE_VERSION_NAME='+value['EPI_ADMIN_RELEASE_VERSION_NAME'],file=out)
-              print('EPI_ADMIN_RELEASE_KEY_ALIAS='+value['KEY_ALIAS'],file=out)
-              print('EPI_ADMIN_RELEASE_STORE_PASSWORD='+value['STORE_PASS'],file=out)
-              print('EPI_ADMIN_RELEASE_KEY_PASSWORD='+value['KEY_PASS'],file=out)
-              print('EPI_ADMIN_RELEASE_KEYSTORE_FILE='+value['RUNNER_TEMP']+'/epi-admin.jks',file=out)
+              print('EPI_ADMIN_RELEASE_KEY_ALIAS='+signing['key_alias'],file=out)
+              print('EPI_ADMIN_RELEASE_STORE_PASSWORD='+signing['store_password'],file=out)
+              print('EPI_ADMIN_RELEASE_KEY_PASSWORD='+signing['key_password'],file=out)
+              print('EPI_ADMIN_RELEASE_CERT_SHA256='+signing['cert_sha256'].lower(),file=out)
+              print('EPI_ADMIN_RELEASE_KEYSTORE_FILE='+keystore_path,file=out)
           PY
-          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/epi-admin.jks"
           test -s "$RUNNER_TEMP/epi-admin.jks"
           echo 'Private release signer and Firebase Android metadata prepared.'
       - name: Compile signed private Admin release and lint
         working-directory: android/admin-app
         run: gradle --no-daemon :app:assembleRelease :app:lintRelease
       - name: Check signature, package and prepare manifest
-        env:
-          SIGNER_SHA: ${{ secrets.EPI_ADMIN_RELEASE_CERT_SHA256 }}
         run: |
           set -euo pipefail
           APK=android/admin-app/app/build/outputs/apk/release/app-release.apk
           test -s "$APK"
           SIGNER="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" |
             sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)"
-          test -n "$SIGNER" && test "${SIGNER,,}" = "${SIGNER_SHA,,}"
+          test -n "$SIGNER" && test "${SIGNER,,}" = "${EPI_ADMIN_RELEASE_CERT_SHA256,,}"
           mkdir -p "$RUNNER_TEMP/admin-release"
           cp "$APK" "$RUNNER_TEMP/admin-release/current.apk"
           python3 - <<'PY'
