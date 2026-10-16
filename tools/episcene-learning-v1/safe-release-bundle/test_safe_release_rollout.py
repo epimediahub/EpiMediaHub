@@ -112,6 +112,28 @@ class SafeRelease(unittest.TestCase):
                 self.assertEqual(con.execute("SELECT status FROM skip_jobs WHERE id=501").fetchone()[0],'queued')
                 self.assertEqual(con.execute("SELECT COUNT(*) FROM episcene_safe_release_retries").fetchone()[0],1)
 
+    def test_backlog_larger_than_limit_is_batched(self):
+        with tempfile.TemporaryDirectory() as td:
+            path=fixture(Path(td))
+            with connect(path) as con:
+                for i in range(130):
+                    asset='extra-'+str(i)
+                    ep=i+100
+                    con.execute("INSERT INTO skip_assets VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        (asset,8,'series','episode',1,ep,'MobLand',2400000,str(ep),'mkv'))
+                    con.execute("INSERT INTO skip_records VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (5000+i,asset,'device','series','intro','pending',1,ep,
+                         'episode','MobLand',30000,60000,2400000,0,99,12))
+                con.commit()
+                first,excluded=r.manual_plan(con,r.manual_rows(con),validate=lambda row:True)
+                self.assertEqual(len(first),120)
+                self.assertEqual(excluded.get('DEFERRED_FOR_NEXT_SAFE_BATCH'),12)
+                con.executemany("UPDATE skip_records SET status='approved' WHERE id=?",
+                                [(row['id'],) for row in first])
+                con.commit()
+                second,_=r.manual_plan(con,r.manual_rows(con),validate=lambda row:True)
+                self.assertEqual(len(second),12)
+
     def test_no_approval_when_exact_provider_file_not_verified(self):
         with tempfile.TemporaryDirectory() as td:
             path=fixture(Path(td))
