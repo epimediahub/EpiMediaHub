@@ -33,7 +33,7 @@ import android.webkit.WebSettings
 
 private const val ADMIN_HOST = "admin.epimediahub.com"
 private const val ADMIN_BASE = "https://admin.epimediahub.com"
-private const val INCIDENTS = "https://admin.epimediahub.com/admin/diagnostics"
+private const val INCIDENTS = "https://admin.epimediahub.com/admin/mobile/alerts"
 
 class MainActivity : FragmentActivity() {
     private var unlocked by mutableStateOf(false)
@@ -52,7 +52,6 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
-        initFirebase()
         val openAlerts = intent.getBooleanExtra("open_alerts", false)
         selection = if (openAlerts) 2 else 0
         browser = WebView(this).apply {
@@ -176,19 +175,6 @@ class MainActivity : FragmentActivity() {
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
         }
-    }
-
-    private fun initFirebase() {
-        val appId = BuildConfig.FIREBASE_APP_ID
-        val apiKey = BuildConfig.FIREBASE_API_KEY
-        val projectId = BuildConfig.FIREBASE_PROJECT_ID
-        val senderId = BuildConfig.FIREBASE_SENDER_ID
-        if (listOf(appId, apiKey, projectId, senderId).any { it.isBlank() }) return
-        if (FirebaseApp.getApps(this).isNotEmpty()) return
-        val opts = FirebaseOptions.Builder()
-            .setApplicationId(appId).setApiKey(apiKey)
-            .setProjectId(projectId).setGcmSenderId(senderId).build()
-        FirebaseApp.initializeApp(this, opts)
     }
 
     private fun enablePush() {
