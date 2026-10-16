@@ -102,10 +102,25 @@ def report(prod,learn):
             'jobs_finished_or_review':entry['jobs_finished_or_review'],
             'not_yet_approved':entry['not_yet_approved'],
         })
+    approved_training=sum(v['n'] for v in labels if v['decision']=='positive')
+    negative_training=sum(v['n'] for v in labels if v['decision']=='negative')
+    source_counts=Counter(x['playlist_id'] for x in models)
+    # An all-positive training cohort cannot measure false-positive risk.
+    # Keep all learned offsets in shadow until held-out negative controls
+    # and independent A/V evidence have been evaluated.
+    blockers=[]
+    if negative_training==0:
+        blockers.append('NO_VERIFIED_NEGATIVE_TRAINING_EXAMPLES')
+    if not source_counts.get(10):
+        blockers.append('NO_LEARNED_MODEL_FOR_ANALYSIS_PLAYLIST_10')
     return {
         'mode':'EPISCENE_READ_ONLY_AUTOMATION_PILOT',
         'timestamp_utc':datetime.now(timezone.utc).isoformat(),
         'active_verified_labels':dict((r['decision'],r['n']) for r in labels),
+        'positive_training':approved_training,
+        'negative_training':negative_training,
+        'source_model_counts':{str(k):v for k,v in sorted(source_counts.items())},
+        'automatic_model_publication_blockers':blockers,
         'shadow_models_total':len(models),
         'pilot_summary':dict(counters),
         'groups':family_details,
