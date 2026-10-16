@@ -21,7 +21,7 @@ MAX_ITEMS=250_000
 EXTENSIONS={'mp4','mkv','m4v','avi','ts','mpeg','mpg'}
 
 
-def reason(record, source_url, provider_asset_key):
+def reason(record, source_url, provider_asset_key, *, provider=None, asset=None):
     stream=record['mapped_stream']
     extension=record['mapped_extension']
     config=record['config_json']
@@ -31,14 +31,25 @@ def reason(record, source_url, provider_asset_key):
         return 'EXTENSION_UNSUPPORTED'
     if not isinstance(config,str) or not config.strip():
         return 'ANALYSIS_PROVIDER_CONFIG_UNAVAILABLE'
-    # Reconstruct the original asset-shaped record, without altering DB:
-    # the raw manual marker does not necessarily include stream_id/extension.
-    media=dict(record)
+    # Actual stored objects are preferred: source_url may read several
+    # playlist/asset fields beyond just config_json/stream_id/extension.
+    media=dict(asset) if asset is not None else dict(record)
     media['stream_id']=stream
     media['extension']=extension
+    playlist=dict(provider) if provider is not None else {'config_json':config}
     try:
-        url=source_url({'config_json':config},media)
-    except KeyError:
+        url=source_url(playlist,media)
+    except KeyError as error:
+        # Only a fixed allowlist of innocuous FIELD NAMES may be reported.
+        # The missing key could otherwise itself be a credential or URL.
+        field=error.args[0] if error.args else ''
+        safe={'id','playlist_id','asset_key','source_key','media_type',
+              'stream_id','extension','username','password','config',
+              'config_json','url','base_url','host','server','server_url',
+              'provider','stream_url','title','type','media_id',
+              'output','episode','season','movie_id','series_id','kind'}
+        if isinstance(field,str) and field in safe:
+            return 'SOURCE_URL_REQUIRED_FIELD_'+field.upper()
         return 'SOURCE_URL_MISSING_FIELD'
     except (TypeError,ValueError,IndexError,AttributeError):
         return 'SOURCE_URL_INVALID_INPUT'
@@ -120,7 +131,23 @@ def audit(con, source_url, provider_asset_key):
             continue
         # We do not claim these rows can be released: conflicting / protected
         # decisions and timing checks remain the original production guards.
-        result=reason(record,source_url,provider_asset_key)
+        # Probe original provider and media rows, not reconstructed guesses.
+        # Values remain process-local and are NEVER included in output.
+        try:
+            playlist_table=('customer_playlists' if owned
+                            else 'skip_analysis_playlists')
+            provider=con.execute(
+                'SELECT * FROM '+playlist_table+' WHERE id=?',
+                (record['playlist_id'],)
+            ).fetchone()
+            asset=con.execute(
+                'SELECT * FROM skip_assets WHERE asset_key=? AND playlist_id=?',
+                (record['asset_key'],record['playlist_id'])
+            ).fetchone()
+            result=reason(record,source_url,provider_asset_key,
+                          provider=provider,asset=asset)
+        except sqlite3.Error:
+            result='DATABASE_SOURCE_LOOKUP_FAILED'
         outcomes[result]+=1
         if result=='PROVIDER_IDENTITY_CHANGED':
             eligible_proof['stable_episode_fields_still_match']+=1
