@@ -41,7 +41,8 @@ fetch(){
 }
 
 echo "=== 1/5: Validate existing versions and runtime ==="
-for p in "$DB" "$PY" "$A" "$B" "$CODE/feedback_learning.py" "$APP/skip_release.py";do
+[[ -x "$PY" ]] || { echo "STOP: expected Python venv missing";exit 2; }
+for p in "$DB" "$A" "$B" "$CODE/feedback_learning.py" "$APP/skip_release.py";do
   [[ -f "$p" && ! -L "$p" ]] || { echo "STOP: missing or linked: $p";exit 2; }
 done
 systemctl cat "$SERVICE" >/dev/null
