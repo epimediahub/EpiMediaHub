@@ -45,7 +45,7 @@ def _private(path: Path, *, expect_dir: bool = False) -> bool:
 
 def read_release(data_directory: Path) -> Release | None:
     root = Path(data_directory)
-    if not _private(root, expect_dir=True):
+    if root.is_symlink() or not root.is_dir():
         raise PermissionError("Unsafe admin data directory")
     private = root / "admin-mobile"
     release_dir = private / "releases"
