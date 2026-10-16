@@ -165,6 +165,16 @@ class MainActivity : FragmentActivity() {
                 Spacer(Modifier.width(8.dp))
                 OutlinedButton(onClick = { enablePush() }) { Text("Push aktivieren") }
             }
+            TextButton(
+                modifier = Modifier.padding(start = 10.dp),
+                onClick = {
+                    val cookie=CookieManager.getInstance().getCookie(ADMIN_BASE) ?: ""
+                    if (cookie.isBlank()) notice="Bitte zuerst am Admin-Dashboard anmelden."
+                    else AdminPushRegistration.unregister(this@MainActivity,cookie) {
+                        notice=it
+                    }
+                }
+            ) { Text("Dieses Push-Gerät abmelden") }
             if (notice.isNotEmpty()) Text(notice, modifier = Modifier.padding(10.dp),
                 style = MaterialTheme.typography.bodySmall)
             AndroidView(
