@@ -1,0 +1,107 @@
+"""Real Flask test-client checks for private Admin mobile authorization."""
+import os
+from pathlib import Path
+import tempfile
+import unittest
+import uuid
+from unittest import mock
+
+from flask import Flask
+import mobile_flask
+from mobile_registry import AdminMobileRegistry
+
+
+class TestPrivateAdminMobile(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory()
+        self.env=mock.patch.dict(os.environ,{
+            "EPIMEDIAHUB_DATA_DIR":self.temp.name,
+            "EPIMEDIAHUB_ADMIN_FCM_PROJECT_ID":"epi-admin-test"
+        })
+        self.env.start()
+        self.app=Flask("test-private-admin")
+        self.app.secret_key="a-long-isolated-test-only-secret"
+        self.app.add_url_rule("/login","login",lambda:"login")
+        mobile_flask.install(self.app)
+        self.client=self.app.test_client()
+        self.install=str(uuid.uuid4())
+        self.token="TEST_FCM_"+"a"*160
+
+    def tearDown(self):
+        self.env.stop()
+        self.temp.cleanup()
+
+    def signin(self):
+        with self.client.session_transaction() as session:
+            session["admin"]=True
+            session["_dashboard_csrf"]="my-test-csrf-"+"a"*32
+
+    def test_anonymous_cannot_read_or_register(self):
+        self.assertEqual(self.client.get("/admin/mobile/bootstrap").status_code,401)
+        self.assertEqual(self.client.get("/admin/mobile/alerts.json").status_code,401)
+        self.assertEqual(self.client.post("/admin/mobile/register",json={
+            "installation_id":self.install,"fcm_token":self.token,
+            "platform":"android-admin"}).status_code,401)
+
+    def test_csrf_and_registration_idempotent_and_private(self):
+        self.signin()
+        data={"installation_id":self.install,"fcm_token":self.token,
+              "platform":"android-admin"}
+        boot=self.client.get("/admin/mobile/bootstrap")
+        self.assertEqual(boot.status_code,200)
+        csrf=boot.get_json()["csrf"]
+        self.assertEqual(boot.headers["Cache-Control"],"private, no-store")
+        self.assertEqual(self.client.post("/admin/mobile/register",json=data).status_code,403)
+        result=self.client.post("/admin/mobile/register",json=data,
+            headers={"X-Dashboard-CSRF":csrf})
+        self.assertEqual(result.status_code,201)
+        self.assertEqual(self.client.post("/admin/mobile/register",json=data,
+            headers={"X-Dashboard-CSRF":csrf}).status_code,201)
+        registry=AdminMobileRegistry(Path(self.temp.name)/"admin-mobile"/"registrations.sqlite3")
+        self.assertEqual(registry.active_count(),1)
+        self.assertNotIn(self.token,str(result.get_json()))
+        self.assertEqual(self.client.post("/admin/mobile/unregister",
+            json={"installation_id":self.install},
+            headers={"X-Dashboard-CSRF":csrf}).status_code,200)
+        self.assertEqual(registry.active_count(),0)
+
+    def test_untrusted_fields_or_platform_blocked(self):
+        self.signin()
+        csrf=self.client.get("/admin/mobile/bootstrap").get_json()["csrf"]
+        data={"installation_id":self.install,"fcm_token":self.token,
+            "platform":"android-admin","password":"DO-NOT-STORE"}
+        self.assertEqual(self.client.post("/admin/mobile/register",json=data,
+            headers={"X-Dashboard-CSRF":csrf}).status_code,400)
+        data.pop("password")
+        data["platform"]="iptv-player"
+        self.assertEqual(self.client.post("/admin/mobile/register",json=data,
+            headers={"X-Dashboard-CSRF":csrf}).status_code,400)
+
+    def test_incident_page_html_autoescapes_alerts(self):
+        self.signin()
+        from monitor_rules import Alert
+        mobile_flask._incidents().observe([Alert(
+            "analysis_stalled:8","analysis_stalled","critical","8",
+            "<script>alert(123)</script>")],1760000000)
+        view=self.client.get("/admin/mobile/alerts")
+        self.assertEqual(view.status_code,200)
+        self.assertIn(b"&lt;script&gt;",view.data)
+        self.assertNotIn(b"<script>alert(123)",view.data)
+        self.assertEqual(view.headers["Cache-Control"],"no-store, private")
+
+    def test_login_required_for_acknowledgements(self):
+        self.signin()
+        from monitor_rules import Alert
+        mobile_flask._incidents().observe([Alert(
+            "analysis_stalled:8","analysis_stalled","critical","8",
+            "EpiScene-Lane ohne Fortschritt trotz wartender Jobs")],1760000000)
+        self.assertEqual(self.client.post("/admin/mobile/ack/analysis_stalled:8").status_code,403)
+        csrf=self.client.get("/admin/mobile/bootstrap").get_json()["csrf"]
+        r=self.client.post("/admin/mobile/ack/analysis_stalled:8",
+            data={"_dashboard_csrf":csrf})
+        self.assertEqual(r.status_code,303)
+        self.assertEqual(mobile_flask._incidents().get("analysis_stalled:8")["state"],"acknowledged")
+
+
+if __name__=="__main__":
+    unittest.main()
