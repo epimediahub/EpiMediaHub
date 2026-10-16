@@ -26,13 +26,52 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Securely load Firebase Android client configuration
+        id: firebase
+        env:
+          EPI_ADMIN_FIREBASE_CLIENT_JSON: ${{ secrets.EPI_ADMIN_FIREBASE_CLIENT_JSON }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          raw = os.getenv("EPI_ADMIN_FIREBASE_CLIENT_JSON", "").strip()
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              if not raw:
+                  print("configured=false", file=out)
+                  print("Firebase not configured: building dashboard-only QA APK.")
+              else:
+                  data = json.loads(raw)
+                  if ("private_key" in data or "private_key_id" in data
+                          or data.get("type") == "service_account"):
+                      raise SystemExit("STOP: server service-account JSON is forbidden in Android builds.")
+                  info = data["project_info"]
+                  clients = [x for x in data["client"] if
+                      x["client_info"]["android_client_info"].get("package_name") ==
+                      "de.epimediahub.admin"]
+                  if len(clients) != 1:
+                      raise SystemExit("STOP: Firebase client package must be de.epimediahub.admin.")
+                  client = clients[0]
+                  values = {
+                    "EPI_ADMIN_FIREBASE_APP_ID":client["client_info"]["mobilesdk_app_id"],
+                    "EPI_ADMIN_FIREBASE_API_KEY":client["api_key"][0]["current_key"],
+                    "EPI_ADMIN_FIREBASE_PROJECT_ID":info["project_id"],
+                    "EPI_ADMIN_FIREBASE_SENDER_ID":info["project_number"],
+                  }
+                  if (not all(isinstance(v,str) and 0<len(v)<=180 and
+                          re.fullmatch(r"[A-Za-z0-9:._-]+",v) for v in values.values())):
+                      raise SystemExit("STOP: Firebase client fields are malformed.")
+                  with open(os.environ["GITHUB_ENV"],"a",encoding="utf-8") as env:
+                      for key,value in values.items():
+                          print(key+"="+value,file=env)
+                  print("configured=true",file=out)
+                  print("Firebase Android client enabled; values kept out of logs.")
+          PY
       - name: Compile separate private Android Admin app
         working-directory: android/admin-app
         run: gradle --no-daemon :app:assembleDebug :app:lintDebug
       - name: Upload private QA build (not official distribution)
         uses: actions/upload-artifact@v4
         with:
-          name: epimediahub-admin-qa-debug-unsigned-release-not-ready
+          name: ${{ steps.firebase.outputs.configured == 'true' && 'epimediahub-admin-firebase-configured-debug-qa' || 'epimediahub-admin-qa-without-push' }}
           path: android/admin-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 3
