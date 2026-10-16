@@ -25,7 +25,7 @@ HERE=Path(__file__).resolve().parent
 MODULES=("monitor_rules.py","incident_store.py","mobile_registry.py",
          "mobile_flask.py","mobile_updates.py","fcm_sender.py","monitor_cycle.py",
          "live_analysis_snapshot.py","publish_private_release.py",
-         "sync_private_updates.py")
+         "sync_private_updates.py","admin_monitor_runner.py")
 HOOK="""
 
 # Private EpiMediaHub Admin Android session API (no customer updater).
