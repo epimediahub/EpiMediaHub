@@ -8,7 +8,7 @@
         android:fullBackupContent="false"
         android:usesCleartextTraffic="false"
         android:label="EpiMediaHub Admin"
-        android:icon="@android:drawable/ic_menu_manage"
+        android:icon="@drawable/epi_admin_icon"
         android:theme="@style/AdminTheme">
         <activity android:name=".MainActivity"
             android:exported="true"
