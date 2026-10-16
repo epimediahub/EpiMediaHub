@@ -31,15 +31,26 @@ def reason(record, source_url, provider_asset_key):
         return 'EXTENSION_UNSUPPORTED'
     if not isinstance(config,str) or not config.strip():
         return 'ANALYSIS_PROVIDER_CONFIG_UNAVAILABLE'
+    # Reconstruct the original asset-shaped record, without altering DB:
+    # the raw manual marker does not necessarily include stream_id/extension.
+    media=dict(record)
+    media['stream_id']=stream
+    media['extension']=extension
     try:
-        actual=provider_asset_key(
-            source_url({'config_json':config},record),record['media_type']
-        )
-    except (TypeError,ValueError,KeyError,IndexError,AttributeError):
-        return 'PROVIDER_RESOLVER_REJECTED'
+        url=source_url({'config_json':config},media)
+    except KeyError:
+        return 'SOURCE_URL_MISSING_FIELD'
+    except (TypeError,ValueError,IndexError,AttributeError):
+        return 'SOURCE_URL_INVALID_INPUT'
     except Exception:
-        # Do not leak exception text: may contain credential-bearing URL.
-        return 'PROVIDER_RESOLVER_ERROR'
+        return 'SOURCE_URL_OTHER_ERROR'
+    try:
+        actual=provider_asset_key(url,record['media_type'])
+    except (KeyError,TypeError,ValueError,IndexError,AttributeError):
+        return 'PROVIDER_IDENTITY_HASH_INVALID_INPUT'
+    except Exception:
+        # Error text could include credentials. Never include it.
+        return 'PROVIDER_IDENTITY_HASH_OTHER_ERROR'
     return 'MATCH' if actual==record['asset_key'] else 'PROVIDER_IDENTITY_CHANGED'
 
 
