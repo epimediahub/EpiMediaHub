@@ -103,6 +103,9 @@ class MainActivity : FragmentActivity() {
     private var selection by mutableIntStateOf(HOME)
     private var loading by mutableStateOf(false)
     private var pushRegistered by mutableStateOf(false)
+    private var updateReady by mutableStateOf<AdminUpdater.Release?>(null)
+    private var updateNotice by mutableStateOf("")
+    private var updateCheckedForSession = false
     private lateinit var browser: WebView
 
     private val notificationPermission = registerForActivityResult(
@@ -138,6 +141,13 @@ class MainActivity : FragmentActivity() {
 
                 override fun onPageFinished(view: WebView, url: String) {
                     loading = false
+                    if (!updateCheckedForSession && url.startsWith(ADMIN_BASE)) {
+                        val cookie = CookieManager.getInstance().getCookie(ADMIN_BASE) ?: ""
+                        if (cookie.isNotBlank()) {
+                            updateCheckedForSession = true
+                            checkForUpdates(false)
+                        }
+                    }
                 }
 
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -396,6 +406,7 @@ class MainActivity : FragmentActivity() {
                 subtitle = "Warnungen, Ereignisse und Bestätigungen",
                 onClick = { selectDestination(ALERTS) }
             )
+            UpdatePanel()
             PushPanel()
             Spacer(Modifier.height(5.dp))
             Text(
@@ -440,6 +451,79 @@ class MainActivity : FragmentActivity() {
                 Icon(Icons.Outlined.ChevronRight, null, tint = Muted,
                     modifier = Modifier.size(20.dp))
             }
+        }
+    }
+
+    @Composable
+    private fun UpdatePanel() {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = InkRaised,
+            border = BorderStroke(1.dp, Border)
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Refresh, null, tint = Positive,
+                        modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("In-App-Updates", color = White,
+                            fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(
+                            if (updateReady != null) "Version ${updateReady!!.name} ist bereit"
+                            else "Neue Versionen direkt in dieser App installieren",
+                            color = Muted, fontSize = 11.sp
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        if (updateReady != null) installUpdate()
+                        else checkForUpdates(true)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (updateReady != null) Positive else BlueMuted,
+                        contentColor = if (updateReady != null) Ink else Blue
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Outlined.Refresh, null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(7.dp))
+                    Text(
+                        if (updateReady != null) "Update ${updateReady!!.name} installieren"
+                        else "Auf Updates prüfen",
+                        fontSize = 13.sp, fontWeight = FontWeight.SemiBold
+                    )
+                }
+                if (updateNotice.isNotBlank()) {
+                    Spacer(Modifier.height(9.dp))
+                    Text(updateNotice, color = Muted, fontSize = 12.sp, lineHeight = 17.sp)
+                }
+            }
+        }
+    }
+
+    private fun checkForUpdates(showMessage: Boolean) {
+        val cookie = CookieManager.getInstance().getCookie(ADMIN_BASE) ?: ""
+        if (cookie.isBlank()) {
+            if (showMessage) updateNotice = "Bitte zuerst im Dashboard anmelden."
+            return
+        }
+        if (showMessage) updateNotice = "Update wird geprüft …"
+        AdminUpdater.check(cookie, BuildConfig.VERSION_CODE.toLong()) { candidate, message ->
+            updateReady = candidate
+            if (showMessage || candidate != null) updateNotice = message
+        }
+    }
+
+    private fun installUpdate() {
+        val release = updateReady ?: return
+        val cookie = CookieManager.getInstance().getCookie(ADMIN_BASE) ?: ""
+        updateNotice = "Das signierte Update wird heruntergeladen und überprüft …"
+        AdminUpdater.downloadAndInstall(this, cookie, release) { message ->
+            updateNotice = message
         }
     }
 
