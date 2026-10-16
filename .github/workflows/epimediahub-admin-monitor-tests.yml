@@ -1,0 +1,22 @@
+name: EpiMediaHub Admin monitor rule tests
+
+on:
+  pull_request:
+    paths:
+      - 'tools/epimediahub-admin/**'
+      - '.github/workflows/epimediahub-admin-monitor-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate syntax and alert rules
+        working-directory: tools/epimediahub-admin
+        run: |
+          python -m py_compile monitor_rules.py test_monitor_rules.py
+          python -m unittest -v test_monitor_rules.py
