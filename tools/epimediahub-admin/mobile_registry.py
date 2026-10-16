@@ -46,6 +46,14 @@ class AdminMobileRegistry:
                 last_registered_epoch INTEGER NOT NULL,
                 enabled INTEGER NOT NULL CHECK(enabled IN (0,1))
             )""")
+            db.execute("""CREATE TABLE IF NOT EXISTS admin_mobile_outbox(
+                installation_id TEXT NOT NULL,
+                alert_key TEXT NOT NULL,
+                generation_epoch INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                sent_epoch INTEGER,
+                PRIMARY KEY(installation_id,alert_key,generation_epoch)
+            )""")
 
     def _connect(self):
         db=sqlite3.connect(self.path, timeout=10)
@@ -84,8 +92,11 @@ class AdminMobileRegistry:
         try: normalized=str(uuid.UUID(installation_id))
         except (TypeError,ValueError,AttributeError):return False
         with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=db.execute("DELETE FROM admin_mobile_devices WHERE installation_id=?",
                            (normalized,))
+            db.execute("DELETE FROM admin_mobile_outbox WHERE installation_id=?",
+                       (normalized,))
             return row.rowcount==1
 
     def tokens(self):
@@ -93,6 +104,44 @@ class AdminMobileRegistry:
             return [row["fcm_token"] for row in db.execute(
                 "SELECT fcm_token FROM admin_mobile_devices WHERE enabled=1 LIMIT ?",
                 (MAX_INSTALLATIONS,))]
+
+    def enqueue(self, events: list[tuple[str,str,int]], now_epoch: int):
+        """Queue a new incident generation once for each opted-in installation."""
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            # Never retain undeliverable notifications indefinitely.
+            db.execute("DELETE FROM admin_mobile_outbox WHERE generation_epoch<?",
+                       (int(now_epoch)-30*86400,))
+            installs=[row[0] for row in db.execute(
+                "SELECT installation_id FROM admin_mobile_devices WHERE enabled=1")]
+            for key,kind,generation in events:
+                if not isinstance(key,str) or len(key)>200:
+                    raise ValueError("Invalid incident key")
+                if kind not in ("analysis_stalled","playlist_access","worker_preflight",
+                                "service_down","build_failed","playback_errors","daily_report"):
+                    raise ValueError("Invalid incident category")
+                for install in installs:
+                    db.execute("""INSERT OR IGNORE INTO admin_mobile_outbox(
+                       installation_id,alert_key,generation_epoch,kind,sent_epoch)
+                       VALUES(?,?,?,?,NULL)""",
+                       (install,key,int(generation),kind))
+
+    def pending(self, limit: int=40):
+        with self._connect() as db:
+            return [dict(row) for row in db.execute("""
+                SELECT o.installation_id,o.alert_key,o.generation_epoch,
+                       o.kind,d.fcm_token
+                FROM admin_mobile_outbox o
+                JOIN admin_mobile_devices d ON d.installation_id=o.installation_id
+                WHERE o.sent_epoch IS NULL AND d.enabled=1
+                ORDER BY o.generation_epoch LIMIT ?""",(min(int(limit),40),))]
+
+    def sent(self, installation_id: str, key: str, generation: int, now_epoch: int):
+        with self._connect() as db:
+            db.execute("""UPDATE admin_mobile_outbox SET sent_epoch=?
+               WHERE installation_id=? AND alert_key=? AND generation_epoch=?
+                 AND sent_epoch IS NULL""",
+                (int(now_epoch),installation_id,key,int(generation)))
 
     def active_count(self):
         with self._connect() as db:
