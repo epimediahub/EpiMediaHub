@@ -95,8 +95,8 @@ print('Manuelle Einträge:',m.get('old_manual_pending'),
 print('Nicht freigabefähig (aggregiert):',
       json.dumps(m.get('excluded',{}),sort_keys=True))
 print('Verwertbare Lernmarkierungen:',l.get('eligible'))
-if not m.get('eligible_exact_manual_marks',0) and not l.get('eligible',0):
-    print('STOP: Die Korrektur kann diese Markierungen nicht sicher zuordnen.')
+if not m.get('eligible_exact_manual_marks',0):
+    print('STOP: Noch immer keine sicher bestätigbare manuelle Markierung.')
     print('Keine Installation; keine Freigaben. Ursache liegt in fehlender')
     print('Geräteherkunft oder einer nicht nachweisbaren Provider-Datei.')
     raise SystemExit(4)
