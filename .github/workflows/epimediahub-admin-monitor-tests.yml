@@ -18,5 +18,5 @@ jobs:
       - name: Validate syntax and alert rules
         working-directory: tools/epimediahub-admin
         run: |
-          python -m py_compile monitor_rules.py test_monitor_rules.py
-          python -m unittest -v test_monitor_rules.py
+          python -m compileall -q .
+          python -m unittest discover -v -p 'test_*.py'
