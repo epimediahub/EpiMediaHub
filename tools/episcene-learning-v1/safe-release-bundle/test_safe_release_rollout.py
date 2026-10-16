@@ -166,6 +166,30 @@ class SafeRelease(unittest.TestCase):
                 valid,_=r.manual_plan(con,r.manual_rows(con),validate=lambda _:True)
                 self.assertEqual(valid,[])
 
+    def test_provider_resolver_receives_real_asset_fields(self):
+        with tempfile.TemporaryDirectory() as td:
+            path=fixture(Path(td))
+            with connect(path) as con:
+                r101=next(x for x in r.manual_rows(con) if x['id']==101)
+                expected={'asset_key':'a-1'}
+                def source_url(playlist,media):
+                    self.assertEqual(playlist['config_json'],'{}')
+                    self.assertEqual(media['stream_id'],'1')
+                    self.assertEqual(media['extension'],'mkv')
+                    self.assertEqual(media['source_key'],'series')
+                    return 'synthetic_verified_stream'
+                def provider_asset_key(url,kind):
+                    self.assertEqual(url,'synthetic_verified_stream')
+                    self.assertEqual(kind,'episode')
+                    return expected['asset_key']
+                fake=types.SimpleNamespace(
+                    source_url=source_url, provider_asset_key=provider_asset_key)
+                with mock.patch.dict(sys.modules,{'skip_analysis':fake}):
+                    verify=r.trusted_validator()
+                    self.assertTrue(verify(r101))
+                    expected['asset_key']='different'
+                    self.assertFalse(verify(r101))
+
     def test_no_approval_when_exact_provider_file_not_verified(self):
         with tempfile.TemporaryDirectory() as td:
             path=fixture(Path(td))
