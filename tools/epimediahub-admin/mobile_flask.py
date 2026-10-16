@@ -77,7 +77,13 @@ def _registry():
     return AdminMobileRegistry(_base()/"admin-mobile"/"registrations.sqlite3")
 
 def _incidents():
-    return IncidentStore(_base()/"admin-mobile"/"incidents.sqlite3")
+    folder=_base()/"admin-mobile"
+    if folder.is_symlink():
+        raise PermissionError("Unexpected linked incident directory")
+    folder.mkdir(mode=0o700,parents=True,exist_ok=True)
+    if folder.stat().st_mode & 0o077:
+        raise PermissionError("Incident directory is not private")
+    return IncidentStore(folder/"incidents.sqlite3")
 
 def _response(data,status=200):
     response=jsonify(data)
@@ -117,7 +123,10 @@ def unregister():
     data=request.get_json(silent=True)
     if not isinstance(data,dict) or set(data)!={"installation_id"}:
         return _response({"error":"invalid_fields"},400)
-    _registry().unregister(data["installation_id"])
+    try:
+        _registry().unregister(data["installation_id"])
+    except (PermissionError, ValueError, TypeError):
+        return _response({"error":"invalid_installation"},400)
     return _response({"registered":False})
 
 @bp.get("/admin/mobile/alerts")
@@ -126,7 +135,6 @@ def alerts():
         return redirect(url_for("login",next=request.path))
     incidents=_incidents().open_incidents()[:120]
     html=render_template_string(HTML,incidents=incidents,csrf=_csrf())
-    response=bp.make_response(html) if hasattr(bp,"make_response") else None
     from flask import make_response
     result=make_response(html)
     result.headers["Cache-Control"]="no-store, private"
