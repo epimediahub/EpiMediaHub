@@ -175,8 +175,15 @@ def trusted_validator():
             config=r['playlist_config'] if owned else r['analysis_config']
             if not isinstance(config,str) or not config:
                 return False
+            # Manual rows use r.* from skip_records joined to skip_assets.
+            # Stream ID and extension are mapped_* join aliases, while the
+            # production URL resolver expects an asset-shaped record.
+            # Supply verified asset fields and keep the exact identity gate.
+            media=dict(r)
+            media['stream_id']=stream
+            media['extension']=ext
             playlist={'config_json':config}
-            actual=provider_asset_key(source_url(playlist,r),r['media_type'])
+            actual=provider_asset_key(source_url(playlist,media),r['media_type'])
             return actual==r['asset_key']
         except (TypeError,ValueError,KeyError,IndexError):
             return False
