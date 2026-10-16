@@ -116,9 +116,11 @@ def deploy():
     old=backend.BASE/"wsgi.py"
     if not old.is_file():
         raise RuntimeError("EXPECTED_WSGI_MISSING")
-    backend.install(datadir,datadir/"provisioning.db",wsgi)
     written=[]
+    applied_backend=False
     try:
+        # Stage the service FCM environment BEFORE dashboard backend restart.
+        # Only additive exact-content unit files are accepted.
         for path,content in wanted.items():
             path.parent.mkdir(mode=0o755,parents=True,exist_ok=True)
             if not path.exists():
@@ -126,6 +128,8 @@ def deploy():
                 path.chmod(0o644)
                 written.append(path)
         capture("systemctl","daemon-reload")
+        backend.install(datadir,datadir/"provisioning.db",wsgi)
+        applied_backend=True
         for unit in (MONITOR+".timer",UPDATES+".timer"):
             capture("systemctl","enable","--now",unit)
         if capture("systemctl","is-active",SERVICE)!="active":
@@ -137,8 +141,10 @@ def deploy():
         for path in written:
             path.unlink(missing_ok=True)
         subprocess.run(["systemctl","daemon-reload"],check=False,timeout=20)
-        # Existing guarded backend installer has the verified WSGI backup.
-        # Never roll back a database that may have received live writes.
+        # Do not automatically roll back the database: live writes may exist.
+        # Backend's own installer restores WSGI if its health probe failed.
+        if applied_backend:
+            print("WARNING: Admin API installed, timers disabled after unit failure.")
         raise
     print("PRIVATE_ADMIN_COMPLETE_SERVER_MODULES_INSTALLED")
     print("Updater polling: hourly. EpiScene monitoring: every five minutes.")
