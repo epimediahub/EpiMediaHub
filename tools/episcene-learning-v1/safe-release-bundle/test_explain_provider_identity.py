@@ -37,6 +37,18 @@ class ProviderIdentityAuditTests(unittest.TestCase):
         self.assertEqual('SOURCE_URL_INVALID_INPUT',
                          mod.reason(row,broken,lambda u,k:u))
 
+    def test_missing_field_name_is_sanitized(self):
+        row={'mapped_stream':'123','mapped_extension':'mkv',
+             'config_json':'secret','media_type':'episode','asset_key':'old'}
+        def expected_field(*args):
+            raise KeyError('server_url')
+        self.assertEqual('SOURCE_URL_REQUIRED_FIELD_SERVER_URL',
+                         mod.reason(row,expected_field,lambda u,k:u))
+        def untrusted_field(*args):
+            raise KeyError('secret-actual-provider-account-name')
+        self.assertEqual('SOURCE_URL_MISSING_FIELD',
+                         mod.reason(row,untrusted_field,lambda u,k:u))
+
     def test_output_contains_only_aggregate_reasons(self):
         db=sqlite3.connect(':memory:')
         db.executescript("""
@@ -67,7 +79,12 @@ class ProviderIdentityAuditTests(unittest.TestCase):
             (9,'OLD_ASSET_KEY','episode','SECRET_SOURCE',1,1,1000000,
              'SECRET_SERIES',0,30000,'intro',0,10,20,'pending','device');
         """)
-        result=mod.audit(db,lambda c,r:'https://secret.invalid/USER/PASS',
+        def full_object_resolver(provider, asset):
+            self.assertEqual(provider['id'],8)
+            self.assertEqual(asset['playlist_id'],8)
+            self.assertEqual(asset['stream_id'],'123')
+            return 'https://secret.invalid/USER/PASS'
+        result=mod.audit(db,full_object_resolver,
                              lambda url,kind:'NEW_KEY')
         output=json.dumps(result)
         for secret in ('SECRET_PASS','SECRET_SERIES','SECRET_SOURCE','OLD_ASSET_KEY'):
