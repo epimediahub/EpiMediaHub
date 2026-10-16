@@ -26,9 +26,13 @@ def fixture(root):
           content_version TEXT,etag TEXT);
         CREATE TABLE devices(id INTEGER PRIMARY KEY,customer_id INTEGER,enabled INTEGER);
         CREATE TABLE customer_playlists(id INTEGER PRIMARY KEY,customer_id INTEGER);
+        CREATE TABLE skip_analysis_playlists(id INTEGER PRIMARY KEY,archived INTEGER);
+        CREATE TABLE skip_analysis_sources(playlist_id INTEGER,enabled INTEGER);
         CREATE TABLE skip_auto_evidence(record_id INTEGER PRIMARY KEY,human_review INTEGER);
         INSERT INTO devices VALUES(99,12,1),(98,999,1);
         INSERT INTO customer_playlists VALUES(8,12);
+        INSERT INTO skip_analysis_playlists VALUES(8,0);
+        INSERT INTO skip_analysis_sources VALUES(8,1);
         """)
         for i,shift in enumerate((35133,35100,34600,35500,35200),1):
             asset=f'asset-{i}'
@@ -108,6 +112,32 @@ class FeedbackLearningSafety(unittest.TestCase):
             self.assertEqual(result['ambiguous_asset_kinds'],1)
             self.assertEqual(result['positives'],4)
             self.assertEqual(result['shadow_models'],1)
+
+    def test_manual_device_labels_survive_independent_analysis_inventory(self):
+        with tempfile.TemporaryDirectory() as td:
+            p,d=fixture(Path(td))
+            with sqlite3.connect(p) as db:
+                db.execute('DELETE FROM customer_playlists WHERE id=8')
+            report=fb.run(p,d,persist=False)
+            self.assertEqual(report['positives'],5)
+            self.assertEqual(report['negatives'],1)
+            self.assertEqual(report['shadow_models'],1)
+            # Explicit admin-reviewed machine findings still require
+            # the separate human_review signal.
+            with sqlite3.connect(p) as db:
+                db.execute('UPDATE skip_analysis_playlists SET archived=1 WHERE id=8')
+            blocked=fb.run(p,d,persist=False)
+            self.assertEqual(blocked['positives'],0)
+
+    def test_unowned_or_unverified_analysis_marks_remain_excluded(self):
+        with tempfile.TemporaryDirectory() as td:
+            p,d=fixture(Path(td))
+            with sqlite3.connect(p) as db:
+                db.execute('DELETE FROM customer_playlists WHERE id=8')
+                db.execute('UPDATE devices SET enabled=0 WHERE id=99')
+            report=fb.run(p,d,persist=False)
+            self.assertEqual(report['positives'],0)
+            self.assertEqual(report['negatives'],0)
 
     def test_multiple_machine_hints_not_cherrypicked(self):
         with tempfile.TemporaryDirectory() as td:
