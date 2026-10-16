@@ -24,7 +24,7 @@ DB=Path('/var/lib/epimediahub/provisioning.db')
 CODE=Path('/opt/epimediahub/provisioning')
 LOCK=Path('/var/lib/epimediahub/.episcene-one-step-releases.lock')
 BAD_REFERENCE_IDS={2282}
-MAX_PENDING_MANUAL=120
+MAX_PENDING_MANUAL=120  # maximum accepted human corrections per run, not backlog cap
 MAX_REQUEUE_PER_DAY=8
 MAX_REQUEUE_PER_RUN=4
 RETRY_PLAYLISTS=(8,10)
@@ -76,8 +76,9 @@ def manual_rows(con):
 
 def manual_plan(con, rows, identity_key=None, validate=None):
     """Immutable eligibility calculation; caller supplies production key validator."""
-    if len(rows)>MAX_PENDING_MANUAL:
-        raise RuntimeError('Unexpected manual backlog size; fail closed')
+    # A large number of human corrections must not halt all releases.
+    # Inspect the full set for duplicates, but approve only a bounded batch.
+    # Future runs can continue past permanently excluded older records.
     groups=defaultdict(list)
     for r in rows:
         groups[(r['asset_key'],r['segment_type'])].append(r)
@@ -128,6 +129,9 @@ def manual_plan(con, rows, identity_key=None, validate=None):
             WHERE asset_key=? AND kind=? AND ABS(duration_ms-?)<=2000 LIMIT 1""",
             (r['asset_key'],r['segment_type'],r['duration_ms'])).fetchone():
             reject('EXPLICIT_BLOCK_PRESENT')
+            continue
+        if len(accepted)>=MAX_PENDING_MANUAL:
+            reject('DEFERRED_FOR_NEXT_SAFE_BATCH')
             continue
         if not validate or not validate(r):
             reject('UNVERIFIED_PROVIDER_ASSET')
