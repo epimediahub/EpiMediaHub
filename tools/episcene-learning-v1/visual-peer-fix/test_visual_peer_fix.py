@@ -43,7 +43,8 @@ def fixture():
           attempts INTEGER,updated_at TEXT,detail TEXT);
       CREATE TABLE skip_records(id INTEGER PRIMARY KEY,asset_key TEXT,
           source_key TEXT,season INTEGER,episode INTEGER,duration_ms INTEGER,
-          source TEXT,segment_type TEXT,status TEXT,disabled INTEGER,media_type TEXT);
+          source TEXT,segment_type TEXT,status TEXT,disabled INTEGER,media_type TEXT,
+          reviewed_at TEXT);
       CREATE TABLE skip_auto_evidence(record_id INTEGER,evidence_json TEXT,
           human_review INTEGER);
       CREATE TABLE skip_language_priority(asset_key TEXT,priority INTEGER);
@@ -63,7 +64,10 @@ def fixture():
                    (key,'mobland',8,1,i,3600000,'episode'))
         db.execute('INSERT INTO skip_jobs VALUES(?,?,?,3,?,?)',
                    (100+i,key,'review','2026-10-14T19:00:00Z',''))
-        db.execute('INSERT INTO skip_records VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+        db.execute('''INSERT INTO skip_records
+              (id,asset_key,source_key,season,episode,duration_ms,
+               source,segment_type,status,disabled,media_type)
+              VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
                    (200+i,key,'mobland',1,i,3600000,
                     'audio_repetition','outro','pending',0,'episode'))
         db.execute('INSERT INTO skip_auto_evidence VALUES(?,?,0)',
@@ -183,13 +187,55 @@ class PeerSeedTests(unittest.TestCase):
         db.execute("""UPDATE skip_auto_evidence SET evidence_json=?
           WHERE record_id=201""",(json.dumps({
               'episcene_required':True,'audio_visual_disagreement':True}),))
-        db.execute("""INSERT INTO skip_records VALUES(
+        db.execute("""INSERT INTO skip_records
+              (id,asset_key,source_key,season,episode,duration_ms,
+               source,segment_type,status,disabled,media_type) VALUES(
               777,'episode-2','mobland',1,2,3600000,'device','outro','pending',0,'episode')""")
         with db:
             candidates=self.module.collect(db)
             self.assertEqual({r['episode'] for r in candidates},{3,4})
             self.assertEqual(self.module.requeue(db,limit=4),[])
             self.assertEqual(db.execute("SELECT COUNT(*) FROM skip_jobs WHERE status='queued'").fetchone()[0],0)
+
+    def test_human_reviewed_machine_marker_unlocks_single_peer(self):
+        # A verified admin review is human learning feedback, as recognised
+        # by feedback_learning.py. It must not be discarded just because the
+        # original machine proposal's source field is not 'device'.
+        db=fixture()
+        db.execute("UPDATE skip_jobs SET status='queued' WHERE id IN (103,104)")
+        db.execute("""UPDATE skip_records SET status='approved',
+          source='episcene',reviewed_at='2026-10-15T12:00:00+00:00'
+          WHERE id=201""")
+        db.execute("UPDATE skip_auto_evidence SET human_review=1 WHERE record_id=201")
+        with db:
+            candidates=self.module.collect(db)
+            self.assertEqual({r['episode'] for r in candidates},{2})
+            rows=self.module.plan(db,candidates,max_jobs=2,models=set())
+            self.assertEqual([2],[r['episode'] for r in rows])
+            # Without affirmative admin review the proposal is machine-only,
+            # not trusted as a human reference.
+            db.execute("UPDATE skip_auto_evidence SET human_review=0 WHERE record_id=201")
+            self.assertEqual([],self.module.plan(db,candidates,max_jobs=2,models=set()))
+            db.execute("UPDATE skip_auto_evidence SET human_review=1 WHERE record_id=201")
+            db.execute("UPDATE skip_records SET reviewed_at=NULL WHERE id=201")
+            self.assertEqual([],self.module.plan(db,candidates,max_jobs=2,models=set()))
+
+    def test_disputed_review_is_not_reference(self):
+        db=fixture()
+        db.execute("UPDATE skip_jobs SET status='queued' WHERE id IN (103,104)")
+        db.execute("""UPDATE skip_records SET status='approved',
+          source='episcene',reviewed_at='2026-10-15T12:00:00+00:00'
+          WHERE id=201""")
+        db.execute("UPDATE skip_auto_evidence SET human_review=1 WHERE record_id=201")
+        db.execute("""INSERT INTO skip_records
+          (id,asset_key,source_key,season,episode,duration_ms,
+           source,segment_type,status,disabled,media_type)
+          VALUES(777,'episode-1','mobland',1,1,3600000,
+                 'episcene','outro','rejected',0,'episode')""")
+        with db:
+            candidates=self.module.collect(db)
+            self.assertEqual({r['episode'] for r in candidates},{2})
+            self.assertEqual([],self.module.plan(db,candidates,max_jobs=2,models=set()))
 
     def test_archived_sources_and_live_playback_do_not_seed(self):
         db=fixture()

@@ -141,16 +141,32 @@ def plan(con, candidates, max_jobs=MAX_NEW_PER_RUN, *, models=None):
     families=defaultdict(list)
     for r in candidates:
         families[(r['playlist_id'],r['source_key'],r['season'],r['kind'])].append(r)
-    # From existing HUMAN observations, never use machine-approved records as
-    # ground truth. A sibling informs priority; it is not required for work.
+    # Human-approved device markers AND explicitly human-reviewed machine
+    # proposals are reference evidence (as in feedback_learning.current_human).
+    # Machine-only approvals, unreviewed suggestions and disputed assets are
+    # NOT human evidence. This changes retry priority only; production
+    # acceptance gates remain unchanged.
     references=set()
     for r in con.execute("""SELECT DISTINCT a.playlist_id,r.source_key,r.season,r.segment_type
         FROM skip_records r JOIN skip_assets a ON a.asset_key=r.asset_key
         JOIN skip_analysis_playlists p ON p.id=a.playlist_id AND p.archived=0
+        LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
         WHERE r.status='approved' AND r.disabled=0
-          AND r.source='device' AND r.source_key=a.source_key
+          AND (r.source='device' OR
+            (r.source IN ('audio','chapter','theintrodb','audio_repetition',
+                          'auto_audio','episcene') AND COALESCE(e.human_review,0)=1
+              AND r.reviewed_at IS NOT NULL))
+          AND r.source_key=a.source_key AND a.media_type='episode'
+          AND r.media_type='episode'
           AND r.season=a.season AND r.episode=a.episode
-          AND ABS(r.duration_ms-a.duration_ms)<=500"""):
+          AND ABS(r.duration_ms-a.duration_ms)<=500
+          AND NOT EXISTS (
+            SELECT 1 FROM skip_records conflicting
+            WHERE conflicting.asset_key=r.asset_key
+              AND conflicting.segment_type=r.segment_type
+              AND conflicting.id<>r.id
+              AND conflicting.status IN ('approved','rejected')
+          )"""):
         references.add(tuple(r))
     # Continue a family already started on a previous hour before selecting
     # new groups. Three independent episodes may require multiple passes under
