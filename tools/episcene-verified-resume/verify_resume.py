@@ -34,12 +34,48 @@ def ro():
     c.row_factory=sqlite3.Row;c.execute('PRAGMA query_only=ON')
     return c
 
+def diagnosis():
+    """Read-only, PII-free inventory of the live DB schema and systemd states."""
+    names=('skip_analysis_playlists','skip_presence','skip_jobs',
+           'skip_assets','episcene_report_events')
+    with ro() as c:
+        existing={r['name'] for r in c.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        result={}
+        for name in names:
+            if name not in existing:
+                result[name]={'present':False}
+                continue
+            cols=[r['name'] for r in c.execute('PRAGMA table_info('+name+')')]
+            info={'present':True,'columns':cols}
+            if name=='skip_analysis_playlists' and 'id' in cols:
+                # Only IDs and safe state flags, never playlist credentials or labels.
+                fields=['id']+[v for v in
+                    ('enabled','active','is_active','archived','paused','disabled')
+                    if v in cols]
+                rows=c.execute('SELECT '+','.join(fields)+
+                    ' FROM skip_analysis_playlists WHERE id IN (?,?) ORDER BY id',
+                    LANES).fetchall()
+                info['lane_flags']=[{k:r[k] for k in fields} for r in rows]
+            result[name]=info
+    services={}
+    for unit in (TIMER,BATCH,COMPUTE,WEB):
+        try:services[unit]=cmd('show',unit,'--property=ActiveState','--value')
+        except (OSError,RuntimeError,subprocess.SubprocessError):
+            services[unit]='UNAVAILABLE'
+    print('DIAGNOSTIC '+json.dumps({'tables':result,'units':services},
+                                   sort_keys=True),flush=True)
+    return 0
+
 def snap(c):
     tables={r['name'] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     required={'episcene_report_events','skip_analysis_playlists','skip_presence','skip_jobs','skip_assets'}
     if not required<=tables:raise RuntimeError('DATABASE_SCHEMA_NOT_COMPATIBLE')
     columns={r['name'] for r in c.execute('PRAGMA table_info(episcene_report_events)')}
     if not {'id','kind','payload'}<=columns:raise RuntimeError('TELEMETRY_SCHEMA_NOT_COMPATIBLE')
+    playlist_cols={r['name'] for r in c.execute('PRAGMA table_info(skip_analysis_playlists)')}
+    if not {'id','enabled','archived','paused'}<=playlist_cols:
+        raise RuntimeError('PLAYLIST_SCHEMA_UNSUPPORTED_RUN_DIAGNOSE')
     lanes=tuple(r['id'] for r in c.execute("""
       SELECT id FROM skip_analysis_playlists
       WHERE id IN (8,10) AND enabled=1 AND archived=0 AND paused=0 ORDER BY id"""))
@@ -151,6 +187,7 @@ def run(args):
 
 def main():
     p=argparse.ArgumentParser()
+    p.add_argument('--diagnose',action='store_true',help='read-only schema/service report')
     p.add_argument('--restart',action='store_true')
     p.add_argument('--kick',action='store_true')
     p.add_argument('--timeout',type=int,default=900)
@@ -159,7 +196,11 @@ def main():
     args=p.parse_args()
     if not (0<=args.timeout<=1800 and 1<=args.poll<=60 and 0<=args.drain<=1800):
         p.error('invalid time budget')
-    try:return run(args)
+    if args.diagnose and (args.restart or args.kick):
+        p.error('--diagnose cannot be combined with --restart or --kick')
+    try:
+        if args.diagnose:return diagnosis()
+        return run(args)
     except (OSError,RuntimeError,sqlite3.Error,subprocess.SubprocessError) as e:
         print('BLOCKED '+str(e),flush=True)
         return 2
