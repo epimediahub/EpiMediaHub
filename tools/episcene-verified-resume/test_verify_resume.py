@@ -103,6 +103,19 @@ class Verification(unittest.TestCase):
   with m.ro() as c:
    with self.assertRaisesRegex(RuntimeError,'ANALYSIS_SOURCE_DISABLED'):m.snap(c)
 
+ def test_audit_uses_real_job_status_without_exposing_metadata(self):
+  with m.ro() as c:
+   before=m.audit_counts(c)
+  self.assertEqual(before['8']['statuses']['queued'],1)
+  self.sql.execute('UPDATE skip_jobs SET status=?,updated_at=? WHERE asset_key=?',
+                   ('review','2026-10-17T07:30:00','opaque8'))
+  self.sql.commit()
+  with m.ro() as c:
+   after=m.audit_counts(c)
+  self.assertEqual(after['8']['statuses']['review'],1)
+  self.assertNotIn('PRIVATE',json.dumps(after))
+  self.assertEqual(after['10']['statuses']['queued'],1)
+
  def test_database_readonly_no_markers_changed(self):
   original=self.db.read_bytes()
   with m.ro() as c:
