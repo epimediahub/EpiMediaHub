@@ -91,6 +91,27 @@ class TestPrivateAdminMobile(unittest.TestCase):
         self.assertNotIn(b"<script>alert(123)",view.data)
         self.assertEqual(view.headers["Cache-Control"],"no-store, private")
 
+    def test_native_episcene_api_never_leaks_sources_without_session(self):
+        self.assertEqual(self.client.get("/admin/mobile/episcene/status").status_code,401)
+        self.signin()
+        sanitized={"sampled_at_epoch":1234567890,"scope":"independent_analysis_sources_only",
+                   "lanes":[{"id":8,"label":"4K ANALYSE","enabled":True,"queued":10,
+                             "running":1,"completed":3,"failed":0,
+                             "last_completion_epoch":1234567880},
+                            {"id":10,"label":"THE BEST","enabled":True,"queued":20,
+                             "running":0,"completed":5,"failed":0,
+                             "last_completion_epoch":None}]}
+        with mock.patch.object(mobile_flask,"read_status",return_value=sanitized):
+            response=self.client.get("/admin/mobile/episcene/status")
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.get_json(),sanitized)
+        self.assertEqual(response.headers["Cache-Control"],"private, no-store")
+        with mock.patch.object(mobile_flask,"read_status",
+                               side_effect=RuntimeError("database locked")):
+            unavailable=self.client.get("/admin/mobile/episcene/status")
+        self.assertEqual(unavailable.status_code,503)
+        self.assertNotIn("database locked",unavailable.get_data(as_text=True))
+
     def test_admin_updates_require_login_and_private_digest(self):
         self.assertEqual(self.client.get("/admin/mobile/update/status").status_code,401)
         self.assertEqual(self.client.get("/admin/mobile/update/apk").status_code,401)
