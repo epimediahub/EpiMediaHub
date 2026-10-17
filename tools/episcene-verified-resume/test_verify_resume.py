@@ -89,8 +89,7 @@ class Verification(unittest.TestCase):
   self.assertNotIn('secret',report['tables']['skip_analysis_playlists']['lane_flags'][0])
   self.assertEqual(len(report['tables']['skip_analysis_playlists']['lane_flags']),2)
   with m.ro() as connection:
-   with self.assertRaisesRegex(RuntimeError,'PLAYLIST_SCHEMA_UNSUPPORTED'):
-    m.snap(connection)
+   self.assertEqual(set(m.snap(connection)['waiting']),{8,10})
 
  def test_mismatched_assets_do_not_pass(self):
   self.emit('heartbeat',{})
@@ -128,10 +127,12 @@ class Verification(unittest.TestCase):
     c.execute("UPDATE skip_jobs SET status='done'")
   self.assertEqual(self.db.read_bytes(),original)
 
- def test_playback_refuses_restart_before_systemd_change(self):
-  with patch.object(m.os,'geteuid',return_value=0), patch.object(m,'cmd') as mocked:
-   with self.assertRaisesRegex(RuntimeError,'PLAYBACK_ACTIVE'):
-    m.guarded_restart(dict(self.base,presence=1))
-   mocked.assert_not_called()
+ def test_restart_remains_disabled_until_deployment_validated(self):
+  from argparse import Namespace
+  args=Namespace(restart=True,drain=600,timeout=0,poll=15,kick=False)
+  with patch.object(m,'active',return_value=True),patch.object(m,'guarded_restart') as restart:
+   with self.assertRaisesRegex(RuntimeError,'RESTART_NOT_VALIDATED'):
+    m.run(args)
+   restart.assert_not_called()
 
 if __name__=='__main__':unittest.main()
