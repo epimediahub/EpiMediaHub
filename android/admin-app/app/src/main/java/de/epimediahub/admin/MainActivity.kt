@@ -106,6 +106,10 @@ class MainActivity : FragmentActivity() {
     private var updateReady by mutableStateOf<AdminUpdater.Release?>(null)
     private var updateNotice by mutableStateOf("")
     private var updateCheckedForSession = false
+    private var analysisDetailWeb by mutableStateOf(false)
+    private var analysisBusy by mutableStateOf(false)
+    private var analysisError by mutableStateOf("")
+    private var analysisSnapshot by mutableStateOf<AdminNativeStatus.Snapshot?>(null)
     private lateinit var browser: WebView
 
     private val notificationPermission = registerForActivityResult(
@@ -201,7 +205,9 @@ class MainActivity : FragmentActivity() {
         if (next !in destinations.indices) return
         selection = next
         notice = ""
-        if (next != HOME) browser.loadUrl(destinations[next].url)
+        analysisDetailWeb = false
+        if (next == EPISCENE) loadEpiscene()
+        else if (next != HOME) browser.loadUrl(destinations[next].url)
     }
 
     private fun requireUnlock() {
@@ -283,7 +289,8 @@ class MainActivity : FragmentActivity() {
     @Composable
     private fun AdminExperience() {
         BackHandler(enabled = selection != HOME) {
-            if (browser.canGoBack()) browser.goBack()
+            if (selection == EPISCENE && analysisDetailWeb) analysisDetailWeb = false
+            else if (selection != EPISCENE && browser.canGoBack()) browser.goBack()
             else selectDestination(HOME)
         }
         Column(
@@ -293,6 +300,8 @@ class MainActivity : FragmentActivity() {
             AdminHeader()
             if (selection == HOME) {
                 HomeContent(modifier = Modifier.weight(1f))
+            } else if (selection == EPISCENE && !analysisDetailWeb) {
+                NativeEpiscene(modifier = Modifier.weight(1f))
             } else {
                 WebContent(modifier = Modifier.weight(1f))
             }
@@ -410,7 +419,7 @@ class MainActivity : FragmentActivity() {
             PushPanel()
             Spacer(Modifier.height(5.dp))
             Text(
-                "PRIVATE ADMIN APP  ·  VERSION 0.2 QA",
+                "PRIVATE ADMIN APP  ·  BUILD " + BuildConfig.VERSION_NAME,
                 modifier = Modifier.fillMaxWidth(),
                 color = Muted.copy(alpha = .75f),
                 textAlign = TextAlign.Center, letterSpacing = 1.2.sp, fontSize = 10.sp
@@ -579,6 +588,139 @@ class MainActivity : FragmentActivity() {
                     Text(notice, color = Warning, fontSize = 12.sp, lineHeight = 17.sp)
                 }
             }
+        }
+    }
+
+    private fun loadEpiscene() {
+        if (!unlocked) return
+        if (analysisBusy) return
+        analysisBusy = true
+        analysisError = ""
+        val cookie = CookieManager.getInstance().getCookie(ADMIN_BASE) ?: ""
+        AdminNativeStatus.load(cookie) { value, error ->
+            analysisBusy = false
+            analysisSnapshot = value
+            analysisError = error
+        }
+    }
+
+    @Composable
+    private fun NativeEpiscene(modifier: Modifier = Modifier) {
+        Column(
+            modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(15.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("EpiScene", color = White, fontSize = 27.sp,
+                        fontWeight = FontWeight.ExtraBold)
+                    Text("Zwei unabhängige Analysequellen · Live-Status",
+                        color = Muted, fontSize = 12.sp)
+                }
+                OutlinedButton(
+                    onClick = { loadEpiscene() },
+                    enabled = !analysisBusy,
+                    border = BorderStroke(1.dp, Border),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Outlined.Refresh, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Aktuell")
+                }
+            }
+            if (analysisBusy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            val status = analysisSnapshot
+            if (analysisError.isNotBlank()) {
+                Surface(color = InkElevated, shape = RoundedCornerShape(13.dp),
+                    border = BorderStroke(1.dp, Warning.copy(alpha = .4f))) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Status nicht bestätigt", color = Warning,
+                            fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(5.dp))
+                        Text(analysisError, color = Muted, fontSize = 13.sp)
+                        TextButton(onClick = { selectDestination(DASHBOARD) }) {
+                            Text("Im Dashboard anmelden", color = Blue)
+                        }
+                    }
+                }
+            }
+            if (status != null) {
+                Text(
+                    "Letzte Abfrage: " + java.text.DateFormat.getDateTimeInstance(
+                        java.text.DateFormat.SHORT, java.text.DateFormat.SHORT
+                    ).format(java.util.Date(status.sampledAtEpoch * 1000)),
+                    color = Muted, fontSize = 12.sp
+                )
+                for (lane in status.lanes) {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp), color = InkRaised,
+                        border = BorderStroke(1.dp, Border)
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(17.dp),
+                            verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(9.dp).clip(CircleShape)
+                                    .background(if (lane.enabled) Positive else Warning))
+                                Spacer(Modifier.width(9.dp))
+                                Text(lane.label, color = White, fontWeight = FontWeight.Bold,
+                                    fontSize = 17.sp, modifier = Modifier.weight(1f))
+                                Text(if (lane.enabled) "Quelle aktiv" else "Quelle deaktiviert",
+                                    color = if (lane.enabled) Positive else Warning,
+                                    fontSize = 11.sp)
+                            }
+                            HorizontalDivider(color = Border)
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("WARTEND", color = Muted, fontSize = 10.sp)
+                                    Text(lane.queued.toString(), color = White,
+                                        fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("IN ARBEIT", color = Muted, fontSize = 10.sp)
+                                    Text(lane.running.toString(), color = Blue,
+                                        fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("ABGESCHLOSSEN", color = Muted, fontSize = 10.sp)
+                                    Text(lane.completed.toString(), color = Positive,
+                                        fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Text(
+                                "Fehlgeschlagen: " + lane.failed + " · Letzter Abschluss: " +
+                                    (lane.lastCompletionEpoch?.let {
+                                        java.text.DateFormat.getDateTimeInstance(
+                                            java.text.DateFormat.SHORT,
+                                            java.text.DateFormat.SHORT
+                                        ).format(java.util.Date(it * 1000))
+                                    } ?: "nicht belegt"),
+                                color = Muted, fontSize = 12.sp, lineHeight = 19.sp
+                            )
+                        }
+                    }
+                }
+                Text("Quellenstatus und Zähler sind keine Garantie für neue erfolgreiche " +
+                    "Erkennung. Keine Kunden-Playlists werden ausgewertet.",
+                    color = Muted, fontSize = 12.sp, lineHeight = 19.sp)
+            } else if (!analysisBusy && analysisError.isBlank()) {
+                Text("Noch keine aktuellen Messwerte verfügbar.",
+                    color = Muted, fontSize = 13.sp)
+            }
+            Button(
+                onClick = {
+                    analysisDetailWeb = true
+                    browser.loadUrl(ADMIN_BASE + "/admin/skip")
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Blue, contentColor = Ink),
+                shape = RoundedCornerShape(13.dp)
+            ) {
+                Text("Analyseverwaltung öffnen", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Outlined.ChevronRight, null)
+            }
+            Spacer(Modifier.height(8.dp))
         }
     }
 
