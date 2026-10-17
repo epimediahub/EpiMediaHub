@@ -17,6 +17,8 @@ class Verification(unittest.TestCase):
     (8,'4K ANALYSE','{"enabled":true,"paused":false,"access_token":"PRIVATE"}',0),
     (10,'THE BEST','{"enabled":true,"paused":false,"access_token":"PRIVATE"}',0);
   CREATE TABLE skip_presence(expires_at INTEGER);
+  CREATE TABLE skip_analysis_sources(playlist_id INTEGER PRIMARY KEY,enabled INTEGER NOT NULL);
+  INSERT INTO skip_analysis_sources VALUES (8,1),(10,1);
   CREATE TABLE skip_assets(asset_key TEXT PRIMARY KEY,playlist_id INTEGER);
   INSERT INTO skip_assets VALUES('opaque8',8),('opaque10',10);
   CREATE TABLE skip_jobs(asset_key TEXT,status TEXT,updated_at TEXT);
@@ -66,9 +68,9 @@ class Verification(unittest.TestCase):
    self.assertNotEqual(m.check(self.base,seconds=0)['status'],'PASS')
 
  def test_absent_schema_or_disabled_source_blocks(self):
-  self.sql.execute('UPDATE skip_analysis_playlists SET archived=1 WHERE id=10');self.sql.commit()
+  self.sql.execute('UPDATE skip_analysis_sources SET enabled=0 WHERE playlist_id=10');self.sql.commit()
   with m.ro() as c:
-   with self.assertRaisesRegex(RuntimeError,'ANALYSIS_LANES'):m.snap(c)
+   with self.assertRaisesRegex(RuntimeError,'INDEPENDENT_ANALYSIS_LANE'):m.snap(c)
 
  def test_live_like_schema_without_enabled_is_diagnosed_safely(self):
   self.sql.executescript("""
@@ -98,12 +100,13 @@ class Verification(unittest.TestCase):
   with patch.object(m,'active',return_value=True),patch.object(m,'cmd',return_value='active'):
    self.assertNotEqual(m.check(self.base,seconds=0)['status'],'PASS')
 
- def test_disabled_in_config_blocks_without_leaking_secrets(self):
-  self.sql.execute('UPDATE skip_analysis_playlists SET config_json=? WHERE id=10',
-                   (json.dumps({'enabled':False,'access_token':'PRIVATE'}),))
+ def test_customer_playback_does_not_disable_dedicated_sources(self):
+  self.sql.execute('INSERT INTO skip_presence VALUES(?)',(9999999999,))
   self.sql.commit()
   with m.ro() as c:
-   with self.assertRaisesRegex(RuntimeError,'ANALYSIS_SOURCE_DISABLED'):m.snap(c)
+   sample=m.snap(c)
+  self.assertEqual(sample['presence'],1)
+  self.assertEqual(set(sample['waiting']),{8,10})
 
  def test_audit_uses_real_job_status_without_exposing_metadata(self):
   with m.ro() as c:
