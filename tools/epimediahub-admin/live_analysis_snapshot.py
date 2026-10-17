@@ -8,7 +8,8 @@ tokens, device identity, customer information or IPTV credentials are emitted.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, time as clock, timezone
+from zoneinfo import ZoneInfo
 import json
 import os
 from pathlib import Path
@@ -75,7 +76,40 @@ def gather(con,now_epoch:int):
             continue
         lanes.append({"id":str(pid),"queued_jobs":int(waiting),
                       "last_progress_epoch":last_epoch,"paused":bool(paused)})
-    return {"sampled_at_epoch":now_epoch,"analysis_lanes":lanes}
+    result={"sampled_at_epoch":now_epoch,"analysis_lanes":lanes}
+    playlist_cols={row[1] for row in con.execute(
+        "PRAGMA table_info(skip_analysis_playlists)")}
+    if "expires_at" in playlist_cols:
+        expiries=[]
+        for row in con.execute("""SELECT p.id,p.expires_at,p.archived,s.enabled
+            FROM skip_analysis_playlists p
+            JOIN skip_analysis_sources s ON s.playlist_id=p.id
+            WHERE p.id IN (8,10)"""):
+            expiry=row["expires_at"]
+            # Zero means a permanent analysis source; never report expiry.
+            if (row["archived"]==0 and row["enabled"]==1
+                    and type(expiry) is int and expiry>0):
+                expiries.append({"id":str(row["id"]),"expires_at_epoch":expiry})
+        if expiries:
+            result["playlists"]=expiries
+
+    # EpiScene day D covers D-1 07:00 through D 07:00 Berlin.
+    # Only a report generated today can create today's single daily alert.
+    report_cols={row[1] for row in con.execute(
+        "PRAGMA table_info(episcene_daily_reports)")}
+    if {"day","generated_at"}<=report_cols:
+        zone=ZoneInfo("Europe/Berlin")
+        now_local=datetime.fromtimestamp(now_epoch,zone)
+        day=now_local.date().isoformat()
+        report=con.execute(
+            "SELECT generated_at FROM episcene_daily_reports WHERE day=?",(day,)
+        ).fetchone()
+        if (report and now_local.time()>=clock(7)
+                and type(report["generated_at"]) in (int,float)
+                and 0<=now_epoch-report["generated_at"]<=24*3600):
+            result["daily_report"]={
+                "id":"episcene","generated_date_berlin":day,"ready":True}
+    return result
 
 
 def safe_write(out:Path,payload:dict):
