@@ -1,0 +1,22 @@
+name: EpiScene Verified Resume Safety Tests
+on:
+  pull_request:
+    paths:
+      - 'tools/episcene-verified-resume/**'
+      - '.github/workflows/episcene-verified-resume.yml'
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax and isolated regression tests
+        run: |
+          python -m py_compile tools/episcene-verified-resume/verify_resume.py
+          cd tools/episcene-verified-resume
+          python -m unittest -v test_verify_resume
