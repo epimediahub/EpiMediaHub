@@ -1,4 +1,4 @@
-import importlib.util,json,sqlite3,tempfile,unittest
+import importlib.util,json,sqlite3,tempfile,unittest,contextlib,io
 from pathlib import Path
 from unittest.mock import patch
 
@@ -63,6 +63,26 @@ class Verification(unittest.TestCase):
   self.sql.execute('UPDATE skip_analysis_playlists SET paused=1 WHERE id=10');self.sql.commit()
   with m.ro() as c:
    with self.assertRaisesRegex(RuntimeError,'ANALYSIS_LANES'):m.snap(c)
+
+ def test_live_like_schema_without_enabled_is_diagnosed_safely(self):
+  self.sql.executescript("""
+  DROP TABLE skip_analysis_playlists;
+  CREATE TABLE skip_analysis_playlists(id INTEGER PRIMARY KEY, active INTEGER, archived INTEGER, paused INTEGER, secret TEXT);
+  INSERT INTO skip_analysis_playlists VALUES(8,1,0,0,'DO_NOT_OUTPUT');
+  INSERT INTO skip_analysis_playlists VALUES(10,1,0,0,'DO_NOT_OUTPUT');
+  """)
+  self.sql.commit()
+  output=io.StringIO()
+  with patch.object(m,'cmd',return_value='active'),contextlib.redirect_stdout(output):
+   self.assertEqual(m.diagnosis(),0)
+  self.assertNotIn('DO_NOT_OUTPUT',output.getvalue())
+  report=json.loads(output.getvalue().split('DIAGNOSTIC ',1)[1])
+  self.assertIn('active',report['tables']['skip_analysis_playlists']['columns'])
+  self.assertNotIn('secret',report['tables']['skip_analysis_playlists']['lane_flags'][0])
+  self.assertEqual(len(report['tables']['skip_analysis_playlists']['lane_flags']),2)
+  with m.ro() as connection:
+   with self.assertRaisesRegex(RuntimeError,'PLAYLIST_SCHEMA_UNSUPPORTED'):
+    m.snap(connection)
 
  def test_database_readonly_no_markers_changed(self):
   original=self.db.read_bytes()
