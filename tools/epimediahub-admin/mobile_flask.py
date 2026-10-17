@@ -153,6 +153,22 @@ def ack(key):
     _incidents().acknowledge(key,int(__import__("time").time()))
     return redirect(url_for("epimediahub_admin_mobile.alerts"),code=303)
 
+@bp.post("/admin/mobile/alerts/ack")
+def ack_json():
+    _require_admin()
+    _require_csrf()
+    if (request.content_length is None or request.content_length>400
+            or not request.is_json):
+        return _response({"error":"invalid_request"},400)
+    data=request.get_json(silent=True)
+    if (not isinstance(data,dict) or set(data)!={"alert_key"}
+            or not isinstance(data["alert_key"],str)
+            or not 1<=len(data["alert_key"])<=200):
+        return _response({"error":"invalid_alert_key"},400)
+    acknowledged=_incidents().acknowledge(data["alert_key"],int(__import__("time").time()))
+    return _response({"acknowledged":acknowledged})
+
+
 @bp.get("/admin/mobile/alerts.json")
 def alerts_json():
     _require_admin()
