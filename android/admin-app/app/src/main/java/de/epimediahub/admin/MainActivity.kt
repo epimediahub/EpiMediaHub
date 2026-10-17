@@ -295,7 +295,8 @@ class MainActivity : FragmentActivity() {
     private fun AdminExperience() {
         BackHandler(enabled = selection != HOME) {
             if (selection == EPISCENE && analysisDetailWeb) analysisDetailWeb = false
-            else if (selection != EPISCENE && browser.canGoBack()) browser.goBack()
+            else if (selection == EPISCENE || selection == ALERTS) selectDestination(HOME)
+            else if (browser.canGoBack()) browser.goBack()
             else selectDestination(HOME)
         }
         Column(
