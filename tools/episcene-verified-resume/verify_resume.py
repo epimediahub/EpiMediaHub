@@ -190,6 +190,95 @@ def audit(seconds):
     print('AUDIT_RESULT '+json.dumps(result,sort_keys=True),flush=True)
     return 0
 
+def triage(minutes=30):
+    """Read-only, privacy-preserving incident snapshot for the two lanes."""
+    from datetime import datetime,timezone
+    now=time.time()
+    safe_states={'queued','running','processing','in_progress','failed',
+                 'done','review','partial','no_match','no_reference'}
+    safe_error_codes={'provider_http_404','provider_timeout','analysis_deferred',
+                      'visual_window','visual_incomplete','range_ignored',
+                      'no_reference','network_timeout'}
+    by_lane={str(pid):{'running_count':0,'running_age_seconds':[],
+                       'last_job_update_utc':None,
+                       'events':{},'terminal_job_events':{},'errors':{}} for pid in LANES}
+    with ro() as c:
+        job_rows=c.execute("""SELECT a.playlist_id pid, j.status state,
+                                    j.updated_at updated_at, COUNT(*) n
+                             FROM skip_jobs j
+                             JOIN skip_assets a ON a.asset_key=j.asset_key
+                             WHERE a.playlist_id IN (8,10)
+                             GROUP BY a.playlist_id,j.status,j.updated_at
+                             ORDER BY j.updated_at DESC""").fetchall()
+        for r in job_rows:
+            lane=by_lane.get(str(r['pid']))
+            if lane is None:continue
+            updated=r['updated_at']
+            if updated and (lane['last_job_update_utc'] is None or
+                            updated>lane['last_job_update_utc']):
+                lane['last_job_update_utc']=updated
+            if r['state'] not in ('running','processing','in_progress'):continue
+            lane['running_count']+=r['n']
+            try:
+                dt=datetime.fromisoformat(updated.replace('Z','+00:00'))
+                if dt.tzinfo is None:dt=dt.replace(tzinfo=timezone.utc)
+                age=max(0,int(now-dt.timestamp()))
+                lane['running_age_seconds'] += [age]*min(5,r['n'])
+            except (AttributeError,TypeError,ValueError):pass
+        ev_rows=c.execute("""SELECT e.kind,e.at,e.payload,a.playlist_id pid
+                             FROM episcene_report_events e
+                             LEFT JOIN skip_assets a ON a.asset_key=e.asset_key
+                             WHERE e.at>=?
+                             ORDER BY e.id DESC LIMIT 3000""",
+                          (now-minutes*60,)).fetchall()
+        leases=c.execute('SELECT COUNT(*) FROM skip_presence WHERE expires_at>?',
+                         (int(now),)).fetchone()[0]
+    global_counts={}
+    for r in ev_rows:
+        kind=r['kind'] if r['kind'] in ('heartbeat','job','analysis_completion',
+                'phase_error','worker','marker','phase','visual_phase',
+                'scene','evidence','cache','worker_timing','performance') else 'other'
+        global_counts[kind]=global_counts.get(kind,0)+1
+        payload={}
+        try:
+            candidate=json.loads(r['payload']) if isinstance(r['payload'],str) else r['payload']
+            if isinstance(candidate,dict):payload=candidate
+        except (ValueError,TypeError):pass
+        pid=r['pid']
+        if pid not in LANES:
+            pid=payload.get('playlist_id')
+        if pid not in LANES and isinstance(payload.get('asset'),dict):
+            pid=payload['asset'].get('playlist_id')
+        lane=by_lane.get(str(pid))
+        if lane is None:continue
+        lane['events'][kind]=lane['events'].get(kind,0)+1
+        if kind=='job':
+            state=payload.get('job',{}).get('status') if isinstance(payload.get('job'),dict) else None
+            if state in safe_states:
+                lane['terminal_job_events'][state]=lane['terminal_job_events'].get(state,0)+1
+        if kind=='phase_error':
+            fields=[payload.get('code'),payload.get('reason'),payload.get('error_code')]
+            code=next((x for x in fields if isinstance(x,str) and x in safe_error_codes),'other')
+            lane['errors'][code]=lane['errors'].get(code,0)+1
+    for lane in by_lane.values():
+        lane['running_age_seconds'].sort(reverse=True)
+        lane['running_age_seconds']=lane['running_age_seconds'][:5]
+    units={}
+    for unit in (TIMER,BATCH,COMPUTE,WEB):
+        state={}
+        for field in ('ActiveState','SubState','Result','NRestarts'):
+            try:state[field]=cmd('show',unit,'--property='+field,'--value')
+            except (OSError,RuntimeError,subprocess.SubprocessError):state[field]='UNAVAILABLE'
+        units[unit]=state
+    print('TRIAGE_RESULT '+json.dumps({
+        'window_minutes':minutes,'window_event_counts':global_counts,
+        'event_window_sample_limit':3000,'lanes':by_lane,
+        'presence_leases_now':leases,'services':units,
+        'scope':'READ_ONLY_CONTAINS_NO_ASSET_IDENTITIES_OR_URLS',
+        'warning':'Health and events are not proof of successful job completion'
+    },sort_keys=True),flush=True)
+    return 0
+
 def health(url):
     try:
         with urlopen(url,timeout=5) as r:return r.status==200
@@ -265,6 +354,7 @@ def run(args):
 def main():
     p=argparse.ArgumentParser()
     p.add_argument('--diagnose',action='store_true',help='read-only schema/service report')
+    p.add_argument('--triage',action='store_true',help='read-only incident details, 30-minute window')
     p.add_argument('--audit',type=int,help='read-only measured job-status changes, seconds (0-300)')
     p.add_argument('--restart',action='store_true')
     p.add_argument('--kick',action='store_true')
@@ -276,10 +366,11 @@ def main():
         p.error('invalid time budget')
     if args.audit is not None and not 0<=args.audit<=300:
         p.error('--audit must be 0-300 seconds')
-    if (args.diagnose or args.audit is not None) and (args.restart or args.kick):
+    if (args.diagnose or args.triage or args.audit is not None) and (args.restart or args.kick):
         p.error('--diagnose cannot be combined with --restart or --kick')
     try:
         if args.diagnose:return diagnosis()
+        if args.triage:return triage()
         if args.audit is not None:return audit(args.audit)
         return run(args)
     except (OSError,RuntimeError,sqlite3.Error,subprocess.SubprocessError) as e:
