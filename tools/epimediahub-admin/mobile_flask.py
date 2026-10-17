@@ -16,6 +16,7 @@ from flask import Blueprint, abort, jsonify, redirect, render_template_string, r
 from incident_store import IncidentStore
 from mobile_registry import AdminMobileRegistry
 from mobile_updates import read_release
+from native_status import read_status
 
 bp=Blueprint("epimediahub_admin_mobile",__name__)
 ALLOWED_KEYS=frozenset({"installation_id","fcm_token","platform"})
@@ -156,6 +157,16 @@ def ack(key):
 def alerts_json():
     _require_admin()
     return _response({"incidents":_incidents().open_incidents()[:120]})
+
+
+@bp.get("/admin/mobile/episcene/status")
+def episcene_status():
+    _require_admin()
+    try:
+        result=read_status(_base()/"provisioning.db")
+    except (RuntimeError,OSError,ValueError):
+        return _response({"error":"analysis_status_unavailable"},503)
+    return _response(result)
 
 
 @bp.get("/admin/mobile/update/status")
