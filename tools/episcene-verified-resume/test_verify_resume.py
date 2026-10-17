@@ -72,7 +72,7 @@ class Verification(unittest.TestCase):
   self.assertEqual(self.db.read_bytes(),original)
 
  def test_playback_refuses_restart_before_systemd_change(self):
-  with patch.object(m,'cmd') as mocked:
+  with patch.object(m.os,'geteuid',return_value=0), patch.object(m,'cmd') as mocked:
    with self.assertRaisesRegex(RuntimeError,'PLAYBACK_ACTIVE'):
     m.guarded_restart(dict(self.base,presence=1))
    mocked.assert_not_called()
