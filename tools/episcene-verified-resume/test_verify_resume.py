@@ -19,8 +19,10 @@ class Verification(unittest.TestCase):
   CREATE TABLE skip_presence(expires_at INTEGER);
   CREATE TABLE skip_assets(asset_key TEXT PRIMARY KEY,playlist_id INTEGER);
   INSERT INTO skip_assets VALUES('opaque8',8),('opaque10',10);
-  CREATE TABLE skip_jobs(asset_key TEXT,status TEXT);
-  INSERT INTO skip_jobs VALUES('opaque8','queued'),('opaque10','queued');
+  CREATE TABLE skip_jobs(asset_key TEXT,status TEXT,updated_at TEXT);
+  INSERT INTO skip_jobs VALUES
+    ('opaque8','queued','2026-10-17T07:00:00'),
+    ('opaque10','queued','2026-10-17T07:00:00');
   CREATE TABLE episcene_report_events(id INTEGER PRIMARY KEY,at REAL,kind TEXT,asset_key TEXT,record_id INTEGER,payload TEXT);
   INSERT INTO episcene_report_events(id,kind,asset_key,payload) VALUES(1,'heartbeat','','{}');
   """);self.sql.commit()
