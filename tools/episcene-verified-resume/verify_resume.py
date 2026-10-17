@@ -203,27 +203,27 @@ def triage(minutes=30):
                        'last_job_update_utc':None,
                        'events':{},'terminal_job_events':{},'errors':{}} for pid in LANES}
     with ro() as c:
-        job_rows=c.execute("""SELECT a.playlist_id pid, j.status state,
-                                    j.updated_at updated_at, COUNT(*) n
-                             FROM skip_jobs j
-                             JOIN skip_assets a ON a.asset_key=j.asset_key
-                             WHERE a.playlist_id IN (8,10)
-                             GROUP BY a.playlist_id,j.status,j.updated_at
-                             ORDER BY j.updated_at DESC""").fetchall()
-        for r in job_rows:
-            lane=by_lane.get(str(r['pid']))
-            if lane is None:continue
-            updated=r['updated_at']
-            if updated and (lane['last_job_update_utc'] is None or
-                            updated>lane['last_job_update_utc']):
-                lane['last_job_update_utc']=updated
-            if r['state'] not in ('running','processing','in_progress'):continue
-            lane['running_count']+=r['n']
+        latest_rows=c.execute("""SELECT a.playlist_id pid,
+                                        MAX(j.updated_at) updated_at
+                                 FROM skip_jobs j
+                                 JOIN skip_assets a ON a.asset_key=j.asset_key
+                                 WHERE a.playlist_id IN (8,10)
+                                 GROUP BY a.playlist_id""").fetchall()
+        for r in latest_rows:
+            by_lane[str(r['pid'])]['last_job_update_utc']=r['updated_at']
+        active_rows=c.execute("""SELECT a.playlist_id pid,j.updated_at updated_at
+                                 FROM skip_jobs j
+                                 JOIN skip_assets a ON a.asset_key=j.asset_key
+                                 WHERE a.playlist_id IN (8,10)
+                                   AND j.status IN ('running','processing','in_progress')
+                                 ORDER BY j.updated_at ASC LIMIT 100""").fetchall()
+        for r in active_rows:
+            lane=by_lane[str(r['pid'])]
+            lane['running_count']+=1
             try:
-                dt=datetime.fromisoformat(updated.replace('Z','+00:00'))
+                dt=datetime.fromisoformat(r['updated_at'].replace('Z','+00:00'))
                 if dt.tzinfo is None:dt=dt.replace(tzinfo=timezone.utc)
-                age=max(0,int(now-dt.timestamp()))
-                lane['running_age_seconds'] += [age]*min(5,r['n'])
+                lane['running_age_seconds'].append(max(0,int(now-dt.timestamp())))
             except (AttributeError,TypeError,ValueError):pass
         ev_rows=c.execute("""SELECT e.kind,e.at,e.payload,a.playlist_id pid
                              FROM episcene_report_events e
