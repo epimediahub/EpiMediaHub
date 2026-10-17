@@ -86,6 +86,7 @@ class TestProgressAdapter(unittest.TestCase):
         self.assertTrue(payload["daily_report"]["ready"])
         kinds={alert.kind for alert in evaluate(payload,NOW)}
         self.assertIn("daily_report",kinds)
+        db.rollback()  # Close the read transaction before a second sample.
         earlier=adapter.gather(db,NOW+2*24*3600)
         self.assertNotIn("daily_report",earlier)
 
