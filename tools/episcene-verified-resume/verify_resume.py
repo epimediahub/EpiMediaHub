@@ -139,6 +139,57 @@ def progress(c,base):
         result[pid]['completions']=len(completed[pid])
     return result,heartbeat
 
+def audit_counts(c):
+    """Aggregated lane/job states only; never expose sources, customers, or tokens."""
+    result={str(pid):{'statuses':{},'last_job_update':None} for pid in LANES}
+    for r in c.execute("""SELECT a.playlist_id pid,j.status state,COUNT(*) n,
+                                 MAX(j.updated_at) last_at
+                          FROM skip_jobs j
+                          JOIN skip_assets a ON a.asset_key=j.asset_key
+                          WHERE a.playlist_id IN (8,10)
+                          GROUP BY a.playlist_id,j.status"""):
+        key=str(r['pid'])
+        if key not in result:continue
+        status=r['state'] if r['state'] in GOOD|{'queued','running','processing','in_progress','failed'} else 'other'
+        result[key]['statuses'][status]=result[key]['statuses'].get(status,0)+r['n']
+        previous=result[key]['last_job_update']
+        if r['last_at'] and (previous is None or r['last_at']>previous):
+            result[key]['last_job_update']=r['last_at']
+    return result
+
+def audit(seconds):
+    """Compare real job counters and journal event types without service changes."""
+    with ro() as c:
+        start=c.execute('SELECT COALESCE(MAX(id),0) FROM episcene_report_events').fetchone()[0]
+        before=audit_counts(c)
+        leases=c.execute('SELECT COUNT(*) FROM skip_presence WHERE expires_at>?',
+                         (int(time.time()),)).fetchone()[0]
+    print('AUDIT_BEFORE '+json.dumps({'jobs':before,'playback_leases':leases},
+                                     sort_keys=True),flush=True)
+    time.sleep(seconds)
+    with ro() as c:
+        after=audit_counts(c)
+        kinds={str(r['kind']):r['n'] for r in c.execute("""
+            SELECT kind,COUNT(*) n FROM episcene_report_events WHERE id>? GROUP BY kind""",(start,))}
+        last=c.execute('SELECT COALESCE(MAX(id),0) FROM episcene_report_events').fetchone()[0]
+        leases_end=c.execute('SELECT COUNT(*) FROM skip_presence WHERE expires_at>?',
+                             (int(time.time()),)).fetchone()[0]
+    delta={}
+    for pid in map(str,LANES):
+        a,b=before[pid]['statuses'],after[pid]['statuses']
+        delta[pid]={k:b.get(k,0)-a.get(k,0) for k in sorted(set(a)|set(b))
+                    if b.get(k,0)!=a.get(k,0)}
+    units={}
+    for unit in (TIMER,BATCH,COMPUTE,WEB):
+        try:units[unit]=cmd('show',unit,'--property=ActiveState','--value')
+        except (OSError,RuntimeError,subprocess.SubprocessError):units[unit]='UNAVAILABLE'
+    result={'interval_seconds':seconds,'job_state_deltas':delta,'jobs_after':after,
+            'journal_event_counts':kinds,'new_journal_rows':last-start,
+            'playback_leases_after':leases_end,'units':units,
+            'conclusion':'EVIDENCE_ONLY_NO_AUTOAPPROVAL_OR_ACCURACY_CLAIM'}
+    print('AUDIT_RESULT '+json.dumps(result,sort_keys=True),flush=True)
+    return 0
+
 def health(url):
     try:
         with urlopen(url,timeout=5) as r:return r.status==200
@@ -214,6 +265,7 @@ def run(args):
 def main():
     p=argparse.ArgumentParser()
     p.add_argument('--diagnose',action='store_true',help='read-only schema/service report')
+    p.add_argument('--audit',type=int,help='read-only measured job-status changes, seconds (0-300)')
     p.add_argument('--restart',action='store_true')
     p.add_argument('--kick',action='store_true')
     p.add_argument('--timeout',type=int,default=900)
@@ -222,10 +274,13 @@ def main():
     args=p.parse_args()
     if not (0<=args.timeout<=1800 and 1<=args.poll<=60 and 0<=args.drain<=1800):
         p.error('invalid time budget')
-    if args.diagnose and (args.restart or args.kick):
+    if args.audit is not None and not 0<=args.audit<=300:
+        p.error('--audit must be 0-300 seconds')
+    if (args.diagnose or args.audit is not None) and (args.restart or args.kick):
         p.error('--diagnose cannot be combined with --restart or --kick')
     try:
         if args.diagnose:return diagnosis()
+        if args.audit is not None:return audit(args.audit)
         return run(args)
     except (OSError,RuntimeError,sqlite3.Error,subprocess.SubprocessError) as e:
         print('BLOCKED '+str(e),flush=True)
