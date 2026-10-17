@@ -110,6 +110,9 @@ class MainActivity : FragmentActivity() {
     private var analysisBusy by mutableStateOf(false)
     private var analysisError by mutableStateOf("")
     private var analysisSnapshot by mutableStateOf<AdminNativeStatus.Snapshot?>(null)
+    private var alertsBusy by mutableStateOf(false)
+    private var alertsMessage by mutableStateOf("")
+    private var nativeAlerts by mutableStateOf<List<AdminNativeAlerts.Incident>>(emptyList())
     private lateinit var browser: WebView
 
     private val notificationPermission = registerForActivityResult(
@@ -207,6 +210,7 @@ class MainActivity : FragmentActivity() {
         notice = ""
         analysisDetailWeb = false
         if (next == EPISCENE) loadEpiscene()
+        else if (next == ALERTS) loadNativeAlerts()
         else if (next != HOME) browser.loadUrl(destinations[next].url)
     }
 
@@ -224,6 +228,7 @@ class MainActivity : FragmentActivity() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     unlocked = true
                     notice = ""
+                    if (selection == ALERTS) loadNativeAlerts()
                 }
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     notice = "Entsperrung erforderlich."
@@ -302,6 +307,8 @@ class MainActivity : FragmentActivity() {
                 HomeContent(modifier = Modifier.weight(1f))
             } else if (selection == EPISCENE && !analysisDetailWeb) {
                 NativeEpiscene(modifier = Modifier.weight(1f))
+            } else if (selection == ALERTS) {
+                NativeAlerts(modifier = Modifier.weight(1f))
             } else {
                 WebContent(modifier = Modifier.weight(1f))
             }
@@ -719,6 +726,139 @@ class MainActivity : FragmentActivity() {
                 Text("Analyseverwaltung öffnen", fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(8.dp))
                 Icon(Icons.Outlined.ChevronRight, null)
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+
+    private fun loadNativeAlerts() {
+        if (!unlocked || alertsBusy) return
+        alertsBusy = true
+        alertsMessage = ""
+        val cookie = CookieManager.getInstance().getCookie(ADMIN_BASE) ?: ""
+        AdminNativeAlerts.load(cookie) { items, message ->
+            alertsBusy = false
+            alertsMessage = message
+            if (items != null) nativeAlerts = items
+            else nativeAlerts = emptyList()
+        }
+    }
+
+    private fun acknowledgeNativeAlert(key: String) {
+        if (alertsBusy) return
+        alertsBusy = true
+        val cookie = CookieManager.getInstance().getCookie(ADMIN_BASE) ?: ""
+        AdminNativeAlerts.acknowledge(cookie, key) { success, message ->
+            alertsBusy = false
+            alertsMessage = message
+            if (success) loadNativeAlerts()
+        }
+    }
+
+    @Composable
+    private fun NativeAlerts(modifier: Modifier = Modifier) {
+        Column(
+            modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(15.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Meldungen", color = White, fontSize = 27.sp,
+                        fontWeight = FontWeight.ExtraBold)
+                    Text("Bestätigte Ereignisse aus deinem Admin-Backend",
+                        color = Muted, fontSize = 12.sp)
+                }
+                OutlinedButton(
+                    onClick = { loadNativeAlerts() },
+                    enabled = !alertsBusy,
+                    border = BorderStroke(1.dp, Border),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Outlined.Refresh, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Aktuell")
+                }
+            }
+            if (alertsBusy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            if (alertsMessage.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(13.dp), color = InkElevated,
+                    border = BorderStroke(1.dp, Border)
+                ) {
+                    Column(Modifier.padding(15.dp)) {
+                        Text(alertsMessage, color = Warning, fontSize = 13.sp)
+                        if (alertsMessage.contains("anmelden", ignoreCase = true)) {
+                            TextButton(onClick = { selectDestination(DASHBOARD) }) {
+                                Text("Zum Login", color = Blue)
+                            }
+                        }
+                    }
+                }
+            }
+            if (!alertsBusy && alertsMessage.isBlank() && nativeAlerts.isEmpty()) {
+                Surface(color = InkRaised, shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Border)) {
+                    Column(Modifier.fillMaxWidth().padding(22.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Outlined.Notifications, null, tint = Muted,
+                            modifier = Modifier.size(36.dp))
+                        Spacer(Modifier.height(10.dp))
+                        Text("Keine offenen Meldungen", color = White,
+                            fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+                        Text("Das bedeutet nicht automatisch, dass alle Dienste gesund sind.",
+                            color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
+                    }
+                }
+            }
+            nativeAlerts.forEach { incident ->
+                Surface(
+                    shape = RoundedCornerShape(17.dp), color = InkRaised,
+                    border = BorderStroke(1.dp, Border)
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).clip(CircleShape).background(
+                                if (incident.severity == "critical") Warning else
+                                    if (incident.severity == "warning") Color(0xFFFFD384)
+                                    else Blue))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                if (incident.severity == "critical") "KRITISCH"
+                                else if (incident.severity == "warning") "WARNUNG"
+                                else "INFORMATION",
+                                color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(if (incident.state == "open") "Offen" else "Bestätigt",
+                                color = if (incident.state == "open") Warning else Positive,
+                                fontSize = 11.sp)
+                        }
+                        Text(incident.message, color = White, fontSize = 15.sp,
+                            lineHeight = 21.sp, fontWeight = FontWeight.SemiBold)
+                        Text(incident.kind, color = Muted, fontSize = 11.sp)
+                        Text(
+                            java.text.DateFormat.getDateTimeInstance(
+                                java.text.DateFormat.SHORT,
+                                java.text.DateFormat.SHORT
+                            ).format(java.util.Date(incident.lastSeenEpoch * 1000)),
+                            color = Muted, fontSize = 11.sp
+                        )
+                        if (incident.state == "open") {
+                            OutlinedButton(
+                                onClick = { acknowledgeNativeAlert(incident.key) },
+                                enabled = !alertsBusy, modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(11.dp),
+                                border = BorderStroke(1.dp, Blue.copy(alpha = .5f))
+                            ) {
+                                Text("Zur Kenntnis genommen", color = Blue,
+                                    fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
             }
             Spacer(Modifier.height(8.dp))
         }
