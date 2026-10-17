@@ -69,33 +69,19 @@ def diagnosis():
 
 def snap(c):
     tables={r['name'] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    required={'episcene_report_events','skip_analysis_playlists','skip_presence','skip_jobs','skip_assets'}
+    required={'episcene_report_events','skip_analysis_playlists','skip_analysis_sources','skip_jobs','skip_assets'}
     if not required<=tables:raise RuntimeError('DATABASE_SCHEMA_NOT_COMPATIBLE')
     columns={r['name'] for r in c.execute('PRAGMA table_info(episcene_report_events)')}
     if not {'id','kind','payload'}<=columns:raise RuntimeError('TELEMETRY_SCHEMA_NOT_COMPATIBLE')
-    playlist_cols={r['name'] for r in c.execute('PRAGMA table_info(skip_analysis_playlists)')}
-    if not {'id','archived','config_json'}<=playlist_cols:
-        raise RuntimeError('PLAYLIST_SCHEMA_UNSUPPORTED_RUN_DIAGNOSE')
-    rows=c.execute('SELECT id,archived,config_json FROM skip_analysis_playlists '
-                   'WHERE id IN (?,?) ORDER BY id', LANES).fetchall()
-    if tuple(r['id'] for r in rows)!=LANES or any(r['archived'] for r in rows):
-        raise RuntimeError('ANALYSIS_LANES_MISSING_OR_ARCHIVED')
-    for row in rows:
-        try: config=json.loads(row['config_json']) if row['config_json'] else {}
-        except (ValueError,TypeError):
-            raise RuntimeError('ANALYSIS_SOURCE_CONFIG_NOT_JSON')
-        if not isinstance(config,dict):
-            raise RuntimeError('ANALYSIS_SOURCE_CONFIG_INVALID')
-        # Whitelisted state flags only. Never print credentials or config_json.
-        false_values=(False,0,'0','false','off','no')
-        true_values=(True,1,'1','true','on','yes')
-        if any(config.get(k) in false_values for k in
-               ('enabled','analysis_enabled','active') if k in config):
-            raise RuntimeError('ANALYSIS_SOURCE_DISABLED')
-        if any(config.get(k) in true_values for k in
-               ('paused','analysis_paused','disabled') if k in config):
-            raise RuntimeError('ANALYSIS_SOURCE_PAUSED')
-    lanes=LANES
+    # Source activation lives in skip_analysis_sources, never in customer
+    # playlist presence or in the credentials-bearing config_json field.
+    lane_rows=c.execute("""SELECT p.id,p.archived,s.enabled
+      FROM skip_analysis_playlists p
+      JOIN skip_analysis_sources s ON s.playlist_id=p.id
+      WHERE p.id IN (8,10) ORDER BY p.id""").fetchall()
+    if (tuple(r['id'] for r in lane_rows)!=LANES or
+            any(r['archived'] or not r['enabled'] for r in lane_rows)):
+        raise RuntimeError('INDEPENDENT_ANALYSIS_LANE_UNAVAILABLE')
     presence=c.execute('SELECT COUNT(*) n FROM skip_presence WHERE expires_at>?',
         (int(time.time()),)).fetchone()['n']
     waiting={}
@@ -286,7 +272,8 @@ def health(url):
 
 def guarded_restart(base,drain=600):
     if os.geteuid()!=0:raise RuntimeError('ROOT_REQUIRED')
-    if base['presence']:raise RuntimeError('PLAYBACK_ACTIVE')
+    # Restarts remain disabled pending verified live service topology.
+    # Customer playback leases do not control the independent analysis sources.
     if RELOAD.exists():raise RuntimeError('EXISTING_SCENE_RELOAD_PENDING')
     if not active(TIMER):raise RuntimeError('ANALYSIS_TIMER_INACTIVE_REFUSE_AUTO_ENABLE')
     if LOCK.is_symlink() or not LOCK.is_file():raise RuntimeError('WORKER_LOCK_MISSING')
@@ -320,7 +307,7 @@ def guarded_restart(base,drain=600):
             if not active(TIMER):raise RuntimeError('TIMER_NOT_RESTORED')
 
 def check(base,seconds=900,poll=15,kick=False):
-    if kick and not base['presence'] and not active(BATCH):
+    if kick and not active(BATCH):
         cmd('start','--no-block',BATCH)
     end=time.monotonic()+seconds
     while True:
@@ -344,7 +331,7 @@ def run(args):
     print('BEFORE '+json.dumps(dict(waiting=base['waiting'],
       playback_leases=base['presence'],timer_active=active(TIMER)),sort_keys=True),flush=True)
     if args.restart:
-        raise RuntimeError('RESTART_NOT_VALIDATED_FOR_LIVE_SCHEMA_USE_DIAGNOSE_ONLY')
+        raise RuntimeError('RESTART_NOT_VALIDATED_FOR_LIVE_SERVICE_TOPOLOGY')
         guarded_restart(base,drain=args.drain)
         print('RESTART_HEALTH_OK (timer restored)',flush=True)
     result=check(base,args.timeout,args.poll,args.kick)
