@@ -18,5 +18,25 @@ jobs:
       - name: Syntax and isolated regression tests
         run: |
           python -m py_compile tools/episcene-verified-resume/verify_resume.py
+          python -m py_compile tools/episcene-verified-resume/export_backend_source.py
+          python - <<'PY'
+          from pathlib import Path
+          import tempfile, subprocess, zipfile
+          with tempfile.TemporaryDirectory() as d:
+              root=Path(d); (root/'analysis').mkdir(); (root/'provisioning').mkdir()
+              (root/'analysis'/'worker.py').write_text('password="SUPER_PRIVATE_VALUE"\\nprint("ready")\\n')
+              (root/'analysis'/'credentials.json').write_text('{"token":"SECRET"}')
+              (root/'provisioning'/'server.py').write_text('print("ready")\\n')
+              output=root/'export.zip'
+              subprocess.run(['python','tools/episcene-verified-resume/export_backend_source.py',
+                  '--analysis',str(root/'analysis'),'--provisioning',str(root/'provisioning'),
+                  '--output',str(output)],check=True)
+              with zipfile.ZipFile(output) as z:
+                  names=z.namelist()
+                  assert 'analysis/worker.py' in names
+                  assert 'provisioning/server.py' in names
+                  assert 'analysis/credentials.json' not in names
+                  assert b'SUPER_PRIVATE_VALUE' not in z.read('analysis/worker.py')
+          PY
           cd tools/episcene-verified-resume
           python -m unittest -v test_verify_resume
