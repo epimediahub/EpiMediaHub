@@ -19,9 +19,10 @@ def fixture():
       CREATE TABLE skip_assets(asset_key TEXT,playlist_id INTEGER,
         source_key TEXT,stream_id TEXT,extension TEXT);
       CREATE TABLE skip_jobs(id INTEGER,asset_key TEXT,status TEXT,updated_at TEXT);
-      CREATE TABLE skip_analysis_playlists(id INTEGER,archived INTEGER);
+      CREATE TABLE skip_analysis_playlists(id INTEGER,archived INTEGER,expires_at INTEGER);
+      CREATE TABLE episcene_daily_reports(day TEXT,generated_at REAL);
       CREATE TABLE skip_analysis_sources(playlist_id INTEGER,enabled INTEGER);
-      INSERT INTO skip_analysis_playlists VALUES(8,0),(10,0);
+      INSERT INTO skip_analysis_playlists VALUES(8,0,0),(10,0,0);
       INSERT INTO skip_analysis_sources VALUES(8,1),(10,0);
       INSERT INTO skip_assets VALUES
        ('HIDDEN_ASSET_8',8,'SECRET_SOURCE_8','1','mp4'),
@@ -61,6 +62,30 @@ class TestProgressAdapter(unittest.TestCase):
             dest.chmod(0o644)
             with self.assertRaises(PermissionError):
                 adapter.safe_write(dest,payload)
+
+    def test_pinned_analysis_source_expiry_without_customer_metadata(self):
+        db=fixture()
+        db.execute("UPDATE skip_analysis_playlists SET expires_at=? WHERE id=8",
+                   (NOW+48*3600,))
+        result=adapter.gather(db,NOW)
+        self.assertEqual(result["playlists"],[
+            {"id":"8","expires_at_epoch":NOW+48*3600}])
+        self.assertNotIn("SECRET_SOURCE",json.dumps(result))
+        kinds={a.kind for a in evaluate(result,NOW)}
+        self.assertIn("playlist_access",kinds)
+
+    def test_dedicated_report_generated_today_creates_info_alert(self):
+        from zoneinfo import ZoneInfo
+        berlin_day=datetime.fromtimestamp(NOW,ZoneInfo("Europe/Berlin")).date().isoformat()
+        db=fixture()
+        db.execute("INSERT INTO episcene_daily_reports VALUES(?,?)",
+                   (berlin_day,float(NOW-20)))
+        payload=adapter.gather(db,NOW)
+        self.assertTrue(payload["daily_report"]["ready"])
+        kinds={alert.kind for alert in evaluate(payload,NOW)}
+        self.assertIn("daily_report",kinds)
+        earlier=adapter.gather(db,NOW+2*24*3600)
+        self.assertNotIn("daily_report",earlier)
 
     def test_untrusted_schema_fail_closed_without_unverified_stall_alarm(self):
         db=sqlite3.connect(':memory:')
