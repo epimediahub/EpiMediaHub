@@ -12,22 +12,26 @@ class Verification(unittest.TestCase):
   self.db=Path(self.tmp.name)/'test.db'
   self.sql=sqlite3.connect(self.db);self.addCleanup(self.sql.close)
   self.sql.executescript("""
-  CREATE TABLE skip_analysis_playlists(id INTEGER,enabled INTEGER,archived INTEGER,paused INTEGER);
-  INSERT INTO skip_analysis_playlists VALUES(8,1,0,0),(10,1,0,0);
+  CREATE TABLE skip_analysis_playlists(id INTEGER,name TEXT,config_json TEXT,expires_at TEXT,revision INTEGER,archived INTEGER,updated_at TEXT);
+  INSERT INTO skip_analysis_playlists(id,name,config_json,archived) VALUES
+    (8,'4K ANALYSE','{"enabled":true,"paused":false,"access_token":"PRIVATE"}',0),
+    (10,'THE BEST','{"enabled":true,"paused":false,"access_token":"PRIVATE"}',0);
   CREATE TABLE skip_presence(expires_at INTEGER);
   CREATE TABLE skip_assets(asset_key TEXT PRIMARY KEY,playlist_id INTEGER);
   INSERT INTO skip_assets VALUES('opaque8',8),('opaque10',10);
   CREATE TABLE skip_jobs(asset_key TEXT,status TEXT);
   INSERT INTO skip_jobs VALUES('opaque8','queued'),('opaque10','queued');
-  CREATE TABLE episcene_report_events(id INTEGER PRIMARY KEY,kind TEXT,payload TEXT);
-  INSERT INTO episcene_report_events VALUES(1,'heartbeat','{}');
+  CREATE TABLE episcene_report_events(id INTEGER PRIMARY KEY,at REAL,kind TEXT,asset_key TEXT,record_id INTEGER,payload TEXT);
+  INSERT INTO episcene_report_events(id,kind,asset_key,payload) VALUES(1,'heartbeat','','{}');
   """);self.sql.commit()
   self.old_db=m.DB;m.DB=self.db;self.addCleanup(lambda:setattr(m,'DB',self.old_db))
   with m.ro() as c:self.base=m.snap(c)
 
- def emit(self,kind,payload):
-  self.sql.execute('INSERT INTO episcene_report_events(kind,payload) VALUES(?,?)',
-                   (kind,json.dumps(payload)));self.sql.commit()
+ def emit(self,kind,payload,asset_key=None):
+  pid=payload.get('playlist_id') or payload.get('asset',{}).get('playlist_id')
+  key=asset_key if asset_key is not None else ('opaque'+str(pid) if pid in m.LANES else '')
+  self.sql.execute('INSERT INTO episcene_report_events(kind,asset_key,payload) VALUES(?,?,?)',
+                   (kind,key,json.dumps(payload)));self.sql.commit()
  def results(self):
   with m.ro() as c:return m.progress(c,self.base)
 
@@ -39,7 +43,7 @@ class Verification(unittest.TestCase):
    self.assertEqual(m.check(self.base,seconds=0)['status'],'FAIL_NO_CONFIRMED_PROGRESS')
   self.emit('analysis_completion',{'playlist_id':10})
   self.emit('job',{'asset':{'playlist_id':10},'job':{'status':'review'}})
-  with patch.object(m,'active',return_value=True):
+  with patch.object(m,'active',return_value=True),patch.object(m,'cmd',return_value='active'):
    result=m.check(self.base,seconds=0)
   self.assertEqual(result['status'],'PASS')
   self.assertEqual(result['verified_lanes'],[8,10])
@@ -60,7 +64,7 @@ class Verification(unittest.TestCase):
    self.assertNotEqual(m.check(self.base,seconds=0)['status'],'PASS')
 
  def test_absent_schema_or_disabled_source_blocks(self):
-  self.sql.execute('UPDATE skip_analysis_playlists SET paused=1 WHERE id=10');self.sql.commit()
+  self.sql.execute('UPDATE skip_analysis_playlists SET archived=1 WHERE id=10');self.sql.commit()
   with m.ro() as c:
    with self.assertRaisesRegex(RuntimeError,'ANALYSIS_LANES'):m.snap(c)
 
@@ -83,6 +87,21 @@ class Verification(unittest.TestCase):
   with m.ro() as connection:
    with self.assertRaisesRegex(RuntimeError,'PLAYLIST_SCHEMA_UNSUPPORTED'):
     m.snap(connection)
+
+ def test_mismatched_assets_do_not_pass(self):
+  self.emit('heartbeat',{})
+  for pid in m.LANES:
+   self.emit('analysis_completion',{'playlist_id':pid},asset_key='completed'+str(pid))
+   self.emit('job',{'asset':{'playlist_id':pid},'job':{'status':'done'}},asset_key='other'+str(pid))
+  with patch.object(m,'active',return_value=True),patch.object(m,'cmd',return_value='active'):
+   self.assertNotEqual(m.check(self.base,seconds=0)['status'],'PASS')
+
+ def test_disabled_in_config_blocks_without_leaking_secrets(self):
+  self.sql.execute('UPDATE skip_analysis_playlists SET config_json=? WHERE id=10',
+                   (json.dumps({'enabled':False,'access_token':'PRIVATE'}),))
+  self.sql.commit()
+  with m.ro() as c:
+   with self.assertRaisesRegex(RuntimeError,'ANALYSIS_SOURCE_DISABLED'):m.snap(c)
 
  def test_database_readonly_no_markers_changed(self):
   original=self.db.read_bytes()
