@@ -158,6 +158,27 @@ class TestPrivateAdminMobile(unittest.TestCase):
         (folder/"current.json").chmod(0o600)
         self.assertEqual(self.client.get("/admin/mobile/update/apk").status_code,503)
 
+    def test_native_alert_ack_requires_admin_csrf_and_safe_json(self):
+        route="/admin/mobile/alerts/ack"
+        self.assertEqual(self.client.post(route,json={"alert_key":"analysis_stalled:8"}).status_code,401)
+        self.signin()
+        from monitor_rules import Alert
+        mobile_flask._incidents().observe([Alert(
+            "analysis_stalled:8","analysis_stalled","critical","8","Analyse ohne Fortschritt")],
+            1760000000)
+        data={"alert_key":"analysis_stalled:8"}
+        self.assertEqual(self.client.post(route,json=data).status_code,403)
+        csrf=self.client.get("/admin/mobile/bootstrap").get_json()["csrf"]
+        invalid=self.client.post(route,json=dict(data,secret="DO_NOT_STORE"),
+                                 headers={"X-Dashboard-CSRF":csrf})
+        self.assertEqual(invalid.status_code,400)
+        response=self.client.post(route,json=data,headers={"X-Dashboard-CSRF":csrf})
+        self.assertEqual(response.status_code,200)
+        self.assertTrue(response.get_json()["acknowledged"])
+        self.assertNotIn("DO_NOT_STORE",response.get_data(as_text=True))
+        again=self.client.post(route,json=data,headers={"X-Dashboard-CSRF":csrf})
+        self.assertFalse(again.get_json()["acknowledged"])
+
     def test_login_required_for_acknowledgements(self):
         self.signin()
         from monitor_rules import Alert
