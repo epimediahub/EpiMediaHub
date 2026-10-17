@@ -67,6 +67,7 @@ class TestProgressAdapter(unittest.TestCase):
         db=fixture()
         db.execute("UPDATE skip_analysis_playlists SET expires_at=? WHERE id=8",
                    (NOW+48*3600,))
+        db.commit()
         result=adapter.gather(db,NOW)
         self.assertEqual(result["playlists"],[
             {"id":"8","expires_at_epoch":NOW+48*3600}])
@@ -80,6 +81,7 @@ class TestProgressAdapter(unittest.TestCase):
         db=fixture()
         db.execute("INSERT INTO episcene_daily_reports VALUES(?,?)",
                    (berlin_day,float(NOW-20)))
+        db.commit()
         payload=adapter.gather(db,NOW)
         self.assertTrue(payload["daily_report"]["ready"])
         kinds={alert.kind for alert in evaluate(payload,NOW)}
