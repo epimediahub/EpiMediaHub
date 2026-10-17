@@ -74,12 +74,28 @@ def snap(c):
     columns={r['name'] for r in c.execute('PRAGMA table_info(episcene_report_events)')}
     if not {'id','kind','payload'}<=columns:raise RuntimeError('TELEMETRY_SCHEMA_NOT_COMPATIBLE')
     playlist_cols={r['name'] for r in c.execute('PRAGMA table_info(skip_analysis_playlists)')}
-    if not {'id','enabled','archived','paused'}<=playlist_cols:
+    if not {'id','archived','config_json'}<=playlist_cols:
         raise RuntimeError('PLAYLIST_SCHEMA_UNSUPPORTED_RUN_DIAGNOSE')
-    lanes=tuple(r['id'] for r in c.execute("""
-      SELECT id FROM skip_analysis_playlists
-      WHERE id IN (8,10) AND enabled=1 AND archived=0 AND paused=0 ORDER BY id"""))
-    if lanes!=LANES:raise RuntimeError('ANALYSIS_LANES_NOT_BOTH_ENABLED')
+    rows=c.execute('SELECT id,archived,config_json FROM skip_analysis_playlists '
+                   'WHERE id IN (?,?) ORDER BY id', LANES).fetchall()
+    if tuple(r['id'] for r in rows)!=LANES or any(r['archived'] for r in rows):
+        raise RuntimeError('ANALYSIS_LANES_MISSING_OR_ARCHIVED')
+    for row in rows:
+        try: config=json.loads(row['config_json']) if row['config_json'] else {}
+        except (ValueError,TypeError):
+            raise RuntimeError('ANALYSIS_SOURCE_CONFIG_NOT_JSON')
+        if not isinstance(config,dict):
+            raise RuntimeError('ANALYSIS_SOURCE_CONFIG_INVALID')
+        # Whitelisted state flags only. Never print credentials or config_json.
+        false_values=(False,0,'0','false','off','no')
+        true_values=(True,1,'1','true','on','yes')
+        if any(config.get(k) in false_values for k in
+               ('enabled','analysis_enabled','active') if k in config):
+            raise RuntimeError('ANALYSIS_SOURCE_DISABLED')
+        if any(config.get(k) in true_values for k in
+               ('paused','analysis_paused','disabled') if k in config):
+            raise RuntimeError('ANALYSIS_SOURCE_PAUSED')
+    lanes=LANES
     presence=c.execute('SELECT COUNT(*) n FROM skip_presence WHERE expires_at>?',
         (int(time.time()),)).fetchone()['n']
     waiting={}
@@ -94,7 +110,9 @@ def snap(c):
 def progress(c,base):
     result={pid:dict(completions=0,successful_jobs=0,failed_jobs=0,running=0) for pid in LANES}
     heartbeat=0
-    for r in c.execute("""SELECT kind,payload FROM episcene_report_events
+    completed={pid:set() for pid in LANES}
+    successful={pid:set() for pid in LANES}
+    for r in c.execute("""SELECT kind,asset_key,payload FROM episcene_report_events
         WHERE id>? AND kind IN ('heartbeat','job','analysis_completion')
         ORDER BY id""",(base['event_id'],)):
         try:p=json.loads(r['payload']) if isinstance(r['payload'],str) else r['payload']
@@ -102,16 +120,23 @@ def progress(c,base):
         if not isinstance(p,dict):continue
         if r['kind']=='heartbeat':heartbeat+=1;continue
         if r['kind']=='analysis_completion':
-            if p.get('playlist_id') in result:result[p['playlist_id']]['completions']+=1
+            pid=p.get('playlist_id')
+            if pid in result and r['asset_key']:
+                completed[pid].add(r['asset_key'])
             continue
         j=p.get('job');asset=p.get('asset')
         if not isinstance(j,dict) or not isinstance(asset,dict):continue
         pid=asset.get('playlist_id')
         if pid not in result:continue
         state=j.get('status')
-        if state in GOOD:result[pid]['successful_jobs']+=1
+        if state in GOOD:
+            result[pid]['successful_jobs']+=1
+            if r['asset_key']:successful[pid].add(r['asset_key'])
         elif state=='failed':result[pid]['failed_jobs']+=1
         elif state=='running':result[pid]['running']+=1
+    for pid in LANES:
+        result[pid]['matched_completed_jobs']=len(completed[pid]&successful[pid])
+        result[pid]['completions']=len(completed[pid])
     return result,heartbeat
 
 def health(url):
@@ -162,11 +187,11 @@ def check(base,seconds=900,poll=15,kick=False):
         with ro() as c:
             current=snap(c)
             outcomes,heartbeats=progress(c,base)
-        needed=[pid for pid in LANES if base['waiting'][pid]>0]
-        verified=[pid for pid in needed if outcomes[pid]['completions'] and
-                  outcomes[pid]['successful_jobs']]
+        needed=list(LANES)  # Both independent analysis playlists must make new progress.
+        verified=[pid for pid in needed if outcomes[pid]['matched_completed_jobs']>0]
         ok=(bool(needed) and heartbeats>0 and len(verified)==len(needed)
-            and active(TIMER) and active(COMPUTE) and active(WEB))
+            and all(cmd('show',u,'--property=ActiveState','--value')=='active'
+                    for u in (TIMER,COMPUTE,WEB)))
         if ok or time.monotonic()>=end:
             return dict(status='PASS' if ok else 'FAIL_NO_CONFIRMED_PROGRESS',
               required_lanes=needed,verified_lanes=verified,
@@ -179,6 +204,7 @@ def run(args):
     print('BEFORE '+json.dumps(dict(waiting=base['waiting'],
       playback_leases=base['presence'],timer_active=active(TIMER)),sort_keys=True),flush=True)
     if args.restart:
+        raise RuntimeError('RESTART_NOT_VALIDATED_FOR_LIVE_SCHEMA_USE_DIAGNOSE_ONLY')
         guarded_restart(base,drain=args.drain)
         print('RESTART_HEALTH_OK (timer restored)',flush=True)
     result=check(base,args.timeout,args.poll,args.kick)
