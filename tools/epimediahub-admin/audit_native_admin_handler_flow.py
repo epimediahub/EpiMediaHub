@@ -28,8 +28,8 @@ ALLOW={
     "license_api.py": ("admin_activate_device","_admin_guard",
         "_activate_subject"),
 }
-MAX_FUNCTION_LINES=300
-MAX_TOTAL_SIZE=80_000
+MAX_FUNCTION_LINES=650
+MAX_TOTAL_SIZE=220_000
 
 class HideLiterals(ast.NodeTransformer):
     def visit_Constant(self,node):
@@ -62,8 +62,8 @@ def export_one(path: Path,names):
         safe=HideLiterals().visit(snippet)
         ast.fix_missing_locations(safe)
         flow=ast.unparse(safe)
-        if len(flow)>12_000:
-            flow=flow[:12_000]+"\n<truncated>"
+        if len(flow)>22_000:
+            flow=flow[:22_000]+"\n<truncated>"
         found.append({"function":node.name,"flow":flow})
     return found
 
