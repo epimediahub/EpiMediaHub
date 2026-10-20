@@ -30,7 +30,7 @@ class ExpiryPublisherTests(unittest.TestCase):
                     customer_id INTEGER,name TEXT,enabled INTEGER,config_json TEXT);
                 INSERT INTO customers VALUES(1,'Muster Name',1,NULL);
                 INSERT INTO customer_playlists VALUES(
-                    6,1,'4K IPTV',1,'{"type":"XTREAM","xtream_password":"PASSWORD_SHOULD_NOT_APPEAR"}');
+                    6,1,'4K IPTV',1,'{"playlist_type":"XTREAM","xtream_password":"PASSWORD_SHOULD_NOT_APPEAR"}');
             """)
         self.now=datetime(2026,11,30,8,0,tzinfo=BERLIN)
         obs=VerifiedPlaylistExpiry(
@@ -71,7 +71,7 @@ class ExpiryPublisherTests(unittest.TestCase):
     def test_partial_refresh_never_publishes_or_sends_push(self):
         with sqlite3.connect(self.db) as db:
             db.execute("INSERT INTO customer_playlists VALUES(7,1,'THE BEST',1,?)",
-                       ('{"type":"XTREAM"}',))
+                       ('{"playlist_type":"XTREAM"}',))
         with self.assertRaises(CoverageUnavailable):
             publish_once(self.base,self.db,self.now,
                          certified_source=True,registry=self.dummy)
