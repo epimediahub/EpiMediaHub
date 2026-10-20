@@ -54,6 +54,25 @@ automatically**, so no parallel manual expiration entry is required.
 - Only authorized admins can fetch these privacy-sensitive report rows/files; HTTP headers must use private, no-store; private storage mode 0600/0700. Never send the full PDF as a push attachment or expose a public URL.
 - Reports are snapshots: generation time and source revision/measurement timestamp must be recorded. Honor established data-retention controls and log administrative downloads without storing customer details in logs.
 
+## Implemented development modules (NOT deployed)
+
+- `expiry_provider_adapter.py` validates Xtream `user_info.exp_date` timestamps without storing or returning provider credentials.
+- `expiry_cache.py` stores backend-verified per-playlist expiry dates and check timestamps in a private service-owned SQLite cache. There is NO public/mobile upload route.
+- `expiry_report_rows.py` joins only fresh provider-verified playlist IDs to customer names and playlist names, with optional authenticated reseller scoping.
+- `expiry_report_calendar.py` provides Berlin calendar windows; `expiry_report_pdf.py` renders multi-page A4 landscape contact/appointment worksheets.
+- `mobile_flask.py` now provides admin-authenticated, no-store routes:
+  - `GET /admin/mobile/reports/expiry` (desktop HTML, protected by dashboard login)
+  - `GET /admin/mobile/reports/expiry/month?year=YYYY&month=M`
+  - `GET /admin/mobile/reports/expiry/month.pdf?year=YYYY&month=M`
+  - `GET /admin/mobile/reports/expiry/week?from=YYYY-MM-DD` (must be Monday)
+- The Android Admin Compose app has a dedicated **Abläufe** area for weekly/monthly grouping and Android system printing via authenticated in-memory PDF bytes, not a WebView or public download URL.
+- `expiry_report_publish.py` prepares one stable PDF on each last calendar day (for NEXT month) and weekly report-ready events on Monday after 07:00 Berlin. It stores no customer names in FCM events, deduplicates events using stable period IDs, and is **disabled unless** the deployment operator sets `EPIMEDIAHUB_EXPIRY_PROVIDER_COVERAGE_CERTIFIED=YES` after independent verification of comprehensive provider refresh.
+- Both new notification categories are recognized by private Firebase send logic and open the native report screen. Sending needs a configured backend service account, registered Android Admin installations, and active monitor outbox cycles.
+- `audit_xtream_expiry_source.py` is a **read-only redacted production discovery audit** needed to locate the actual provider refresh pipeline. It writes only aggregate account-type counts, whitelisted configuration key presence counts and safe source function names; never names/IDs, hosts, URLs, usernames or passwords.
+- Isolated Python regression tests cover session authorization, PDF confidentiality, provider date conversions, multi-playlist grouping, reseller isolation, time windows, cache stale rejection, publication idempotency and generic push event content. Android CI builds the new native navigation.
+
+**Release blocker:** the production API/worker path that actually obtains Xtream `user_info.exp_date` for EACH customer-playlist account has not been inspected or wired to `expiry_cache.save_verified`. The evidence of account coverage must be audited before enabling report publication or notifications. Installation of ReportLab in the service Python environment and real Android device tests remain necessary. No current customer expiry is inferred from an app license, VPN, EpiScene account, M3U URL, or stale response.
+
 ## Development status (do not mistake for deployment)
 
 The pure renderer `expiry_report_pdf.py` builds the A4 worksheet from externally **verified** `Expiry(customer,playlist,day)` records, and is covered by tests. It is not yet connected to production data, scheduler, web route, authenticated download, native list viewer or FCM. Leave this feature disabled until verified expiration mapping and end-to-end privacy/permission testing. Do not promise a real monthly or weekly notification yet.
