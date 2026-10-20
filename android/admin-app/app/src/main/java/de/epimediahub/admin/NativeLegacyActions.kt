@@ -30,7 +30,10 @@ internal object NativeLegacyActions {
         "add-playlist" to setOf("playlist_name","playlist_type","playlist_url",
             "xtream_server","xtream_username","xtream_password","xtream_output"),
         "edit-playlist" to setOf("playlist_name","playlist_type","playlist_url",
-            "xtream_server","xtream_username","xtream_password","xtream_output")
+            "xtream_server","xtream_username","xtream_password","xtream_output"),
+        "delete-customer" to emptySet(),
+        "delete-reseller" to emptySet(),
+        "delete-device" to emptySet()
     )
     data class Outcome(val applied: Boolean, val message: String, val newId: String = "")
 
@@ -68,11 +71,58 @@ internal object NativeLegacyActions {
         }
     }
 
+    /** Lookup the exact phrase from the trusted existing server handler.
+     *  A delete is never offered when the backend safety gate is disabled.
+     */
+    fun confirmDeletion(action: String, id: String, done: (String?, String) -> Unit) {
+        if (action !in setOf("delete-customer","delete-reseller","delete-device") ||
+            !Regex("[1-9][0-9]{0,17}").matches(id)) {
+            main.post { done(null, "Ungültige Aktion.") }
+            return
+        }
+        thread(name = "epi-admin-typed-delete") {
+            val result = try {
+                val cookie = CookieManager.getInstance().getCookie(BASE) ?: ""
+                if (cookie.isBlank()) throw IllegalStateException("Admin-Sitzung fehlt.")
+                val conn = (URL(
+                    "$BASE/admin/mobile/management/delete-confirm/$action/$id"
+                ).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    instanceFollowRedirects = false
+                    connectTimeout = 8000
+                    readTimeout = 10000
+                    setRequestProperty("Cookie", cookie)
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("Cache-Control", "no-store")
+                }
+                try {
+                    if (conn.responseCode != 200)
+                        throw IllegalStateException("Löschen serverseitig noch nicht freigegeben.")
+                    val data = JSONObject(conn.inputStream.bufferedReader().use {
+                        it.readText().take(1000)
+                    })
+                    val phrase = data.optString("required_confirmation", "")
+                    if (phrase.length !in 2..100)
+                        throw IllegalStateException("Bestätigung nicht verfügbar.")
+                    phrase to ""
+                } finally {
+                    conn.disconnect()
+                }
+            } catch (e: Exception) {
+                null to (e.message?.take(100) ?: "Löschfunktion nicht verfügbar.")
+            }
+            main.post { done(result.first, result.second) }
+        }
+    }
+
     fun execute(action: String, entityId: String, fields: Map<String, String>,
-                done: (Outcome) -> Unit) {
+                typedConfirmation: String? = null, done: (Outcome) -> Unit) {
         val idValid = if (action.startsWith("create-")) entityId == "0"
             else Regex("[1-9][0-9]{0,17}").matches(entityId)
+        val deleting = action in setOf("delete-customer","delete-reseller","delete-device")
         if (!idValid || fields.keys != expected[action]
+                || (deleting && (typedConfirmation == null || typedConfirmation.isBlank()
+                    || typedConfirmation.length > 100))
                 || fields.values.any { it.length > 1600 || it.contains('\u0000') }) {
             main.post { done(Outcome(false, "Ungültige Eingaben für diese Aktion.")) }
             return
@@ -87,7 +137,7 @@ internal object NativeLegacyActions {
                 } else {
                     val path = "/admin/mobile/management/actions/$action/$entityId"
                     val values = fields + mapOf(
-                        "confirm" to "true",
+                        "confirm" to (if (deleting) typedConfirmation!! else "true"),
                         "request_id" to UUID.randomUUID().toString()
                     )
                     val encoded = values.entries.joinToString("&") { (k, v) ->
