@@ -5,6 +5,8 @@ Never contacts IPTV providers or uses actual subscriber data.
 from datetime import date,datetime,timedelta,timezone
 from pathlib import Path
 import sqlite3
+import json
+import os
 import tempfile
 import unittest
 from unittest import mock
@@ -13,6 +15,7 @@ from flask import Flask
 import mobile_flask
 from expiry_cache import save_verified, read_verified
 from expiry_report_rows import VerifiedPlaylistExpiry
+from expiry_http_worker import refresh
 
 
 class PrivateExpiryReportsTests(unittest.TestCase):
@@ -134,6 +137,46 @@ class PrivateExpiryReportsTests(unittest.TestCase):
         self.assertEqual(pdf.headers["Cache-Control"],"private, no-store")
         self.assertTrue(pdf.data.startswith(b"%PDF"))
         self.assertIn("attachment",pdf.headers["Content-Disposition"])
+
+    def test_provisional_http_expiry_is_displayed_but_not_automatically_certified(self):
+        with sqlite3.connect(self.db) as con:
+            for ident in (9,10,11):
+                source={
+                    "playlist_type":"XTREAM",
+                    "xtream_server":"http://provider.example:8080",
+                    "xtream_username":"PRIVATE_USER_"+str(ident),
+                    "xtream_password":"PRIVATE_SECRET_"+str(ident)}
+                con.execute("UPDATE customer_playlists SET config_json=? WHERE id=?",
+                            (json.dumps(source),ident))
+        def fake(origin,user,password):
+            if user.endswith("9"):
+                return {"user_info":{"username":user,"exp_date":"1792531200"}}
+            return {"user_info":{"username":user,"exp_date":"0"}}
+        with mock.patch.dict(os.environ,{
+            "EPIMEDIAHUB_XTREAM_DAILY_HTTP_APPROVED":"YES"}):
+            summary=refresh(database=self.db,
+                            cache=self.root/"admin-mobile"/"expiry-http.sqlite3",
+                            now=self.now,http_fetch=fake)
+        self.assertEqual(summary["dates_observed_over_unverified_transport"],1)
+        self.login()
+        coverage=self.client.get("/admin/mobile/reports/expiry/coverage")
+        self.assertEqual(coverage.status_code,200)
+        value=coverage.get_json()
+        self.assertEqual(value["confirmed_accounts"],0)
+        self.assertEqual(value["http_observed_accounts"],1)
+        self.assertEqual(value["unverified_accounts"],2)
+        self.assertFalse(value["automatic_reports_active"])
+        self.assertIn("http_observed",coverage.get_data(as_text=True))
+        self.assertNotIn("PRIVATE_SECRET",coverage.get_data(as_text=True))
+        preview=self.client.get(
+            "/admin/mobile/reports/expiry/month.preview.pdf?year=2026&month=10")
+        self.assertEqual(preview.status_code,200)
+        self.assertTrue(preview.data.startswith(b"%PDF"))
+        self.assertIn("UNVOLLSTAENDIG",preview.headers["Content-Disposition"])
+        self.assertNotIn(b"PRIVATE_SECRET",preview.data)
+        self.assertEqual(self.client.get(
+            "/admin/mobile/reports/expiry/month.pdf?year=2026&month=10"
+        ).status_code,503)
 
     def test_incomplete_pdf_is_explicitly_labeled_and_private(self):
         endpoint="/admin/mobile/reports/expiry/month.preview.pdf?year=2026&month=11"
