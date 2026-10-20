@@ -13,9 +13,14 @@ A redirect or flash from a legacy handler alone is NEVER interpreted as success.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
+import fcntl
+import os
 from pathlib import Path
 import sqlite3
+import stat
+import time
 import uuid
 from flask import current_app
 from native_management_data import SchemaUnavailable
@@ -80,6 +85,49 @@ def current_entitlement(path,device_row_id,action):
     finally:
         con.close()
 
+@contextmanager
+def _device_lock(path, device_row_id, action):
+    """Cross-worker serialization around the ORIGINAL handler and verification.
+
+    SQLite transactions inside the existing handler cannot be nested in our
+    connection. An OS file lock serializes requests for the same device/action
+    on the single provisioning host, including separate Flask workers.
+    """
+    root=Path(path).parent/"admin-mobile"
+    folder=root/"native-grant-locks"
+    for candidate in (root,folder):
+        if candidate.is_symlink():
+            raise SchemaUnavailable("unsafe native grant lock directory")
+        candidate.mkdir(mode=0o700,parents=True,exist_ok=True)
+        info=candidate.stat()
+        if (not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o077
+                or info.st_uid!=os.geteuid()):
+            raise SchemaUnavailable("native grant lock directory is not private")
+    flags=os.O_CREAT|os.O_RDWR
+    if hasattr(os,"O_NOFOLLOW"):
+        flags|=os.O_NOFOLLOW
+    descriptor=os.open(folder/f"{device_row_id}-{action}.lock",flags,0o600)
+    acquired=False
+    try:
+        info=os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid!=os.geteuid():
+            raise SchemaUnavailable("unsafe native grant lock")
+        os.fchmod(descriptor,0o600)
+        deadline=time.monotonic()+8
+        while not acquired:
+            try:
+                fcntl.flock(descriptor,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                acquired=True
+            except BlockingIOError:
+                if time.monotonic()>=deadline:
+                    raise SchemaUnavailable("native grant already in progress")
+                time.sleep(0.05)
+        yield
+    finally:
+        if acquired:
+            fcntl.flock(descriptor,fcntl.LOCK_UN)
+        os.close(descriptor)
+
 def invoke_grant(path,device_row_id,action):
     if action not in HANDLERS:
         raise ValueError("unsupported action")
@@ -87,11 +135,14 @@ def invoke_grant(path,device_row_id,action):
     handler=current_app.view_functions.get(handler_name)
     if not callable(handler):
         raise SchemaUnavailable("original audited business action missing")
-    if current_entitlement(path,device_row_id,action):
-        return {"applied":False,"error":"already_active"},409
-    # Call the REAL business implementation. It owns all its original guards,
-    # provider readiness checks, license transactions, and audit history.
-    handler(device_row_id)
-    if current_entitlement(path,device_row_id,action):
-        return {"applied":True,"action":action},200
-    return {"applied":False,"error":"not_applied"},409
+    # The eligibility check, real handler and post-condition must be one
+    # serialized unit. Otherwise two concurrent POSTs can both see 'inactive'.
+    with _device_lock(path,device_row_id,action):
+        if current_entitlement(path,device_row_id,action):
+            return {"applied":False,"error":"already_active"},409
+        # Call the REAL business implementation. It owns all its original guards,
+        # provider readiness checks, license transactions, and audit history.
+        handler(device_row_id)
+        if current_entitlement(path,device_row_id,action):
+            return {"applied":True,"action":action},200
+        return {"applied":False,"error":"not_applied"},409
