@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import json
 import os
 from pathlib import Path
 import re
@@ -36,6 +37,14 @@ ACTIONS = {
     "move-device": ("v070_move_device", ("customer_id",)),
     "assign-reseller": ("v080_assign_customer_reseller", ("reseller_id",)),
     "delete-playlist": ("v076_delete_customer_playlist", ()),
+    "add-playlist": ("v076_add_customer_playlist", (
+        "playlist_name", "playlist_type", "playlist_url", "xtream_server",
+        "xtream_username", "xtream_password", "xtream_output"
+    )),
+    "edit-playlist": ("v076_update_customer_playlist", (
+        "playlist_name", "playlist_type", "playlist_url", "xtream_server",
+        "xtream_username", "xtream_password", "xtream_output"
+    )),
 }
 CREATE_ACTIONS = {"create-customer", "create-reseller"}
 IDENTIFIER = re.compile(r"^[1-9][0-9]{0,17}$")
