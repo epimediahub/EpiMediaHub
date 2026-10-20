@@ -876,7 +876,7 @@ class MainActivity : FragmentActivity() {
                                 ) {
                                     Row(Modifier.fillMaxWidth().padding(10.dp),
                                         verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Outlined.WarningAmber, null,
+                                        Icon(Icons.Outlined.Security, null,
                                             tint = Warning, modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(8.dp))
                                         Text("Seit mindestens 15 Minuten kein neuer Abschluss.",
