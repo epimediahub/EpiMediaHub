@@ -369,6 +369,107 @@ def _month_period():
     return int(y),int(m)
 
 
+WEB_EXPIRY_HTML = """<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EpiMediaHub Admin · Ablaufübersicht</title>
+<style>
+:root{color-scheme:light}body{font:15px system-ui,Arial,sans-serif;margin:0;background:#f1f4f9;color:#152238}
+main{max-width:1030px;margin:0 auto;padding:25px 18px}
+header{background:#10243a;color:white;padding:20px;border-radius:15px;margin-bottom:18px}
+h1{margin:0 0 7px;font-size:24px}h2{margin:24px 0 12px;font-size:19px}
+a{color:#145984}nav{display:flex;gap:14px;flex-wrap:wrap;padding:12px 0}
+a.action{display:inline-block;border-radius:9px;background:#145984;color:white;
+ padding:10px 14px;text-decoration:none}
+section{background:white;border:1px solid #d5deea;border-radius:12px;
+padding:13px;margin:12px 0;break-inside:avoid}
+table{width:100%;border-collapse:collapse}th,td{padding:11px;text-align:left;
+border-bottom:1px solid #e5eaf0}th{background:#edf2f7}
+small{color:#4f617a} .error{color:#9f2525;font-weight:600}
+@media print {body{background:white}nav{display:none}header{color:#111;background:white}
+section{break-before:page}}
+</style></head><body><main>
+<header><h1>Monats- &amp; Wochenübersichten</h1>
+<div>Nur bestätigte Abläufe beim IPTV-Anbieter</div></header>
+<nav>
+<a href="?year={{ year }}&amp;month={{ month }}">Monat anzeigen</a>
+<a href="?kind=week&amp;from={{ monday }}">Aktuelle Woche anzeigen</a>
+{% if not weekly %}
+<a class="action" href="/admin/mobile/reports/expiry/month.pdf?year={{ year }}&amp;month={{ month }}">Monats-PDF herunterladen / drucken</a>
+{% endif %}
+</nav>
+{% if error %}<p class="error">{{ error|e }}</p>{% else %}
+<h2>{{ label|e }} — {{ count }} bestätigte Abläufe</h2>
+{% if not groups %}<p>Für diesen Zeitraum sind keine bestätigten Abläufe erfasst.</p>{% endif %}
+{% for group in groups %}
+<section><h2>{{ group.name|e }} <small>({{ group.entries|length }})</small></h2>
+<table><thead><tr><th>Kundenname</th><th>Ablaufdatum</th></tr></thead>
+<tbody>{% for entry in group.entries %}
+<tr><td>{{ entry.customer|e }}</td><td>{{ entry.day|e }}</td></tr>
+{% endfor %}</tbody></table></section>
+{% endfor %}
+{% endif %}
+<small>Vertraulich. Nur im geschützten Administratorbereich.</small>
+</main></body></html>"""
+
+
+@bp.get("/admin/mobile/reports/expiry")
+def expiry_report_web():
+    """Private desktop report overview on the existing admin host."""
+    _require_admin()
+    berlin=__import__("zoneinfo").ZoneInfo("Europe/Berlin")
+    today=datetime.now(berlin).date()
+    next_month=(today.replace(day=1)+timedelta(days=32)).replace(day=1)
+    current_monday=today-timedelta(days=today.weekday())
+    requested_monday=request.args.get("from",current_monday.isoformat())
+    weekly=request.args.get("kind","month")=="week"
+    yr=request.args.get("year",str(next_month.year))
+    mo=request.args.get("month",str(next_month.month))
+    groups=[]
+    error=None
+    count=0
+    label=""
+    try:
+        if not yr.isascii() or not yr.isdecimal() or len(yr)!=4 or not (
+            2000<=int(yr)<=2100) or not mo.isascii() or not mo.isdecimal() or not 1<=len(mo)<=2 or not 1<=int(mo)<=12:
+            raise ValueError()
+        year,month=int(yr),int(mo)
+        monday=date.fromisoformat(requested_monday)
+        if (monday.weekday()!=0 or monday.isoformat()!=requested_monday):
+            raise ValueError()
+        result=_expiry_entries()
+        if weekly:
+            grouped=weekly_entries(result,monday)
+            label=monday.strftime("%d.%m.%Y")+" – "+(
+                monday+timedelta(days=6)).strftime("%d.%m.%Y")
+        else:
+            grouped={}
+            for item in result:
+                if (item.day.year,item.day.month)==(year,month):
+                    grouped.setdefault(item.playlist,[]).append(item)
+            label=f"{year}-{month:02d}"
+        for name in sorted(grouped,key=str.casefold):
+            entries=[{"customer":item.customer,
+                      "day":item.day.strftime("%d.%m.%Y")}
+                     for item in sorted(grouped[name],
+                        key=lambda x:(x.day,x.customer.casefold()))]
+            groups.append({"name":name,"entries":entries})
+            count+=len(entries)
+    except ValueError:
+        abort(400)
+    except (ExpiryUnavailable,sqlite3.Error,OSError,RuntimeError):
+        error="Ablaufdaten des Anbieters sind derzeit nicht bestätigt."
+    html=render_template_string(WEB_EXPIRY_HTML,year=year,month=month,
+        monday=monday.isoformat(),weekly=weekly,label=label,
+        count=count,groups=groups,error=error)
+    from flask import make_response
+    reply=make_response(html,503 if error else 200)
+    reply.headers["Cache-Control"]="private, no-store"
+    reply.headers["X-Frame-Options"]="DENY"
+    reply.headers["X-Content-Type-Options"]="nosniff"
+    reply.headers["Content-Security-Policy"]="default-src 'none'; style-src 'unsafe-inline'"
+    return reply
+
+
 @bp.get("/admin/mobile/reports/expiry/month")
 def expiry_month_json():
     _require_admin()
