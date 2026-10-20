@@ -206,10 +206,15 @@ def native_management_overview():
 def native_management_customers():
     _require_admin()
     query=request.args.get("q","")
+    cursor=request.args.get("before_id")
     if not isinstance(query,str) or len(query)>80:
         return _response({"error":"invalid_query"},400)
+    if (cursor is not None and (not cursor or len(cursor)>18 or
+            not cursor.isascii() or not cursor.isdecimal() or int(cursor)<1)):
+        return _response({"error":"invalid_cursor"},400)
     try:
-        return _response(native_customers(_base()/"provisioning.db",query=query))
+        return _response(native_customers(_base()/"provisioning.db",
+            query=query,before_id=int(cursor) if cursor is not None else None))
     except (SchemaUnavailable, RuntimeError, sqlite3.Error, OSError, ValueError):
         return _response({"error":"management_unavailable"},503)
 
@@ -218,10 +223,15 @@ def native_management_customers():
 def native_management_resellers():
     _require_admin()
     query=request.args.get("q","")
+    cursor=request.args.get("before_id")
     if not isinstance(query,str) or len(query)>80:
         return _response({"error":"invalid_query"},400)
+    if (cursor is not None and (not cursor or len(cursor)>18 or
+            not cursor.isascii() or not cursor.isdecimal() or int(cursor)<1)):
+        return _response({"error":"invalid_cursor"},400)
     try:
-        return _response(native_resellers(_base()/"provisioning.db",query=query))
+        return _response(native_resellers(_base()/"provisioning.db",
+            query=query,before_id=int(cursor) if cursor is not None else None))
     except (SchemaUnavailable, RuntimeError, sqlite3.Error, OSError, ValueError):
         return _response({"error":"management_unavailable"},503)
 
