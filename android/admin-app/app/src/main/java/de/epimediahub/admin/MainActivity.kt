@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Logout
@@ -56,6 +57,7 @@ private const val HOME = 0
 private const val DASHBOARD = 1
 private const val EPISCENE = 2
 private const val ALERTS = 3
+private const val REPORTS = 4
 
 private val Ink = Color(0xFF080E1B)
 private val InkRaised = Color(0xFF101B2D)
@@ -87,7 +89,8 @@ private val destinations = listOf(
     Destination("Start", "Deine Schaltzentrale"),
     Destination("Dashboard", "Verwaltung & System"),
     Destination("EpiScene", "Analyse & Marker"),
-    Destination("Meldungen", "Alarme & Verlauf")
+    Destination("Meldungen", "Alarme & Verlauf"),
+    Destination("Abläufe", "Monatslisten & Erinnerungen")
 )
 
 class MainActivity : FragmentActivity() {
@@ -385,6 +388,8 @@ class MainActivity : FragmentActivity() {
                 NativeEpiscene(modifier = Modifier.weight(1f))
             } else if (selection == ALERTS) {
                 NativeAlerts(modifier = Modifier.weight(1f))
+            } else if (selection == REPORTS) {
+                NativeExpiryScreen(modifier = Modifier.weight(1f))
             }
             NavigationFooter()
         }
@@ -554,7 +559,7 @@ class MainActivity : FragmentActivity() {
                 Text("SCHNELLZUGRIFF", color = Muted,
                     fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
                 Spacer(Modifier.weight(1f))
-                Text("3 Bereiche", color = Muted, fontSize = 11.sp)
+                Text("4 Bereiche", color = Muted, fontSize = 11.sp)
             }
             QuickAccessCard(
                 icon = { Icon(Icons.Outlined.Dashboard, null, tint = Blue) },
@@ -573,6 +578,12 @@ class MainActivity : FragmentActivity() {
                 title = "Meldungen",
                 subtitle = "Warnungen, Ereignisse und Bestätigungen",
                 onClick = { selectDestination(ALERTS) }
+            )
+            QuickAccessCard(
+                icon = { Icon(Icons.Outlined.DateRange, null, tint = Positive) },
+                title = "Ablaufberichte",
+                subtitle = "Monats-PDF drucken und Wochenlisten einsehen",
+                onClick = { selectDestination(REPORTS) }
             )
             UpdatePanel()
             PushPanel()
@@ -1065,7 +1076,8 @@ class MainActivity : FragmentActivity() {
     @Composable
     private fun NavigationFooter() {
         val icons = listOf(Icons.Outlined.Home, Icons.Outlined.Dashboard,
-            Icons.Outlined.AutoAwesome, Icons.Outlined.Notifications)
+            Icons.Outlined.AutoAwesome, Icons.Outlined.Notifications,
+            Icons.Outlined.DateRange)
         NavigationBar(
             containerColor = InkRaised,
             tonalElevation = 0.dp,
