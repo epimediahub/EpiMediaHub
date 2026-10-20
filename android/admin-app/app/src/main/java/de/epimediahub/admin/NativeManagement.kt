@@ -384,6 +384,8 @@ internal fun NativeManagementScreen(
     var resellerCustomerLimit by remember { mutableStateOf("0") }
     var resellerDeviceLimit by remember { mutableStateOf("0") }
     var pendingLegacyAction by remember { mutableStateOf<Triple<String,String,String>?>(null) }
+    var editingPlaylist by remember { mutableStateOf<NativeManagementApi.DetailItem?>(null) }
+    var createPlaylist by remember { mutableStateOf(false) }
     var actionValue by remember { mutableStateOf("") }
     var actionBusy by remember { mutableStateOf(false) }
     var loadedDetail by remember { mutableStateOf<NativeManagementApi.Detail?>(null) }
@@ -646,6 +648,13 @@ internal fun NativeManagementScreen(
                     }
                 ) { Text("Reseller zuweisen") }
             }
+            if (section == 0 && loadedDetail != null) {
+                Button(
+                    onClick = { createPlaylist = true },
+                    enabled = !actionBusy && !grantBusy && !renameBusy,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("+ Playlist anlegen") }
+            }
             loadedDetail?.let { detail ->
                 Surface(
                     color = SurfaceNavy,
@@ -691,6 +700,10 @@ internal fun NativeManagementScreen(
                                         section == 0 &&
                                         Regex("[1-9][0-9]{0,17}").matches(entry.id)
                                     if (playlistEntry) {
+                                        TextButton(onClick = { editingPlaylist = entry },
+                                            enabled = !actionBusy && !grantBusy) {
+                                            Text("Playlist bearbeiten", fontSize = 11.sp)
+                                        }
                                         TextButton(
                                             enabled = !actionBusy && !grantBusy,
                                             onClick = {
@@ -768,6 +781,33 @@ internal fun NativeManagementScreen(
                 color = Secondary, fontSize = 11.sp)
             Spacer(Modifier.height(18.dp))
         }
+    }
+
+    if (createPlaylist || editingPlaylist != null) {
+        NativePlaylistEditorDialog(
+            customerId = selected?.id ?: "0",
+            playlistId = editingPlaylist?.id,
+            initialName = editingPlaylist?.name ?: "",
+            onDismiss = { createPlaylist = false; editingPlaylist = null },
+            onFinished = { applied, message ->
+                operationMessage = message
+                if (applied) {
+                    createPlaylist = false
+                    editingPlaylist = null
+                    val item = selected
+                    if (item != null) {
+                        val cookie = CookieManager.getInstance()
+                            .getCookie("https://admin.epimediahub.com") ?: ""
+                        NativeManagementApi.loadDetail(cookie, "customers", item.id) {
+                            detail, error ->
+                            loadedDetail = detail
+                            detailMessage = error
+                        }
+                    }
+                    refresh()
+                }
+            }
+        )
     }
 
     if (pendingCreate) {
