@@ -43,6 +43,40 @@ class ProbeError(RuntimeError):
     """Only safe fixed error codes should be exposed in terminal output."""
 
 
+class ProviderHttpError(ProbeError):
+    """Preserve numeric status internally, never echo provider body or URL."""
+
+    def __init__(self, status):
+        super().__init__("provider_http_error")
+        self.status=status if type(status) is int else 0
+
+
+def diagnostic_reason(exc):
+    """Whitelist error categories so sensitive exception text never escapes."""
+    if isinstance(exc,ProviderHttpError):
+        if 400<=exc.status<=499:
+            return "provider_http_4xx"
+        if 500<=exc.status<=599:
+            return "provider_http_5xx"
+        return "provider_http_other"
+    if isinstance(exc,ProbeError):
+        code=str(exc)
+        return code if code in {
+            "https_endpoint_required","invalid_endpoint",
+            "non_public_provider_address","provider_dns_unavailable",
+            "provider_http_error","provider_response_too_large",
+            "invalid_provider_json","missing_provider_account",
+            "provider_account_mismatch","http_origin_required"
+        } else "provider_error"
+    if isinstance(exc,(TimeoutError,socket.timeout)):
+        return "provider_timeout"
+    if isinstance(exc,ConnectionRefusedError):
+        return "provider_connection_refused"
+    if isinstance(exc,ConnectionResetError):
+        return "provider_connection_reset"
+    return "provider_transport_error"
+
+
 def _type(config):
     if not isinstance(config,dict):
         raise ProbeError("invalid_playlist_config")
@@ -318,7 +352,7 @@ def player_compatible_http_fetch(origin,username,password):
         reply=conn.getresponse()
         if reply.status!=200:
             # No redirects, including from HTTP to attacker-controlled HTTPS.
-            raise ProbeError("provider_http_error")
+            raise ProviderHttpError(reply.status)
         raw=reply.read(MAX_PAYLOAD+1)
         if len(raw)>MAX_PAYLOAD:
             raise ProbeError("provider_response_too_large")
@@ -336,41 +370,45 @@ def player_compatible_http_fetch(origin,username,password):
 
 
 
-def probe(database=DATABASE,fetch=secure_fetch,now=None):
-    """Injectable transport makes fixture testing fully offline."""
+def probe(database=DATABASE,fetch=secure_fetch,now=None,diagnostics=False):
+    """Offline-fixture injectable transport; emits no secrets or account IDs."""
     accounts=read_accounts(database)
     counts=Counter()
     dates=[]
-    for ident,credentials in accounts:
-        if credentials is None:
-            counts["incomplete_credentials"]+=1
-            continue
-        endpoint,username,password=credentials
-        try:
-            result=fetch(endpoint,username,password)
-            expiry=xtream_expiry(result)
-            if expiry.expires_on is None:
-                counts["provider_date_unknown"]+=1
-                continue
-            dates.append((ident,expiry.expires_on,
-                          now or datetime.now(timezone.utc)))
-            counts["confirmed"]+=1
-        except ProbeError as exc:
-            # Fixed classification only, no exception traceback or URLs.
-            counts[str(exc) if str(exc) in {
-                "https_endpoint_required","invalid_endpoint",
-                "non_public_provider_address","provider_dns_unavailable",
-                "provider_http_error","provider_response_too_large",
-                "invalid_provider_json","missing_provider_account",
-                "provider_account_mismatch"} else "provider_error"]+=1
-        except (OSError,ssl.SSLError,http.client.HTTPException,ValueError):
-            counts["provider_error"]+=1
-    return {
+    detail=[]
+    for number,(ident,credentials) in enumerate(accounts,start=1):
+        status="incomplete_credentials"
+        if credentials is not None:
+            endpoint,username,password=credentials
+            try:
+                result=fetch(endpoint,username,password)
+                expiry=xtream_expiry(result)
+                if expiry.expires_on is None:
+                    status=("provider_date_undated" if expiry.status=="undated"
+                            else "provider_date_unavailable")
+                else:
+                    dates.append((ident,expiry.expires_on,
+                                  now or datetime.now(timezone.utc)))
+                    status="confirmed"
+            except (ProbeError,OSError,ssl.SSLError,
+                    http.client.HTTPException,ValueError) as exc:
+                status=diagnostic_reason(exc)
+        # Only the ordered 1..N position, never any database ID or username.
+        counts[status]+=1
+        if diagnostics:
+            detail.append({"position":number,"status":status})
+    summary={
         "active_xtream_accounts":len(accounts),
         "confirmed":counts["confirmed"],
         "result_counts":dict(sorted(counts.items())),
         "all_confirmed":len(dates)==len(accounts),
-    },dates
+    }
+    if diagnostics:
+        summary["account_checks"]=detail
+        summary["account_positions_are_not_ids"]=True
+        summary["secrets_in_output"]=False
+        summary["any_database_or_cache_writes"]=False
+    return summary,dates
 
 
 def main():
@@ -379,6 +417,8 @@ def main():
     group.add_argument("--probe",action="store_true",help="HTTPS-only; no cache writes")
     group.add_argument("--probe-http",action="store_true",
                        help="INSECURE opt-in: sends provider account credentials over plaintext HTTP; never saves data")
+    group.add_argument("--diagnose-http",action="store_true",
+                       help="INSECURE opt-in: one read-only HTTP probe with anonymized per-position status")
     group.add_argument("--save-cache",action="store_true",
                        help="Requires explicit opt-in and full HTTPS verification")
     group.add_argument("--check-https",action="store_true",
@@ -388,12 +428,13 @@ def main():
         print("XTREAM_HTTPS_TLS_CHECK_COMPLETE; NO_PROVIDER_CREDENTIALS_SENT")
         print(json.dumps(check_https_upgrade(),sort_keys=True))
         return
-    if options.probe_http:
+    if options.probe_http or options.diagnose_http:
         if os.environ.get("EPIMEDIAHUB_XTREAM_HTTP_PROBE_APPROVED")!="YES":
             raise ProbeError("plaintext_http_requires_explicit_operator_approval")
-        # The plaintext probe is READ-ONLY and never writes the verified cache.
-        # The normal scheduler and --save-cache always remain HTTPS-only.
-        result,_=probe(fetch=player_compatible_http_fetch)
+        # Neither HTTP mode writes the verified cache. The normal scheduler
+        # and --save-cache always remain HTTPS-only.
+        result,_=probe(fetch=player_compatible_http_fetch,
+                       diagnostics=options.diagnose_http)
         print("INSECURE_XTREAM_HTTP_PROBE_COMPLETE; NO_DATABASE_OR_CACHE_WRITES")
         print(json.dumps(result,sort_keys=True))
         return
