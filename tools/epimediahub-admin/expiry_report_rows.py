@@ -29,7 +29,8 @@ class VerifiedPlaylistExpiry:
 
 def linked_expiries(database: Path,
                     verified: list[VerifiedPlaylistExpiry],
-                    now_utc: datetime) -> list[Expiry]:
+                    now_utc: datetime,
+                    reseller_id: int | None = None) -> list[Expiry]:
     """Only a fresh, independently verified provider expiry is reportable.
 
     Unknown/invalid provider expiry is intentionally absent, never replaced
@@ -38,6 +39,12 @@ def linked_expiries(database: Path,
     if now_utc.tzinfo is None or now_utc.utcoffset() is None:
         raise ValueError("timezone-aware UTC clock required")
     now_utc = now_utc.astimezone(timezone.utc)
+    # Only bind reseller_id from the server-authorized session scope.
+    # Never accept an arbitrary reseller id from an untrusted mobile request.
+    if reseller_id is not None and (
+        type(reseller_id) is not int or reseller_id < 1 or reseller_id >= 2**63
+    ):
+        raise ValueError("invalid reseller scope")
     if len(verified) > MAX_OBSERVATIONS:
         raise ValueError("too many provider observations")
     p = Path(database)
@@ -71,12 +78,17 @@ def linked_expiries(database: Path,
             chunk=ids[start:start+500]
             placeholders=",".join("?" for _ in chunk)
             # Select names and ids only; never select provider URLs/credentials.
-            rows=conn.execute(
+            scoped = (
+                " AND c.reseller_id=?" if reseller_id is not None else ""
+            )
+            query = (
                 "SELECT p.id,c.name,p.name FROM customer_playlists p "
                 "JOIN customers c ON c.id=p.customer_id "
-                "WHERE p.enabled=1 AND c.enabled=1 AND p.id IN ("+
-                placeholders+")",chunk
-            ).fetchall()
+                "WHERE p.enabled=1 AND c.enabled=1 AND p.id IN ("
+                + placeholders + ")" + scoped
+            )
+            args = chunk + ([reseller_id] if reseller_id is not None else [])
+            rows=conn.execute(query,args).fetchall()
             for row in rows:
                 playlist_id, customer, playlist = row
                 if (not isinstance(customer,str) or not customer.strip()
