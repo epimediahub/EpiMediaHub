@@ -218,6 +218,27 @@ def _snapshot(path, action, identifier, fields):
     return value
 
 
+def _matches_playlist(name, config_text, fields):
+    if name != fields["playlist_name"]:
+        return False
+    try:
+        cfg = json.loads(config_text or "{}")
+    except (ValueError, TypeError):
+        return False
+    if not isinstance(cfg, dict):
+        return False
+    # Actual provider config schema remains owned by the original helper.
+    # Validate persisted supplied values, but NEVER echo provider credentials.
+    vals = {v for v in cfg.values() if isinstance(v, str)}
+    kind = fields["playlist_type"]
+    endpoint = fields["playlist_url"] if kind == "M3U" else fields["xtream_server"]
+    if kind not in vals or endpoint not in vals:
+        return False
+    if kind == "XTREAM" and fields["xtream_username"].strip() not in vals:
+        return False
+    return True
+
+
 def _postcondition(path, action, identifier, fields, previous):
     if action == "create-customer":
         rows = _read(path,
@@ -229,6 +250,18 @@ def _postcondition(path, action, identifier, fields, previous):
             "SELECT id FROM resellers WHERE id>? AND name=? AND username=?",
             (previous, fields["name"], fields["username"]))
         return int(rows[0][0]) if len(rows) == 1 else None
+    if action == "add-playlist":
+        rows = _read(path,
+            "SELECT id,name,config_json FROM customer_playlists WHERE customer_id=? AND id>? ORDER BY id",
+            (identifier,previous))
+        matched = [row for row in rows if _matches_playlist(row[1],row[2],fields)]
+        return int(matched[0][0]) if len(matched) == 1 else None
+    if action == "edit-playlist":
+        rows = _read(path,
+            "SELECT name,config_json FROM customer_playlists WHERE id=?",
+            (identifier,))
+        return identifier if (rows and rows[0] != previous and
+            _matches_playlist(rows[0][0],rows[0][1],fields)) else None
     if action == "delete-playlist":
         rows = _read(path,
             "SELECT id FROM customer_playlists WHERE id=?", (identifier,))
@@ -340,6 +373,7 @@ def invoke_legacy(path, action, identifier, submitted):
                 "rename-device":"device_id", "sync-device":"device_id",
                 "move-device":"device_id", "assign-reseller":"customer_id",
                 "delete-playlist":"playlist_id",
+                "add-playlist":"customer_id", "edit-playlist":"playlist_id",
             }
             handler(**({} if action in CREATE_ACTIONS else
                 {arg_names[action]:identifier}))
