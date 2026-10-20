@@ -320,7 +320,8 @@ def native_management_legacy_action(action, entity_id):
     _require_csrf()
     if action not in (
         "create-customer","create-reseller","rename-device",
-        "sync-device","move-device","assign-reseller","delete-playlist"
+        "sync-device","move-device","assign-reseller","delete-playlist",
+        "add-playlist","edit-playlist"
     ):
         return _response({"error":"unsupported_action"},404)
     if (request.content_length is None or request.content_length>3500
