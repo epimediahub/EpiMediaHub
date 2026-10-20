@@ -82,7 +82,11 @@ def service_unit(name:str,service_user:str,datadir:Path,credential_file:Path):
             +env+
             f"ExecStart={backend.BASE}/.venv/bin/python {backend.BASE}/{py}\n"
             f"NoNewPrivileges=true\nPrivateTmp=true\n"
-            f"ProtectSystem=strict\nReadWritePaths={datadir}/admin-mobile\n"
+            f"ProtectSystem=strict\n"+
+            (f"ReadWritePaths={datadir}\n"
+             f"ReadOnlyPaths={datadir}/provisioning.db\n"
+             if name==MONITOR else
+             f"ReadWritePaths={datadir}/admin-mobile\n")+
             f"ProtectHome=true\n"
             f"TimeoutStartSec=100\n")
 
