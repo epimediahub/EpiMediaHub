@@ -24,6 +24,7 @@ from flask import current_app, request
 
 from native_management_actions import _device_lock
 from native_management_data import SchemaUnavailable
+from native_delete_confirmation import expected_confirmation
 
 # 2026-10-20 redacted production flow audit. No guessed playlist form keys.
 ACTIONS = {
@@ -45,8 +46,12 @@ ACTIONS = {
         "playlist_name", "playlist_type", "playlist_url", "xtream_server",
         "xtream_username", "xtream_password", "xtream_output"
     )),
+    "delete-customer": ("v073_delete_customer", ()),
+    "delete-reseller": ("v080_delete_reseller", ()),
+    "delete-device": ("v074_delete_device", ()),
 }
 CREATE_ACTIONS = {"create-customer", "create-reseller"}
+DELETE_ACTIONS = {"delete-customer","delete-reseller","delete-device"}
 IDENTIFIER = re.compile(r"^[1-9][0-9]{0,17}$")
 NAME = re.compile(r"^[^\x00-\x1f\x7f<>]{1,120}$")
 USERNAME = re.compile(r"^[a-zA-Z0-9_.-]{3,60}$")
@@ -76,12 +81,15 @@ def _number(value, optional=False):
     return number
 
 
-def _fields(action, values):
+def _fields(action, values, identifier):
     if action not in ACTIONS:
         raise ValueError("action unavailable")
     if set(values) != set(ACTIONS[action][1]) | {"request_id", "confirm"}:
         raise ValueError("unexpected form fields")
-    if values["confirm"] != "true":
+    if action in DELETE_ACTIONS:
+        if values["confirm"] != expected_confirmation(action, identifier):
+            raise ValueError("typed delete confirmation required")
+    elif values["confirm"] != "true":
         raise ValueError("explicit confirmation required")
     key = values["request_id"]
     if not isinstance(key, str) or len(key) > 50:
@@ -164,6 +172,18 @@ def _read(path, query, params=()):
 
 
 def _snapshot(path, action, identifier, fields):
+    if action == "delete-customer":
+        rows=_read(path,"SELECT id FROM customers WHERE id=?",(identifier,))
+        if not rows: raise ValueError("customer unavailable")
+        return int(rows[0][0])
+    if action == "delete-reseller":
+        rows=_read(path,"SELECT id FROM resellers WHERE id=?",(identifier,))
+        if not rows: raise ValueError("reseller unavailable")
+        return int(rows[0][0])
+    if action == "delete-device":
+        rows=_read(path,"SELECT id FROM devices WHERE id=?",(identifier,))
+        if not rows: raise ValueError("device unavailable")
+        return int(rows[0][0])
     if action == "create-customer":
         return int(_read(path, "SELECT COALESCE(MAX(id),0) FROM customers")[0][0])
     if action == "create-reseller":
@@ -240,6 +260,15 @@ def _matches_playlist(name, config_text, fields):
 
 
 def _postcondition(path, action, identifier, fields, previous):
+    if action in DELETE_ACTIONS:
+        table={"delete-customer":"customers","delete-reseller":"resellers",
+               "delete-device":"devices"}[action]
+        rows=_read(path,"SELECT id FROM "+table+" WHERE id=?",(identifier,))
+        if rows: return None
+        if action == "delete-reseller" and _read(path,
+            "SELECT id FROM customers WHERE reseller_id=? LIMIT 1",(identifier,)):
+            return None
+        return identifier
     if action == "create-customer":
         rows = _read(path,
             "SELECT id FROM customers WHERE id>? AND name=? ORDER BY id",
@@ -344,7 +373,7 @@ def invoke_legacy(path, action, identifier, submitted):
         raise ValueError("invalid entity id")
     if (identifier == 0) != (action in CREATE_ACTIONS):
         raise ValueError("invalid action id")
-    request_id, fields = _fields(action, submitted)
+    request_id, fields = _fields(action, submitted, identifier)
     handler = current_app.view_functions.get(ACTIONS[action][0])
     if not callable(handler):
         raise LegacyUnavailable("audited legacy business handler is missing")
@@ -374,6 +403,8 @@ def invoke_legacy(path, action, identifier, submitted):
                 "move-device":"device_id", "assign-reseller":"customer_id",
                 "delete-playlist":"playlist_id",
                 "add-playlist":"customer_id", "edit-playlist":"playlist_id",
+                "delete-customer":"customer_id","delete-reseller":"reseller_id",
+                "delete-device":"device_id",
             }
             handler(**({} if action in CREATE_ACTIONS else
                 {arg_names[action]:identifier}))
