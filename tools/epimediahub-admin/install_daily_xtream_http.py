@@ -67,7 +67,7 @@ Description=Daily preliminary Xtream subscription expiry refresh
 OnCalendar=*-*-* 06:15:00 Europe/Berlin
 AccuracySec=5min
 RandomizedDelaySec=30s
-Persistent=true
+Persistent=false
 Unit={NAME}.service
 
 [Install]
@@ -147,7 +147,7 @@ def apply(account):
         print("DAILY_XTREAM_PRELIMINARY_REFRESH_TIMER_ACTIVE")
         print("CALENDAR=06:15 Europe/Berlin")
         print("NEXT_RUN_VIA_SYSTEMCTL_LIST_TIMERS")
-        print("NO_IMMEDIATE_PROVIDER_QUERY_OR_DATABASE_CHANGES")
+        print("TIMER_ENABLED_WITHOUT_MISSED_RUN_CATCHUP")
     except Exception:
         subprocess.run(["systemctl","disable","--now",f"{NAME}.timer"],
                        timeout=30,check=False,
