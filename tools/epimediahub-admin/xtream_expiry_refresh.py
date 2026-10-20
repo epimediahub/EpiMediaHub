@@ -185,11 +185,10 @@ def https_tls_handshake_only(origin):
 
 
 def check_https_upgrade(database=DATABASE,handshake=https_tls_handshake_only):
-    """Aggregate HTTPS TLS capability of HTTP-configured Xtream accounts.
+    """Aggregate valid port-443 TLS capability without sending account secrets.
 
-    No HTTP requests, provider credentials or customer identities are sent,
-    no cache/db modifications and no host/URL is printed. Identical origins
-    are checked only once to minimize provider traffic.
+    All results (including failed origins) are cached per configured origin so
+    multiple subscriber records never trigger repeated TLS handshakes.
     """
     accounts=read_accounts(database)
     counts=Counter()
@@ -199,19 +198,19 @@ def check_https_upgrade(database=DATABASE,handshake=https_tls_handshake_only):
             counts["missing_configuration"]+=1
             continue
         origin=credentials[0]
-        try:
-            if origin not in results:
-                results[origin]=bool(handshake(origin))
-            counts["https_tls_ready" if results[origin]
-                   else "https_tls_unavailable"]+=1
-        except ProbeError as exc:
-            code=str(exc)
-            counts["unsafe_or_invalid_origin" if code in {
-                "invalid_endpoint","non_public_provider_address",
-                "invalid_provider_address","unsupported_address"
-            } else "https_tls_unavailable"]+=1
-        except (OSError,ssl.SSLError,ValueError,socket.timeout):
-            counts["https_tls_unavailable"]+=1
+        if origin not in results:
+            try:
+                results[origin]="https_tls_ready" if handshake(origin) else (
+                    "https_tls_unavailable")
+            except ProbeError as exc:
+                code=str(exc)
+                results[origin]="unsafe_or_invalid_origin" if code in {
+                    "invalid_endpoint","non_public_provider_address",
+                    "invalid_provider_address","unsupported_address"
+                } else "https_tls_unavailable"
+            except (OSError,ssl.SSLError,ValueError):
+                results[origin]="https_tls_unavailable"
+        counts[results[origin]]+=1
     return {
         "active_xtream_accounts":len(accounts),
         "accounts_with_valid_https_tls":counts["https_tls_ready"],
@@ -222,6 +221,7 @@ def check_https_upgrade(database=DATABASE,handshake=https_tls_handshake_only):
         "customer_data_written":False,
         "meaning":"TLS certificate check only; Xtream API not yet verified",
     }
+
 
 
 def secure_fetch(endpoint,username,password):
