@@ -125,7 +125,8 @@ class MainActivity : FragmentActivity() {
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         pushRegistered = getSharedPreferences("admin-push", MODE_PRIVATE)
             .getBoolean("registered", false)
-        if (intent.getBooleanExtra("open_alerts", false)) selection = ALERTS
+        if (intent.getBooleanExtra("open_reports", false)) selection = REPORTS
+        else if (intent.getBooleanExtra("open_alerts", false)) selection = ALERTS
 
 
         setContent {
@@ -143,7 +144,9 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.getBooleanExtra("open_alerts", false)) {
+        if (intent.getBooleanExtra("open_reports", false)) {
+            selectDestination(REPORTS)
+        } else if (intent.getBooleanExtra("open_alerts", false)) {
             selectDestination(ALERTS)
         }
     }
