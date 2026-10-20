@@ -90,7 +90,8 @@ def check():
         raise InstallRefused("requires_nonroot_dashboard_user")
     pwd.getpwnam(account)
     interpreter=BASE/".venv/bin/python"
-    if interpreter.is_symlink() or not interpreter.exists():
+    # Python in a standard venv is commonly a symlink to /usr/bin/python3.
+    if not interpreter.exists() or not interpreter.is_file() or not os.access(interpreter,os.X_OK):
         raise InstallRefused("python_runtime_not_verified")
     # Staged administrator installer deploys these exact modules first.
     for name in REQUIRED:
@@ -120,9 +121,6 @@ def check():
 def apply(account):
     if os.environ.get("EPIMEDIAHUB_XTREAM_DAILY_HTTP_DEPLOY")!="YES":
         raise InstallRefused("explicit_timer_deploy_flag_required")
-    backup=Path(tempfile.mkdtemp(prefix="epi-xtream-schedule-",
-                                dir="/var/backups/epimediahub"))
-    backup.chmod(0o700)
     written=[]
     try:
         folder=STORAGE/"admin-mobile"
@@ -162,9 +160,6 @@ def apply(account):
         subprocess.run(["systemctl","daemon-reload"],timeout=30,check=False,
                        stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         raise
-    finally:
-        try:backup.rmdir()
-        except OSError:pass
 
 def main():
     parser=argparse.ArgumentParser()
