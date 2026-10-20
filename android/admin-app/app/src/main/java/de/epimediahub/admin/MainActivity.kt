@@ -1,18 +1,10 @@
 package de.epimediahub.admin
 
 import android.Manifest
-import android.annotation.SuppressLint
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.CookieManager
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -48,17 +41,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 
-private const val ADMIN_HOST = "admin.epimediahub.com"
 private const val ADMIN_BASE = "https://admin.epimediahub.com"
-private const val ALERTS_URL = "https://admin.epimediahub.com/admin/mobile/alerts"
 private const val HOME = 0
 private const val DASHBOARD = 1
 private const val EPISCENE = 2
@@ -89,34 +81,34 @@ private val AdminColors = darkColorScheme(
     error = Warning
 )
 
-private data class Destination(val title: String, val hint: String, val url: String)
+private data class Destination(val title: String, val hint: String)
 private val destinations = listOf(
-    Destination("Start", "Deine Schaltzentrale", ""),
-    Destination("Dashboard", "Verwaltung & System", ADMIN_BASE + "/admin"),
-    Destination("EpiScene", "Analyse & Marker", ADMIN_BASE + "/admin/skip"),
-    Destination("Meldungen", "Alarme & Verlauf", ALERTS_URL)
+    Destination("Start", "Deine Schaltzentrale"),
+    Destination("Dashboard", "Verwaltung & System"),
+    Destination("EpiScene", "Analyse & Marker"),
+    Destination("Meldungen", "Alarme & Verlauf")
 )
 
 class MainActivity : FragmentActivity() {
     private var unlocked by mutableStateOf(false)
     private var notice by mutableStateOf("")
     private var selection by mutableIntStateOf(HOME)
-    private var loading by mutableStateOf(false)
+    private var backendAuthenticated by mutableStateOf(false)
+    private var checkingSession by mutableStateOf(true)
+    private var loginBusy by mutableStateOf(false)
+    private var loginMessage by mutableStateOf("")
     private var pushRegistered by mutableStateOf(false)
     private var updateReady by mutableStateOf<AdminUpdater.Release?>(null)
     private var updateNotice by mutableStateOf("")
     private var updateCheckedForSession = false
-    private var analysisDetailWeb by mutableStateOf(false)
     private var analysisBusy by mutableStateOf(false)
     private var analysisError by mutableStateOf("")
     private var analysisSnapshot by mutableStateOf<AdminNativeStatus.Snapshot?>(null)
     private var managementBusy by mutableStateOf(false)
     private var managementData by mutableStateOf<NativeManagementApi.Result?>(null)
-    private var legacyLoginVisible by mutableStateOf(false)
     private var alertsBusy by mutableStateOf(false)
     private var alertsMessage by mutableStateOf("")
     private var nativeAlerts by mutableStateOf<List<AdminNativeAlerts.Incident>>(emptyList())
-    private lateinit var browser: WebView
 
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -124,7 +116,6 @@ class MainActivity : FragmentActivity() {
         if (granted) registerPush() else notice = "Bitte erlaube Benachrichtigungen in Android."
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
@@ -132,55 +123,14 @@ class MainActivity : FragmentActivity() {
             .getBoolean("registered", false)
         if (intent.getBooleanExtra("open_alerts", false)) selection = ALERTS
 
-        browser = WebView(this).apply {
-            setBackgroundColor(android.graphics.Color.WHITE)
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.allowFileAccess = false
-            settings.allowContentAccess = false
-            settings.javaScriptCanOpenWindowsAutomatically = false
-            settings.setSupportMultipleWindows(false)
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            settings.cacheMode = WebSettings.LOAD_NO_CACHE
-            CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
-            webChromeClient = WebChromeClient()
-            webViewClient = object : WebViewClient() {
-                override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
-                    loading = true
-                }
-
-                override fun onPageFinished(view: WebView, url: String) {
-                    loading = false
-                    if (selection == DASHBOARD && legacyLoginVisible && url.startsWith(ADMIN_BASE)) {
-                        loadManagement()
-                    }
-                    if (!updateCheckedForSession && url.startsWith(ADMIN_BASE)) {
-                        val cookie = CookieManager.getInstance().getCookie(ADMIN_BASE) ?: ""
-                        if (cookie.isNotBlank()) {
-                            updateCheckedForSession = true
-                            checkForUpdates(false)
-                        }
-                    }
-                }
-
-                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                    val uri = request.url
-                    val internal = uri.scheme == "https" && uri.host == ADMIN_HOST
-                    if (internal) return false
-                    if (request.isForMainFrame && uri.scheme == "https") {
-                        try { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
-                        catch (_: Exception) { notice = "Der externe Link konnte nicht geöffnet werden." }
-                    }
-                    return true
-                }
-            }
-            loadUrl(if (selection == ALERTS) ALERTS_URL else ADMIN_BASE + "/admin")
-        }
 
         setContent {
             MaterialTheme(colorScheme = AdminColors) {
                 Surface(modifier = Modifier.fillMaxSize(), color = Ink) {
-                    if (unlocked) AdminExperience() else LockExperience()
+                    if (!unlocked) LockExperience()
+                    else if (checkingSession) SessionLoadingExperience()
+                    else if (!backendAuthenticated) NativeLoginExperience()
+                    else AdminExperience()
                 }
             }
         }
@@ -201,24 +151,137 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         unlocked = false
+        backendAuthenticated = false
+        checkingSession = true
         super.onStop()
-    }
-
-    override fun onDestroy() {
-        (browser.parent as? ViewGroup)?.removeView(browser)
-        browser.destroy()
-        super.onDestroy()
     }
 
     private fun selectDestination(next: Int) {
         if (next !in destinations.indices) return
         selection = next
         notice = ""
-        analysisDetailWeb = false
-        legacyLoginVisible = false
+        if (!backendAuthenticated) return
         if (next == EPISCENE) loadEpiscene()
         else if (next == ALERTS) loadNativeAlerts()
         else if (next == DASHBOARD) loadManagement()
+    }
+
+    private fun verifyNativeSession() {
+        checkingSession = true
+        NativeAdminAuth.check { active ->
+            backendAuthenticated = active
+            checkingSession = false
+            if (active) afterNativeAuthentication()
+        }
+    }
+
+    private fun afterNativeAuthentication() {
+        if (!updateCheckedForSession) {
+            updateCheckedForSession = true
+            checkForUpdates(false)
+        }
+        when (selection) {
+            DASHBOARD -> loadManagement()
+            EPISCENE -> loadEpiscene()
+            ALERTS -> loadNativeAlerts()
+        }
+    }
+
+    private fun signOutNative() {
+        if (loginBusy) return
+        loginBusy = true
+        NativeAdminAuth.logout {
+            loginBusy = false
+            backendAuthenticated = false
+            checkingSession = false
+            managementData = null
+            nativeAlerts = emptyList()
+            analysisSnapshot = null
+            updateReady = null
+            updateCheckedForSession = false
+            selection = HOME
+        }
+    }
+
+    @Composable
+    private fun SessionLoadingExperience() {
+        Column(
+            modifier = Modifier.fillMaxSize().background(Ink)
+                .statusBarsPadding().navigationBarsPadding(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            CircularProgressIndicator(color = Blue)
+            Spacer(Modifier.height(15.dp))
+            Text("Admin-Sitzung wird geprüft …", color = Muted, fontSize = 13.sp)
+        }
+    }
+
+    @Composable
+    private fun NativeLoginExperience() {
+        var password by remember { mutableStateOf("") }
+        Column(
+            modifier = Modifier.fillMaxSize().background(Ink)
+                .statusBarsPadding().navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 25.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(Modifier.height(65.dp))
+            BrandMark(70)
+            Spacer(Modifier.height(18.dp))
+            Text("EpiMediaHub Admin", fontSize = 26.sp,
+                fontWeight = FontWeight.ExtraBold, color = White)
+            Spacer(Modifier.height(7.dp))
+            Text("Sichere Anmeldung", color = Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(28.dp))
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it.take(1024) },
+                label = { Text("Administratorpasswort") },
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(14.dp))
+            Button(
+                enabled = password.isNotBlank() && !loginBusy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(13.dp),
+                onClick = {
+                    val temporary = password
+                    password = ""
+                    loginBusy = true
+                    loginMessage = ""
+                    NativeAdminAuth.login(temporary) { success, message ->
+                        loginBusy = false
+                        loginMessage = message
+                        if (success) {
+                            backendAuthenticated = true
+                            afterNativeAuthentication()
+                        }
+                    }
+                }
+            ) {
+                Text("Sicher anmelden", fontWeight = FontWeight.Bold)
+            }
+            if (loginBusy) {
+                Spacer(Modifier.height(16.dp))
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            if (loginMessage.isNotBlank()) {
+                Spacer(Modifier.height(14.dp))
+                Text(loginMessage, color = Warning, fontSize = 13.sp,
+                    textAlign = TextAlign.Center)
+            }
+            Spacer(Modifier.height(18.dp))
+            Icon(Icons.Outlined.Security, null, tint = Muted)
+            Spacer(Modifier.height(6.dp))
+            Text("Native Android-Anmeldung · Verschlüsselte Verbindung",
+                color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center)
+        }
     }
 
     private fun requireUnlock() {
@@ -235,8 +298,7 @@ class MainActivity : FragmentActivity() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     unlocked = true
                     notice = ""
-                    if (selection == ALERTS) loadNativeAlerts()
-                    if (selection == DASHBOARD) loadManagement()
+                    verifyNativeSession()
                 }
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     notice = "Entsperrung erforderlich."
@@ -302,11 +364,7 @@ class MainActivity : FragmentActivity() {
     @Composable
     private fun AdminExperience() {
         BackHandler(enabled = selection != HOME) {
-            if (selection == DASHBOARD && legacyLoginVisible) legacyLoginVisible = false
-            else if (selection == EPISCENE && analysisDetailWeb) analysisDetailWeb = false
-            else if (selection == EPISCENE || selection == ALERTS || selection == DASHBOARD) selectDestination(HOME)
-            else if (browser.canGoBack()) browser.goBack()
-            else selectDestination(HOME)
+            selectDestination(HOME)
         }
         Column(
             modifier = Modifier.fillMaxSize().background(Ink)
@@ -315,24 +373,19 @@ class MainActivity : FragmentActivity() {
             AdminHeader()
             if (selection == HOME) {
                 HomeContent(modifier = Modifier.weight(1f))
-            } else if (selection == DASHBOARD && !legacyLoginVisible) {
+            } else if (selection == DASHBOARD) {
                 NativeManagementScreen(
                     data = managementData, loading = managementBusy,
                     refresh = { loadManagement() },
-                    signIn = {
-                        legacyLoginVisible = true
-                        browser.loadUrl(ADMIN_BASE + "/admin")
-                    },
+                    signIn = { backendAuthenticated = false },
                     openEpiscene = { selectDestination(EPISCENE) },
                     openAlerts = { selectDestination(ALERTS) },
                     modifier = Modifier.weight(1f)
                 )
-            } else if (selection == EPISCENE && !analysisDetailWeb) {
+            } else if (selection == EPISCENE) {
                 NativeEpiscene(modifier = Modifier.weight(1f))
             } else if (selection == ALERTS) {
                 NativeAlerts(modifier = Modifier.weight(1f))
-            } else {
-                WebContent(modifier = Modifier.weight(1f))
             }
             NavigationFooter()
         }
@@ -446,6 +499,17 @@ class MainActivity : FragmentActivity() {
             )
             UpdatePanel()
             PushPanel()
+            OutlinedButton(
+                onClick = { signOutNative() },
+                enabled = !loginBusy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Border)
+            ) {
+                Icon(Icons.Outlined.Logout, null, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Admin-Sitzung abmelden")
+            }
             Spacer(Modifier.height(5.dp))
             Text(
                 "PRIVATE ADMIN APP  ·  BUILD " + BuildConfig.VERSION_NAME,
@@ -627,7 +691,7 @@ class MainActivity : FragmentActivity() {
         NativeManagementApi.load(cookie) { result ->
             managementBusy = false
             managementData = result
-            if (result.loaded && legacyLoginVisible) legacyLoginVisible = false
+            if (!result.authenticated) backendAuthenticated = false
         }
     }
 
@@ -747,19 +811,9 @@ class MainActivity : FragmentActivity() {
                 Text("Noch keine aktuellen Messwerte verfügbar.",
                     color = Muted, fontSize = 13.sp)
             }
-            Button(
-                onClick = {
-                    analysisDetailWeb = true
-                    browser.loadUrl(ADMIN_BASE + "/admin/skip")
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Blue, contentColor = Ink),
-                shape = RoundedCornerShape(13.dp)
-            ) {
-                Text("Analyseverwaltung öffnen", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(8.dp))
-                Icon(Icons.Outlined.ChevronRight, null)
-            }
+            Text("Erweiterte Marker-Prüfung wird in der nächsten nativen "
+                + "Analyseverwaltung ergänzt. Die vorhandenen Live-Zähler bleiben lesbar.",
+                color = Muted, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -894,74 +948,6 @@ class MainActivity : FragmentActivity() {
                 }
             }
             Spacer(Modifier.height(8.dp))
-        }
-    }
-
-    @Composable
-    private fun WebContent(modifier: Modifier = Modifier) {
-        Column(
-            modifier = modifier.fillMaxWidth().padding(horizontal = 15.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(destinations[selection].title, color = White,
-                        fontSize = 23.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(3.dp))
-                    Text(destinations[selection].hint, color = Muted, fontSize = 12.sp)
-                }
-                Surface(
-                    modifier = Modifier.size(44.dp),
-                    onClick = { browser.reload() },
-                    color = InkElevated,
-                    shape = RoundedCornerShape(13.dp),
-                    border = BorderStroke(1.dp, Border)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = "Seite aktualisieren",
-                            tint = Blue, modifier = Modifier.size(20.dp))
-                    }
-                }
-            }
-            Surface(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                shape = RoundedCornerShape(topStart = 17.dp, topEnd = 17.dp),
-                color = InkRaised,
-                border = BorderStroke(1.dp, Border)
-            ) {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(
-                            start = 13.dp, end = 13.dp, top = 10.dp, bottom = 10.dp
-                        ),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Outlined.Lock, null, tint = Positive,
-                            modifier = Modifier.size(13.dp))
-                        Spacer(Modifier.width(7.dp))
-                        Text("admin.epimediahub.com", color = Muted,
-                            fontSize = 11.sp, modifier = Modifier.weight(1f))
-                        if (loading) CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Blue
-                        )
-                    }
-                    AndroidView(
-                        factory = {
-                            (browser.parent as? ViewGroup)?.removeView(browser)
-                            browser
-                        },
-                        modifier = Modifier.fillMaxWidth().weight(1f)
-                    )
-                }
-            }
-            if (notice.isNotBlank()) {
-                Text(
-                    notice, color = Warning, fontSize = 12.sp,
-                    modifier = Modifier.fillMaxWidth().padding(9.dp)
-                )
-            }
         }
     }
 
