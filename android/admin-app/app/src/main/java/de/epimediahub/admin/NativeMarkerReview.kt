@@ -247,8 +247,8 @@ internal fun NativeMarkerReviewPanel(){
                     NativeMarkerApi.decide(marker,decision,csrf){ ok,message ->
                         saving=false
                         selected=null
-                        error=if(ok)"" else message
-                        reload()
+                        if(ok) reload()
+                        else error=message
                     }
                 }){Text("Bestätigen")}
             }
