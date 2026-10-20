@@ -15,7 +15,7 @@ import re
 import sys
 
 ROOT = Path("/opt/epimediahub/provisioning")
-OUT = Path("/root/epimediahub-native-final-gaps.json")
+OUT = Path("/root/epimediahub-native-missing-handlers.json")
 MAX_MODULES = 500
 MAX_SOURCE_BYTES = 2_500_000
 MAX_FLOW = 18000
@@ -143,7 +143,9 @@ def inspect(path):
     tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"), filename=path.name)
     result = []
     roles = intro_roles(tree) if path.name == "skip_intro_sections.py" else []
-    for node in tree.body:
+    # Dashboard handlers are registered inside install(app), not only at the
+    # module top level. Walk every nested definition without running code.
+    for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name not in TARGETS:
             continue
         if node.end_lineno - node.lineno > 700:
@@ -174,7 +176,7 @@ def main():
             modules.append({"file": p.name, "functions": functions})
         all_roles.extend(roles)
     result = {
-        "format": "epimediahub-native-final-gaps-v1",
+        "format": "epimediahub-native-missing-handlers-v2",
         "scope": "AST-only; field names and finite known enums; no SQL or runtime data",
         "modules": modules,
         "intro_role_identifiers": sorted(set(all_roles)),
@@ -189,7 +191,7 @@ def main():
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         os.fchmod(handle.fileno(), 0o600)
         handle.write(raw)
-    print("NATIVE_V2_FINAL_GAPS_READY")
+    print("NATIVE_V2_MISSING_HANDLERS_READY")
     print("OUTPUT=" + str(OUT))
     print("FUNCTIONS=" + str(sum(len(x["functions"]) for x in modules)))
     print("Please review locally before uploading. No data rows or secrets exported.")
