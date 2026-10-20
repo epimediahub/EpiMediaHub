@@ -233,16 +233,35 @@ def apply(user,add_units,source):
 
 def main():
     cli=argparse.ArgumentParser()
-    cli.add_argument("--apply",action="store_true",required=True)
-    cli.parse_args()
+    mode=cli.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--check",action="store_true",
+        help="Read-only host and GitHub pinned-source validation")
+    mode.add_argument("--apply",action="store_true",
+        help="Install private signed release sync after preflight")
+    options=cli.parse_args()
+    print("PRIVATE_ADMIN_RELEASE_PREFLIGHT_START")
     user,create_units=check()
+    print("RELEASE_PREFLIGHT=HOST_OK")
     source=download_verified()
+    print("RELEASE_PREFLIGHT=PINNED_SOURCES_OK")
+    print("RELEASE_SYNC_UNITS="+("TO_CREATE" if create_units else "PRESENT"))
+    if options.check:
+        print("RELEASE_PREFLIGHT_READ_ONLY_OK")
+        print("NO_FILES_OR_SERVICES_CHANGED")
+        return
     apply(user,create_units,source)
 
 
 if __name__=="__main__":
     try:main()
-    except Exception:
-        print("PRIVATE_ADMIN_RELEASE_HANDOFF_STOPPED; CHECK_HOST_LOGS_LOCALLY",
+    except Stop as error:
+        # Stop messages are fixed, developer-authored categories only.
+        print("PRIVATE_ADMIN_RELEASE_HANDOFF_STOPPED",file=sys.stderr)
+        print("RELEASE_STAGE_REASON="+str(error),file=sys.stderr)
+        sys.exit(2)
+    except Exception as error:
+        # Never print raw urllib, token, hostname or subprocess errors.
+        print("PRIVATE_ADMIN_RELEASE_HANDOFF_STOPPED",file=sys.stderr)
+        print("RELEASE_STAGE_REASON=unexpected_"+type(error).__name__,
               file=sys.stderr)
         sys.exit(2)
