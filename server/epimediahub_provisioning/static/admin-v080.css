@@ -1,0 +1,44 @@
+.brand-logo-img{width:40px;height:40px;border-radius:12px;display:block;box-shadow:0 9px 20px rgba(92,99,224,.23)}
+.hierarchy-brand .brand-logo-img{flex:0 0 auto}
+.reseller-panel{margin-bottom:22px;border:1px solid #dfe3eb;border-radius:18px;background:#fff;box-shadow:0 12px 38px rgba(35,45,65,.055);overflow:hidden}
+.reseller-panel-head{padding:20px 22px;display:flex;align-items:end;justify-content:space-between;gap:18px;border-bottom:1px solid #e9ecf1;background:linear-gradient(180deg,#fff,#fafbfc)}
+.reseller-panel-head h2{margin:4px 0 4px;font-size:19px;color:#2e394f}
+.reseller-panel-head p{margin:0;color:#8992a4;font-size:10px}
+.reseller-grid{padding:14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;background:#f7f8fb}
+.reseller-card{padding:16px;border:1px solid #e0e4eb;border-radius:14px;background:#fff}
+.reseller-card-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+.reseller-card h3{margin:2px 0 4px;color:#344057;font-size:15px}
+.reseller-card p{margin:0;color:#8c96a7;font-size:9px}
+.reseller-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:14px 0}
+.reseller-meta div{padding:9px;border-radius:9px;background:#f7f8fb;border:1px solid #eceef2}
+.reseller-meta span,.reseller-meta strong{display:block}
+.reseller-meta span{color:#929bad;font-size:8px}
+.reseller-meta strong{margin-top:2px;color:#445066;font-size:13px}
+.reseller-actions{display:flex;gap:7px;flex-wrap:wrap}
+.reseller-status{padding:5px 8px;border-radius:999px;font-size:8px;font-weight:850}
+.reseller-status.active{background:#e7f7ef;color:#18825b}
+.reseller-status.blocked{background:#fdebed;color:#be3e4d}
+.reseller-owner-row{margin-top:12px;padding-top:12px;border-top:1px solid #eef0f4;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.reseller-owner-row label{color:#7e8799;font-size:9px;font-weight:750}
+.reseller-owner-row select{min-width:190px;padding:8px 9px}
+.audit-panel{margin-top:22px;border:1px solid #e0e4eb;border-radius:17px;background:#fff;overflow:hidden}
+.audit-panel header{padding:17px 20px;border-bottom:1px solid #eceef2}
+.audit-panel h2{margin:4px 0;font-size:16px}
+.audit-list{display:grid}
+.audit-row{padding:10px 20px;display:grid;grid-template-columns:120px 100px 1fr 170px;gap:10px;border-bottom:1px solid #f0f2f5;font-size:9px;align-items:center}
+.audit-row:last-child{border-bottom:0}
+.audit-row strong{font-size:9px}
+.reseller-login-page{min-height:100vh;display:grid;place-items:center;background:linear-gradient(145deg,#eef1f8,#f8f9fc)}
+.reseller-login-card{width:min(430px,calc(100% - 30px));padding:30px;border:1px solid #dfe3eb;border-radius:22px;background:#fff;box-shadow:0 25px 80px rgba(30,40,65,.12)}
+.reseller-login-brand{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.reseller-login-brand img{width:48px;height:48px;border-radius:14px}
+.reseller-login-brand strong{display:block;font-size:18px}
+.reseller-login-brand small{display:block;margin-top:3px;color:#929bad;font-size:9px;letter-spacing:.08em}
+.reseller-login-card h1{margin:0 0 6px;font-size:24px}
+.reseller-login-card p{margin:0 0 20px;color:#7e8799;font-size:11px}
+.reseller-login-card form{display:grid;gap:12px}
+.reseller-login-card label{display:grid;gap:6px;color:#687389;font-size:10px;font-weight:750}
+.reseller-shell .hierarchy-heading{margin-top:2px}
+.reseller-limit-note{padding:10px 12px;border-radius:10px;background:#f6f7fb;color:#727d91;font-size:9px}
+@media(max-width:850px){.reseller-grid{grid-template-columns:1fr}.audit-row{grid-template-columns:1fr 1fr}.audit-row span:last-child{grid-column:1/-1}.reseller-meta{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.reseller-panel-head{align-items:flex-start;flex-direction:column}.reseller-meta{grid-template-columns:1fr 1fr}.reseller-owner-row{align-items:flex-start;flex-direction:column}.reseller-owner-row select{width:100%;min-width:0}.audit-row{grid-template-columns:1fr}}

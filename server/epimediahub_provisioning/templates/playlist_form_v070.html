@@ -1,0 +1,10 @@
+{% set current = playlist if playlist is defined else none %}
+<div class="form-grid playlist-form">
+  <label><span>Playlist-Name</span><input name="playlist_name" value="{{ current.name if current else '' }}" placeholder="z. B. Wohnzimmer" required></label>
+  <label><span>Typ</span><select name="playlist_type" class="playlist-type-select"><option value="M3U" {% if not current or current.playlist_type == 'M3U' %}selected{% endif %}>M3U</option><option value="XTREAM" {% if current and current.playlist_type == 'XTREAM' %}selected{% endif %}>Xtream</option></select></label>
+  <label class="span-2 type-fields type-M3U"><span>M3U-Adresse</span><input name="playlist_url" type="url" value="{{ current.playlist_url if current else '' }}" placeholder="https://…/get.php?…"></label>
+  <label class="span-2 type-fields type-XTREAM" hidden><span>Xtream Server</span><input name="xtream_server" type="url" value="{{ current.xtream_server if current else '' }}" placeholder="https://server.example"></label>
+  <label class="type-fields type-XTREAM" hidden><span>Benutzername</span><input name="xtream_username" value="{{ current.xtream_username if current else '' }}" autocomplete="off"></label>
+  <label class="type-fields type-XTREAM" hidden><span>Passwort</span><input name="xtream_password" type="password" placeholder="{% if current %}leer = unverändert{% endif %}" autocomplete="new-password"></label>
+  <label class="type-fields type-XTREAM" hidden><span>Ausgabe</span><select name="xtream_output"><option value="ts" {% if not current or current.xtream_output == 'ts' %}selected{% endif %}>ts</option><option value="m3u8" {% if current and current.xtream_output == 'm3u8' %}selected{% endif %}>m3u8</option></select></label>
+</div>
