@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 import sqlite3
 
-from expiry_report_pdf import Expiry
+from expiry_report_core import Expiry
 
 MAX_OBSERVATIONS = 10000
 MAX_AGE = timedelta(hours=48)
