@@ -118,7 +118,8 @@ class AdminMobileRegistry:
                 if not isinstance(key,str) or len(key)>200:
                     raise ValueError("Invalid incident key")
                 if kind not in ("analysis_stalled","playlist_access","worker_preflight",
-                                "service_down","build_failed","playback_errors","daily_report"):
+                                "service_down","build_failed","playback_errors","daily_report",
+                                "expiry_monthly","expiry_weekly"):
                     raise ValueError("Invalid incident category")
                 for install in installs:
                     db.execute("""INSERT OR IGNORE INTO admin_mobile_outbox(
