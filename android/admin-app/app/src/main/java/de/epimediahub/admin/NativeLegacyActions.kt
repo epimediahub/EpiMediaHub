@@ -25,7 +25,8 @@ internal object NativeLegacyActions {
         "rename-device" to setOf("name"),
         "sync-device" to emptySet(),
         "move-device" to setOf("customer_id"),
-        "assign-reseller" to setOf("reseller_id")
+        "assign-reseller" to setOf("reseller_id"),
+        "delete-playlist" to emptySet()
     )
     data class Outcome(val applied: Boolean, val message: String, val newId: String = "")
 
