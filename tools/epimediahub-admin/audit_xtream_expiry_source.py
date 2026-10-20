@@ -55,11 +55,16 @@ def inspect_database(path):
                 config={}
             if not isinstance(config,dict):
                 config={}
-            kind=config.get("type")
-            if not isinstance(kind,str) or kind.upper() not in {"M3U","XTREAM"}:
+            # Production stores the media format in playlist_type.
+            # Support historical type but never guess from credential keys.
+            found=[config[k] for k in ("playlist_type","type") if k in config]
+            normalized=[v.strip().upper() for v in found if isinstance(v,str)]
+            if (not found or len(normalized)!=len(found)
+                    or any(v not in {"M3U","XTREAM"} for v in normalized)
+                    or len(set(normalized))!=1):
                 kind="OTHER_OR_UNKNOWN"
             else:
-                kind=kind.upper()
+                kind=normalized[0]
             types[kind]+=1
             for key,value in config.items():
                 if not isinstance(key,str) or key not in CONFIG_KEYS:
