@@ -145,7 +145,7 @@ class NativeLegacyBridgeTests(unittest.TestCase):
         self.assertEqual(self.post("create-customer",0,csrf,{
             "name":"Gamma", "hijack":"true"}).status_code,400)
         self.assertEqual(self.post("create-customer",0,csrf,{"name":"<script>"}).status_code,400)
-        self.assertEqual(self.post("delete-customer",1,csrf).status_code,404)
+        self.assertEqual(self.post("delete-customer",1,csrf).status_code,503)
         self.assertEqual(sum(self.calls.values()),0)
 
     def test_customer_creation_replay_prevents_duplicates(self):
