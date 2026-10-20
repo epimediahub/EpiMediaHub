@@ -20,7 +20,7 @@ import tempfile
 from zoneinfo import ZoneInfo
 
 from expiry_cache import read_verified, Unavailable
-from expiry_report_rows import linked_expiries
+from expiry_report_rows import linked_expiries, require_complete_xtream_coverage
 from expiry_report_calendar import upcoming_month_on_last_day, calendar_week_on_monday
 from expiry_report_pdf import monthly_pdf
 from mobile_registry import AdminMobileRegistry
@@ -67,6 +67,7 @@ def publish_once(data_dir:Path,provisioning:Path,now:datetime,
     if not any(-300<=(current-o.observed_at).total_seconds()<=48*3600
                for o in observations):
         raise Unavailable("PROVIDER_DATA_STALE")
+    require_complete_xtream_coverage(provisioning,observations,current)
     records=linked_expiries(provisioning,observations,current)
     # A verified account may expire outside this period; an empty target
     # report is legitimate only if the PROVIDER source is certified complete.
