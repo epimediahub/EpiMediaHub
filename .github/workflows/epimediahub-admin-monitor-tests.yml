@@ -1,0 +1,23 @@
+name: EpiMediaHub Admin monitor and private mobile backend tests
+on:
+  pull_request:
+    paths:
+      - 'tools/epimediahub-admin/**'
+      - '.github/workflows/epimediahub-admin-monitor-tests.yml'
+  workflow_dispatch:
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Flask to exercise real admin HTTP routes
+        run: python -m pip install "Flask==3.1.0"
+      - name: Test monitoring, admin authentication, CSRF and push registry
+        working-directory: tools/epimediahub-admin
+        run: |
+          python3 -m compileall -q .
+          python3 -m unittest discover -v -p 'test_*.py'
