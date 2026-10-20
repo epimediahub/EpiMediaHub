@@ -269,6 +269,73 @@ def secure_fetch(endpoint,username,password):
         conn.close()
 
 
+
+def _plaintext_origin(origin):
+    """Opt-in ONLY: parse the existing HTTP server without ever changing it."""
+    host=_https_upgrade_host(origin)
+    url=urlsplit(origin)
+    if url.scheme!="http":
+        raise ProbeError("http_origin_required")
+    try:
+        port=url.port or 80
+    except ValueError:
+        raise ProbeError("invalid_endpoint") from None
+    # Never permit an accidental HTTP request to another privileged service.
+    if port != 80 and not 1024 <= port <= 65535:
+        raise ProbeError("invalid_endpoint")
+    return host,port,url.path.rstrip("/")
+
+
+def player_compatible_http_fetch(origin,username,password):
+    """Deliberately INSECURE legacy Xtream request, opt-in mode only.
+
+    GET query contains sensitive credentials on the public network. This
+    implementation protects against internal-network access and redirects,
+    but cannot make plaintext HTTP private or authenticated. Use only with
+    operator authorization and a verified provider; never as a default.
+    """
+    host,port,base=_plaintext_origin(origin)
+    family,address=resolve_public(host,port)
+    query=urlencode({"username":username,"password":password})
+    path=base+"/player_api.php?"+query
+    conn=http.client.HTTPConnection(host,port,timeout=5)
+    try:
+        sock=socket.socket(family,socket.SOCK_STREAM)
+        sock.settimeout(5)
+        try:
+            sock.connect((address,port))
+            # Use the DNS-verified public address without a second DNS lookup.
+            conn.sock=sock
+        except Exception:
+            sock.close()
+            raise
+        conn.request("GET",path,headers={
+            "Accept":"application/json",
+            "Accept-Encoding":"identity",
+            "Connection":"close",
+            "User-Agent":"EpiMediaHub-Admin-Expiry/1.0",
+        })
+        reply=conn.getresponse()
+        if reply.status!=200:
+            # No redirects, including from HTTP to attacker-controlled HTTPS.
+            raise ProbeError("provider_http_error")
+        raw=reply.read(MAX_PAYLOAD+1)
+        if len(raw)>MAX_PAYLOAD:
+            raise ProbeError("provider_response_too_large")
+        try:
+            result=json.loads(raw)
+        except (ValueError,UnicodeError):
+            raise ProbeError("invalid_provider_json") from None
+        if not isinstance(result,dict) or not isinstance(result.get("user_info"),dict):
+            raise ProbeError("missing_provider_account")
+        if result["user_info"].get("username") != username:
+            raise ProbeError("provider_account_mismatch")
+        return result
+    finally:
+        conn.close()
+
+
+
 def probe(database=DATABASE,fetch=secure_fetch,now=None):
     """Injectable transport makes fixture testing fully offline."""
     accounts=read_accounts(database)
@@ -309,7 +376,9 @@ def probe(database=DATABASE,fetch=secure_fetch,now=None):
 def main():
     parser=argparse.ArgumentParser(description="Privacy-preserving Xtream expiry check")
     group=parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--probe",action="store_true",help="Read-only; no cache writes")
+    group.add_argument("--probe",action="store_true",help="HTTPS-only; no cache writes")
+    group.add_argument("--probe-http",action="store_true",
+                       help="INSECURE opt-in: sends provider account credentials over plaintext HTTP; never saves data")
     group.add_argument("--save-cache",action="store_true",
                        help="Requires explicit opt-in and full HTTPS verification")
     group.add_argument("--check-https",action="store_true",
@@ -318,6 +387,15 @@ def main():
     if options.check_https:
         print("XTREAM_HTTPS_TLS_CHECK_COMPLETE; NO_PROVIDER_CREDENTIALS_SENT")
         print(json.dumps(check_https_upgrade(),sort_keys=True))
+        return
+    if options.probe_http:
+        if os.environ.get("EPIMEDIAHUB_XTREAM_HTTP_PROBE_APPROVED")!="YES":
+            raise ProbeError("plaintext_http_requires_explicit_operator_approval")
+        # The plaintext probe is READ-ONLY and never writes the verified cache.
+        # The normal scheduler and --save-cache always remain HTTPS-only.
+        result,_=probe(fetch=player_compatible_http_fetch)
+        print("INSECURE_XTREAM_HTTP_PROBE_COMPLETE; NO_DATABASE_OR_CACHE_WRITES")
+        print(json.dumps(result,sort_keys=True))
         return
     if options.save_cache and os.environ.get(
             "EPIMEDIAHUB_XTREAM_REFRESH_APPROVED")!="YES":
