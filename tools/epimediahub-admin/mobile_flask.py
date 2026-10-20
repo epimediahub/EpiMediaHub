@@ -11,12 +11,17 @@ import hmac
 import os
 from pathlib import Path
 import secrets
+import sqlite3
 
 from flask import Blueprint, abort, jsonify, redirect, render_template_string, request, session, url_for, send_file
 from incident_store import IncidentStore
 from mobile_registry import AdminMobileRegistry
 from mobile_updates import read_release
 from native_status import read_status
+from native_management_data import (SchemaUnavailable, overview as native_overview,
+    customers as native_customers, resellers as native_resellers,
+    customer_detail as native_customer_detail,
+    reseller_detail as native_reseller_detail)
 
 bp=Blueprint("epimediahub_admin_mobile",__name__)
 ALLOWED_KEYS=frozenset({"installation_id","fcm_token","platform"})
@@ -183,6 +188,53 @@ def episcene_status():
     except (RuntimeError,OSError,ValueError):
         return _response({"error":"analysis_status_unavailable"},503)
     return _response(result)
+
+
+@bp.get("/admin/mobile/management/overview")
+def native_management_overview():
+    _require_admin()
+    try:
+        return _response(native_overview(_base()/"provisioning.db"))
+    except (SchemaUnavailable, RuntimeError, sqlite3.Error, OSError, ValueError):
+        return _response({"error":"management_unavailable"},503)
+
+
+@bp.get("/admin/mobile/management/customers")
+def native_management_customers():
+    _require_admin()
+    try:
+        return _response(native_customers(_base()/"provisioning.db"))
+    except (SchemaUnavailable, RuntimeError, sqlite3.Error, OSError, ValueError):
+        return _response({"error":"management_unavailable"},503)
+
+
+@bp.get("/admin/mobile/management/resellers")
+def native_management_resellers():
+    _require_admin()
+    try:
+        return _response(native_resellers(_base()/"provisioning.db"))
+    except (SchemaUnavailable, RuntimeError, sqlite3.Error, OSError, ValueError):
+        return _response({"error":"management_unavailable"},503)
+
+
+@bp.get("/admin/mobile/management/customers/<int:customer_id>")
+def native_management_customer_detail(customer_id):
+    _require_admin()
+    try:
+        data=native_customer_detail(_base()/"provisioning.db",customer_id)
+    except (SchemaUnavailable, RuntimeError, sqlite3.Error, OSError, ValueError):
+        return _response({"error":"management_unavailable"},503)
+    return _response(data) if data is not None else _response({"error":"not_found"},404)
+
+
+@bp.get("/admin/mobile/management/resellers/<int:reseller_id>")
+def native_management_reseller_detail(reseller_id):
+    _require_admin()
+    try:
+        data=native_reseller_detail(_base()/"provisioning.db",reseller_id)
+    except (SchemaUnavailable, RuntimeError, sqlite3.Error, OSError, ValueError):
+        return _response({"error":"management_unavailable"},503)
+    return _response(data) if data is not None else _response({"error":"not_found"},404)
 
 
 @bp.get("/admin/mobile/update/status")
