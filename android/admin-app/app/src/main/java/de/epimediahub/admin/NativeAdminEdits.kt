@@ -31,9 +31,24 @@ internal object NativeAdminEdits {
         }
         return try {
             if (conn.responseCode != 200) ""
-            else JSONObject(conn.inputStream.bufferedReader().use {
-                it.readText().take(16384)
-            }).optString("csrf","")
+            else {
+                val csrf = JSONObject(conn.inputStream.bufferedReader().use {
+                    it.readText().take(16384)
+                }).optString("csrf","")
+                val cookieJar = CookieManager.getInstance()
+                for ((header, values) in conn.headerFields) {
+                    if (header?.equals("Set-Cookie", ignoreCase = true) == true
+                        && values != null) {
+                        for (value in values) {
+                            if (value.isNotBlank() && value.length < 8192) {
+                                cookieJar.setCookie(BASE, value)
+                            }
+                        }
+                    }
+                }
+                cookieJar.flush()
+                csrf
+            }
         } finally {
             conn.disconnect()
         }
