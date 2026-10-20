@@ -1,6 +1,6 @@
 # EpiMediaHub Admin V2 — Native Android API contract (development)
 
-**Status: design + Android read-only client implemented; production server adapter NOT implemented.**
+**Status: native Android screens + Python read-only JSON server adapter implemented and unit-tested, NOT installed on production. Native login and write actions NOT implemented.**
 Do not publish a V2 release or register these paths by guessing the production schema.
 
 ## Goal
@@ -19,7 +19,7 @@ the current login WebView on the development branch is temporary and must go bef
 - GET /admin/mobile/update/status — signed private update metadata
 - GET /admin/mobile/update/apk — protected update download
 
-## New proposed endpoints — awaiting production schema audit
+## Implemented in development — production schema audit received 2026-10-20
 
 All requests must be HTTPS, admin-authenticated, authorized by server, no-store,
 rate-limited and restricted to that caller's permitted entities. No plaintext customer
@@ -33,7 +33,7 @@ GET `/admin/mobile/management/overview`
 {"customers":12,"resellers":3,"active_licenses":11,"active_vpns":2}
 ```
 
-Counts are *illustrative schema examples only*, not real production values.
+Counts are *illustrative schema examples only*, not real production values. The live adapter deliberately returns `null` for `active_licenses` and `active_vpns` until business semantics have been verified; it never guesses active entitlements.
 
 GET `/admin/mobile/management/customers`:
 
@@ -47,9 +47,15 @@ GET `/admin/mobile/management/resellers`:
 {"resellers":[{"id":"opaque-reseller-id","name":"Example (not real data)","subtitle":"Reseller","playlist_count":null,"expires_at_epoch":null}]}
 ```
 
-The Android client currently requests precisely these three GET endpoints and correctly
-reports 401/403/404 without synthesizing counts or records. The server routes do not exist
-in the deployed backend and need verified adapters.
+The Android client calls the three GET endpoints and their native detail variants,
+including server-side bounded search `?q=...` with SQL wildcard escaping.
+`GET /admin/mobile/management/customers/<int:id>` returns enabled state and
+sanitized device and playlist names; `GET /admin/mobile/management/resellers/<int:id>`
+returns a reseller and its customer list. Each list is bounded to 100 entries,
+with `has_more` flags. No `config_json`, stream URL, device identifier,
+WireGuard key or credential is returned. The new routes exist **only in this PR**, not
+in the deployed backend. A guarded deployment and authenticated live smoke test
+are required before any Android release.
 
 ### Native detail + write actions (not yet implemented)
 
@@ -72,11 +78,12 @@ Biometrics unlock the device view, not the backend account/session.
 
 ## Next step (read-only, one time)
 
-Run `audit_native_management_contract.py` on the provisioning/dashboard host.
-It exports only table/column names and static route signatures to a 0600 JSON
-file under /root — no customer rows, credential values, stream URLs or auth tokens.
-Review this output before sharing. Use its route/schema map to implement actual
-server adapters and end-to-end integration tests.
+The initial schema/route inventory was received and used to implement the JSON
+read adapter. Run `audit_native_admin_actions.py` once on the dashboard host to
+capture **only** existing authentication and grant-handler AST call names and
+request key names, never function source or credentials. Review the resulting
+JSON before sharing. This is needed to connect existing login and 1-year-app/
+7-day-VPN business actions safely without guessing required security checks.
 
 ## Mandatory release gates
 
