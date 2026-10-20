@@ -31,7 +31,7 @@ from native_delete_confirmation import expected_confirmation, ConfirmationUnavai
 from native_marker_review import list_pending as native_pending_markers, csrf_token as marker_csrf, invoke_review as original_marker_review, MarkerReviewUnavailable
 from native_management_edits import rename as native_rename, EditUnavailable
 from expiry_cache import read_verified, Unavailable as ExpiryUnavailable
-from expiry_report_rows import linked_expiries
+from expiry_report_rows import linked_expiries, require_complete_xtream_coverage
 from expiry_report_calendar import weekly_entries
 
 bp=Blueprint("epimediahub_admin_mobile",__name__)
@@ -428,6 +428,7 @@ def _expiry_entries():
     if not any(-300 <= (now-x.observed_at).total_seconds() <= 48*3600
                for x in observations):
         raise ExpiryUnavailable("provider results stale")
+    require_complete_xtream_coverage(_base()/"provisioning.db",observations,now)
     return linked_expiries(_base()/"provisioning.db",observations,now)
 
 
