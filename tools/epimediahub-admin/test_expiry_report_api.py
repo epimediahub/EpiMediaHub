@@ -135,6 +135,38 @@ class PrivateExpiryReportsTests(unittest.TestCase):
         self.assertTrue(pdf.data.startswith(b"%PDF"))
         self.assertIn("attachment",pdf.headers["Content-Disposition"])
 
+    def test_incomplete_pdf_is_explicitly_labeled_and_private(self):
+        endpoint="/admin/mobile/reports/expiry/month.preview.pdf?year=2026&month=11"
+        anon=self.client.get(endpoint)
+        self.assertEqual(anon.status_code,401)
+        self.assertNotIn(b"Beispielkunde",anon.data)
+        self.login()
+        # Unknown dates included even with NO provider cache.
+        unknown=self.client.get(endpoint)
+        self.assertEqual(unknown.status_code,200)
+        self.assertTrue(unknown.data.startswith(b"%PDF"))
+        self.assertEqual(unknown.headers["Cache-Control"],"private, no-store")
+        self.assertEqual(unknown.headers["X-Report-Completeness"],
+                         "unverified-accounts-included")
+        self.assertIn("UNVOLLSTAENDIG",unknown.headers["Content-Disposition"])
+        self.assertNotIn(b"PRIVATE_PROVIDER_SECRETS",unknown.data)
+        # Canonical automated PDF still rejects the incomplete feed.
+        self.assertEqual(self.client.get(
+            "/admin/mobile/reports/expiry/month.pdf?year=2026&month=11"
+        ).status_code,503)
+
+        self.seed()
+        with sqlite3.connect(self.cache) as db:
+            db.execute("DELETE FROM verified_xtream_expiry WHERE playlist_id=11")
+        part=self.client.get(endpoint)
+        self.assertEqual(part.status_code,200)
+        self.assertGreater(len(part.data),1000)
+        self.assertEqual(part.headers["X-Report-Completeness"],
+                         "unverified-accounts-included")
+        self.assertEqual(self.client.get(
+            "/admin/mobile/reports/expiry/month.pdf?year=2026&month=11"
+        ).status_code,503)
+
     def test_uncertified_provider_coverage_cannot_generate_partial_report(self):
         self.seed()
         self.login()
