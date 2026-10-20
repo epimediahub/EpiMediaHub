@@ -1,5 +1,6 @@
 package de.epimediahub.admin
 
+import android.webkit.CookieManager
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.BorderStroke
@@ -66,17 +67,34 @@ internal object NativeManagementApi {
         val resellers: List<Entry>,
         val error: String?,
         val authenticated: Boolean,
-        val loaded: Boolean
+        val loaded: Boolean,
+        val customerHasMore: Boolean = false,
+        val resellerHasMore: Boolean = false
+    )
+
+    data class DetailItem(val name: String, val description: String, val enabled: Boolean)
+    data class Detail(
+        val name: String,
+        val enabled: Boolean,
+        val playlists: List<DetailItem>,
+        val devices: List<DetailItem>,
+        val customers: List<DetailItem>,
+        val morePlaylists: Boolean,
+        val moreDevices: Boolean,
+        val moreCustomers: Boolean
     )
 
     private class Status(val code: Int) : RuntimeException()
 
     private fun read(path: String, cookie: String): JSONObject {
-        require(path in listOf(
-            "/admin/mobile/management/overview",
-            "/admin/mobile/management/customers",
-            "/admin/mobile/management/resellers"
-        ))
+        require(
+            path in setOf(
+                "/admin/mobile/management/overview",
+                "/admin/mobile/management/customers",
+                "/admin/mobile/management/resellers"
+            ) || Regex("^/admin/mobile/management/(customers|resellers)/[1-9][0-9]{0,17}$")
+                .matches(path)
+        )
         val conn = (URL(BASE + path).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects = false
             connectTimeout = 8000
@@ -139,6 +157,50 @@ internal object NativeManagementApi {
         return found
     }
 
+    private fun detailEntries(body: JSONObject, key: String): List<DetailItem> {
+        val array = body.optJSONArray(key) ?: return emptyList()
+        if (array.length() > LIMIT) throw IllegalStateException("Unbounded detail list")
+        return (0 until array.length()).map { i ->
+            val value = array.getJSONObject(i)
+            DetailItem(
+                name = value.optString("name", "").take(160),
+                description = value.optString("platform", "").take(48),
+                enabled = value.optBoolean("enabled", false)
+            )
+        }
+    }
+
+    fun loadDetail(
+        cookie: String,
+        kind: String,
+        identifier: String,
+        done: (Detail?, String) -> Unit
+    ) {
+        if (cookie.isBlank() || kind !in setOf("customers", "resellers") ||
+            !Regex("[1-9][0-9]{0,17}").matches(identifier)) {
+            main.post { done(null, "Anmeldung oder Eintrags-ID ungültig.") }
+            return
+        }
+        thread(name = "epi-admin-native-detail") {
+            try {
+                val payload = read("/admin/mobile/management/$kind/$identifier", cookie)
+                val result = Detail(
+                    name = payload.optString("name", "").take(160),
+                    enabled = payload.optBoolean("enabled", false),
+                    playlists = detailEntries(payload, "playlists"),
+                    devices = detailEntries(payload, "devices"),
+                    customers = detailEntries(payload, "customers"),
+                    morePlaylists = payload.optBoolean("more_playlists", false),
+                    moreDevices = payload.optBoolean("more_devices", false),
+                    moreCustomers = payload.optBoolean("more_customers", false)
+                )
+                main.post { done(result, "") }
+            } catch (_: Exception) {
+                main.post { done(null, "Details momentan nicht verfügbar.") }
+            }
+        }
+    }
+
     fun load(cookie: String, done: (Result) -> Unit) {
         if (cookie.isBlank()) {
             main.post { done(Result(null, emptyList(), emptyList(),
@@ -155,7 +217,9 @@ internal object NativeManagementApi {
                         count(overview, "active_licenses"), count(overview, "active_vpns")),
                     entries(customers, "customers"),
                     entries(resellers, "resellers"),
-                    null, true, true
+                    null, true, true,
+                    customers.optBoolean("has_more", false),
+                    resellers.optBoolean("has_more", false)
                 )
             } catch (error: Status) {
                 val message = when (error.code) {
@@ -194,6 +258,29 @@ internal fun NativeManagementScreen(
     var section by remember { mutableIntStateOf(0) }
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf<NativeManagementApi.Entry?>(null) }
+    var loadedDetail by remember { mutableStateOf<NativeManagementApi.Detail?>(null) }
+    var detailBusy by remember { mutableStateOf(false) }
+    var detailMessage by remember { mutableStateOf("") }
+    LaunchedEffect(selected?.id, section) {
+        val item = selected
+        loadedDetail = null
+        detailMessage = ""
+        if (item != null) {
+            detailBusy = true
+            val kind = if (section == 0) "customers" else "resellers"
+            val cookie = CookieManager.getInstance().getCookie(
+                "https://admin.epimediahub.com") ?: ""
+            NativeManagementApi.loadDetail(cookie, kind, item.id) { value, message ->
+                if (selected?.id == item.id) {
+                    loadedDetail = value
+                    detailMessage = message
+                    detailBusy = false
+                }
+            }
+        } else {
+            detailBusy = false
+        }
+    }
 
     Column(modifier = modifier.fillMaxWidth().background(Navy).padding(horizontal = 18.dp)) {
         Row(
@@ -251,6 +338,16 @@ internal fun NativeManagementScreen(
             ManagementMetric("App-Lizenzen", overview?.activeLicenses, Modifier.weight(1f))
             ManagementMetric("VPN aktiv", overview?.vpnActive, Modifier.weight(1f))
         }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = openEpiscene, modifier = Modifier.weight(1f)) {
+                Text("EpiScene", maxLines = 1)
+            }
+            OutlinedButton(onClick = openAlerts, modifier = Modifier.weight(1f)) {
+                Text("Meldungen", maxLines = 1)
+            }
+        }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = section == 0, onClick = { section = 0; query = "" },
@@ -269,6 +366,13 @@ internal fun NativeManagementScreen(
         val all = if (section == 0) data?.customers.orEmpty() else data?.resellers.orEmpty()
         val filtered = all.filter { it.name.contains(query, ignoreCase = true) ||
             it.subtitle.contains(query, ignoreCase = true) }
+        if (if (section == 0) data?.customerHasMore == true
+            else data?.resellerHasMore == true) {
+            Text("Es werden die neuesten 100 Einträge angezeigt. Weitere "
+                + "Einträge erfordern eine serverseitige Suche.",
+                color = Secondary, fontSize = 12.sp,
+                modifier = Modifier.padding(vertical = 6.dp))
+        }
         if (filtered.isEmpty()) {
             Text("Keine Einträge für diese Auswahl.", color = Secondary,
                 modifier = Modifier.padding(12.dp))
@@ -303,11 +407,38 @@ internal fun NativeManagementScreen(
             onDismissRequest = { selected = null },
             title = { Text(item.name) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Column(
+                    modifier = Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
                     Text(item.subtitle.ifBlank { "Keine weiteren Details verfügbar." })
-                    Text("Playlists: " + (item.playlistCount?.toString() ?: "Unbekannt"))
-                    Text("Lizenz- und VPN-Aktionen werden erst aktiviert, wenn der "
-                        + "Server Berechtigungen, CSRF-Schutz und die konkrete Aktion bestätigt.")
+                    if (detailBusy) CircularProgressIndicator(Modifier.size(22.dp))
+                    if (detailMessage.isNotBlank()) Text(detailMessage)
+                    loadedDetail?.let { detail ->
+                        Text(if (detail.enabled) "Status: Aktiv" else "Status: Deaktiviert")
+                        val groupings = listOf(
+                            Pair("Playlists", detail.playlists),
+                            Pair("Geräte", detail.devices),
+                            Pair("Zugeordnete Kunden", detail.customers)
+                        )
+                        groupings.forEach { (heading, entries) ->
+                            if (entries.isNotEmpty()) {
+                                HorizontalDivider()
+                                Text(heading, fontWeight = FontWeight.Bold)
+                                entries.take(30).forEach { entry ->
+                                    Text("• " + entry.name +
+                                        if (entry.enabled) " · Aktiv" else " · Inaktiv")
+                                }
+                                if (entries.size > 30) Text("Weitere Einträge nicht angezeigt")
+                            }
+                        }
+                        if (detail.morePlaylists || detail.moreDevices || detail.moreCustomers) {
+                            Text("Weitere Datensätze auf dem Server vorhanden.")
+                        }
+                    }
+                    Text("Lizenz- und VPN-Aktionen werden nach der Prüfung "
+                        + "der serverseitigen Berechtigungen ergänzt.",
+                        color = Secondary, fontSize = 12.sp)
                 }
             },
             confirmButton = {
