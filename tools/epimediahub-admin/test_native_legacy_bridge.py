@@ -1,5 +1,6 @@
 """Isolated contract tests; never call real provisioning, license or VPN data."""
 from pathlib import Path
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -92,6 +93,25 @@ class NativeLegacyBridgeTests(unittest.TestCase):
         register("v076_delete_customer_playlist",
                  lambda con, playlist_id: con.execute(
                      "DELETE FROM customer_playlists WHERE id=?", (playlist_id,)))
+
+        def prepared_config():
+            return json.dumps({
+                "name": request.form["playlist_name"],
+                "type": request.form["playlist_type"],
+                "url": request.form["playlist_url"],
+                "xtream_server": request.form["xtream_server"],
+                "xtream_username": request.form["xtream_username"],
+                "xtream_password": request.form["xtream_password"],
+                "output": request.form["xtream_output"]
+            })
+        register("v076_add_customer_playlist",
+                 lambda con, customer_id: con.execute(
+                     "INSERT INTO customer_playlists (customer_id,name,enabled,config_json) VALUES (?,?,1,?)",
+                     (customer_id,request.form["playlist_name"],prepared_config())))
+        register("v076_update_customer_playlist",
+                 lambda con, playlist_id: con.execute(
+                     "UPDATE customer_playlists SET name=?,config_json=? WHERE id=?",
+                     (request.form["playlist_name"],prepared_config(),playlist_id)))
 
     def tearDown(self):
         self.env.stop()
@@ -206,6 +226,58 @@ class NativeLegacyBridgeTests(unittest.TestCase):
             "SELECT COUNT(*) FROM customer_playlists WHERE id=40"),0)
         self.assertEqual(self.calls["v076_delete_customer_playlist"],1)
         self.assertNotIn("private-config-not-for-mobile",response.get_data(as_text=True))
+
+    def test_playlist_add_edit_verify_persistence_without_leaking_password(self):
+        csrf = self.signin()
+        values = {
+            "playlist_name":"Sport HD",
+            "playlist_type":"XTREAM",
+            "playlist_url":"",
+            "xtream_server":"https://provider.example.invalid:8443",
+            "xtream_username":"subscriber",
+            "xtream_password":"SECRET_NOT_FOR_CLIENT",
+            "xtream_output":"ts"
+        }
+        created = self.post("add-playlist",1,csrf,values)
+        self.assertEqual(created.status_code,200,created.get_data(as_text=True))
+        self.assertTrue(created.get_json()["applied"])
+        playlist_id=int(created.get_json()["id"])
+        self.assertNotIn("SECRET_NOT_FOR_CLIENT",created.get_data(as_text=True))
+        updated = dict(values)
+        updated["playlist_name"]="Sport HD Reloaded"
+        updated["xtream_output"]="m3u8"
+        response = self.post("edit-playlist",playlist_id,csrf,updated)
+        self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+        self.assertTrue(response.get_json()["applied"])
+        self.assertNotIn("SECRET_NOT_FOR_CLIENT",response.get_data(as_text=True))
+        self.assertEqual(self.scalar(
+            "SELECT name FROM customer_playlists WHERE id=?",(playlist_id,)),
+            "Sport HD Reloaded")
+        self.assertEqual(self.calls["v076_add_customer_playlist"],1)
+        self.assertEqual(self.calls["v076_update_customer_playlist"],1)
+
+    def test_playlist_input_blocks_unverified_types_and_incomplete_credentials(self):
+        csrf=self.signin()
+        payload={
+            "playlist_name":"M3U Valid",
+            "playlist_type":"M3U",
+            "playlist_url":"https://provider.example.invalid/list.m3u",
+            "xtream_server":"",
+            "xtream_username":"",
+            "xtream_password":"",
+            "xtream_output":"ts"
+        }
+        r=self.post("add-playlist",1,csrf,payload)
+        self.assertEqual(r.status_code,200,r.get_data(as_text=True))
+        for field,value in (("playlist_type","UNKNOWN"),
+                            ("playlist_url","not-an-url"),
+                            ("playlist_name","<script>")):
+            invalid={**payload,field:value}
+            self.assertEqual(self.post("add-playlist",1,csrf,invalid).status_code,400)
+        self.assertEqual(self.post("add-playlist",1,csrf,{
+            **payload,"extra":"secret"
+        }).status_code,400)
+        self.assertEqual(self.calls["v076_add_customer_playlist"],1)
 
     def test_original_redirect_is_not_success(self):
         csrf=self.signin()
