@@ -28,7 +28,9 @@ class MonitorSandboxTests(unittest.TestCase):
             updater=root/"epimediahub-admin-update-sync.service"
             monitor.write_text("UNEXPECTED_OVERRIDE")
             updater.write_text("unchanged")
-            expected={monitor:"new",updater:"unchanged"}
+            expected={monitor:(f"ReadWritePaths={d}\\n"
+                               f"ReadOnlyPaths={d}/provisioning.db\\n"),
+                      updater:"unchanged"}
             with mock.patch.object(admin,"validate",return_value=(d,"epimediahub","",None,None)):
                 with mock.patch.object(admin,"files",return_value=expected):
                     with mock.patch.object(admin,"UNIT_DIR",root):
