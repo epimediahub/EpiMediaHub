@@ -64,7 +64,7 @@ class NativeStatusTests(unittest.TestCase):
             c.execute("INSERT INTO skip_assets VALUES ('asset8queued',8,'HIDDEN')")
             c.execute("INSERT INTO skip_jobs VALUES ('asset8queued','queued','2026-10-17T14:32:00Z')")
         with sqlite3.connect(self.path) as con:
-            entry=summarize(con,now=1790000000)["lanes"][0]
+            entry=summarize(con,now=1792251000)["lanes"][0]
         self.assertEqual(entry["status_counts"]["done"],1)
         self.assertEqual(entry["status_counts"]["review"],1)
         self.assertEqual(entry["queued"],1)
