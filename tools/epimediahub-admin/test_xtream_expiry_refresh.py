@@ -9,7 +9,8 @@ import unittest
 from unittest import mock
 
 from xtream_expiry_refresh import (
-    ProbeError,read_accounts,parse_endpoint,resolve_public,
+    ProbeError,ProviderHttpError,diagnostic_reason,
+    read_accounts,parse_endpoint,resolve_public,
     probe,secure_fetch,check_https_upgrade,_https_upgrade_host,
     https_tls_handshake_only, _plaintext_origin, player_compatible_http_fetch, main
 )
@@ -74,8 +75,50 @@ class XtreamLiveProbeTests(unittest.TestCase):
         summary,rows=probe(self.path,fetch=fake,now=self.now)
         self.assertFalse(summary["all_confirmed"])
         self.assertEqual(summary["confirmed"],1)
-        self.assertEqual(summary["result_counts"]["provider_date_unknown"],1)
+        self.assertEqual(summary["result_counts"]["provider_date_undated"],1)
         self.assertEqual(len(rows),1)
+
+    def test_diagnostics_report_only_ordinal_positions_and_safe_statuses(self):
+        def fake(server,username,password):
+            if username.endswith("1"):
+                return {"user_info":{"username":username,"exp_date":"1792531200"}}
+            raise ProviderHttpError(403)
+        result,dates=probe(self.path,fetch=fake,now=self.now,
+                           diagnostics=True)
+        self.assertEqual(result["confirmed"],1)
+        self.assertEqual(result["result_counts"]["provider_http_4xx"],1)
+        self.assertEqual(result["account_checks"],[
+            {"position":1,"status":"confirmed"},
+            {"position":2,"status":"provider_http_4xx"}])
+        self.assertTrue(result["account_positions_are_not_ids"])
+        self.assertEqual(len(dates),1)
+        serialized=json.dumps(result)
+        for secret in ["PRIVATE_USER","PRIVATE_PASSWORD","SECRET_NAME",
+                       "provider.example","1792531200"]:
+            self.assertNotIn(secret,serialized)
+
+    def test_diagnostic_status_classification_no_raw_provider_text(self):
+        self.assertEqual(diagnostic_reason(ProviderHttpError(503)),
+                         "provider_http_5xx")
+        self.assertEqual(diagnostic_reason(ProviderHttpError(302)),
+                         "provider_http_other")
+        self.assertEqual(diagnostic_reason(TimeoutError("SECRET")),
+                         "provider_timeout")
+        self.assertEqual(diagnostic_reason(
+            ConnectionRefusedError("SECRET")),"provider_connection_refused")
+        self.assertEqual(diagnostic_reason(
+            ProbeError("password PRIVATE")),"provider_error")
+
+    def test_diagnose_http_requires_same_explicit_operator_opt_in(self):
+        with mock.patch("xtream_expiry_refresh.sys.argv",
+                        ["refresh","--diagnose-http"]), \
+             mock.patch.dict("xtream_expiry_refresh.os.environ",
+                             {"EPIMEDIAHUB_XTREAM_HTTP_PROBE_APPROVED":"NO"}), \
+             mock.patch("xtream_expiry_refresh.probe") as run:
+            with self.assertRaisesRegex(ProbeError,
+                                        "plaintext_http_requires_explicit_operator_approval"):
+                main()
+            run.assert_not_called()
 
     def test_http_transport_is_explicit_and_never_automatically_enabled(self):
         with mock.patch("xtream_expiry_refresh.sys.argv",
@@ -259,7 +302,7 @@ class XtreamLiveProbeTests(unittest.TestCase):
             return {"user_info":{"username":username,"exp_date":"1792531200"}}
         result,rows=probe(self.path,fetch=fake,now=self.now)
         self.assertFalse(result["all_confirmed"])
-        self.assertEqual(result["result_counts"]["provider_error"],1)
+        self.assertEqual(result["result_counts"]["provider_transport_error"],1)
         self.assertNotIn("SECRET_PROVIDER",json.dumps(result))
         self.assertEqual(len(rows),1)
 
