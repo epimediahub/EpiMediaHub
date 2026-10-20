@@ -936,9 +936,8 @@ class MainActivity : FragmentActivity() {
                 Text("Noch keine aktuellen Messwerte verfügbar.",
                     color = Muted, fontSize = 13.sp)
             }
-            Text("Erweiterte Marker-Prüfung wird in der nächsten nativen "
-                + "Analyseverwaltung ergänzt. Die vorhandenen Live-Zähler bleiben lesbar.",
-                color = Muted, fontSize = 12.sp)
+            HorizontalDivider(color = Border)
+            NativeMarkerReviewPanel()
             Spacer(Modifier.height(8.dp))
         }
     }
