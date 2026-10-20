@@ -27,6 +27,7 @@ from native_management_data import (SchemaUnavailable, overview as native_overvi
     device_diagnostics as native_device_diagnostics)
 from native_management_actions import invoke_grant, valid_confirmation
 from native_legacy_bridge import invoke_legacy, LegacyUnavailable
+from native_delete_confirmation import expected_confirmation, ConfirmationUnavailable
 from native_management_edits import rename as native_rename, EditUnavailable
 from expiry_cache import read_verified, Unavailable as ExpiryUnavailable
 from expiry_report_rows import linked_expiries
@@ -314,6 +315,22 @@ def native_management_grant(device_row_id,action):
         return _response({"error":"grant_unavailable"},503)
 
 
+@bp.get("/admin/mobile/management/delete-confirm/<action>/<int:entity_id>")
+def native_management_delete_confirm(action,entity_id):
+    """Return the ORIGINAL static typed-confirmation phrase to an admin only."""
+    _require_admin()
+    if action not in ("delete-customer","delete-reseller","delete-device"):
+        return _response({"error":"unsupported_action"},404)
+    if os.environ.get("EPIMEDIAHUB_NATIVE_ADMIN_ENABLE_DELETES")!="YES":
+        return _response({"error":"action_not_verified_for_production"},503)
+    try:
+        phrase=expected_confirmation(action,entity_id)
+    except (ConfirmationUnavailable,RuntimeError,ValueError,OSError):
+        return _response({"error":"confirmation_unavailable"},503)
+    return _response({"action":action,"id":str(entity_id),
+                      "required_confirmation":phrase})
+
+
 @bp.post("/admin/mobile/management/actions/<action>/<int:entity_id>")
 def native_management_legacy_action(action, entity_id):
     """Native form-data adapter to audited original business handlers.
@@ -326,9 +343,14 @@ def native_management_legacy_action(action, entity_id):
     if action not in (
         "create-customer","create-reseller","rename-device",
         "sync-device","move-device","assign-reseller","delete-playlist",
-        "add-playlist","edit-playlist"
+        "add-playlist","edit-playlist",
+        "delete-customer","delete-reseller","delete-device"
     ):
         return _response({"error":"unsupported_action"},404)
+    if action in ("delete-customer","delete-reseller","delete-device") and (
+        os.environ.get("EPIMEDIAHUB_NATIVE_ADMIN_ENABLE_DELETES")!="YES"
+    ):
+        return _response({"error":"action_not_verified_for_production"},503)
     if (request.content_length is None or request.content_length>3500
             or request.mimetype!="application/x-www-form-urlencoded"):
         return _response({"error":"invalid_request"},400)
