@@ -41,8 +41,8 @@ import kotlin.concurrent.thread
  *
  * No HTML and no synthetic customer, reseller, license or VPN data.
  * Until server contracts are installed, requests return an explicit unavailable state.
- * All writes must be added only after server-side roles, CSRF, audit and idempotency
- * are available; buttons deliberately cannot trigger a guessed legacy endpoint.
+ * License and VPN grants require dedicated audited backend adapters, CSRF and a
+ * second confirmation. The existing server business handlers own all writes.
  */
 internal object NativeManagementApi {
     private const val BASE = "https://admin.epimediahub.com"
@@ -76,7 +76,10 @@ internal object NativeManagementApi {
         val resellerHasMore: Boolean = false
     )
 
-    data class DetailItem(val name: String, val description: String, val enabled: Boolean)
+    data class DetailItem(
+        val id: String, val name: String,
+        val description: String, val enabled: Boolean
+    )
     data class Detail(
         val name: String,
         val enabled: Boolean,
@@ -190,6 +193,7 @@ internal object NativeManagementApi {
         return (0 until array.length()).map { i ->
             val value = array.getJSONObject(i)
             DetailItem(
+                id = value.optString("id", "").take(25),
                 name = value.optString("name", "").take(160),
                 description = value.optString("platform", "").take(48),
                 enabled = value.optBoolean("enabled", false)
@@ -312,6 +316,11 @@ internal fun NativeManagementScreen(
         }
     }
     var selected by remember { mutableStateOf<NativeManagementApi.Entry?>(null) }
+    var pendingGrant by remember {
+        mutableStateOf<Pair<NativeManagementApi.DetailItem, String>?>(null)
+    }
+    var grantBusy by remember { mutableStateOf(false) }
+    var grantMessage by remember { mutableStateOf("") }
     var loadedDetail by remember { mutableStateOf<NativeManagementApi.Detail?>(null) }
     var detailBusy by remember { mutableStateOf(false) }
     var detailMessage by remember { mutableStateOf("") }
@@ -319,6 +328,7 @@ internal fun NativeManagementScreen(
         val item = selected
         loadedDetail = null
         detailMessage = ""
+        grantMessage = ""
         if (item != null) {
             detailBusy = true
             val kind = if (section == 0) "customers" else "resellers"
@@ -462,8 +472,8 @@ internal fun NativeManagementScreen(
     }
 
     selected?.let { item ->
-        AlertDialog(
-            onDismissRequest = { selected = null },
+        if (pendingGrant == null) AlertDialog(
+            onDismissRequest = { if (!grantBusy) selected = null },
             title = { Text(item.name) },
             text = {
                 Column(
@@ -473,6 +483,8 @@ internal fun NativeManagementScreen(
                     Text(item.subtitle.ifBlank { "Keine weiteren Details verfügbar." })
                     if (detailBusy) CircularProgressIndicator(Modifier.size(22.dp))
                     if (detailMessage.isNotBlank()) Text(detailMessage)
+                    if (grantMessage.isNotBlank()) Text(grantMessage, color = AccentBlue)
+                    if (grantBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     loadedDetail?.let { detail ->
                         Text(if (detail.enabled) "Status: Aktiv" else "Status: Deaktiviert")
                         val groupings = listOf(
@@ -487,6 +499,22 @@ internal fun NativeManagementScreen(
                                 entries.take(30).forEach { entry ->
                                     Text("• " + entry.name +
                                         if (entry.enabled) " · Aktiv" else " · Inaktiv")
+                                    if (heading == "Geräte" && section == 0 &&
+                                        detail.enabled && entry.enabled &&
+                                        Regex("[1-9][0-9]{0,17}").matches(entry.id)) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            OutlinedButton(
+                                                onClick = { pendingGrant = entry to "grant-year" },
+                                                enabled = !grantBusy,
+                                                contentPadding = PaddingValues(horizontal = 8.dp)
+                                            ) { Text("1 Jahr App", fontSize = 11.sp) }
+                                            OutlinedButton(
+                                                onClick = { pendingGrant = entry to "vpn-trial7" },
+                                                enabled = !grantBusy,
+                                                contentPadding = PaddingValues(horizontal = 8.dp)
+                                            ) { Text("7 Tage VPN", fontSize = 11.sp) }
+                                        }
+                                    }
                                 }
                                 if (entries.size > 30) Text("Weitere Einträge nicht angezeigt")
                             }
@@ -495,13 +523,63 @@ internal fun NativeManagementScreen(
                             Text("Weitere Datensätze auf dem Server vorhanden.")
                         }
                     }
-                    Text("Lizenz- und VPN-Aktionen werden nach der Prüfung "
-                        + "der serverseitigen Berechtigungen ergänzt.",
+                    Text("Freigaben werden nur über die bestätigte Admin-Sitzung "
+                        + "und die serverseitig geprüften Lizenz-/VPN-Regeln ausgeführt.",
                         color = Secondary, fontSize = 12.sp)
                 }
             },
             confirmButton = {
                 TextButton(onClick = { selected = null }) { Text("Schließen") }
+            }
+        )
+    }
+
+    pendingGrant?.let { (device, action) ->
+        val caption = if (action == "grant-year") "1 Jahr App-Lizenz"
+            else "7 Tage VPN-Test"
+        AlertDialog(
+            onDismissRequest = { if (!grantBusy) pendingGrant = null },
+            title = { Text("Freigabe bestätigen") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text("Aktion: $caption")
+                    Text("Gerät: " + device.name)
+                    Text("Die Vergabe erfolgt unmittelbar und wird serverseitig geprüft "
+                        + "und protokolliert. Ein aktiver Anspruch wird nicht erneut vergeben.")
+                    if (grantBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingGrant = null }, enabled = !grantBusy) {
+                    Text("Abbrechen")
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !grantBusy,
+                    onClick = {
+                        grantBusy = true
+                        grantMessage = ""
+                        NativeAdminActions.grant(device.id, action) { outcome ->
+                            grantBusy = false
+                            grantMessage = outcome.message
+                            pendingGrant = null
+                            if (outcome.applied) {
+                                // A fresh detail read verifies the authoritative device list.
+                                val item = selected
+                                if (item != null) {
+                                    val cookie = CookieManager.getInstance()
+                                        .getCookie("https://admin.epimediahub.com") ?: ""
+                                    NativeManagementApi.loadDetail(cookie,"customers",item.id) {
+                                        detail, message ->
+                                        loadedDetail = detail
+                                        detailMessage = message
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ) { Text("Jetzt freigeben") }
             }
         )
     }
