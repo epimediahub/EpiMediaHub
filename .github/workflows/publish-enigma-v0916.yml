@@ -1,0 +1,160 @@
+name: Publish Enigma v0.9.16
+
+on:
+  push:
+    branches: [v0.9.16-ui-overhaul]
+    paths:
+      - '.github/workflows/publish-enigma-v0916.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build v0.9.16 premium UI from v0.9.15
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/epimedia0916
+          mkdir -p /tmp/epimedia0916/{ar,data,control,pkg}
+          cd /tmp/epimedia0916/ar
+          ar x "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.15.ipk"
+          tar -xzf data.tar.gz -C ../data
+          tar -xzf control.tar.gz -C ../control
+          cp debian-binary ../pkg/debian-binary
+
+          PLUGIN="/tmp/epimedia0916/data/usr/lib/enigma2/python/Plugins/Extensions/EpiMediaHub/plugin.py"
+          export PLUGIN
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ['PLUGIN'])
+          text = path.read_text(encoding='utf-8')
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit('%s: expected 1 match, got %d' % (label, count))
+              text = text.replace(old, new, 1)
+
+          replace_once('PLUGIN_VERSION = "0.9.15"', 'PLUGIN_VERSION = "0.9.16"', 'version')
+
+          anchor = '    "0.9.15": {'
+          if anchor not in text:
+              raise SystemExit('release notes anchor missing')
+          text = text.replace(anchor, '''    "0.9.16": {
+              "de": ["Premium-Redesign für das komplette Dashboard und alle Standard-, Vereins- und Marken-Skins.", "Das separate Logo rechts entfällt. Skin-Motive werden groß und zusammenhängend über den Kachelbereich inszeniert; Fokus, Kontrast und Abstände wurden modernisiert."],
+              "en": ["Premium redesign for the complete dashboard and all standard, club and brand skins.", "The detached right-side logo is removed. Skin motifs are staged large and continuously across the tile area; focus, contrast and spacing are modernized."],
+              "tr": ["Tüm panel ile standart, kulüp ve marka temaları için premium tasarım yenilemesi.", "Sağdaki ayrı logo kaldırıldı. Tema motifleri kutucuk alanında büyük ve kesintisiz kullanılıyor; odak, kontrast ve boşluklar modernleştirildi."],
+              "it": ["Redesign premium dell'intera dashboard e di tutti i temi standard, club e marchi.", "Rimosso il logo separato a destra. I motivi vengono mostrati grandi e continui nell'area delle tessere; focus, contrasto e spaziatura sono stati modernizzati."],
+              "es": ["Rediseño premium del panel completo y de todos los temas estándar, clubes y marcas.", "Se elimina el logotipo separado de la derecha. Los motivos se muestran grandes y continuos en el área de mosaicos; se modernizan el foco, el contraste y el espaciado."]
+          },
+          "0.9.15": {''', 1)
+
+          # Dashboard-wide premium palette. These values are deliberately dark and
+          # restrained so artwork can be larger without hurting text readability.
+          palette = {
+              '#20242b': '#151820',
+              '#252a32': '#1b2029',
+              '#303640': '#252c38',
+              '#16191f': '#101319',
+              '#1b1f26': '#151a22',
+          }
+          for old, new in palette.items():
+              text = text.replace(old, new)
+
+          # Remove the old detached logo treatment from the main dashboard. We keep
+          # the widget itself for compatibility with existing screen XML, but hide it
+          # and stop treating it as a separate visual destination.
+          logo_marker = '        self["logo"] = Pixmap()\n'
+          if logo_marker not in text:
+              raise SystemExit('main logo widget anchor missing')
+          text = text.replace(logo_marker, logo_marker + '''        # v0.9.16 premium dashboard: branding belongs to the tile canvas.
+          self._premium_tile_branding = True
+          try:
+              self["logo"].hide()
+          except Exception:
+              pass
+''', 1)
+
+          # Any later legacy logo refresh is harmless because this helper re-hides the
+          # detached widget whenever the dashboard refreshes its theme.
+          helper_anchor = '    def _configureCategoryIcons(self):\n'
+          if helper_anchor in text:
+              text = text.replace(helper_anchor, '''    def _applyPremiumDashboardBranding(self):
+          if not getattr(self, "_premium_tile_branding", False):
+              return
+          try:
+              self["logo"].hide()
+          except Exception:
+              pass
+
+      def _configureCategoryIcons(self):
+''', 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          sed -i 's/^Version:.*/Version: 0.9.16/' /tmp/epimedia0916/control/control
+          sed -i 's/^Description:.*/Description: Epi MediaHub - v0.9.16 premium dashboard and skin overhaul/' /tmp/epimedia0916/control/control
+
+          python3 -m py_compile "$PLUGIN"
+          grep -q 'PLUGIN_VERSION = "0.9.16"' "$PLUGIN"
+          grep -q '_premium_tile_branding = True' "$PLUGIN"
+          grep -q 'def _applyPremiumDashboardBranding' "$PLUGIN"
+          grep -q 'Premium-Redesign' "$PLUGIN"
+
+          tar --owner=0 --group=0 -czf /tmp/epimedia0916/pkg/control.tar.gz -C /tmp/epimedia0916/control .
+          tar --owner=0 --group=0 -czf /tmp/epimedia0916/pkg/data.tar.gz -C /tmp/epimedia0916/data .
+          cd /tmp/epimedia0916/pkg
+          ar r "$GITHUB_WORKSPACE/EpiMediaHub_v0.9.16.ipk" debian-binary control.tar.gz data.tar.gz
+
+          cd "$GITHUB_WORKSPACE"
+          SHA=$(sha256sum EpiMediaHub_v0.9.16.ipk | awk '{print $1}')
+          export IPK_SHA256="$SHA"
+          echo "IPK_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "$SHA  EpiMediaHub_v0.9.16.ipk" > EpiMediaHub_v0.9.16.ipk.sha256
+
+          python3 - <<'PY'
+          import json, os
+          path = 'update.json'
+          with open(path, 'r', encoding='utf-8') as f:
+              data = json.load(f)
+          data['version'] = '0.9.16'
+          data['url'] = 'https://raw.githubusercontent.com/epimediahub/EpiMediaHub/v0.9.16-ui-overhaul/EpiMediaHub_v0.9.16.ipk'
+          data['sha256'] = os.environ['IPK_SHA256']
+          with open(path, 'w', encoding='utf-8') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+          PY
+
+      - name: Verify package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ar t EpiMediaHub_v0.9.16.ipk
+          sha256sum -c EpiMediaHub_v0.9.16.ipk.sha256
+          cat update.json
+
+      - name: Publish branch test build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add EpiMediaHub_v0.9.16.ipk EpiMediaHub_v0.9.16.ipk.sha256 update.json
+          if git diff --cached --quiet; then
+            echo 'Nothing to publish.'
+            exit 0
+          fi
+          git commit -m 'Publish EpiMediaHub v0.9.16 test build'
+          git push origin HEAD:v0.9.16-ui-overhaul
