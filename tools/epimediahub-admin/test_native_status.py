@@ -57,6 +57,20 @@ class NativeStatusTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"MISSING"):
             read_status(alias)
 
+    def test_result_breakdown_and_stall_are_grounded(self):
+        with sqlite3.connect(self.path) as c:
+            c.execute("INSERT INTO skip_assets VALUES ('asset8review',8,'HIDDEN')")
+            c.execute("INSERT INTO skip_jobs VALUES ('asset8review','review','2026-10-17T14:30:00Z')")
+            c.execute("INSERT INTO skip_assets VALUES ('asset8queued',8,'HIDDEN')")
+            c.execute("INSERT INTO skip_jobs VALUES ('asset8queued','queued','2026-10-17T14:32:00Z')")
+        with sqlite3.connect(self.path) as con:
+            entry=summarize(con,now=1790000000)["lanes"][0]
+        self.assertEqual(entry["status_counts"]["done"],1)
+        self.assertEqual(entry["status_counts"]["review"],1)
+        self.assertEqual(entry["queued"],1)
+        self.assertTrue(entry["completion_stalled"])
+        self.assertNotIn("HIDDEN",str(entry))
+
     def test_queued_is_not_counted_as_completed(self):
         with sqlite3.connect(self.path) as c:
             c.execute("UPDATE skip_jobs SET status='queued' WHERE asset_key='asset8'")
