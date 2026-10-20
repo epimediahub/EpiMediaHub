@@ -32,6 +32,7 @@ from native_marker_review import list_pending as native_pending_markers, csrf_to
 from native_management_edits import rename as native_rename, EditUnavailable
 from expiry_cache import read_verified, Unavailable as ExpiryUnavailable
 from expiry_report_rows import linked_expiries, require_complete_xtream_coverage
+from expiry_report_coverage import preview as expiry_coverage_preview, CoveragePreviewUnavailable
 from expiry_report_calendar import weekly_entries
 
 bp=Blueprint("epimediahub_admin_mobile",__name__)
@@ -541,6 +542,28 @@ def expiry_report_web():
     reply.headers["X-Content-Type-Options"]="nosniff"
     reply.headers["Content-Security-Policy"]="default-src 'none'; style-src 'unsafe-inline'"
     return reply
+
+
+@bp.get("/admin/mobile/reports/expiry/coverage")
+def expiry_coverage_json():
+    """Admin-only status of all currently active accounts, including unknowns.
+
+    Never claim that an absent/stale provider date proves subscription has no
+    expiration. This does not enable any auto refresh/PDF/push publisher.
+    """
+    _require_admin()
+    try:
+        value=expiry_coverage_preview(
+            _base()/"provisioning.db",
+            _base()/"admin-mobile"/"expiry-cache.sqlite3",
+            datetime.now(timezone.utc))
+        value["automatic_reports_active"]=(
+            os.environ.get("EPIMEDIAHUB_EXPIRY_PROVIDER_COVERAGE_CERTIFIED")=="YES"
+            and value["snapshot_complete"])
+        return _response(value)
+    except (CoveragePreviewUnavailable,ExpiryUnavailable,sqlite3.Error,
+            OSError,RuntimeError,ValueError):
+        return _response({"error":"expiry_coverage_unavailable"},503)
 
 
 @bp.get("/admin/mobile/reports/expiry/month")
