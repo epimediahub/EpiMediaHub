@@ -7,7 +7,7 @@ import unittest
 from zoneinfo import ZoneInfo
 
 from expiry_cache import save_verified, Unavailable
-from expiry_report_rows import VerifiedPlaylistExpiry
+from expiry_report_rows import VerifiedPlaylistExpiry, CoverageUnavailable
 from expiry_report_publish import publish_once
 
 BERLIN=ZoneInfo("Europe/Berlin")
@@ -72,7 +72,7 @@ class ExpiryPublisherTests(unittest.TestCase):
         with sqlite3.connect(self.db) as db:
             db.execute("INSERT INTO customer_playlists VALUES(7,1,'THE BEST',1,?)",
                        ('{"type":"XTREAM"}',))
-        with self.assertRaises(Unavailable):
+        with self.assertRaises(CoverageUnavailable):
             publish_once(self.base,self.db,self.now,
                          certified_source=True,registry=self.dummy)
         self.assertEqual(self.dummy.events,[])
