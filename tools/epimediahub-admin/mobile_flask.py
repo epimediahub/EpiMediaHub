@@ -24,6 +24,7 @@ from native_management_data import (SchemaUnavailable, overview as native_overvi
     reseller_detail as native_reseller_detail,
     device_diagnostics as native_device_diagnostics)
 from native_management_actions import invoke_grant, valid_confirmation
+from native_legacy_bridge import invoke_legacy, LegacyUnavailable
 from native_management_edits import rename as native_rename, EditUnavailable
 
 bp=Blueprint("epimediahub_admin_mobile",__name__)
@@ -306,6 +307,36 @@ def native_management_grant(device_row_id,action):
         return _response(value,status)
     except (SchemaUnavailable,RuntimeError,sqlite3.Error,OSError,ValueError):
         return _response({"error":"grant_unavailable"},503)
+
+
+@bp.post("/admin/mobile/management/actions/<action>/<int:entity_id>")
+def native_management_legacy_action(action, entity_id):
+    """Native form-data adapter to audited original business handlers.
+
+    Original handlers see their normal request.form; only our JSON reply is
+    new. No HTML is rendered in the Android app.
+    """
+    _require_admin()
+    _require_csrf()
+    if action not in (
+        "create-customer","create-reseller","rename-device",
+        "sync-device","move-device","assign-reseller"
+    ):
+        return _response({"error":"unsupported_action"},404)
+    if (request.content_length is None or request.content_length>3500
+            or request.mimetype!="application/x-www-form-urlencoded"):
+        return _response({"error":"invalid_request"},400)
+    if any(len(request.form.getlist(key))!=1 for key in request.form):
+        return _response({"error":"duplicate_form_field"},400)
+    try:
+        value,status=invoke_legacy(
+            _base()/"provisioning.db",action,entity_id,request.form.to_dict())
+        return _response(value,status)
+    except ValueError:
+        return _response({"error":"invalid_fields_or_state"},400)
+    except (LegacyUnavailable,SchemaUnavailable,RuntimeError,
+            sqlite3.Error,OSError):
+        return _response({"error":"business_action_unavailable"},503)
 
 
 @bp.get("/admin/mobile/update/status")
