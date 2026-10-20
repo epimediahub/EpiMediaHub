@@ -153,7 +153,38 @@ class NativeManagementTests(unittest.TestCase):
         value=api.customers(self.db)
         self.assertEqual(len(value["customers"]),100)
         self.assertTrue(value["has_more"])
+        self.assertEqual(value["next_before_id"],"1020")
+        second=api.customers(self.db,before_id=int(value["next_before_id"]))
+        self.assertEqual(len(second["customers"]),22)
+        self.assertFalse(second["has_more"])
+        self.assertIsNone(second["next_before_id"])
+        self.assertEqual(len({x["id"] for x in value["customers"]+second["customers"]}),122)
         self.assertEqual(api.overview(self.db)["customers"],122)
+
+    def test_cursor_validation_and_reseller_pages(self):
+        with sqlite3.connect(self.db) as con:
+            con.executemany(
+                "INSERT INTO resellers VALUES (?,?,1,20,40,'Brand')",
+                [(i,"Partner "+str(i)) for i in range(10,121)])
+        first=api.resellers(self.db)
+        self.assertEqual(len(first["resellers"]),100)
+        second=api.resellers(self.db,before_id=int(first["next_before_id"]))
+        self.assertEqual(len(second["resellers"]),12)
+        self.assertEqual(len({x["id"] for x in first["resellers"]+second["resellers"]}),112)
+        for invalid in (-1,0,2**63,True,"18"):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    api.customers(self.db,before_id=invalid)
+        self.signin()
+        from unittest import mock
+        with mock.patch.object(mobile_flask,"_base",return_value=Path(self.root.name)):
+            for raw in ("bad","-1","0","9"*30,""):
+                self.assertEqual(self.client.get("/admin/mobile/management/resellers",
+                    query_string={"before_id":raw}).status_code,400)
+            paged=self.client.get("/admin/mobile/management/resellers",
+                query_string={"before_id":first["next_before_id"]})
+            self.assertEqual(paged.status_code,200)
+            self.assertEqual(len(paged.get_json()["resellers"]),12)
 
 
 if __name__=="__main__":
