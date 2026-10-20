@@ -23,6 +23,7 @@ from native_management_data import (SchemaUnavailable, overview as native_overvi
     customer_detail as native_customer_detail,
     reseller_detail as native_reseller_detail)
 from native_management_actions import invoke_grant, valid_confirmation
+from native_management_edits import rename as native_rename, EditUnavailable
 
 bp=Blueprint("epimediahub_admin_mobile",__name__)
 ALLOWED_KEYS=frozenset({"installation_id","fcm_token","platform"})
@@ -242,6 +243,29 @@ def native_management_reseller_detail(reseller_id):
     except (SchemaUnavailable, RuntimeError, sqlite3.Error, OSError, ValueError):
         return _response({"error":"management_unavailable"},503)
     return _response(data) if data is not None else _response({"error":"not_found"},404)
+
+
+@bp.post("/admin/mobile/management/<kind>/<int:entity_id>/rename")
+def native_management_rename(kind,entity_id):
+    _require_admin()
+    _require_csrf()
+    if kind not in ("customers","resellers"):
+        return _response({"error":"unsupported_account_type"},404)
+    if (request.content_length is None or request.content_length>1000
+            or not request.is_json):
+        return _response({"error":"invalid_request"},400)
+    data=request.get_json(silent=True)
+    if not isinstance(data,dict) or set(data)!={"expected_name","name","request_id"}:
+        return _response({"error":"invalid_fields"},400)
+    try:
+        result,status=native_rename(
+            _base()/"provisioning.db",kind,entity_id,
+            data["expected_name"],data["name"],data["request_id"])
+        return _response(result,status)
+    except ValueError:
+        return _response({"error":"invalid_fields"},400)
+    except (EditUnavailable,RuntimeError,sqlite3.Error,OSError):
+        return _response({"error":"rename_unavailable"},503)
 
 
 @bp.post("/admin/mobile/management/devices/<int:device_row_id>/<action>")
