@@ -610,6 +610,52 @@ def expiry_week_json():
         "count":sum(map(len,groups.values())),"source":"verified_provider_only"})
 
 
+@bp.get("/admin/mobile/reports/expiry/month.preview.pdf")
+def expiry_month_preview_pdf():
+    """Manually requested INCOMPLETE PDF, including all unverified accounts.
+
+    Does not activate automated reports, notifications, provider polling, or
+    interpret unknown dates as due within the selected calendar month.
+    """
+    _require_admin()
+    try:
+        year,month=_month_period()
+        coverage=expiry_coverage_preview(
+            _base()/"provisioning.db",
+            _base()/"admin-mobile"/"expiry-cache.sqlite3",
+            datetime.now(timezone.utc))
+        from expiry_report_core import Expiry
+        from expiry_report_pdf import monthly_pdf
+        confirmed=[]
+        unknown=[]
+        for group in coverage["playlists"]:
+            for entry in group["entries"]:
+                if entry["status"]=="confirmed":
+                    confirmed.append(Expiry(entry["customer"],group["name"],
+                                            date.fromisoformat(entry["expires_on"])))
+                else:
+                    unknown.append((entry["customer"],group["name"]))
+        output=BytesIO()
+        monthly_pdf(confirmed,year,month,output,unknown=unknown)
+        if output.tell()>8*1024*1024:
+            raise ExpiryUnavailable("preview PDF too large")
+        output.seek(0)
+    except ValueError:
+        return _response({"error":"invalid_month"},400)
+    except (CoveragePreviewUnavailable,ExpiryUnavailable,ImportError,
+            sqlite3.Error,OSError,RuntimeError):
+        return _response({"error":"expiry_preview_unavailable"},503)
+    response=send_file(output,as_attachment=True,
+        download_name=f"epimediahub-UNVOLLSTAENDIG-{year}-{month:02d}.pdf",
+        mimetype="application/pdf",max_age=0,conditional=False)
+    response.headers["Cache-Control"]="private, no-store"
+    response.headers["Pragma"]="no-cache"
+    response.headers["X-Report-Completeness"]="unverified-accounts-included"
+    response.headers["X-Content-Type-Options"]="nosniff"
+    response.headers["X-Frame-Options"]="DENY"
+    return response
+
+
 @bp.get("/admin/mobile/reports/expiry/month.pdf")
 def expiry_month_pdf():
     _require_admin()
