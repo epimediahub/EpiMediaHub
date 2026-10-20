@@ -196,3 +196,62 @@ def reseller_detail(path,reseller_id):
             "more_customers":len(customers)>PAGE_SIZE
         }
     return _run(path,load)
+
+def device_diagnostics(path, device_row_id):
+    """Safe one-device summary; never return stream, identity or log message."""
+    if not isinstance(device_row_id,int) or not 0<device_row_id<2**63:
+        raise ValueError("invalid device id")
+    def load(con):
+        device_columns={row[1] for row in con.execute("PRAGMA table_info(devices)")}
+        required={"id","customer_id","display_name","platform","enabled",
+            "last_seen_at","last_sync_at","last_sync_status","config_version",
+            "applied_config_version"}
+        if not required<=device_columns:
+            raise SchemaUnavailable("device status columns unavailable")
+        row=con.execute("""
+            SELECT id,display_name,platform,enabled,last_seen_at,last_sync_at,
+                   last_sync_status,config_version,applied_config_version
+            FROM devices WHERE id=?
+        """,(device_row_id,)).fetchone()
+        if row is None:
+            return None
+        # Do not return last_sync_error or device_id; they may contain
+        # provider details or unique device identifiers.
+        allowed_status={"ok","success","failed","error","pending",
+                        "skipped","not_started","synced","offline"}
+        raw=(row["last_sync_status"] or "").strip().lower()
+        status=raw if raw in allowed_status else "unknown"
+        error_columns={col[1] for col in con.execute(
+            "PRAGMA table_info(device_error_events)")}
+        recent=[]
+        if {"id","device_row_id","component","code","app_version",
+                "reported_at"}<=error_columns:
+            errors=con.execute("""
+                SELECT component,code,app_version,reported_at
+                FROM device_error_events WHERE device_row_id=?
+                ORDER BY reported_at DESC LIMIT 15
+            """,(device_row_id,)).fetchall()
+            import re
+            allowed=re.compile(r"^[a-zA-Z0-9_.:-]{1,55}$")
+            for item in errors:
+                recent.append({
+                    "component":str(item["component"]) if
+                        item["component"] and allowed.fullmatch(str(item["component"])) else "unknown",
+                    "code":str(item["code"]) if
+                        item["code"] and allowed.fullmatch(str(item["code"])) else "unknown",
+                    "app_version":_safe_name(item["app_version"],35),
+                    "reported_at":_safe_name(item["reported_at"],45)
+                })
+        return {
+            "id":str(row["id"]),
+            "name":_safe_name(row["display_name"] or row["platform"] or "Gerät"),
+            "enabled":bool(row["enabled"]),
+            "platform":_safe_name(row["platform"],40),
+            "last_seen_at":_safe_name(row["last_seen_at"],45),
+            "last_sync_at":_safe_name(row["last_sync_at"],45),
+            "last_sync_status":status,
+            "config_version":row["config_version"],
+            "applied_config_version":row["applied_config_version"],
+            "recent_errors":recent
+        }
+    return _run(path,load)
