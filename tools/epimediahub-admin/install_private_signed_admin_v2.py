@@ -123,7 +123,10 @@ def check():
     for dep in ("mobile_flask.py","mobile_updates.py"):
         if not (BASE/dep).is_file() or (BASE/dep).is_symlink():
             raise Stop("native backend or private updater missing")
-    if cmd("systemctl","is-active",NAME+".service",timeout=8)=="active":
+    service_state=subprocess.run(
+        ["systemctl","is-active",NAME+".service"],
+        check=False,capture_output=True,text=True,timeout=8).stdout.strip()
+    if service_state=="active":
         raise Stop("release sync currently running")
     for module,(target_sha,previous) in SOURCES.items():
         path=BASE/module
