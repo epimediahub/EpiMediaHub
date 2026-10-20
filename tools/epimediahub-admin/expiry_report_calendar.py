@@ -7,7 +7,7 @@ from __future__ import annotations
 import calendar
 from datetime import date, timedelta
 from collections import defaultdict
-from expiry_report_pdf import Expiry
+from expiry_report_core import Expiry
 
 
 def upcoming_month_on_last_day(today:date):
