@@ -3,7 +3,10 @@
 Tests never import or call real production business actions, live VPN or
 customer databases. Fixture handlers simulate the original audited functions.
 """
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime,timedelta,timezone
+from threading import Barrier
+import time
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -119,6 +122,37 @@ class NativeGrantTests(unittest.TestCase):
         csrf=self.login()
         self.app.view_functions["admin_grant_year"]=lambda row_id: "redirect"
         self.assertEqual(self.post(csrf=csrf).status_code,409)
+
+    def test_two_simultaneous_requests_never_both_apply(self):
+        """Separate workers competing on one device may grant only once."""
+        from native_management_actions import invoke_grant
+        original=self.app.view_functions["admin_grant_year"]
+        def slow_business_handler(row_id):
+            time.sleep(0.15)
+            return original(row_id)
+        self.app.view_functions["admin_grant_year"]=slow_business_handler
+        barrier=Barrier(2)
+        def invoke(_):
+            with self.app.app_context():
+                barrier.wait(timeout=5)
+                _,status=invoke_grant(self.db,15,"grant-year")
+                return status
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            results=list(workers.map(invoke,range(2)))
+        self.assertEqual(sorted(results),[200,409])
+        self.assertEqual(self.invoked["grant-year"],1)
+        with sqlite3.connect(self.db) as con:
+            self.assertEqual(con.execute(
+                "SELECT COUNT(*) FROM annual_device_licenses").fetchone()[0],1)
+
+    def test_untrusted_lock_directory_fails_without_calling_business_handler(self):
+        csrf=self.login()
+        external=Path(self.tmp.name)/"external-target"
+        external.mkdir()
+        (Path(self.tmp.name)/"admin-mobile").symlink_to(external,target_is_directory=True)
+        response=self.post(csrf=csrf)
+        self.assertEqual(response.status_code,503)
+        self.assertEqual(self.invoked["grant-year"],0)
 
     def test_disabled_device_fails_closed(self):
         csrf=self.login()
