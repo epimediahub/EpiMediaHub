@@ -72,7 +72,7 @@ def expected_confirmation(action: str, entity_id: int) -> str:
             else:
                 raise ConfirmationUnavailable("dynamic confirmation unsupported")
         if references!=1 or len(output)>100 or len(output)<2 or any(
-                ord(c)<32 or ord(c)>126 for c in output):
+                not c.isprintable() for c in output):
             raise ConfirmationUnavailable("unsupported confirmation expression")
         matches.append(output)
     if len(matches)!=1:
