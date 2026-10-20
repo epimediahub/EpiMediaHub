@@ -139,6 +139,91 @@ def resolve_public(host,port):
     return selections[0]
 
 
+
+def _https_upgrade_host(origin):
+    """Inspect just the configured hostname; never access the HTTP URL."""
+    if (not isinstance(origin,str) or len(origin)>1500 or
+            origin != origin.strip()):
+        raise ProbeError("invalid_endpoint")
+    try:
+        url=urlsplit(origin)
+        # Validate configured port syntax even though we probe only 443.
+        configured_port=url.port
+        host=url.hostname
+    except ValueError:
+        raise ProbeError("invalid_endpoint") from None
+    if (url.scheme not in {"http","https"} or not url.netloc or
+            not host or url.username is not None or url.password is not None
+            or url.query or url.fragment
+            or (url.path and not BASE_PATH.fullmatch(url.path))
+            or not HOSTNAME.fullmatch(host)
+            or host.endswith(".") or ".." in host
+            or (configured_port is not None and configured_port<1)):
+        raise ProbeError("invalid_endpoint")
+    return host
+
+
+def https_tls_handshake_only(origin):
+    """Probe a verified TLS certificate on port 443, without any HTTP request.
+
+    In particular: NEVER include Xtream usernames/passwords in this check.
+    This cannot confirm that player_api.php is served on the HTTPS endpoint.
+    """
+    host=_https_upgrade_host(origin)
+    family,address=resolve_public(host,443)
+    sock=socket.socket(family,socket.SOCK_STREAM)
+    sock.settimeout(5)
+    try:
+        sock.connect((address,443))
+        with ssl.create_default_context().wrap_socket(
+                sock,server_hostname=host) as channel:
+            # A successful, verified handshake is enough; no HTTP is sent.
+            channel.version()
+        return True
+    finally:
+        sock.close()
+
+
+def check_https_upgrade(database=DATABASE,handshake=https_tls_handshake_only):
+    """Aggregate HTTPS TLS capability of HTTP-configured Xtream accounts.
+
+    No HTTP requests, provider credentials or customer identities are sent,
+    no cache/db modifications and no host/URL is printed. Identical origins
+    are checked only once to minimize provider traffic.
+    """
+    accounts=read_accounts(database)
+    counts=Counter()
+    results={}
+    for _,credentials in accounts:
+        if credentials is None:
+            counts["missing_configuration"]+=1
+            continue
+        origin=credentials[0]
+        try:
+            if origin not in results:
+                results[origin]=bool(handshake(origin))
+            counts["https_tls_ready" if results[origin]
+                   else "https_tls_unavailable"]+=1
+        except ProbeError as exc:
+            code=str(exc)
+            counts["unsafe_or_invalid_origin" if code in {
+                "invalid_endpoint","non_public_provider_address",
+                "invalid_provider_address","unsupported_address"
+            } else "https_tls_unavailable"]+=1
+        except (OSError,ssl.SSLError,ValueError,socket.timeout):
+            counts["https_tls_unavailable"]+=1
+    return {
+        "active_xtream_accounts":len(accounts),
+        "accounts_with_valid_https_tls":counts["https_tls_ready"],
+        "result_counts":dict(sorted(counts.items())),
+        "distinct_origins_checked":len(results),
+        "http_requests_sent":0,
+        "provider_credentials_sent":False,
+        "customer_data_written":False,
+        "meaning":"TLS certificate check only; Xtream API not yet verified",
+    }
+
+
 def secure_fetch(endpoint,username,password):
     """No proxy, no redirect, pinned verified TLS, small JSON result."""
     host,port,base=parse_endpoint(endpoint)
@@ -227,7 +312,13 @@ def main():
     group.add_argument("--probe",action="store_true",help="Read-only; no cache writes")
     group.add_argument("--save-cache",action="store_true",
                        help="Requires explicit opt-in and full HTTPS verification")
+    group.add_argument("--check-https",action="store_true",
+                       help="TLS handshake only on port 443; no credentials or HTTP sent")
     options=parser.parse_args()
+    if options.check_https:
+        print("XTREAM_HTTPS_TLS_CHECK_COMPLETE; NO_PROVIDER_CREDENTIALS_SENT")
+        print(json.dumps(check_https_upgrade(),sort_keys=True))
+        return
     if options.save_cache and os.environ.get(
             "EPIMEDIAHUB_XTREAM_REFRESH_APPROVED")!="YES":
         raise ProbeError("write_not_authorized")
