@@ -3,7 +3,7 @@
 
 Install only when native Android authentication AND write actions are fully
 tested. Requires operator opt-in; checks the exact known stable mobile backend,
-backs up files, atomically replaces only two modules, restarts dashboard and
+backs up files, atomically replaces only audited modules, restarts dashboard and
 rolls back on failure. Does not write to customer/license/VPN DB tables.
 """
 from __future__ import annotations
@@ -25,7 +25,10 @@ BASE=Path("/opt/epimediahub/provisioning")
 SERVICE="epimediahub-provisioning.service"
 HERE=Path(__file__).resolve().parent
 MODULES=("mobile_flask.py","native_management_data.py","native_management_actions.py",
-         "native_management_edits.py","native_legacy_bridge.py")
+         "native_management_edits.py","native_legacy_bridge.py",
+         "expiry_report_core.py","expiry_cache.py","expiry_provider_adapter.py",
+         "expiry_report_rows.py","expiry_report_calendar.py","expiry_report_pdf.py",
+         "expiry_report_publish.py")
 # Git blob SHA of released, already-deployed Android Admin v1 module on main.
 KNOWN_MAIN_SHA={"mobile_flask.py":"074979ed6e523ba899106f54549fcab1ec432f2c"}
 
