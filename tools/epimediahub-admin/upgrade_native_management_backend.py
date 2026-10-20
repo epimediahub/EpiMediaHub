@@ -24,7 +24,8 @@ import urllib.request
 BASE=Path("/opt/epimediahub/provisioning")
 SERVICE="epimediahub-provisioning.service"
 HERE=Path(__file__).resolve().parent
-MODULES=("mobile_flask.py","native_management_data.py","native_management_actions.py")
+MODULES=("mobile_flask.py","native_management_data.py","native_management_actions.py",
+         "native_management_edits.py")
 # Git blob SHA of released, already-deployed Android Admin v1 module on main.
 KNOWN_MAIN_SHA={"mobile_flask.py":"074979ed6e523ba899106f54549fcab1ec432f2c"}
 
