@@ -65,7 +65,14 @@ def overview(path):
         }
     return _run(path,load)
 
-def customers(path):
+def _search(term):
+    if not isinstance(term,str) or len(term)>80:
+        raise ValueError("search query invalid")
+    return "%"+term.replace("~","~~").replace("%","~%").replace("_","~_")+"%"
+
+
+def customers(path,query=""):
+    pattern=_search(query)
     def load(con):
         rows=con.execute("""
             SELECT c.id,c.name,c.enabled,
@@ -80,8 +87,9 @@ def customers(path):
                 SELECT customer_id,COUNT(*) n
                 FROM devices GROUP BY customer_id
             ) d ON d.customer_id=c.id
+            WHERE c.name LIKE ? ESCAPE '~'
             ORDER BY c.id DESC LIMIT ?
-        """,(PAGE_SIZE+1,)).fetchall()
+        """,(pattern,PAGE_SIZE+1)).fetchall()
         return {
             "customers":[{
                 "id":str(row["id"]),
@@ -96,7 +104,8 @@ def customers(path):
         }
     return _run(path,load)
 
-def resellers(path):
+def resellers(path,query=""):
+    pattern=_search(query)
     def load(con):
         rows=con.execute("""
             SELECT r.id,r.name,r.enabled,
@@ -106,8 +115,9 @@ def resellers(path):
                 SELECT reseller_id,COUNT(*) n
                 FROM customers WHERE reseller_id IS NOT NULL GROUP BY reseller_id
             ) c ON c.reseller_id=r.id
+            WHERE r.name LIKE ? ESCAPE '~'
             ORDER BY r.id DESC LIMIT ?
-        """,(PAGE_SIZE+1,)).fetchall()
+        """,(pattern,PAGE_SIZE+1)).fetchall()
         return {
             "resellers":[{
                 "id":str(row["id"]),
