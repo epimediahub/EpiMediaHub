@@ -110,6 +110,9 @@ class MainActivity : FragmentActivity() {
     private var analysisBusy by mutableStateOf(false)
     private var analysisError by mutableStateOf("")
     private var analysisSnapshot by mutableStateOf<AdminNativeStatus.Snapshot?>(null)
+    private var managementBusy by mutableStateOf(false)
+    private var managementData by mutableStateOf<NativeManagementApi.Result?>(null)
+    private var legacyLoginVisible by mutableStateOf(false)
     private var alertsBusy by mutableStateOf(false)
     private var alertsMessage by mutableStateOf("")
     private var nativeAlerts by mutableStateOf<List<AdminNativeAlerts.Incident>>(emptyList())
@@ -148,6 +151,9 @@ class MainActivity : FragmentActivity() {
 
                 override fun onPageFinished(view: WebView, url: String) {
                     loading = false
+                    if (selection == DASHBOARD && legacyLoginVisible && url.startsWith(ADMIN_BASE)) {
+                        loadManagement()
+                    }
                     if (!updateCheckedForSession && url.startsWith(ADMIN_BASE)) {
                         val cookie = CookieManager.getInstance().getCookie(ADMIN_BASE) ?: ""
                         if (cookie.isNotBlank()) {
@@ -209,9 +215,10 @@ class MainActivity : FragmentActivity() {
         selection = next
         notice = ""
         analysisDetailWeb = false
+        legacyLoginVisible = false
         if (next == EPISCENE) loadEpiscene()
         else if (next == ALERTS) loadNativeAlerts()
-        else if (next != HOME) browser.loadUrl(destinations[next].url)
+        else if (next == DASHBOARD) loadManagement()
     }
 
     private fun requireUnlock() {
@@ -229,6 +236,7 @@ class MainActivity : FragmentActivity() {
                     unlocked = true
                     notice = ""
                     if (selection == ALERTS) loadNativeAlerts()
+                    if (selection == DASHBOARD) loadManagement()
                 }
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     notice = "Entsperrung erforderlich."
@@ -294,8 +302,9 @@ class MainActivity : FragmentActivity() {
     @Composable
     private fun AdminExperience() {
         BackHandler(enabled = selection != HOME) {
-            if (selection == EPISCENE && analysisDetailWeb) analysisDetailWeb = false
-            else if (selection == EPISCENE || selection == ALERTS) selectDestination(HOME)
+            if (selection == DASHBOARD && legacyLoginVisible) legacyLoginVisible = false
+            else if (selection == EPISCENE && analysisDetailWeb) analysisDetailWeb = false
+            else if (selection == EPISCENE || selection == ALERTS || selection == DASHBOARD) selectDestination(HOME)
             else if (browser.canGoBack()) browser.goBack()
             else selectDestination(HOME)
         }
@@ -306,6 +315,18 @@ class MainActivity : FragmentActivity() {
             AdminHeader()
             if (selection == HOME) {
                 HomeContent(modifier = Modifier.weight(1f))
+            } else if (selection == DASHBOARD && !legacyLoginVisible) {
+                NativeManagementScreen(
+                    data = managementData, loading = managementBusy,
+                    refresh = { loadManagement() },
+                    signIn = {
+                        legacyLoginVisible = true
+                        browser.loadUrl(ADMIN_BASE + "/admin")
+                    },
+                    openEpiscene = { selectDestination(EPISCENE) },
+                    openAlerts = { selectDestination(ALERTS) },
+                    modifier = Modifier.weight(1f)
+                )
             } else if (selection == EPISCENE && !analysisDetailWeb) {
                 NativeEpiscene(modifier = Modifier.weight(1f))
             } else if (selection == ALERTS) {
@@ -596,6 +617,17 @@ class MainActivity : FragmentActivity() {
                     Text(notice, color = Warning, fontSize = 12.sp, lineHeight = 17.sp)
                 }
             }
+        }
+    }
+
+    private fun loadManagement() {
+        if (!unlocked || managementBusy) return
+        managementBusy = true
+        val cookie = CookieManager.getInstance().getCookie(ADMIN_BASE) ?: ""
+        NativeManagementApi.load(cookie) { result ->
+            managementBusy = false
+            managementData = result
+            if (result.loaded && legacyLoginVisible) legacyLoginVisible = false
         }
     }
 
