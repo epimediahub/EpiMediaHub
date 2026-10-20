@@ -22,6 +22,14 @@ KEY=re.compile(r"^[A-Za-z_][A-Za-z_0-9-]{0,55}$")
 FUNC=re.compile(r"^[A-Za-z_][A-Za-z_0-9]{0,70}$")
 KNOWN_FIELDS={"exp_date","user_info","expires_at","expiration","expiry",
               "player_api.php","xtream","Xtream"}
+# Never export arbitrary JSON keys, which might themselves be account names.
+CONFIG_KEYS=frozenset({
+    "type","name","playlist_name","playlist_type","playlist_url",
+    "url","xtream_server","xtream_username","xtream_password","xtream_output",
+    "username","password","server","output","exp_date","expires_at",
+    "expiry","expiration","user_info","provider","kind","base_url","host",
+    "created_at","updated_at","enabled",
+})
 
 def inspect_database(path):
     if path.is_symlink() or not path.is_file():
@@ -54,7 +62,7 @@ def inspect_database(path):
                 kind=kind.upper()
             types[kind]+=1
             for key,value in config.items():
-                if not isinstance(key,str) or not KEY.fullmatch(key):
+                if not isinstance(key,str) or key not in CONFIG_KEYS:
                     continue
                 keys[kind][key]+=1
                 if key.lower() in {"exp_date","expires_at","expiration","expiry"}:
