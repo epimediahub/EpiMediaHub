@@ -25,7 +25,6 @@ def license_reseller(id):
         self.assertEqual(len(routes), 2)
         raw = str(routes)
         self.assertIn("/admin/customers/<int:customer_id>", raw)
-        self.assertIn("POST", raw) if False else None
         self.assertNotIn("NEVER_EXPORT", raw)
         self.assertNotIn("PASSWORD", raw)
 
