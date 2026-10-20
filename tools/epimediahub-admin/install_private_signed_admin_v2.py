@@ -204,7 +204,7 @@ def apply(user,add_units,source):
     cmd("systemctl","enable","--now",NAME+".timer",timeout=30)
     # Execute once with exactly the existing private service identity.
     result=subprocess.run([
-        "runuser","-u",user,"--",str(BASE/".venv/bin/python"),
+        shutil.which("runuser") or "/usr/sbin/runuser","-u",user,"--",str(BASE/".venv/bin/python"),
         str(BASE/"sync_private_updates.py")],
         env={"PATH":"/usr/bin:/bin",
              "EPIMEDIAHUB_DATA_DIR":"/var/lib/epimediahub",
