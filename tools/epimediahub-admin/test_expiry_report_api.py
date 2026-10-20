@@ -42,10 +42,14 @@ class PrivateExpiryReportsTests(unittest.TestCase):
         self.client=self.app.test_client()
         self.patch=mock.patch.object(mobile_flask,"_base",return_value=self.root)
         self.patch.start()
+        self.coverage=mock.patch.dict("os.environ",{
+            "EPIMEDIAHUB_EXPIRY_PROVIDER_COVERAGE_CERTIFIED":"YES"})
+        self.coverage.start()
         self.now=datetime.now(timezone.utc)
         self.cache=self.root/"admin-mobile"/"expiry-cache.sqlite3"
 
     def tearDown(self):
+        self.coverage.stop()
         self.patch.stop()
         self.temp.cleanup()
 
@@ -103,6 +107,19 @@ class PrivateExpiryReportsTests(unittest.TestCase):
         self.assertEqual(pdf.headers["Cache-Control"],"private, no-store")
         self.assertTrue(pdf.data.startswith(b"%PDF"))
         self.assertIn("attachment",pdf.headers["Content-Disposition"])
+
+    def test_uncertified_provider_coverage_cannot_generate_partial_report(self):
+        self.seed()
+        self.login()
+        with mock.patch.dict("os.environ",{
+            "EPIMEDIAHUB_EXPIRY_PROVIDER_COVERAGE_CERTIFIED":"NO"}):
+            report=self.client.get(
+                "/admin/mobile/reports/expiry/month?year=2026&month=11")
+            self.assertEqual(report.status_code,503)
+            self.assertNotIn("Beispielkunde",report.get_data(as_text=True))
+            pdf=self.client.get(
+                "/admin/mobile/reports/expiry/month.pdf?year=2026&month=11")
+            self.assertEqual(pdf.status_code,503)
 
     def test_week_dates_and_fail_closed_on_missing_provider_cache(self):
         self.login()
