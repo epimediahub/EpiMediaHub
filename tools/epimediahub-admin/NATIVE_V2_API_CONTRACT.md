@@ -1,14 +1,14 @@
 # EpiMediaHub Admin V2 — Native Android API contract (development)
 
-**Status: native Android screens + Python read-only JSON server adapter implemented and unit-tested, NOT installed on production. Native login and write actions NOT implemented.**
+**Status: native Jetpack Compose management, login and explicit admin app-year / VPN-trial grants implemented in development and checked with isolated backend QA. NOT deployed or acceptance-tested on production or device.**
 Do not publish a V2 release or register these paths by guessing the production schema.
 
 ## Goal
 
 Daily administration entirely in Android Jetpack Compose. No customer, reseller, license,
-playlist or VPN management page embedded as HTML or WebView. The existing web dashboard
-may continue as an independent operator tool. Authentication must become native as well;
-the current login WebView on the development branch is temporary and must go before release.
+playlist or VPN management page embedded as HTML or WebView. The existing web dashboard may continue independently. Android uses its own native
+login UI, which posts to the existing Flask administrator login and validates the
+resulting secure session via `/admin/mobile/bootstrap`. No WebView is included.
 
 ## Existing authenticated read endpoints (production)
 
@@ -57,24 +57,50 @@ WireGuard key or credential is returned. The new routes exist **only in this PR*
 in the deployed backend. A guarded deployment and authenticated live smoke test
 are required before any Android release.
 
-### Native detail + write actions (not yet implemented)
+### Native detail + privileged write actions (development)
 
-- GET customer / reseller details with playlists, expiry and available actions.
-- POST annual app-license grant and POST 7-day VPN trial **only through existing
-  provisioning/business logic**, respecting stock, eligibility and device binding.
-- Actions must be idempotent (replays cannot issue duplicate credits/trials).
-- Admin CSRF, per-action authorization, reauthentication for sensitive actions,
-  explicit confirmation with target, duration and cost, atomic transactions and audit
-  records are mandatory.
-- Unverified write routes must not be exposed as tappable controls. Never use legacy
-  browser session cookies in URLs or log them.
+The following read endpoints return bounded, private entity summaries:
+- GET `/admin/mobile/management/customers/<int:customer_id>`
+- GET `/admin/mobile/management/resellers/<int:reseller_id>`
 
-### Native authentication (not yet implemented)
+The following actions now have server-side wrappers in `native_management_actions.py`:
+- POST `/admin/mobile/management/devices/<int:id>/grant-year`
+- POST `/admin/mobile/management/devices/<int:id>/vpn-trial7`
 
-First inspect `dashboard_security.py` and the production login and MFA flow; then
-create a narrow authenticated mobile session contract preserving MFA, CSRF,
-revocation and rate limits. Do not put administrator passwords into persistent storage.
-Biometrics unlock the device view, not the backend account/session.
+Every write requires the existing admin session, a fresh `X-Dashboard-CSRF`
+header, explicit `{"confirm":true,"request_id":"<canonical UUID>"}`, and a
+positive device eligibility check. The wrapper delegates execution to the
+*actual existing* Flask handler registered as `admin_grant_year` or
+`grant_trial_auto`; it does not duplicate the original business SQL or
+override the provider requirements. The final JSON result is `applied:true`
+only if a new active entitlement is verified in SQLite. Existing active
+entitlements respond 409. Invalid/adminless requests fail closed. A client
+timeout is reported as *unconfirmed*, never as guaranteed failure.
+
+Additional release gates:
+- Verify production view-function names, database key mappings, 365-day and
+  7-day semantics against isolated production-shaped fixtures; do not infer
+  success from legacy redirects or flash messages.
+- Ensure each business handler serializes concurrent grants and strictly
+  enforces one trial/one active annual entitlement as intended.
+- Validate session/CSRF cookies with the production reverse proxy; test native
+  login failure, successful login, logout and biometric reentry on a device.
+- Introduce a durable replay journal before activating high-impact native
+  credits/payment flows, and verify legacy direct action routes are protected
+  against CSRF.
+- Do not expose IPTV config JSON, streaming URLs, VPN private keys or tokens.
+- Customer/reseller modification, device assignment and playlist CRUD still
+  need their native business adapters before complete V2 release.
+
+### Native authentication (development)
+
+`NativeAdminAuth.kt` uses a native password input with no persistent
+password storage. It POSTs form data over HTTPS directly to the existing
+administrator login endpoint and never renders the HTML response. It accepts
+the first-party session cookie only after authenticated
+`GET /admin/mobile/bootstrap`, checks on each biometric unlock, and can
+log out. No additional password database is introduced. This needs an
+on-device live acceptance test and review of brute-force protections.
 
 ## Next step (read-only, one time)
 
@@ -87,7 +113,7 @@ JSON before sharing. This is needed to connect existing login and 1-year-app/
 
 ## Mandatory release gates
 
-1. Confirm no HTML/WebView navigation for any admin operation, including login.
+1. Confirm no HTML/WebView navigation for any admin operation, including login (CI guard now present).
 2. Verify real GET/detail/write flows against isolated test fixtures.
 3. Verify authentication, MFA, CSRF, role restrictions and session expiry.
 4. Verify double taps, retries, network loss and API timeout never duplicate licenses.
