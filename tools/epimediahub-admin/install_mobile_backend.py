@@ -16,6 +16,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 
@@ -101,6 +102,24 @@ def snapshot(source:Path,dest:Path):
     dest.chmod(0o600)
 
 
+def wait_for_health(timeout_seconds: int=35):
+    """Wait for Gunicorn workers rather than probing just after systemd says active."""
+    deadline=time.monotonic()+timeout_seconds
+    failure="NO_RESPONSE"
+    while time.monotonic()<deadline:
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:8787/health",timeout=3) as response:
+                if response.status==200:
+                    return
+                failure="HTTP_"+str(response.status)
+        except urllib.error.HTTPError as error:
+            failure="HTTP_"+str(error.code)
+        except (OSError,urllib.error.URLError) as error:
+            failure=type(error).__name__
+        time.sleep(1)
+    raise RuntimeError("LOCAL_DASHBOARD_HEALTH_NOT_READY:"+failure)
+
+
 def install(datadir:Path,database:Path,original:str):
     backup_root=Path("/var/backups/epimediahub")
     if backup_root.is_symlink():
@@ -111,7 +130,8 @@ def install(datadir:Path,database:Path,original:str):
     backup=Path(tempfile.mkdtemp(prefix="admin-mobile-",dir=backup_root))
     backup.chmod(0o700)
     written=[]
-    stopped=False
+    service_touched=False
+    phase="backup"
     try:
         snapshot(database,backup/"provisioning.sqlite3")
         shutil.copy2(BASE/"wsgi.py",backup/"wsgi.py")
@@ -121,12 +141,15 @@ def install(datadir:Path,database:Path,original:str):
         staged=original if FLAG in original else original.rstrip()+"\n"+HOOK
         # Compile test the hook and the new modules without importing the live
         # wsgi. Importing it would trigger production schema migrations.
+        phase="syntax_check"
         import ast
         ast.parse(staged,filename="wsgi.py")
         for name in MODULES:
             ast.parse((HERE/name).read_text(),filename=name)
+        phase="stop_dashboard"
         command("systemctl","stop",SERVICE)
-        stopped=True
+        service_touched=True
+        phase="write_backend"
         for name in MODULES:
             dest=BASE/name
             if not dest.exists():
@@ -139,20 +162,20 @@ def install(datadir:Path,database:Path,original:str):
         temp.write_text(staged,encoding="utf-8")
         temp.chmod(0o644)
         os.replace(temp,BASE/"wsgi.py")
+        phase="start_dashboard"
         command("systemctl","start",SERVICE)
-        stopped=False
         if command("systemctl","is-active",SERVICE)!="active":
             raise RuntimeError("DASHBOARD_START_FAILED")
-        try:
-            with urllib.request.urlopen("http://127.0.0.1:8787/health",timeout=7) as response:
-                if response.status!=200:
-                    raise RuntimeError("LOCAL_DASHBOARD_HEALTH_FAILED")
-        except (OSError,urllib.error.URLError):
-            raise RuntimeError("LOCAL_DASHBOARD_HEALTH_FAILED") from None
+        phase="health_probe"
+        wait_for_health()
         print("ADMIN_MOBILE_API_INSTALLED")
         print("BACKUP="+str(backup))
         print("PUSH_NOT_ACTIVATED_BY_INSTALLER")
-    except Exception:
+    except Exception as error:
+        print("ADMIN_MOBILE_DEPLOY_FAILED_STAGE="+phase)
+        print("ADMIN_MOBILE_DEPLOY_FAILED_TYPE="+type(error).__name__)
+        if isinstance(error,RuntimeError) and str(error).startswith("LOCAL_DASHBOARD_HEALTH_NOT_READY:"):
+            print("ADMIN_MOBILE_DEPLOY_FAILED_REASON="+str(error))
         # Restore source modules only. Database is intentionally not rolled
         # backward because other clients might have written meanwhile.
         shutil.copy2(backup/"wsgi.py",BASE/"wsgi.py")
@@ -162,8 +185,11 @@ def install(datadir:Path,database:Path,original:str):
         for name in MODULES:
             prev=backup/name
             if prev.exists():shutil.copy2(prev,BASE/name)
-        if stopped or command("systemctl","is-active",SERVICE)!="active":
-            subprocess.run(["systemctl","start",SERVICE],check=False,timeout=20)
+        # Always reload the restored WSGI if the service was touched. An active
+        # Gunicorn process may otherwise keep the now-rolled-back hook in memory.
+        if service_touched:
+            restarted=subprocess.run(["systemctl","restart",SERVICE],check=False,timeout=40)
+            print("ADMIN_MOBILE_ROLLBACK_RESTART="+("OK" if restarted.returncode==0 else "FAILED"))
         print("ROLLBACK_ATTEMPTED_BACKUP="+str(backup))
         raise
 
