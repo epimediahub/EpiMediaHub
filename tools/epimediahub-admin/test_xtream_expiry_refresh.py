@@ -11,7 +11,7 @@ from unittest import mock
 from xtream_expiry_refresh import (
     ProbeError,read_accounts,parse_endpoint,resolve_public,
     probe,secure_fetch,check_https_upgrade,_https_upgrade_host,
-    https_tls_handshake_only
+    https_tls_handshake_only, _plaintext_origin, player_compatible_http_fetch, main
 )
 
 
@@ -76,6 +76,80 @@ class XtreamLiveProbeTests(unittest.TestCase):
         self.assertEqual(summary["confirmed"],1)
         self.assertEqual(summary["result_counts"]["provider_date_unknown"],1)
         self.assertEqual(len(rows),1)
+
+    def test_http_transport_is_explicit_and_never_automatically_enabled(self):
+        with mock.patch("xtream_expiry_refresh.sys.argv",
+                        ["refresh","--probe-http"]), \
+             mock.patch.dict("xtream_expiry_refresh.os.environ",
+                             {"EPIMEDIAHUB_XTREAM_HTTP_PROBE_APPROVED":"NO"}), \
+             mock.patch("xtream_expiry_refresh.probe") as run:
+            with self.assertRaisesRegex(ProbeError,
+                                        "plaintext_http_requires_explicit_operator_approval"):
+                main()
+            run.assert_not_called()
+
+    def test_http_origin_validation_is_strict(self):
+        self.assertEqual(_plaintext_origin("http://provider.example:8080/path"),
+                         ("provider.example",8080,"/path"))
+        self.assertEqual(_plaintext_origin("http://provider.example"),
+                         ("provider.example",80,""))
+        for origin in ("https://provider.example",
+                       "http://provider.example:25",
+                       "http://user:secret@provider.example",
+                       "http://provider.example?token=SECRET",
+                       "http://provider.example/a/../../b",
+                       "http://provider.example/#fragment",
+                       "file:///etc/passwd",
+                       "http://provider.example:abc"):
+            with self.subTest(origin=origin):
+                with self.assertRaises(ProbeError):
+                    _plaintext_origin(origin)
+
+    def test_http_transport_pins_public_ip_checks_username_and_no_redirects(self):
+        class FakeResponse:
+            status=200
+            def read(self,n):
+                return b'{"user_info":{"username":"USER","exp_date":"1792531200"}}'
+        conn=mock.MagicMock()
+        conn.getresponse.return_value=FakeResponse()
+        sock=mock.MagicMock()
+        with mock.patch("xtream_expiry_refresh.resolve_public",
+                        return_value=(socket.AF_INET,"8.8.8.8")), \
+             mock.patch("xtream_expiry_refresh.socket.socket",
+                        return_value=sock), \
+             mock.patch("xtream_expiry_refresh.http.client.HTTPConnection",
+                        return_value=conn):
+            value=player_compatible_http_fetch(
+                "http://provider.example:8080","USER","PASSWORD")
+        self.assertEqual(value["user_info"]["username"],"USER")
+        sock.connect.assert_called_once_with(("8.8.8.8",8080))
+        conn.request.assert_called_once()
+        args,kwargs=conn.request.call_args
+        self.assertEqual(args[0],"GET")
+        self.assertIn("username=USER",args[1])
+        self.assertIn("password=PASSWORD",args[1])
+        self.assertNotIn("PASSWORD",repr(value))
+        conn.close.assert_called_once()
+
+        conn=mock.MagicMock()
+        conn.getresponse.return_value=mock.Mock(status=302)
+        with mock.patch("xtream_expiry_refresh.resolve_public",
+                        return_value=(socket.AF_INET,"8.8.8.8")), \
+             mock.patch("xtream_expiry_refresh.socket.socket"), \
+             mock.patch("xtream_expiry_refresh.http.client.HTTPConnection",
+                        return_value=conn):
+            with self.assertRaisesRegex(ProbeError,"provider_http_error"):
+                player_compatible_http_fetch(
+                    "http://provider.example","USER","PASSWORD")
+
+    def test_http_transport_rejects_private_destination_before_socket(self):
+        with mock.patch("xtream_expiry_refresh.resolve_public",
+                        side_effect=ProbeError("non_public_provider_address")), \
+             mock.patch("xtream_expiry_refresh.socket.socket") as socket_mock:
+            with self.assertRaises(ProbeError):
+                player_compatible_http_fetch(
+                    "http://provider.example","USER","PASSWORD")
+            socket_mock.assert_not_called()
 
     def test_https_check_deduplicates_origin_and_never_passes_credentials(self):
         with sqlite3.connect(self.path) as db:
