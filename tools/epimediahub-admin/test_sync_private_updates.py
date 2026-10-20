@@ -23,12 +23,34 @@ class SyncTests(unittest.TestCase):
                      "event":"workflow_dispatch","status":"completed","conclusion":"success"},
                     {"id":2,"name":"EpiMediaHub Admin private signed release",
                      "head_branch":"main","event":"workflow_dispatch",
+                     "path":".github/workflows/"+sync.WORKFLOW,
                      "status":"completed","conclusion":"success"}]}
             return {"artifacts":[{"id":123,"name":sync.ARTIFACT,
                    "expired":False,"size_in_bytes":4000}]}
         with mock.patch.object(sync,"json_endpoint",side_effect=fake):
             self.assertEqual(sync.latest_signed_artifact("fake"),123)
         self.assertFalse(any("/runs/1/" in p for p in requests))
+
+    def test_main_release_trigger_push_artifact_is_selected_and_other_push_rejected(self):
+        requested=[]
+        def fake(token,path):
+            requested.append(path)
+            if "/runs?" in path:
+                return {"workflow_runs":[
+                    {"id":1,"name":"EpiMediaHub Admin private signed release",
+                     "head_branch":"main","event":"push","status":"completed",
+                     "path":".github/workflows/other.yml","conclusion":"success"},
+                    {"id":2,"name":"EpiMediaHub Admin private signed release",
+                     "head_branch":"main","event":"push","status":"completed",
+                     "path":".github/workflows/"+sync.WORKFLOW,
+                     "conclusion":"success"},
+                ]}
+            return {"artifacts":[{"id":3400,"name":sync.ARTIFACT,
+                        "expired":False,"size_in_bytes":4000}]}
+        with mock.patch.object(sync,"json_endpoint",side_effect=fake):
+            self.assertEqual(sync.latest_signed_artifact("fake"),3400)
+        self.assertTrue(any("/runs/2/" in p for p in requested))
+        self.assertFalse(any("/runs/1/" in p for p in requested))
 
     def test_private_archive_accepts_exact_two_names(self):
         with tempfile.TemporaryDirectory() as temp:
