@@ -76,6 +76,33 @@ class PrivateExpiryReportsTests(unittest.TestCase):
         save_verified(self.cache,[older])
         self.assertEqual(read_verified(self.cache)[0].expires_on,date(2026,11,19))
 
+    def test_coverage_preview_private_and_no_false_complete(self):
+        private=self.client.get("/admin/mobile/reports/expiry/coverage")
+        self.assertEqual(private.status_code,401)
+        self.assertNotIn(b"Beispielkunde",private.data)
+        self.login()
+        empty=self.client.get("/admin/mobile/reports/expiry/coverage")
+        self.assertEqual(empty.status_code,200)
+        obj=empty.get_json()
+        self.assertEqual(obj["active_accounts"],3)
+        self.assertEqual(obj["unverified_accounts"],3)
+        self.assertFalse(obj["snapshot_complete"])
+        self.assertFalse(obj["automatic_reports_active"])
+        self.assertEqual(empty.headers["Cache-Control"],"private, no-store")
+        self.assertNotIn("PRIVATE_PROVIDER",empty.get_data(as_text=True))
+        self.seed()
+        with sqlite3.connect(self.cache) as con:
+            con.execute("DELETE FROM verified_xtream_expiry WHERE playlist_id=11")
+        partial=self.client.get("/admin/mobile/reports/expiry/coverage")
+        self.assertEqual(partial.status_code,200)
+        self.assertEqual(partial.get_json()["confirmed_accounts"],2)
+        self.assertEqual(partial.get_json()["unverified_accounts"],1)
+        self.assertFalse(partial.get_json()["automatic_reports_active"])
+        # Protected canonical monthly PDF is still fail-closed.
+        self.assertEqual(self.client.get(
+            "/admin/mobile/reports/expiry/month.pdf?year=2026&month=11"
+        ).status_code,503)
+
     def test_unauthenticated_reports_never_expose_names(self):
         self.seed()
         for endpoint in (
