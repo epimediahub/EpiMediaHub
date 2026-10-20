@@ -868,6 +868,40 @@ class MainActivity : FragmentActivity() {
                                         fontSize = 24.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
+                            if (lane.completionStalled) {
+                                Surface(
+                                    color = Warning.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(9.dp),
+                                    border = BorderStroke(1.dp, Warning.copy(alpha = 0.5f))
+                                ) {
+                                    Row(Modifier.fillMaxWidth().padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Outlined.WarningAmber, null,
+                                            tint = Warning, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Seit mindestens 15 Minuten kein neuer Abschluss.",
+                                            color = Warning, fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                            val breakdown = listOf(
+                                "Erfolgreich" to "done",
+                                "Zur Prüfung" to "review",
+                                "Teilweise" to "partial",
+                                "Kein Treffer" to "no_match",
+                                "Keine Referenz" to "no_reference"
+                            )
+                            Text("ERGEBNISSE", color = Muted, fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold)
+                            breakdown.forEach { (label, code) ->
+                                Row(Modifier.fillMaxWidth()) {
+                                    Text(label, color = Muted, fontSize = 12.sp,
+                                        modifier = Modifier.weight(1f))
+                                    Text((lane.statusCounts[code] ?: 0).toString(),
+                                        color = White, fontWeight = FontWeight.SemiBold,
+                                        fontSize = 12.sp)
+                                }
+                            }
                             Text(
                                 "Fehlgeschlagen: " + lane.failed + " · Letzter Abschluss: " +
                                     (lane.lastCompletionEpoch?.let {
