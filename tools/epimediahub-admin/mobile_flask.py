@@ -627,16 +627,21 @@ def expiry_month_preview_pdf():
         from expiry_report_core import Expiry
         from expiry_report_pdf import monthly_pdf
         confirmed=[]
+        preliminary=[]
         unknown=[]
         for group in coverage["playlists"]:
             for entry in group["entries"]:
                 if entry["status"]=="confirmed":
                     confirmed.append(Expiry(entry["customer"],group["name"],
                                             date.fromisoformat(entry["expires_on"])))
+                elif entry["status"]=="http_observed":
+                    preliminary.append(Expiry(entry["customer"],group["name"],
+                                              date.fromisoformat(entry["expires_on"])))
                 else:
                     unknown.append((entry["customer"],group["name"]))
         output=BytesIO()
-        monthly_pdf(confirmed,year,month,output,unknown=unknown)
+        monthly_pdf(confirmed,year,month,output,unknown=unknown,
+                    provisional=preliminary)
         if output.tell()>8*1024*1024:
             raise ExpiryUnavailable("preview PDF too large")
         output.seek(0)
