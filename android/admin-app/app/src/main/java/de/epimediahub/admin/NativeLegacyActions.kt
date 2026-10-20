@@ -26,7 +26,11 @@ internal object NativeLegacyActions {
         "sync-device" to emptySet(),
         "move-device" to setOf("customer_id"),
         "assign-reseller" to setOf("reseller_id"),
-        "delete-playlist" to emptySet()
+        "delete-playlist" to emptySet(),
+        "add-playlist" to setOf("playlist_name","playlist_type","playlist_url",
+            "xtream_server","xtream_username","xtream_password","xtream_output"),
+        "edit-playlist" to setOf("playlist_name","playlist_type","playlist_url",
+            "xtream_server","xtream_username","xtream_password","xtream_output")
     )
     data class Outcome(val applied: Boolean, val message: String, val newId: String = "")
 
@@ -69,7 +73,7 @@ internal object NativeLegacyActions {
         val idValid = if (action.startsWith("create-")) entityId == "0"
             else Regex("[1-9][0-9]{0,17}").matches(entityId)
         if (!idValid || fields.keys != expected[action]
-                || fields.values.any { it.length > 256 || it.contains('\u0000') }) {
+                || fields.values.any { it.length > 1600 || it.contains('\u0000') }) {
             main.post { done(Outcome(false, "Ungültige Eingaben für diese Aktion.")) }
             return
         }
