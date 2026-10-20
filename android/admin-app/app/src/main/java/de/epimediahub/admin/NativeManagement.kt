@@ -687,6 +687,19 @@ internal fun NativeManagementScreen(
                                                 " · " + entry.description else "",
                                         color = Secondary, fontSize = 12.sp
                                     )
+                                    val playlistEntry = heading == "Playlists" &&
+                                        section == 0 &&
+                                        Regex("[1-9][0-9]{0,17}").matches(entry.id)
+                                    if (playlistEntry) {
+                                        TextButton(
+                                            enabled = !actionBusy && !grantBusy,
+                                            onClick = {
+                                                pendingLegacyAction = Triple(
+                                                    "delete-playlist",entry.id,entry.name)
+                                                actionValue = ""
+                                            }
+                                        ) { Text("Playlist löschen", fontSize = 11.sp) }
+                                    }
                                     val eligible = heading == "Geräte" && section == 0 &&
                                         Regex("[1-9][0-9]{0,17}").matches(entry.id)
                                     if (eligible) {
@@ -852,6 +865,7 @@ internal fun NativeManagementScreen(
             "rename-device" -> "Gerät umbenennen"
             "sync-device" -> "Gerät synchronisieren"
             "move-device" -> "Gerät einem Kunden zuordnen"
+            "delete-playlist" -> "Playlist endgültig löschen"
             else -> "Reseller zuweisen"
         }
         AlertDialog(
@@ -860,7 +874,15 @@ internal fun NativeManagementScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Text("Eintrag: " + label)
-                    if (action != "sync-device") {
+                    if (action == "delete-playlist") {
+                        Text("Die Playlist wird gelöscht und die zugehörigen "
+                            + "Kundengeräte werden über die vorhandene "
+                            + "Serverfunktion aktualisiert. Die Aktion "
+                            + "kann nicht rückgängig gemacht werden.",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp)
+                    }
+                    if (action !in setOf("sync-device","delete-playlist")) {
                         OutlinedTextField(
                             value = actionValue,
                             onValueChange = { actionValue = it.take(120) },
@@ -885,8 +907,8 @@ internal fun NativeManagementScreen(
             confirmButton = {
                 Button(
                     enabled = !actionBusy &&
-                        (action == "sync-device" ||
-                            action == "assign-reseller" || actionValue.isNotBlank()),
+                        (action in setOf("sync-device","assign-reseller",
+                            "delete-playlist") || actionValue.isNotBlank()),
                     onClick = {
                         actionBusy = true
                         val fields = when (action) {
