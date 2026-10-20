@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -373,6 +374,18 @@ internal fun NativeManagementScreen(
     }
     var grantBusy by remember { mutableStateOf(false) }
     var grantMessage by remember { mutableStateOf("") }
+    var operationMessage by remember { mutableStateOf("") }
+    var pendingCreate by remember { mutableStateOf(false) }
+    var createBusy by remember { mutableStateOf(false) }
+    var createName by remember { mutableStateOf("") }
+    var resellerUsername by remember { mutableStateOf("") }
+    var resellerPassword by remember { mutableStateOf("") }
+    var resellerBranding by remember { mutableStateOf("") }
+    var resellerCustomerLimit by remember { mutableStateOf("0") }
+    var resellerDeviceLimit by remember { mutableStateOf("0") }
+    var pendingLegacyAction by remember { mutableStateOf<Triple<String,String,String>?>(null) }
+    var actionValue by remember { mutableStateOf("") }
+    var actionBusy by remember { mutableStateOf(false) }
     var loadedDetail by remember { mutableStateOf<NativeManagementApi.Detail?>(null) }
     var detailBusy by remember { mutableStateOf(false) }
     var detailMessage by remember { mutableStateOf("") }
@@ -419,6 +432,9 @@ internal fun NativeManagementScreen(
         if (renameResult.isNotBlank()) {
             Text(renameResult, color = AccentBlue, fontSize = 12.sp,
                 modifier = Modifier.padding(vertical = 8.dp))
+        }
+        if (operationMessage.isNotBlank()) {
+            Text(operationMessage, color = AccentBlue, fontSize = 12.sp)
         }
         if (data?.loaded != true) {
             Surface(
@@ -476,6 +492,20 @@ internal fun NativeManagementScreen(
             FilterChip(selected = section == 1, onClick = { section = 1; query = "" },
                 label = { Text("Reseller") })
         }
+        Button(
+            enabled = !loading && !createBusy && !actionBusy,
+            onClick = {
+                createName = ""
+                resellerUsername = ""
+                resellerPassword = ""
+                resellerBranding = ""
+                resellerCustomerLimit = "0"
+                resellerDeviceLimit = "0"
+                pendingCreate = true
+                operationMessage = ""
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (section == 0) "+ Kunde anlegen" else "+ Reseller anlegen") }
         OutlinedTextField(
             value = query,
             onValueChange = { query = it.take(80) },
@@ -527,6 +557,7 @@ internal fun NativeManagementScreen(
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(item.subtitle, color = Secondary, fontSize = 12.sp,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("ID " + item.id, color = Secondary, fontSize = 10.sp)
                         }
                         Icon(Icons.Outlined.ChevronRight, null, tint = Secondary)
                     }
@@ -604,7 +635,17 @@ internal fun NativeManagementScreen(
             if (detailMessage.isNotBlank()) Text(detailMessage, color = Secondary)
             if (renameResult.isNotBlank()) Text(renameResult, color = AccentBlue)
             if (grantMessage.isNotBlank()) Text(grantMessage, color = AccentBlue)
-            if (grantBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (operationMessage.isNotBlank()) Text(operationMessage, color = AccentBlue)
+            if (grantBusy || actionBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (section == 0) {
+                OutlinedButton(
+                    enabled = !actionBusy && !renameBusy && !grantBusy,
+                    onClick = {
+                        pendingLegacyAction = Triple("assign-reseller",item.id,item.name)
+                        actionValue = ""
+                    }
+                ) { Text("Reseller zuweisen") }
+            }
             loadedDetail?.let { detail ->
                 Surface(
                     color = SurfaceNavy,
@@ -652,6 +693,29 @@ internal fun NativeManagementScreen(
                                         TextButton(onClick = { inspectingDevice = entry }) {
                                             Text("Gerätediagnose")
                                         }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                            TextButton(onClick = {
+                                                pendingLegacyAction = Triple(
+                                                    "rename-device",entry.id,entry.name)
+                                                actionValue = entry.name
+                                            }, enabled = !actionBusy) {
+                                                Text("Umbenennen", fontSize = 11.sp)
+                                            }
+                                            TextButton(onClick = {
+                                                pendingLegacyAction = Triple(
+                                                    "sync-device",entry.id,entry.name)
+                                                actionValue = ""
+                                            }, enabled = !actionBusy) {
+                                                Text("Synchronisieren", fontSize = 11.sp)
+                                            }
+                                        }
+                                        TextButton(onClick = {
+                                            pendingLegacyAction = Triple(
+                                                "move-device",entry.id,entry.name)
+                                            actionValue = ""
+                                        }, enabled = !actionBusy) {
+                                            Text("Anderem Kunden zuordnen", fontSize = 11.sp)
+                                        }
                                         if (detail.enabled && entry.enabled) {
                                             Row(horizontalArrangement =
                                                 Arrangement.spacedBy(6.dp)) {
@@ -691,6 +755,159 @@ internal fun NativeManagementScreen(
                 color = Secondary, fontSize = 11.sp)
             Spacer(Modifier.height(18.dp))
         }
+    }
+
+    if (pendingCreate) {
+        val creatingReseller = section == 1
+        AlertDialog(
+            onDismissRequest = { if (!createBusy) pendingCreate = false },
+            title = { Text(if (creatingReseller) "Reseller anlegen" else "Kunden anlegen") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = createName, onValueChange = { createName = it.take(120) },
+                        label = { Text("Name") }, singleLine = true
+                    )
+                    if (creatingReseller) {
+                        OutlinedTextField(
+                            value = resellerUsername,
+                            onValueChange = { resellerUsername = it.take(60) },
+                            label = { Text("Benutzername") }, singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = resellerPassword,
+                            onValueChange = { resellerPassword = it.take(256) },
+                            label = { Text("Startpasswort") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = resellerBranding,
+                            onValueChange = { resellerBranding = it.take(120) },
+                            label = { Text("Branding (optional)") }, singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = resellerCustomerLimit,
+                            onValueChange = { resellerCustomerLimit = it.filter(Char::isDigit).take(6) },
+                            label = { Text("Kundenlimit") }, singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = resellerDeviceLimit,
+                            onValueChange = { resellerDeviceLimit = it.filter(Char::isDigit).take(6) },
+                            label = { Text("Gerätelimit") }, singleLine = true
+                        )
+                    }
+                    Text("Die Neuanlage erfolgt über die vorhandene "
+                        + "Server-Verwaltung und wird erst nach bestätigtem "
+                        + "Datenbankeintrag als erfolgreich angezeigt.",
+                        fontSize = 12.sp)
+                    if (createBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingCreate = false }, enabled = !createBusy) {
+                    Text("Abbrechen")
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !createBusy && createName.trim().isNotBlank() &&
+                        (!creatingReseller || (
+                            resellerUsername.length >= 3 && resellerPassword.length >= 8 &&
+                            resellerCustomerLimit.isNotBlank() &&
+                            resellerDeviceLimit.isNotBlank())),
+                    onClick = {
+                        createBusy = true
+                        val fields = if (creatingReseller) mapOf(
+                            "name" to createName,
+                            "username" to resellerUsername,
+                            "password" to resellerPassword,
+                            "branding_name" to resellerBranding,
+                            "customer_limit" to resellerCustomerLimit,
+                            "device_limit" to resellerDeviceLimit
+                        ) else mapOf("name" to createName)
+                        val action = if (creatingReseller) "create-reseller"
+                            else "create-customer"
+                        NativeLegacyActions.execute(action,"0",fields) { outcome ->
+                            createBusy = false
+                            operationMessage = outcome.message
+                            if (outcome.applied) {
+                                pendingCreate = false
+                                resellerPassword = ""
+                                query = ""
+                                refresh()
+                            }
+                        }
+                    }
+                ) { Text("Jetzt anlegen") }
+            }
+        )
+    }
+
+    pendingLegacyAction?.let { (action,id,label) ->
+        val description = when (action) {
+            "rename-device" -> "Gerät umbenennen"
+            "sync-device" -> "Gerät synchronisieren"
+            "move-device" -> "Gerät einem Kunden zuordnen"
+            else -> "Reseller zuweisen"
+        }
+        AlertDialog(
+            onDismissRequest = { if (!actionBusy) pendingLegacyAction = null },
+            title = { Text(description) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text("Eintrag: " + label)
+                    if (action != "sync-device") {
+                        OutlinedTextField(
+                            value = actionValue,
+                            onValueChange = { actionValue = it.take(120) },
+                            label = { Text(when (action) {
+                                "rename-device" -> "Neuer Gerätename"
+                                "move-device" -> "Ziel-Kunden-ID"
+                                else -> "Reseller-ID (leer = ohne Reseller)"
+                            }) },
+                            singleLine = true
+                        )
+                    }
+                    Text("Nach Bestätigung wird die originale Serverfunktion "
+                        + "ausgeführt und der tatsächliche neue Status geprüft.",
+                        fontSize = 12.sp)
+                    if (actionBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingLegacyAction = null },
+                    enabled = !actionBusy) { Text("Abbrechen") }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !actionBusy &&
+                        (action == "sync-device" ||
+                            action == "assign-reseller" || actionValue.isNotBlank()),
+                    onClick = {
+                        actionBusy = true
+                        val fields = when (action) {
+                            "rename-device" -> mapOf("name" to actionValue)
+                            "move-device" -> mapOf("customer_id" to actionValue)
+                            "assign-reseller" -> mapOf("reseller_id" to actionValue)
+                            else -> emptyMap()
+                        }
+                        NativeLegacyActions.execute(action,id,fields) { outcome ->
+                            actionBusy = false
+                            operationMessage = outcome.message
+                            pendingLegacyAction = null
+                            if (outcome.applied) {
+                                selected = null
+                                refresh()
+                            }
+                        }
+                    }
+                ) { Text("Aktion bestätigen") }
+            }
+        )
     }
 
     pendingRename?.let { entry ->
