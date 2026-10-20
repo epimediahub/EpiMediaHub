@@ -23,6 +23,8 @@
 The administrator confirms that **the IPTV provider supplies expiry
 automatically**, so no parallel manual expiration entry is required.
 
+- The user reports that **most direct and reseller-owned customer accounts are Xtream**. Prioritize verified Xtream `user_info.exp_date` for the first provider adapter; do not exclude the minority of M3U accounts or synthesize dates for them.
+- The administrator's aggregate view may include both direct and reseller-owned customer playlists. Any reseller-specific report must be filtered by `customers.reseller_id` bound to the authenticated server session; never permit the mobile client to request a different reseller's customer list. The read-only `expiry_report_rows.linked_expiries(..., reseller_id=...)` helper includes this filter with synthetic cross-reseller isolation tests.
 - The server must refresh an authoritative expiration **for each individual
   customer-playlist provider account** and keep the verified timestamp and
   update time. Xtream account responses commonly expose `user_info.exp_date`
