@@ -132,6 +132,54 @@ request key names, never function source or credentials. Review the resulting
 JSON before sharing. This is needed to connect existing login and 1-year-app/
 7-day-VPN business actions safely without guessing required security checks.
 
+## Additional audited native actions — 2026-10-20 CRUD-flow JSON
+
+The one-time production source-flow audit identified 26 handler functions.
+Its literals/SQL were redacted and it was **not** permission to invent missing
+playlist form fields, deletion confirmation constants, or EpiScene decisions.
+
+The development branch now has a narrow form-data bridge:
+`POST /admin/mobile/management/actions/<action>/<int:entity_id>`
+
+Only these form actions are supported; `entity_id=0` is used only for creation.
+
+| Action | Original production handler |
+| --- | --- |
+| `create-customer` | `v070_create_customer` |
+| `create-reseller` | `v080_create_reseller` |
+| `rename-device` | `v074_rename_device` |
+| `sync-device` | `v070_sync_device` |
+| `move-device` | `v070_move_device` |
+| `assign-reseller` | `v080_assign_customer_reseller` |
+| `delete-playlist` | `v076_delete_customer_playlist` |
+
+Input is bounded `application/x-www-form-urlencoded` with only audited
+field names plus `confirm=true` and canonical `request_id` UUID. A valid
+administrator session and `X-Dashboard-CSRF` are mandatory. The existing
+registered Flask business function receives the form and remains responsible
+for quotas, validation, migrations, history, and config bumping; its redirect
+is never interpreted as proof of success. Native responses are JSON only and
+verified through a read-only postcondition. No credentials are echoed.
+
+A private local SQLite replay journal reserves each request UUID *before*
+invoking the existing business handler. A crash leaves it pending and a repeated
+request is denied rather than potentially duplicating a creation. A per-action
+OS lock serializes concurrent requests across worker processes. We do **not**
+claim cross-channel exactly-once behavior with legacy browser form submissions.
+No native delete is dispatched without an explicit confirmation dialog.
+
+The Kotlin client uses native Compose dialogs for customer/reseller creation,
+device rename/sync/move, customer-to-reseller assignment, and guarded playlist
+removal, never embedding a browser. It does not automatically retry a write.
+
+**Still blocked for a full V2 acceptance**: playlist create/edit cannot be
+implemented safely from this redacted extract because the form contract is
+hidden inside `_playlist_config()`. Customer/reseller/device deletion needs the
+exact confirmation semantics and side-effect fixture verification. EpiScene
+manual review needs the validated decision values and legacy CSRF form
+requirements. Neither these tasks nor full real-device onboarding and
+authenticated production integration have been tested. No V2 release/merge.
+
 ## Mandatory release gates
 
 1. Confirm no HTML/WebView navigation for any admin operation, including login (CI guard now present).
