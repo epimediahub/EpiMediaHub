@@ -384,6 +384,11 @@ internal fun NativeManagementScreen(
     var resellerCustomerLimit by remember { mutableStateOf("0") }
     var resellerDeviceLimit by remember { mutableStateOf("0") }
     var pendingLegacyAction by remember { mutableStateOf<Triple<String,String,String>?>(null) }
+    var pendingDelete by remember { mutableStateOf<Triple<String,String,String>?>(null) }
+    var requiredDeleteText by remember { mutableStateOf<String?>(null) }
+    var typedDeleteText by remember { mutableStateOf("") }
+    var deletionError by remember { mutableStateOf("") }
+    var deletionBusy by remember { mutableStateOf(false) }
     var editingPlaylist by remember { mutableStateOf<NativeManagementApi.DetailItem?>(null) }
     var createPlaylist by remember { mutableStateOf(false) }
     var actionValue by remember { mutableStateOf("") }
@@ -391,6 +396,22 @@ internal fun NativeManagementScreen(
     var loadedDetail by remember { mutableStateOf<NativeManagementApi.Detail?>(null) }
     var detailBusy by remember { mutableStateOf(false) }
     var detailMessage by remember { mutableStateOf("") }
+    LaunchedEffect(pendingDelete?.first, pendingDelete?.second) {
+        val request = pendingDelete
+        requiredDeleteText = null
+        typedDeleteText = ""
+        deletionError = ""
+        if (request != null) {
+            NativeLegacyActions.confirmDeletion(request.first, request.second) {
+                phrase, error ->
+                if (pendingDelete == request) {
+                    requiredDeleteText = phrase
+                    deletionError = error
+                }
+            }
+        }
+    }
+
     LaunchedEffect(selected?.id, section) {
         val item = selected
         loadedDetail = null
@@ -648,6 +669,15 @@ internal fun NativeManagementScreen(
                     }
                 ) { Text("Reseller zuweisen") }
             }
+            OutlinedButton(
+                enabled = !actionBusy && !grantBusy && !renameBusy,
+                onClick = {
+                    pendingDelete = Triple(
+                        if (section == 0) "delete-customer" else "delete-reseller",
+                        item.id,item.name
+                    )
+                }
+            ) { Text(if (section == 0) "Kunden löschen" else "Reseller löschen") }
             if (section == 0 && loadedDetail != null) {
                 Button(
                     onClick = { createPlaylist = true },
@@ -742,6 +772,12 @@ internal fun NativeManagementScreen(
                                         }, enabled = !actionBusy) {
                                             Text("Anderem Kunden zuordnen", fontSize = 11.sp)
                                         }
+                                        TextButton(onClick = {
+                                            pendingDelete = Triple(
+                                                "delete-device",entry.id,entry.name)
+                                        }, enabled = !actionBusy && !grantBusy) {
+                                            Text("Gerät löschen", fontSize = 11.sp)
+                                        }
                                         if (detail.enabled && entry.enabled) {
                                             Row(horizontalArrangement =
                                                 Arrangement.spacedBy(6.dp)) {
@@ -781,6 +817,70 @@ internal fun NativeManagementScreen(
                 color = Secondary, fontSize = 11.sp)
             Spacer(Modifier.height(18.dp))
         }
+    }
+
+    pendingDelete?.let { (action,id,name) ->
+        AlertDialog(
+            onDismissRequest = { if (!deletionBusy) pendingDelete = null },
+            title = { Text("Endgültig löschen") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(name + " (ID " + id + ")")
+                    Text("Diese Aktion kann nicht rückgängig gemacht werden. "
+                        + "Betroffene Kunden, Zuordnungen und Geräte können dadurch "
+                        + "verändert werden.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp)
+                    requiredDeleteText?.let { phrase ->
+                        Text("Zur Bestätigung exakt eingeben:", fontSize = 12.sp)
+                        Text(phrase, fontWeight = FontWeight.Bold)
+                        OutlinedTextField(
+                            value = typedDeleteText,
+                            onValueChange = { typedDeleteText = it.take(100) },
+                            label = { Text("Bestätigung") },
+                            enabled = !deletionBusy,
+                            singleLine = true
+                        )
+                    }
+                    if (requiredDeleteText == null && deletionError.isBlank()) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    }
+                    if (deletionError.isNotBlank()) {
+                        Text(deletionError, color = MaterialTheme.colorScheme.error)
+                    }
+                    if (deletionBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null },enabled = !deletionBusy) {
+                    Text("Abbrechen")
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !deletionBusy && requiredDeleteText != null &&
+                        typedDeleteText == requiredDeleteText,
+                    onClick = {
+                        deletionBusy = true
+                        deletionError = ""
+                        val confirmed = typedDeleteText
+                        NativeLegacyActions.execute(
+                            action,id,emptyMap(),typedConfirmation=confirmed
+                        ) { outcome ->
+                            deletionBusy = false
+                            if (outcome.applied) {
+                                pendingDelete = null
+                                selected = null
+                                operationMessage = "Eintrag wurde endgültig gelöscht."
+                                refresh()
+                            } else {
+                                deletionError = outcome.message
+                            }
+                        }
+                    }
+                ) { Text("Endgültig löschen") }
+            }
+        )
     }
 
     if (createPlaylist || editingPlaylist != null) {
