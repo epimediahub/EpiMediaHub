@@ -40,7 +40,8 @@ def _fit(pdf,text,x,y,max_width,font,size):
     pdf.drawString(x,y,text)
 
 
-def monthly_pdf(items:list[Expiry],year:int,month:int,output:Path,unknown=None):
+def monthly_pdf(items:list[Expiry],year:int,month:int,output:Path,unknown=None,
+                provisional=None):
     """Group by playlist, then expiry date; add large empty contact/date/notes fields.
 
     Each playlist starts on a new page. Never infer the date from a license or
@@ -73,6 +74,21 @@ def monthly_pdf(items:list[Expiry],year:int,month:int,output:Path,unknown=None):
             unknown_groups[playlist].append(customer)
     for rows in unknown_groups.values():
         rows.sort(key=str.casefold)
+    provisional_groups=defaultdict(list)
+    if provisional is not None:
+        if type(provisional) is not list or len(provisional)>10000:
+            raise ValueError("INVALID_PROVISIONAL_RECORD")
+        for item in provisional:
+            if not isinstance(item,Expiry) or type(item.day) is not date:
+                raise ValueError("INVALID_PROVISIONAL_RECORD")
+            if any(not isinstance(x,str) or not x.strip() or len(x)>200
+                    or any(ord(c)<32 for c in x)
+                    for x in (item.customer,item.playlist)):
+                raise ValueError("INVALID_PROVISIONAL_RECORD")
+            if (item.day.year,item.day.month)==(year,month):
+                provisional_groups[item.playlist].append(item)
+    for rows in provisional_groups.values():
+        rows.sort(key=lambda x:(x.day,x.customer.casefold()))
     plain,bold=_font()
     pdf=canvas.Canvas(output if hasattr(output, 'write') else str(output),pagesize=(PAGE_W,PAGE_H),pageCompression=1)
     pdf.setTitle("EpiMediaHub Monatsuebersicht "+str(year)+"-"+str(month).zfill(2))
@@ -95,8 +111,8 @@ def monthly_pdf(items:list[Expiry],year:int,month:int,output:Path,unknown=None):
         pdf.setFillColorRGB(.3,.38,.48)
         pdf.setFont(plain,8)
         pdf.drawString(L,PAGE_H-104,
-            ("UNVOLLSTÄNDIGE ARBEITSLISTE – unbekannte Abläufe separat erfasst"
-             if unknown is not None else
+            ("UNVOLLSTÄNDIG – HTTP-DATEN NICHT VERIFIZIERT / unbekannte Abläufe"
+             if unknown is not None or provisional is not None else
              "Nach Ablaufdatum sortiert  |  Freiraum für handschriftliche Einträge"))
         top=PAGE_H-122
         pdf.setFillColorRGB(.9,.93,.96)
@@ -111,7 +127,7 @@ def monthly_pdf(items:list[Expiry],year:int,month:int,output:Path,unknown=None):
         pdf.drawString(L,31,"Vertraulich  |  Nur für berechtigte Administratoren")
         pdf.drawRightString(R,31,f"Seite {pages}")
         return top-29
-    if not groups and not unknown_groups:
+    if not groups and not unknown_groups and not provisional_groups:
         top=heading("Keine bestätigten Abläufe",0)
         pdf.setFont(plain,11)
         pdf.drawString(L+10,top-48,"Für diesen Monat liegen keine bestätigten Abläufe vor.")
@@ -132,6 +148,33 @@ def monthly_pdf(items:list[Expiry],year:int,month:int,output:Path,unknown=None):
             pdf.setFillColorRGB(.09,.16,.25)
             pdf.setFont(plain,9.5)
             _fit(pdf,entry.customer,L+8,y-26,COL[1]-L-16,plain,9.5)
+            pdf.setFont(bold,9)
+            pdf.drawString(COL[1]+8,y-26,entry.day.strftime("%d.%m.%Y"))
+            pdf.setStrokeColorRGB(.5,.58,.67)
+            pdf.rect(COL[2]+10,next_y+16,12,12,stroke=1,fill=0)
+            pdf.setFont(plain,8)
+            pdf.drawString(COL[2]+27,next_y+18,"Ja")
+            pdf.line(COL[3]+10,next_y+13,COL[4]-12,next_y+13)
+            pdf.line(COL[4]+10,next_y+13,R-12,next_y+13)
+            y=next_y
+        pdf.showPage()
+    for playlist in sorted(provisional_groups,key=str.casefold):
+        # HTTP values are preliminary and NEVER appear among verified rows.
+        rows=provisional_groups[playlist]
+        y=0
+        for i,entry in enumerate(rows):
+            if i==0 or y-47<56:
+                if i:pdf.showPage()
+                y=heading(playlist+" – HTTP (unbestätigt)",len(rows),i>0)
+            next_y=y-47
+            pdf.setFillColorRGB(*( (.965,.975,.99) if i%2==0 else (1,1,1) ))
+            pdf.rect(L,next_y,R-L,47,fill=1,stroke=0)
+            pdf.setStrokeColorRGB(.82,.86,.9)
+            pdf.line(L,next_y,R,next_y)
+            for x in COL[1:-1]:pdf.line(x,next_y,x,y)
+            pdf.setFillColorRGB(.09,.16,.25)
+            pdf.setFont(plain,9)
+            _fit(pdf,entry.customer,L+8,y-26,COL[1]-L-16,plain,9)
             pdf.setFont(bold,9)
             pdf.drawString(COL[1]+8,y-26,entry.day.strftime("%d.%m.%Y"))
             pdf.setStrokeColorRGB(.5,.58,.67)
@@ -172,5 +215,6 @@ def monthly_pdf(items:list[Expiry],year:int,month:int,output:Path,unknown=None):
     pdf.save()
     return {"month":f"{year}-{month:02d}","entries":sum(map(len,groups.values())),
             "unknown_entries":sum(map(len,unknown_groups.values())),
+            "provisional_entries":sum(map(len,provisional_groups.values())),
             "playlists":len(groups),"pages":pages,
-            "complete":unknown is None or not bool(unknown_groups)}
+            "complete":(not bool(unknown_groups) and not bool(provisional_groups))}
