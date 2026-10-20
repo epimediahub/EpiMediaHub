@@ -163,7 +163,7 @@ internal object NativeManagementApi {
                     404, 501 -> "Die native Verwaltungs-API ist serverseitig noch nicht aktiviert."
                     else -> "Admin-Verwaltung derzeit nicht erreichbar (HTTP ${error.code})."
                 }
-                Result(null, emptyList(), emptyList(), message, error.code !in (401,403), false)
+                Result(null, emptyList(), emptyList(), message, error.code != 401 && error.code != 403, false)
             } catch (_: Exception) {
                 Result(null, emptyList(), emptyList(),
                     "Verwaltungsdaten konnten nicht sicher geladen werden.", true, false)
