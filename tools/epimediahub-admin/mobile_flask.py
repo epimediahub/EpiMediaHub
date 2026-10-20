@@ -416,6 +416,8 @@ def native_management_legacy_action(action, entity_id):
 
 
 def _expiry_entries():
+    if os.environ.get("EPIMEDIAHUB_EXPIRY_PROVIDER_COVERAGE_CERTIFIED") != "YES":
+        raise ExpiryUnavailable("provider population verification pending")
     # Fails closed if no provider-verified snapshot has been installed;
     # an empty or absent feed is never silently reported as "no expirations".
     observations=read_verified(
