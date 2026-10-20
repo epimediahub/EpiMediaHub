@@ -22,6 +22,7 @@ from native_management_data import (SchemaUnavailable, overview as native_overvi
     customers as native_customers, resellers as native_resellers,
     customer_detail as native_customer_detail,
     reseller_detail as native_reseller_detail)
+from native_management_actions import invoke_grant, valid_confirmation
 
 bp=Blueprint("epimediahub_admin_mobile",__name__)
 ALLOWED_KEYS=frozenset({"installation_id","fcm_token","platform"})
@@ -241,6 +242,25 @@ def native_management_reseller_detail(reseller_id):
     except (SchemaUnavailable, RuntimeError, sqlite3.Error, OSError, ValueError):
         return _response({"error":"management_unavailable"},503)
     return _response(data) if data is not None else _response({"error":"not_found"},404)
+
+
+@bp.post("/admin/mobile/management/devices/<int:device_row_id>/<action>")
+def native_management_grant(device_row_id,action):
+    _require_admin()
+    _require_csrf()
+    if action not in ("grant-year","vpn-trial7"):
+        return _response({"error":"unsupported_action"},404)
+    if (request.content_length is None or request.content_length>300
+            or not request.is_json):
+        return _response({"error":"invalid_request"},400)
+    data=request.get_json(silent=True)
+    if not valid_confirmation(data):
+        return _response({"error":"confirmation_required"},400)
+    try:
+        value,status=invoke_grant(_base()/"provisioning.db",device_row_id,action)
+        return _response(value,status)
+    except (SchemaUnavailable,RuntimeError,sqlite3.Error,OSError,ValueError):
+        return _response({"error":"grant_unavailable"},503)
 
 
 @bp.get("/admin/mobile/update/status")
