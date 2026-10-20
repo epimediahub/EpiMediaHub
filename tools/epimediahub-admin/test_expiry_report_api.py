@@ -30,11 +30,11 @@ class PrivateExpiryReportsTests(unittest.TestCase):
                 INSERT INTO customers VALUES (1,'Beispielkunde A',1,NULL);
                 INSERT INTO customers VALUES (2,'Beispielkunde B',1,77);
                 INSERT INTO customer_playlists VALUES (
-                    9,1,'THE BEST',1,'PRIVATE_PROVIDER_SECRETS');
+                    9,1,'THE BEST',1,'{"type":"XTREAM","xtream_password":"PRIVATE_PROVIDER_SECRETS"}');
                 INSERT INTO customer_playlists VALUES (
-                    10,1,'4K IPTV',1,'PRIVATE_PASSWORD');
+                    10,1,'4K IPTV',1,'{"type":"XTREAM","xtream_password":"PRIVATE_PASSWORD"}');
                 INSERT INTO customer_playlists VALUES (
-                    11,2,'THE BEST',1,'OTHER_CUSTOMER_PRIVATE');
+                    11,2,'THE BEST',1,'{"type":"XTREAM","xtream_password":"OTHER_CUSTOMER_PRIVATE"}');
             """)
         self.app=Flask("test-only-expiry-report")
         self.app.secret_key="synthetic-no-production"
@@ -120,6 +120,40 @@ class PrivateExpiryReportsTests(unittest.TestCase):
             pdf=self.client.get(
                 "/admin/mobile/reports/expiry/month.pdf?year=2026&month=11")
             self.assertEqual(pdf.status_code,503)
+
+    def test_one_missing_xtream_account_blocks_every_report(self):
+        self.seed()
+        with sqlite3.connect(self.cache) as db:
+            db.execute("DELETE FROM verified_xtream_expiry WHERE playlist_id=11")
+        self.login()
+        for endpoint in (
+            "/admin/mobile/reports/expiry/month?year=2026&month=11",
+            "/admin/mobile/reports/expiry/month.pdf?year=2026&month=11",
+            "/admin/mobile/reports/expiry/week?from=2026-11-02",
+        ):
+            with self.subTest(endpoint=endpoint):
+                self.assertEqual(self.client.get(endpoint).status_code,503)
+
+    def test_one_stale_xtream_account_blocks_reports(self):
+        self.seed()
+        with sqlite3.connect(self.cache) as db:
+            db.execute("UPDATE verified_xtream_expiry SET observed_epoch=? "
+                       "WHERE playlist_id=11",
+                       (int((self.now-timedelta(days=4)).timestamp()),))
+        self.login()
+        self.assertEqual(self.client.get(
+            "/admin/mobile/reports/expiry/month?year=2026&month=11"
+        ).status_code,503)
+
+    def test_unknown_provider_type_fails_closed(self):
+        self.seed()
+        with sqlite3.connect(self.db) as db:
+            db.execute("UPDATE customer_playlists SET config_json=? WHERE id=11",
+                       ('{"type":"UNRECOGNIZED"}',))
+        self.login()
+        self.assertEqual(self.client.get(
+            "/admin/mobile/reports/expiry/month?year=2026&month=11"
+        ).status_code,503)
 
     def test_week_dates_and_fail_closed_on_missing_provider_cache(self):
         self.login()
