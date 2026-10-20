@@ -28,6 +28,7 @@ from native_management_data import (SchemaUnavailable, overview as native_overvi
 from native_management_actions import invoke_grant, valid_confirmation
 from native_legacy_bridge import invoke_legacy, LegacyUnavailable
 from native_delete_confirmation import expected_confirmation, ConfirmationUnavailable
+from native_marker_review import list_pending as native_pending_markers, csrf_token as marker_csrf, invoke_review as original_marker_review, MarkerReviewUnavailable
 from native_management_edits import rename as native_rename, EditUnavailable
 from expiry_cache import read_verified, Unavailable as ExpiryUnavailable
 from expiry_report_rows import linked_expiries
@@ -198,6 +199,53 @@ def episcene_status():
     except (RuntimeError,OSError,ValueError):
         return _response({"error":"analysis_status_unavailable"},503)
     return _response(result)
+
+
+def _marker_review_enabled():
+    return os.environ.get("EPIMEDIAHUB_NATIVE_EPISCENE_REVIEW_ENABLED")=="YES"
+
+
+@bp.get("/admin/mobile/episcene/reviews")
+def native_episcene_pending_reviews():
+    _require_admin()
+    if not _marker_review_enabled():
+        return _response({"error":"review_not_verified_for_production"},503)
+    raw=request.args.get("before_id")
+    if (raw is not None and (not raw or len(raw)>18 or
+            not raw.isascii() or not raw.isdecimal() or int(raw)<1)):
+        return _response({"error":"invalid_cursor"},400)
+    try:
+        value=native_pending_markers(_base()/"provisioning.db",
+                before_id=int(raw) if raw is not None else None)
+        value["review_csrf"]=marker_csrf()
+        return _response(value)
+    except (MarkerReviewUnavailable,SchemaUnavailable,RuntimeError,ValueError,
+            sqlite3.Error,OSError):
+        return _response({"error":"marker_review_unavailable"},503)
+
+
+@bp.post("/admin/mobile/episcene/reviews/<int:record_id>/<decision>")
+def native_episcene_apply_review(record_id,decision):
+    _require_admin()
+    _require_csrf()
+    if decision not in ("approve","reject"):
+        return _response({"error":"invalid_review_decision"},404)
+    if not _marker_review_enabled():
+        return _response({"error":"review_not_verified_for_production"},503)
+    if (request.content_length is None or request.content_length>800 or
+            request.mimetype!="application/x-www-form-urlencoded"):
+        return _response({"error":"invalid_request"},400)
+    if any(len(request.form.getlist(key))!=1 for key in request.form):
+        return _response({"error":"duplicate_form_field"},400)
+    try:
+        value,status=original_marker_review(
+            _base()/"provisioning.db",record_id,decision,request.form.to_dict())
+        return _response(value,status)
+    except (ValueError,KeyError):
+        return _response({"error":"invalid_review_fields"},400)
+    except (MarkerReviewUnavailable,SchemaUnavailable,RuntimeError,
+            sqlite3.Error,OSError):
+        return _response({"error":"marker_review_unavailable"},503)
 
 
 @bp.get("/admin/mobile/management/overview")
