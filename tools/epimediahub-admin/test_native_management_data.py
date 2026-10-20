@@ -102,6 +102,39 @@ class NativeManagementTests(unittest.TestCase):
                 query_string={"q":"Partner"})
             self.assertEqual(len(reseller.get_json()["resellers"]),1)
 
+    def test_device_diagnostics_hide_private_identifiers(self):
+        with sqlite3.connect(self.db) as con:
+            for name,kind in (
+                ("last_seen_at","TEXT"),("last_sync_at","TEXT"),
+                ("last_sync_status","TEXT"),("config_version","INTEGER"),
+                ("applied_config_version","INTEGER")):
+                con.execute(f"ALTER TABLE devices ADD COLUMN {name} {kind}")
+            con.execute("""
+                UPDATE devices SET last_seen_at='2026-10-20T10:00:00Z',
+                    last_sync_status='success',config_version=7,
+                    applied_config_version=6 WHERE id=7
+            """)
+            con.execute("""CREATE TABLE device_error_events
+                (id INTEGER, device_row_id INTEGER, component TEXT,code TEXT,
+                 app_version TEXT,reported_at TEXT)""")
+            con.execute("""INSERT INTO device_error_events VALUES
+                (1,7,'player','E500','1.0.3','2026-10-20T10:00:00Z')""")
+        endpoint="/admin/mobile/management/devices/7/diagnostics"
+        self.assertEqual(self.client.get(endpoint).status_code,401)
+        self.signin()
+        from unittest import mock
+        with mock.patch.object(mobile_flask,"_base",return_value=Path(self.root.name)):
+            r=self.client.get(endpoint)
+            self.assertEqual(r.status_code,200)
+            body=r.get_json()
+            self.assertEqual(body["config_version"],7)
+            self.assertEqual(body["applied_config_version"],6)
+            self.assertEqual(body["last_sync_status"],"success")
+            self.assertEqual(body["recent_errors"][0]["code"],"E500")
+            self.assertNotIn("PRIVATE_MAC",r.get_data(as_text=True))
+            self.assertEqual(self.client.get(
+                "/admin/mobile/management/devices/777/diagnostics").status_code,404)
+
     def test_schema_mismatch_fails_closed(self):
         self.signin()
         with tempfile.TemporaryDirectory() as other:
