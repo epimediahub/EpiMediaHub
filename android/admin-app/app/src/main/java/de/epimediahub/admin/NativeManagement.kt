@@ -3,6 +3,8 @@ package de.epimediahub.admin
 import android.webkit.CookieManager
 import android.os.Handler
 import android.os.Looper
+import java.net.URLEncoder
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -87,14 +89,16 @@ internal object NativeManagementApi {
     private class Status(val code: Int) : RuntimeException()
 
     private fun read(path: String, cookie: String): JSONObject {
+        val cleanPath = path.substringBefore("?")
         require(
-            path in setOf(
+            cleanPath in setOf(
                 "/admin/mobile/management/overview",
                 "/admin/mobile/management/customers",
                 "/admin/mobile/management/resellers"
             ) || Regex("^/admin/mobile/management/(customers|resellers)/[1-9][0-9]{0,17}$")
-                .matches(path)
+                .matches(cleanPath)
         )
+        require(path.length < 300 && !path.contains("#"))
         val conn = (URL(BASE + path).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects = false
             connectTimeout = 8000
@@ -155,6 +159,27 @@ internal object NativeManagementApi {
             )
         }
         return found
+    }
+
+    fun search(
+        cookie: String, kind: String, term: String,
+        done: (List<Entry>?, Boolean, String) -> Unit
+    ) {
+        if (cookie.isBlank() || kind !in setOf("customers", "resellers") || term.length > 80) {
+            main.post { done(null, false, "Bitte als Administrator anmelden.") }
+            return
+        }
+        thread(name = "epi-admin-native-search") {
+            try {
+                val encoded = URLEncoder.encode(term, "UTF-8")
+                val payload = read("/admin/mobile/management/$kind?q=$encoded", cookie)
+                val found = entries(payload, kind)
+                val more = payload.optBoolean("has_more", false)
+                main.post { done(found, more, "") }
+            } catch (_: Exception) {
+                main.post { done(null, false, "Suche vorübergehend nicht erreichbar.") }
+            }
+        }
     }
 
     private fun detailEntries(body: JSONObject, key: String): List<DetailItem> {
@@ -257,6 +282,33 @@ internal fun NativeManagementScreen(
 ) {
     var section by remember { mutableIntStateOf(0) }
     var query by remember { mutableStateOf("") }
+    var searchResult by remember { mutableStateOf<List<NativeManagementApi.Entry>?>(null) }
+    var searchHasMore by remember { mutableStateOf(false) }
+    var searchError by remember { mutableStateOf("") }
+    var searchBusy by remember { mutableStateOf(false) }
+    LaunchedEffect(query, section, data?.loaded) {
+        searchResult = null
+        searchError = ""
+        if (query.isNotBlank() && data?.loaded == true) {
+            searchBusy = true
+            delay(350)
+            val requested = query
+            val requestSection = section
+            val kind = if (section == 0) "customers" else "resellers"
+            val cookie = CookieManager.getInstance()
+                .getCookie("https://admin.epimediahub.com") ?: ""
+            NativeManagementApi.search(cookie, kind, requested) { list, more, error ->
+                if (query == requested && section == requestSection) {
+                    searchResult = list
+                    searchHasMore = more
+                    searchError = error
+                    searchBusy = false
+                }
+            }
+        } else {
+            searchBusy = false
+        }
+    }
     var selected by remember { mutableStateOf<NativeManagementApi.Entry?>(null) }
     var loadedDetail by remember { mutableStateOf<NativeManagementApi.Detail?>(null) }
     var detailBusy by remember { mutableStateOf(false) }
@@ -364,16 +416,21 @@ internal fun NativeManagementScreen(
             modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp)
         )
         val all = if (section == 0) data?.customers.orEmpty() else data?.resellers.orEmpty()
-        val filtered = all.filter { it.name.contains(query, ignoreCase = true) ||
-            it.subtitle.contains(query, ignoreCase = true) }
-        if (if (section == 0) data?.customerHasMore == true
-            else data?.resellerHasMore == true) {
-            Text("Es werden die neuesten 100 Einträge angezeigt. Weitere "
-                + "Einträge erfordern eine serverseitige Suche.",
+        val filtered = if (query.isBlank()) all else searchResult.orEmpty()
+        if (searchBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (searchError.isNotBlank()) {
+            Text(searchError, color = Secondary, fontSize = 12.sp)
+        }
+        val more = if (query.isBlank()) {
+            if (section == 0) data?.customerHasMore == true
+            else data?.resellerHasMore == true
+        } else searchHasMore
+        if (more) {
+            Text("Mehr als 100 passende Einträge. Suche bitte genauer.",
                 color = Secondary, fontSize = 12.sp,
                 modifier = Modifier.padding(vertical = 6.dp))
         }
-        if (filtered.isEmpty()) {
+        if (filtered.isEmpty() && !searchBusy && searchError.isBlank()) {
             Text("Keine Einträge für diese Auswahl.", color = Secondary,
                 modifier = Modifier.padding(12.dp))
         }
