@@ -21,7 +21,7 @@ class DailyXtreamInstallerTests(unittest.TestCase):
     def test_one_run_per_day_berlin_and_not_installed_just_by_import(self):
         timer=timer_text()
         self.assertIn("OnCalendar=*-*-* 06:15:00 Europe/Berlin",timer)
-        self.assertIn("Persistent=true",timer)
+        self.assertIn("Persistent=false",timer)
         self.assertIn("Unit=epimediahub-xtream-expiry.service",timer)
         self.assertNotIn("OnUnitActiveSec",timer)
 
