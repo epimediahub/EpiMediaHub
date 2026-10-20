@@ -43,6 +43,34 @@ def require_safe_paths():
         raise RuntimeError("WRONG_DASHBOARD_WORKING_DIRECTORY")
     if "install_epimediahub_admin_mobile" not in (BASE/"wsgi.py").read_text():
         raise RuntimeError("ADMIN_MOBILE_BLUEPRINT_NOT_INSTALLED")
+    # Refuse deployment if the existing authentication form cannot be driven
+    # natively with the exact known field. Do not execute or print app.py.
+    login_ast=ast.parse((BASE/"app.py").read_text(encoding="utf-8"))
+    logins=[n for n in ast.walk(login_ast)
+            if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))
+            and n.name=="login"]
+    if len(logins)!=1:
+        raise RuntimeError("NATIVE_LOGIN_HANDLER_UNVERIFIED")
+    fields=[]
+    for n in ast.walk(logins[0]):
+        if (isinstance(n,ast.Call) and
+            isinstance(n.func,ast.Attribute) and n.func.attr=="get" and
+            isinstance(n.func.value,ast.Attribute) and
+            n.func.value.attr=="form" and n.args and
+            isinstance(n.args[0],ast.Constant)):
+            fields.append(n.args[0].value)
+    if "password" not in fields:
+        raise RuntimeError("NATIVE_LOGIN_FORM_FIELD_UNVERIFIED")
+    # The native JSON wrappers delegate ONLY to these production business
+    # handlers, never to a guessed new implementation.
+    for module,handler in (("annual_license.py","admin_grant_year"),
+                           ("vpn_auto_enroll.py","grant_trial_auto")):
+        source_tree=ast.parse((BASE/module).read_text(encoding="utf-8"))
+        found=[n for n in ast.walk(source_tree)
+               if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))
+               and n.name==handler]
+        if len(found)!=1:
+            raise RuntimeError("ORIGINAL_GRANT_HANDLER_UNVERIFIED:"+module)
     source={}
     to_copy=[]
     for name in MODULES:
