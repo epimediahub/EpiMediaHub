@@ -52,6 +52,18 @@ internal object NativeMarkerApi {
             if(conn.contentType?.substringBefore(";")!="application/json")
                 throw IllegalStateException("Ungültige API-Antwort")
             val text=conn.inputStream.bufferedReader().use{it.readText().take(160_000)}
+            // EpiScene CSRF token may have been issued in a NEW signed Flask
+            // session cookie. Save the rotated cookie before the review POST.
+            for((name, values) in conn.headerFields){
+                if(name?.equals("Set-Cookie",ignoreCase=true)==true && values!=null){
+                    for(value in values){
+                        if(value.isNotBlank() && value.length<8192){
+                            CookieManager.getInstance().setCookie(BASE,value)
+                        }
+                    }
+                }
+            }
+            CookieManager.getInstance().flush()
             return JSONObject(text)
         } finally { conn.disconnect() }
     }
