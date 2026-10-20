@@ -172,6 +172,18 @@ def _snapshot(path, action, identifier, fields):
         if duplicates:
             raise ValueError("username already exists")
         return int(_read(path, "SELECT COALESCE(MAX(id),0) FROM resellers")[0][0])
+    if action == "add-playlist":
+        if not _read(path, "SELECT id FROM customers WHERE id=?", (identifier,)):
+            raise ValueError("customer unavailable")
+        return int(_read(path,
+            "SELECT COALESCE(MAX(id),0) FROM customer_playlists")[0][0])
+    if action == "edit-playlist":
+        rows = _read(path,
+            "SELECT name,config_json FROM customer_playlists WHERE id=?",
+            (identifier,))
+        if not rows:
+            raise ValueError("playlist unavailable")
+        return rows[0]
     if action == "delete-playlist":
         rows = _read(path,
             "SELECT id FROM customer_playlists WHERE id=?", (identifier,))
