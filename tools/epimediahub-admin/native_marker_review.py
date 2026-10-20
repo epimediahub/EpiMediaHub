@@ -37,15 +37,14 @@ def _original():
 
 
 def _csrf_key(handler):
-    checker=handler.__globals__.get("csrf")
+    # Prefer the closure's original csrf() over unrelated module-global
+    # functions of the same name. Some Flask installation routines nest both.
+    try:
+        checker=inspect.getclosurevars(handler).nonlocals.get("csrf")
+    except (TypeError,ValueError):
+        checker=None
     if not callable(checker):
-        # The original skip_markers.install(app) commonly nests csrf() and
-        # v082_skip_review() together. Resolve ONLY that named closed-over
-        # function; never guess a session key or bypass the original check.
-        try:
-            checker=inspect.getclosurevars(handler).nonlocals.get("csrf")
-        except (TypeError,ValueError):
-            checker=None
+        checker=handler.__globals__.get("csrf")
     if not callable(checker):
         raise MarkerReviewUnavailable("original review csrf unavailable")
     try:
