@@ -71,8 +71,17 @@ def _search(term):
     return "%"+term.replace("~","~~").replace("%","~%").replace("_","~_")+"%"
 
 
-def customers(path,query=""):
+def _before_id(value):
+    if value is None:
+        return 2**63-1
+    if type(value) is not int or not 0<value<2**63:
+        raise ValueError("invalid pagination cursor")
+    return value
+
+
+def customers(path,query="",before_id=None):
     pattern=_search(query)
+    cursor=_before_id(before_id)
     def load(con):
         rows=con.execute("""
             SELECT c.id,c.name,c.enabled,
@@ -87,9 +96,9 @@ def customers(path,query=""):
                 SELECT customer_id,COUNT(*) n
                 FROM devices GROUP BY customer_id
             ) d ON d.customer_id=c.id
-            WHERE c.name LIKE ? ESCAPE '~'
+            WHERE c.name LIKE ? ESCAPE '~' AND c.id < ?
             ORDER BY c.id DESC LIMIT ?
-        """,(pattern,PAGE_SIZE+1)).fetchall()
+        """,(pattern,cursor,PAGE_SIZE+1)).fetchall()
         return {
             "customers":[{
                 "id":str(row["id"]),
@@ -100,12 +109,14 @@ def customers(path,query=""):
                 "expires_at_epoch":None
             } for row in rows[:PAGE_SIZE]],
             "has_more":len(rows)>PAGE_SIZE,
+            "next_before_id":str(rows[PAGE_SIZE-1]["id"]) if len(rows)>PAGE_SIZE else None,
             "scope":"customer_names_and_aggregate_counts_only"
         }
     return _run(path,load)
 
-def resellers(path,query=""):
+def resellers(path,query="",before_id=None):
     pattern=_search(query)
+    cursor=_before_id(before_id)
     def load(con):
         rows=con.execute("""
             SELECT r.id,r.name,r.enabled,
@@ -115,9 +126,9 @@ def resellers(path,query=""):
                 SELECT reseller_id,COUNT(*) n
                 FROM customers WHERE reseller_id IS NOT NULL GROUP BY reseller_id
             ) c ON c.reseller_id=r.id
-            WHERE r.name LIKE ? ESCAPE '~'
+            WHERE r.name LIKE ? ESCAPE '~' AND r.id < ?
             ORDER BY r.id DESC LIMIT ?
-        """,(pattern,PAGE_SIZE+1)).fetchall()
+        """,(pattern,cursor,PAGE_SIZE+1)).fetchall()
         return {
             "resellers":[{
                 "id":str(row["id"]),
@@ -128,6 +139,7 @@ def resellers(path,query=""):
                 "expires_at_epoch":None
             } for row in rows[:PAGE_SIZE]],
             "has_more":len(rows)>PAGE_SIZE,
+            "next_before_id":str(rows[PAGE_SIZE-1]["id"]) if len(rows)>PAGE_SIZE else None,
             "scope":"reseller_names_and_aggregate_counts_only"
         }
     return _run(path,load)
