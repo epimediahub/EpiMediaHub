@@ -12,6 +12,8 @@ import os
 from pathlib import Path
 import secrets
 import sqlite3
+from datetime import date, datetime, timezone, timedelta
+from io import BytesIO
 
 from flask import Blueprint, abort, jsonify, redirect, render_template_string, request, session, url_for, send_file
 from incident_store import IncidentStore
@@ -26,6 +28,9 @@ from native_management_data import (SchemaUnavailable, overview as native_overvi
 from native_management_actions import invoke_grant, valid_confirmation
 from native_legacy_bridge import invoke_legacy, LegacyUnavailable
 from native_management_edits import rename as native_rename, EditUnavailable
+from expiry_cache import read_verified, Unavailable as ExpiryUnavailable
+from expiry_report_rows import linked_expiries
+from expiry_report_calendar import weekly_entries
 
 bp=Blueprint("epimediahub_admin_mobile",__name__)
 ALLOWED_KEYS=frozenset({"installation_id","fcm_token","platform"})
@@ -338,6 +343,100 @@ def native_management_legacy_action(action, entity_id):
     except (LegacyUnavailable,SchemaUnavailable,RuntimeError,
             sqlite3.Error,OSError):
         return _response({"error":"business_action_unavailable"},503)
+
+
+def _expiry_entries():
+    # Fails closed if no provider-verified snapshot has been installed;
+    # an empty or absent feed is never silently reported as "no expirations".
+    observations=read_verified(
+        _base()/"admin-mobile"/"expiry-cache.sqlite3")
+    if not observations:
+        raise ExpiryUnavailable("provider results unavailable")
+    now=datetime.now(timezone.utc)
+    if not any(-300 <= (now-x.observed_at).total_seconds() <= 48*3600
+               for x in observations):
+        raise ExpiryUnavailable("provider results stale")
+    return linked_expiries(_base()/"provisioning.db",observations,now)
+
+
+def _month_period():
+    y=request.args.get("year","")
+    m=request.args.get("month","")
+    if (not y.isascii() or not y.isdecimal() or len(y)!=4
+            or not m.isascii() or not m.isdecimal() or len(m)>2
+            or not 2000<=int(y)<=2100 or not 1<=int(m)<=12):
+        raise ValueError("invalid month")
+    return int(y),int(m)
+
+
+@bp.get("/admin/mobile/reports/expiry/month")
+def expiry_month_json():
+    _require_admin()
+    try:
+        year,month=_month_period()
+        records=[row for row in _expiry_entries()
+                 if (row.day.year,row.day.month)==(year,month)]
+    except ValueError:
+        return _response({"error":"invalid_month"},400)
+    except (ExpiryUnavailable,sqlite3.Error,OSError,RuntimeError):
+        return _response({"error":"provider_expiry_unavailable"},503)
+    data={}
+    for row in records:
+        data.setdefault(row.playlist,[]).append({
+            "customer":row.customer,"expires_on":row.day.isoformat()})
+    return _response({"year":year,"month":month,
+        "playlists":[{"name":name,"entries":data[name]}
+            for name in sorted(data,key=str.casefold)],
+        "count":len(records),"source":"verified_provider_only"})
+
+
+@bp.get("/admin/mobile/reports/expiry/week")
+def expiry_week_json():
+    _require_admin()
+    value=request.args.get("from","")
+    try:
+        if len(value)!=10 or date.fromisoformat(value).isoformat()!=value:
+            raise ValueError("invalid date")
+        monday=date.fromisoformat(value)
+        if monday.weekday()!=0:
+            raise ValueError("not Monday")
+        groups=weekly_entries(_expiry_entries(),monday)
+    except ValueError:
+        return _response({"error":"invalid_week"},400)
+    except (ExpiryUnavailable,sqlite3.Error,OSError,RuntimeError):
+        return _response({"error":"provider_expiry_unavailable"},503)
+    return _response({"week_start":monday.isoformat(),
+        "week_end":(monday+timedelta(days=6)).isoformat(),
+        "playlists":[{"name":name,"entries":[
+            {"customer":r.customer,"expires_on":r.day.isoformat()}
+            for r in rows]} for name,rows in groups.items()],
+        "count":sum(map(len,groups.values())),"source":"verified_provider_only"})
+
+
+@bp.get("/admin/mobile/reports/expiry/month.pdf")
+def expiry_month_pdf():
+    _require_admin()
+    try:
+        year,month=_month_period()
+        records=_expiry_entries()
+        from expiry_report_pdf import monthly_pdf
+        output=BytesIO()
+        monthly_pdf(records,year,month,output)
+        if output.tell()>8*1024*1024:
+            raise ExpiryUnavailable("PDF too large")
+        output.seek(0)
+    except ValueError:
+        return _response({"error":"invalid_month"},400)
+    except (ExpiryUnavailable,ImportError,sqlite3.Error,OSError,RuntimeError):
+        return _response({"error":"provider_expiry_unavailable"},503)
+    response=send_file(output,as_attachment=True,
+        download_name=f"epimediahub-ablauf-{year}-{month:02d}.pdf",
+        mimetype="application/pdf",max_age=0,conditional=False)
+    response.headers["Cache-Control"]="private, no-store"
+    response.headers["Pragma"]="no-cache"
+    response.headers["X-Content-Type-Options"]="nosniff"
+    response.headers["X-Frame-Options"]="DENY"
+    return response
 
 
 @bp.get("/admin/mobile/update/status")
