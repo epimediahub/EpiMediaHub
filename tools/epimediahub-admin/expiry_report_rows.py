@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+import json
 import sqlite3
 
 from expiry_report_core import Expiry
@@ -25,6 +26,72 @@ class VerifiedPlaylistExpiry:
     playlist_id: int
     expires_on: date
     observed_at: datetime
+
+
+
+class CoverageUnavailable(RuntimeError):
+    """The verified refresh does not cover all currently active Xtream accounts."""
+
+
+def require_complete_xtream_coverage(database: Path,
+                                     verified: list[VerifiedPlaylistExpiry],
+                                     now_utc: datetime) -> None:
+    """Fail closed if even one active Xtream subscription lacks a fresh record.
+
+    An operator's one-time certification is not enough: customers can be
+    created after certification and individual provider refreshes can fail.
+    This gate compares only anonymous playlist IDs and never returns config
+    values, customer names, usernames or URLs. M3U is excluded because its
+    provider may not expose a trustworthy expiration date.
+    """
+    if now_utc.tzinfo is None or now_utc.utcoffset() is None:
+        raise CoverageUnavailable("invalid coverage clock")
+    now_utc=now_utc.astimezone(timezone.utc)
+    path=Path(database)
+    if path.is_symlink() or not path.is_file():
+        raise CoverageUnavailable("provisioning database unavailable")
+    with sqlite3.connect(path.resolve().as_uri()+"?mode=ro",
+                         uri=True,timeout=8) as conn:
+        conn.execute("PRAGMA query_only=ON")
+        rows=conn.execute("""
+            SELECT p.id,p.config_json
+            FROM customer_playlists p
+            JOIN customers c ON c.id=p.customer_id
+            WHERE p.enabled=1 AND c.enabled=1
+            LIMIT 10001
+        """).fetchall()
+    if len(rows)>MAX_OBSERVATIONS:
+        raise CoverageUnavailable("too many playlists to certify")
+    active=set()
+    for playlist_id,raw in rows:
+        if (type(playlist_id) is not int or playlist_id<1
+                or not isinstance(raw,str) or len(raw)>131072):
+            raise CoverageUnavailable("unverified playlist configuration")
+        try:
+            config=json.loads(raw)
+        except (TypeError,ValueError):
+            raise CoverageUnavailable("unverified playlist configuration") from None
+        if not isinstance(config,dict) or not isinstance(config.get("type"),str):
+            raise CoverageUnavailable("unverified playlist type")
+        kind=config["type"].upper()
+        if kind=="XTREAM":
+            active.add(playlist_id)
+        elif kind!="M3U":
+            raise CoverageUnavailable("unrecognized playlist type")
+    if not active:
+        raise CoverageUnavailable("no active Xtream accounts to certify")
+    observed=set()
+    for entry in verified:
+        if not isinstance(entry,VerifiedPlaylistExpiry):
+            raise CoverageUnavailable("unverified cache observation")
+        if entry.playlist_id in active:
+            if entry.observed_at.tzinfo is None or entry.observed_at.utcoffset() is None:
+                raise CoverageUnavailable("unverified observation time")
+            age=now_utc-entry.observed_at.astimezone(timezone.utc)
+            if -CLOCK_SKEW<=age<=MAX_AGE:
+                observed.add(entry.playlist_id)
+    if active != observed:
+        raise CoverageUnavailable("Xtream refresh coverage incomplete")
 
 
 def linked_expiries(database: Path,
