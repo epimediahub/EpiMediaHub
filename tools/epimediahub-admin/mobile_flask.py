@@ -21,7 +21,8 @@ from native_status import read_status
 from native_management_data import (SchemaUnavailable, overview as native_overview,
     customers as native_customers, resellers as native_resellers,
     customer_detail as native_customer_detail,
-    reseller_detail as native_reseller_detail)
+    reseller_detail as native_reseller_detail,
+    device_diagnostics as native_device_diagnostics)
 from native_management_actions import invoke_grant, valid_confirmation
 from native_management_edits import rename as native_rename, EditUnavailable
 
@@ -243,6 +244,16 @@ def native_management_reseller_detail(reseller_id):
     except (SchemaUnavailable, RuntimeError, sqlite3.Error, OSError, ValueError):
         return _response({"error":"management_unavailable"},503)
     return _response(data) if data is not None else _response({"error":"not_found"},404)
+
+
+@bp.get("/admin/mobile/management/devices/<int:device_row_id>/diagnostics")
+def native_device_diagnostics_api(device_row_id):
+    _require_admin()
+    try:
+        value=native_device_diagnostics(_base()/"provisioning.db",device_row_id)
+    except (SchemaUnavailable,RuntimeError,sqlite3.Error,OSError,ValueError):
+        return _response({"error":"diagnostics_unavailable"},503)
+    return _response(value) if value is not None else _response({"error":"not_found"},404)
 
 
 @bp.post("/admin/mobile/management/<kind>/<int:entity_id>/rename")
