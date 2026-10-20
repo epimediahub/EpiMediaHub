@@ -63,6 +63,27 @@ The following read endpoints return bounded, private entity summaries:
 - GET `/admin/mobile/management/customers/<int:customer_id>`
 - GET `/admin/mobile/management/resellers/<int:reseller_id>`
 
+Additional audited native operations in development:
+
+- POST `/admin/mobile/management/customers/<int:id>/rename`
+- POST `/admin/mobile/management/resellers/<int:id>/rename`
+  with `expected_name`, `name`, and a canonical UUID request ID. The
+  `native_management_edits.py` helper performs metadata-only names updates
+  with optimistic concurrency, journaled replay detection and rollback.
+  It does not touch device assignments, IPTV config JSON, credits, licenses
+  or VPN subscriptions. Editing customer/reseller provisioning fields
+  still requires the original business logic.
+- GET `/admin/mobile/management/devices/<int:id>/diagnostics`
+  returns sanitized platform, recent synchronization status and error-code
+  metadata. It never returns device hardware identifiers, playlist
+  credentials, provider URLs, sync error text or raw report payloads.
+
+The native EpiScene endpoint now includes results broken into
+`done`, `review`, `partial`, `no_match` and `no_reference`,
+plus a warning when a queue remains and there has been no confirmed
+completion for at least 15 minutes. These remain read-only and scoped
+to independent analysis lanes 8 and 10.
+
 The following actions now have server-side wrappers in `native_management_actions.py`:
 - POST `/admin/mobile/management/devices/<int:id>/grant-year`
 - POST `/admin/mobile/management/devices/<int:id>/vpn-trial7`
