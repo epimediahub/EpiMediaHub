@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -351,6 +352,7 @@ internal fun NativeManagementScreen(
         }
     }
 
+    if (selected == null) {
     Column(modifier = modifier.fillMaxWidth().background(Navy).padding(horizontal = 18.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 17.dp, bottom = 14.dp),
@@ -480,82 +482,126 @@ internal fun NativeManagementScreen(
         }
     }
 
-    selected?.let { item ->
-        if (pendingGrant == null && pendingRename == null && inspectingDevice == null) AlertDialog(
-            onDismissRequest = { if (!grantBusy) selected = null },
-            title = { Text(item.name) },
-            text = {
-                Column(
-                    modifier = Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(9.dp)
-                ) {
-                    Text(item.subtitle.ifBlank { "Keine weiteren Details verfügbar." })
-                    if (detailBusy) CircularProgressIndicator(Modifier.size(22.dp))
-                    if (detailMessage.isNotBlank()) Text(detailMessage)
-                    if (grantMessage.isNotBlank()) Text(grantMessage, color = AccentBlue)
-                    if (grantBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                    loadedDetail?.let { detail ->
-                        Text(if (detail.enabled) "Status: Aktiv" else "Status: Deaktiviert")
-                        val groupings = listOf(
-                            Pair("Playlists", detail.playlists),
-                            Pair("Geräte", detail.devices),
-                            Pair("Zugeordnete Kunden", detail.customers)
-                        )
-                        groupings.forEach { (heading, entries) ->
-                            if (entries.isNotEmpty()) {
-                                HorizontalDivider()
-                                Text(heading, fontWeight = FontWeight.Bold)
-                                entries.take(30).forEach { entry ->
-                                    Text("• " + entry.name +
-                                        if (entry.enabled) " · Aktiv" else " · Inaktiv")
-                                    if (heading == "Geräte" && section == 0 &&
-                                        Regex("[1-9][0-9]{0,17}").matches(entry.id)) {
-                                        TextButton(onClick = { inspectingDevice = entry }) {
-                                            Text("Gerätediagnose")
-                                        }
-                                    }
-                                    if (heading == "Geräte" && section == 0 &&
-                                        detail.enabled && entry.enabled &&
-                                        Regex("[1-9][0-9]{0,17}").matches(entry.id)) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            OutlinedButton(
-                                                onClick = { pendingGrant = entry to "grant-year" },
-                                                enabled = !grantBusy,
-                                                contentPadding = PaddingValues(horizontal = 8.dp)
-                                            ) { Text("1 Jahr App", fontSize = 11.sp) }
-                                            OutlinedButton(
-                                                onClick = { pendingGrant = entry to "vpn-trial7" },
-                                                enabled = !grantBusy,
-                                                contentPadding = PaddingValues(horizontal = 8.dp)
-                                            ) { Text("7 Tage VPN", fontSize = 11.sp) }
-                                        }
-                                    }
-                                }
-                                if (entries.size > 30) Text("Weitere Einträge nicht angezeigt")
-                            }
-                        }
-                        if (detail.morePlaylists || detail.moreDevices || detail.moreCustomers) {
-                            Text("Weitere Datensätze auf dem Server vorhanden.")
-                        }
-                    }
-                    Text("Freigaben werden nur über die bestätigte Admin-Sitzung "
-                        + "und die serverseitig geprüften Lizenz-/VPN-Regeln ausgeführt.",
-                        color = Secondary, fontSize = 12.sp)
+    } else {
+        val item = selected!!
+        BackHandler(enabled = true) {
+            if (!grantBusy && !renameBusy) selected = null
+        }
+        Column(
+            modifier = modifier.fillMaxWidth().background(Navy)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 18.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            TextButton(onClick = { if (!grantBusy && !renameBusy) selected = null }) {
+                Text("‹ Zurück zur Übersicht", color = AccentBlue)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(item.name, color = Foreground, fontSize = 24.sp,
+                        fontWeight = FontWeight.ExtraBold)
+                    Text(item.subtitle, color = Secondary, fontSize = 12.sp)
                 }
-            },
-            dismissButton = {
-                TextButton(
+                OutlinedButton(
                     onClick = {
                         pendingRename = item
                         renameValue = item.name
                         renameResult = ""
-                    }
-                ) { Text("Umbenennen") }
-            },
-            confirmButton = {
-                TextButton(onClick = { selected = null }) { Text("Schließen") }
+                    },
+                    enabled = !renameBusy && !grantBusy
+                ) { Text("Bearbeiten") }
             }
-        )
+            if (detailBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (detailMessage.isNotBlank()) Text(detailMessage, color = Secondary)
+            if (renameResult.isNotBlank()) Text(renameResult, color = AccentBlue)
+            if (grantMessage.isNotBlank()) Text(grantMessage, color = AccentBlue)
+            if (grantBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            loadedDetail?.let { detail ->
+                Surface(
+                    color = SurfaceNavy,
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, LineNavy)
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Shield, null,
+                            tint = if (detail.enabled) AccentBlue else Secondary)
+                        Spacer(Modifier.width(10.dp))
+                        Text(if (detail.enabled) "Konto aktiv" else "Konto deaktiviert",
+                            color = Foreground, fontWeight = FontWeight.Medium)
+                    }
+                }
+                val groupings = listOf(
+                    Pair("Playlists", detail.playlists),
+                    Pair("Geräte", detail.devices),
+                    Pair("Zugeordnete Kunden", detail.customers)
+                )
+                groupings.forEach { (heading, entries) ->
+                    if (entries.isNotEmpty()) {
+                        Text(heading, color = Foreground, fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold)
+                        entries.take(100).forEach { entry ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = SurfaceNavy,
+                                shape = RoundedCornerShape(14.dp),
+                                border = BorderStroke(1.dp, LineNavy)
+                            ) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(entry.name, color = Foreground,
+                                        fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        (if (entry.enabled) "Aktiv" else "Deaktiviert") +
+                                            if (entry.description.isNotBlank())
+                                                " · " + entry.description else "",
+                                        color = Secondary, fontSize = 12.sp
+                                    )
+                                    val eligible = heading == "Geräte" && section == 0 &&
+                                        Regex("[1-9][0-9]{0,17}").matches(entry.id)
+                                    if (eligible) {
+                                        TextButton(onClick = { inspectingDevice = entry }) {
+                                            Text("Gerätediagnose")
+                                        }
+                                        if (detail.enabled && entry.enabled) {
+                                            Row(horizontalArrangement =
+                                                Arrangement.spacedBy(6.dp)) {
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        pendingGrant = entry to "grant-year"
+                                                    },
+                                                    enabled = !grantBusy,
+                                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                                ) {
+                                                    Text("1 Jahr App", fontSize = 11.sp)
+                                                }
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        pendingGrant = entry to "vpn-trial7"
+                                                    },
+                                                    enabled = !grantBusy,
+                                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                                ) {
+                                                    Text("7 Tage VPN", fontSize = 11.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (detail.morePlaylists || detail.moreDevices || detail.moreCustomers) {
+                    Text("Weitere Datensätze vorhanden. Nutze die Suche.",
+                        color = Secondary, fontSize = 12.sp)
+                }
+            }
+            Text("Änderungen und Freigaben werden durch den Admin-Server geprüft. "
+                + "Playlist-Zugangsdaten werden hier nicht angezeigt.",
+                color = Secondary, fontSize = 11.sp)
+            Spacer(Modifier.height(18.dp))
+        }
     }
 
     pendingRename?.let { entry ->
