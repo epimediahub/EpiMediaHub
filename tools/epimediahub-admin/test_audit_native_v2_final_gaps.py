@@ -61,5 +61,33 @@ def v082_skip_review(record_id):
             self.assertEqual(roles, ["intro", "outro"])
 
 
+    def test_nested_registered_handlers_are_found_without_exposing_confirm_string(self):
+        with tempfile.TemporaryDirectory() as temp:
+            p = Path(temp) / "dashboard_v080.py"
+            p.write_text("""
+def install(app):
+    def nested_other():
+        return "private-secret-password"
+
+    @app.post("/admin/resellers/9/delete")
+    def v080_delete_reseller(reseller_id):
+        if request.form.get("confirm") != f"DELETE {reseller_id}":
+            abort(400)
+        db().execute("DELETE FROM resellers WHERE password='SECRET'")
+        return redirect("/")
+""", encoding="utf-8")
+            found, roles = target.inspect(p)
+        self.assertEqual(roles, [])
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["function"], "v080_delete_reseller")
+        self.assertEqual(found[0]["field_name_only"], ["confirm"])
+        flow = found[0]["redacted_structure"]
+        self.assertIn("request.form.get('confirm')", flow)
+        self.assertIn("<redacted-format>", flow)
+        self.assertNotIn("private-secret-password", flow)
+        self.assertNotIn("DELETE FROM resellers", flow)
+        self.assertNotIn("admin/resellers/9/delete", flow)
+
+
 if __name__ == "__main__":
     unittest.main()
