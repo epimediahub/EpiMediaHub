@@ -181,11 +181,9 @@ class MainActivity : FragmentActivity() {
             updateCheckedForSession = true
             checkForUpdates(false)
         }
-        when (selection) {
-            DASHBOARD -> loadManagement()
-            EPISCENE -> loadEpiscene()
-            ALERTS -> loadNativeAlerts()
-        }
+        loadManagement()
+        loadEpiscene()
+        loadNativeAlerts()
     }
 
     private fun signOutNative() {
@@ -472,6 +470,84 @@ class MainActivity : FragmentActivity() {
                         Spacer(Modifier.width(8.dp))
                         Icon(Icons.Outlined.ChevronRight, null)
                     }
+                }
+            }
+            Text("LIVE-ÜBERSICHT", color = Muted,
+                fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                letterSpacing = 1.6.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(9.dp),
+                modifier = Modifier.fillMaxWidth()) {
+                Surface(
+                    modifier = Modifier.weight(1f).clickable { selectDestination(DASHBOARD) },
+                    shape = RoundedCornerShape(16.dp), color = InkRaised,
+                    border = BorderStroke(1.dp, Border)
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text("KUNDEN", color = Muted, fontSize = 10.sp)
+                        Spacer(Modifier.height(5.dp))
+                        Text(managementData?.overview?.customers?.toString() ?: "—",
+                            color = White, fontSize = 25.sp,
+                            fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+                Surface(
+                    modifier = Modifier.weight(1f).clickable { selectDestination(DASHBOARD) },
+                    shape = RoundedCornerShape(16.dp), color = InkRaised,
+                    border = BorderStroke(1.dp, Border)
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text("RESELLER", color = Muted, fontSize = 10.sp)
+                        Spacer(Modifier.height(5.dp))
+                        Text(managementData?.overview?.resellers?.toString() ?: "—",
+                            color = White, fontSize = 25.sp,
+                            fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+            }
+            Surface(shape = RoundedCornerShape(17.dp), color = InkRaised,
+                border = BorderStroke(1.dp, Border),
+                modifier = Modifier.fillMaxWidth()
+                    .clickable { selectDestination(EPISCENE) }) {
+                Column(Modifier.padding(15.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.AutoAwesome, null, tint = Positive)
+                        Spacer(Modifier.width(9.dp))
+                        Text("EpiScene Analyse", color = White,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f))
+                        Icon(Icons.Outlined.ChevronRight, null, tint = Muted)
+                    }
+                    analysisSnapshot?.lanes?.forEach { lane ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(lane.label, color = Muted, fontSize = 12.sp,
+                                modifier = Modifier.weight(1f))
+                            Text("Läuft: " + lane.running + " · Wartet: " + lane.queued,
+                                color = White, fontSize = 12.sp)
+                        }
+                    }
+                    if (analysisSnapshot == null) {
+                        Text("Keine bestätigten Analysewerte geladen.",
+                            color = Muted, fontSize = 12.sp)
+                    }
+                }
+            }
+            Surface(shape = RoundedCornerShape(16.dp), color = InkRaised,
+                border = BorderStroke(1.dp, Border),
+                modifier = Modifier.fillMaxWidth()
+                    .clickable { selectDestination(ALERTS) }) {
+                Row(Modifier.padding(15.dp),verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Notifications, null, tint = Warning)
+                    Spacer(Modifier.width(9.dp))
+                    Text("Offene Meldungen", color = White,
+                        fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(
+                        if (alertsBusy) "Prüfung …"
+                        else if (alertsMessage.isNotBlank()) "Nicht verfügbar"
+                        else nativeAlerts.count { it.state == "open" }.toString(),
+                        color = if (alertsMessage.isNotBlank()) Warning else White,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
