@@ -18,6 +18,31 @@
 - Monthly push: **"EpiMediaHub: Die Monatsübersicht ist zum Drucken bereit."**
 - Notifications contain only authenticated navigation targets/report type. Dedupe per report period, retry safely, deliver only to registered admin FCM installations, support notification-off setting.
 
+### Provider-supplied expiration confirmed by administrator
+
+The administrator confirms that **the IPTV provider supplies expiry
+automatically**, so no parallel manual expiration entry is required.
+
+- The server must refresh an authoritative expiration **for each individual
+  customer-playlist provider account** and keep the verified timestamp and
+  update time. Xtream account responses commonly expose `user_info.exp_date`
+  as a Unix timestamp; `expiry_provider_adapter.py` validates this field
+  strictly, converts its UTC instant to the Europe/Berlin calendar date, and
+  treats `0`, missing or malformed fields as unknown (never "expires today").
+- M3U does **not** have a universal expiry response format. Provider-specific
+  authentication information must be checked independently before reporting
+  M3U accounts. Don't claim their expiry can be inferred from their playlist URL.
+- `expiry_report_rows.py` joins **fresh verified** per-playlist dates to the
+  dashboard's customer and playlist names using the actual playlist primary key,
+  without fetching config_json, credentials, token or stream URLs. A customer with
+  4K and THE BEST on different dates appears in separate corresponding groups.
+- Render monthly sheets with `expiry_report_pdf.py`, and weekly grouped
+  dates via `expiry_report_calendar.py`. The source polling, isolated provider
+  API network policy, persistent expiry snapshot cache and live schedule must
+  be reviewed and installed before turning on automated web or mobile reports.
+- Neither `annual_device_licenses.expires_at` nor `vpn_trials.expires_at`
+  is an acceptable replacement for the IPTV provider's account expiration.
+
 ### Expiration source correctness / release gate
 - The already received provisioning schema contains `customers.name` and `customer_playlists(customer_id,name,config_json)`, but **no verified customer-playlist `expires_at` column**.
 - The verified `skip_analysis_playlists.expires_at` field refers to **analysis playlists**, not customer subscription expiry.
