@@ -5,7 +5,7 @@ No playlist URLs, passwords, hardware identifiers or access tokens are accepted.
 """
 from __future__ import annotations
 from collections import defaultdict
-from dataclasses import dataclass
+from expiry_report_core import Expiry
 from datetime import date, datetime
 from pathlib import Path
 from reportlab.lib.pagesizes import A4, landscape
@@ -18,12 +18,6 @@ L,R=35,807
 COL=(35,246,350,474,604,807)
 MONTHS=("","Januar","Februar","März","April","Mai","Juni","Juli",
         "August","September","Oktober","November","Dezember")
-
-@dataclass(frozen=True)
-class Expiry:
-    customer: str
-    playlist: str
-    day: date
 
 
 def _font():
@@ -66,7 +60,7 @@ def monthly_pdf(items:list[Expiry],year:int,month:int,output:Path):
     for rows in groups.values():
         rows.sort(key=lambda r:(r.day,r.customer.casefold()))
     plain,bold=_font()
-    pdf=canvas.Canvas(str(output),pagesize=(PAGE_W,PAGE_H),pageCompression=1)
+    pdf=canvas.Canvas(output if hasattr(output, 'write') else str(output),pagesize=(PAGE_W,PAGE_H),pageCompression=1)
     pdf.setTitle("EpiMediaHub Monatsuebersicht "+str(year)+"-"+str(month).zfill(2))
     pdf.setAuthor("EpiMediaHub Admin")
     pages=0
