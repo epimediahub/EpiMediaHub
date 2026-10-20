@@ -117,6 +117,29 @@ class NativeMarkerReviewTests(unittest.TestCase):
             self.assertEqual(con.execute(
                 "SELECT status FROM skip_records WHERE id=23").fetchone()[0],"pending")
 
+    def test_original_nested_skip_csrf_helper_is_resolved_from_closure(self):
+        def nested_handlers():
+            def csrf():
+                supplied=request.form.get("csrf","")
+                known=session.get("_nested_marker_csrf","")
+                if not known or not secrets.compare_digest(supplied,known):
+                    abort(400)
+
+            def v082_skip_review(record_id):
+                csrf()
+                with sqlite3.connect(current_app.config["MARKER_TEST_DB"]) as con:
+                    con.execute("UPDATE skip_records SET status='approved' WHERE id=?",
+                                (record_id,))
+                return "original redirect"
+            return v082_skip_review
+        self.app.view_functions["v082_skip_review"]=nested_handlers()
+        dashboard=self.login()
+        result=self.client.get("/admin/mobile/episcene/reviews")
+        self.assertEqual(result.status_code,200,result.get_data(as_text=True))
+        csrf_value=result.get_json()["review_csrf"]
+        response=self.post(21,"approve",csrf_value,dashboard)
+        self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+
     def test_disabled_feature_and_out_of_scope_record_never_mutated(self):
         dashboard=self.login()
         response=self.client.get("/admin/mobile/episcene/reviews")
