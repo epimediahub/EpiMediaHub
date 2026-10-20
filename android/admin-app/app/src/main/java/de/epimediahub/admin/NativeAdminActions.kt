@@ -40,9 +40,23 @@ internal object NativeAdminActions {
                     }
                     val csrf = try {
                         if (bootstrap.responseCode != 200) ""
-                        else JSONObject(bootstrap.inputStream.bufferedReader().use {
-                            it.readText().take(16_384)
-                        }).optString("csrf", "")
+                        else {
+                            val result = JSONObject(bootstrap.inputStream.bufferedReader().use {
+                                it.readText().take(16_384)
+                            }).optString("csrf", "")
+                            for ((name, values) in bootstrap.headerFields) {
+                                if (name?.equals("Set-Cookie",ignoreCase = true) == true &&
+                                    values != null) {
+                                    for (value in values) {
+                                        if (value.isNotBlank() && value.length < 8192) {
+                                            cookies.setCookie(BASE, value)
+                                        }
+                                    }
+                                }
+                            }
+                            cookies.flush()
+                            result
+                        }
                     } finally {
                         bootstrap.disconnect()
                     }
