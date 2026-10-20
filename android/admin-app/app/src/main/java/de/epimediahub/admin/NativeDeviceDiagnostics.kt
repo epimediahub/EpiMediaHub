@@ -121,7 +121,7 @@ internal fun NativeDeviceDiagnosticsDialog(
                 if (message.isNotBlank()) Text(message)
                 status?.let { state ->
                     Text(state.name,style=MaterialTheme.typography.titleMedium)
-                    Text(state.platform+" · "+if (state.enabled) "Aktiv" else "Deaktiviert")
+                    Text(state.platform + " · " + (if (state.enabled) "Aktiv" else "Deaktiviert"))
                     Text("Zuletzt gesehen: "+state.lastSeen.ifBlank { "Keine Angabe" })
                     Text("Letzte Synchronisierung: "+state.lastSync.ifBlank { "Keine Angabe" })
                     Text("Sync-Status: "+state.syncStatus)
