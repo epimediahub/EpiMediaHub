@@ -71,9 +71,15 @@ def require_complete_xtream_coverage(database: Path,
             config=json.loads(raw)
         except (TypeError,ValueError):
             raise CoverageUnavailable("unverified playlist configuration") from None
-        if not isinstance(config,dict) or not isinstance(config.get("type"),str):
+        if not isinstance(config,dict):
+            raise CoverageUnavailable("unverified playlist configuration")
+        found=[config[k] for k in ("playlist_type","type") if k in config]
+        kinds=[value.strip().upper() for value in found if isinstance(value,str)]
+        if (not found or len(kinds)!=len(found)
+                or any(value not in {"M3U","XTREAM"} for value in kinds)
+                or len(set(kinds))!=1):
             raise CoverageUnavailable("unverified playlist type")
-        kind=config["type"].upper()
+        kind=kinds[0]
         if kind=="XTREAM":
             active.add(playlist_id)
         elif kind!="M3U":
