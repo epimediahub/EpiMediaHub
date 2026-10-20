@@ -10,7 +10,8 @@ from unittest import mock
 
 from xtream_expiry_refresh import (
     ProbeError,read_accounts,parse_endpoint,resolve_public,
-    probe,secure_fetch
+    probe,secure_fetch,check_https_upgrade,_https_upgrade_host,
+    https_tls_handshake_only
 )
 
 
@@ -75,6 +76,67 @@ class XtreamLiveProbeTests(unittest.TestCase):
         self.assertEqual(summary["confirmed"],1)
         self.assertEqual(summary["result_counts"]["provider_date_unknown"],1)
         self.assertEqual(len(rows),1)
+
+    def test_https_check_deduplicates_origin_and_never_passes_credentials(self):
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE customer_playlists SET config_json=json_set("
+                       "config_json,'$.xtream_server','http://provider.example:8080')"
+                       " WHERE id IN (1,2)")
+        seen=[]
+        def handshake(origin):
+            seen.append(origin)
+            self.assertEqual(origin,"http://provider.example:8080")
+            return True
+        summary=check_https_upgrade(self.path,handshake=handshake)
+        self.assertEqual(summary["accounts_with_valid_https_tls"],2)
+        self.assertEqual(summary["distinct_origins_checked"],1)
+        self.assertEqual(seen,["http://provider.example:8080"])
+        self.assertEqual(summary["http_requests_sent"],0)
+        self.assertFalse(summary["provider_credentials_sent"])
+        self.assertFalse(summary["customer_data_written"])
+        self.assertNotIn("PRIVATE_PASSWORD",json.dumps(summary))
+        self.assertNotIn("SECRET_NAME",json.dumps(summary))
+
+    def test_https_check_rejects_invalid_and_internal_origins(self):
+        for url in ("https://user:pass@provider.example",
+                    "http://provider.example/?token=secret",
+                    "http://provider.example/#key",
+                    "file:///etc/passwd",
+                    "http://provider.example/../../x",
+                    "http://provider.example:abc",
+                    "http://provider.example/%2e%2e"):
+            with self.subTest(url=url):
+                with self.assertRaises(ProbeError):
+                    _https_upgrade_host(url)
+        self.assertEqual(_https_upgrade_host(
+            "http://provider.example:8080/live"),"provider.example")
+        with mock.patch("xtream_expiry_refresh.resolve_public",
+                        side_effect=ProbeError("non_public_provider_address")), \
+             mock.patch("xtream_expiry_refresh.socket.socket") as sock:
+            summary=check_https_upgrade(self.path,
+                 handshake=https_tls_handshake_only)
+            self.assertEqual(summary["result_counts"]["unsafe_or_invalid_origin"],2)
+            self.assertFalse(sock.called)
+
+    def test_tls_handshake_sends_no_http_request(self):
+        sock=mock.MagicMock()
+        tls=mock.MagicMock()
+        tls.__enter__.return_value=tls
+        ctx=mock.MagicMock()
+        ctx.wrap_socket.return_value=tls
+        with mock.patch("xtream_expiry_refresh.resolve_public",
+                        return_value=(socket.AF_INET,"8.8.8.8")), \
+             mock.patch("xtream_expiry_refresh.socket.socket",
+                        return_value=sock), \
+             mock.patch("xtream_expiry_refresh.ssl.create_default_context",
+                        return_value=ctx):
+            self.assertTrue(https_tls_handshake_only(
+                "http://provider.example:8080"))
+        sock.connect.assert_called_once_with(("8.8.8.8",443))
+        ctx.wrap_socket.assert_called_once_with(
+            sock,server_hostname="provider.example")
+        self.assertFalse(tls.send.called)
+        self.assertFalse(tls.sendall.called)
 
     def test_https_only_and_no_hidden_urls_credentials_or_ports(self):
         for endpoint in (
