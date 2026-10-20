@@ -1,0 +1,108 @@
+"""No-production-data tests for native Android Admin management contract."""
+from pathlib import Path
+import sqlite3
+import tempfile
+import unittest
+from flask import Flask
+import native_management_data as api
+import mobile_flask
+
+
+SCHEMA="""
+CREATE TABLE customers (id INTEGER PRIMARY KEY,name TEXT,enabled INTEGER,reseller_id INTEGER);
+CREATE TABLE devices (id INTEGER PRIMARY KEY,customer_id INTEGER,enabled INTEGER,
+    display_name TEXT,platform TEXT,device_id TEXT);
+CREATE TABLE customer_playlists (id INTEGER PRIMARY KEY,customer_id INTEGER,name TEXT,
+    enabled INTEGER,config_json TEXT);
+CREATE TABLE resellers (id INTEGER PRIMARY KEY,name TEXT,enabled INTEGER,
+    customer_limit INTEGER,device_limit INTEGER,branding_name TEXT);
+"""
+PRIVATE="https://example.invalid/provider?username=PRIVATE_USER&password=PRIVATE_PASSWORD"
+
+
+class NativeManagementTests(unittest.TestCase):
+    def setUp(self):
+        self.root=tempfile.TemporaryDirectory()
+        self.db=Path(self.root.name)/"provisioning.db"
+        with sqlite3.connect(self.db) as con:
+            con.executescript(SCHEMA)
+            con.execute("INSERT INTO customers VALUES (1,'Kunde 1',1,3)")
+            con.execute("INSERT INTO customers VALUES (2,'Kunde 2',0,NULL)")
+            con.execute("INSERT INTO devices VALUES (7,1,1,'Living Room','firetv','PRIVATE_MAC')")
+            con.execute("INSERT INTO customer_playlists VALUES (10,1,'4K Test',1,?)",(PRIVATE,))
+            con.execute("INSERT INTO resellers VALUES (3,'Partner 3',1,20,40,'Private Label')")
+        self.app=Flask("test-native-management")
+        self.app.secret_key="test-only-development-secret"
+        self.app.config.update(TESTING=True)
+        mobile_flask.install(self.app)
+        self.client=self.app.test_client()
+
+    def tearDown(self):
+        self.root.cleanup()
+
+    def signin(self):
+        with self.client.session_transaction() as s:
+            s["admin"]=True
+
+    def test_anonymous_forbidden_all_endpoints(self):
+        urls=(
+            "/admin/mobile/management/overview",
+            "/admin/mobile/management/customers",
+            "/admin/mobile/management/resellers",
+            "/admin/mobile/management/customers/1",
+            "/admin/mobile/management/resellers/3",
+        )
+        for url in urls:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code,401)
+
+    def test_read_api_respects_verified_schema_and_no_config_leak(self):
+        self.signin()
+        from unittest import mock
+        with mock.patch.object(mobile_flask, "_base", return_value=Path(self.root.name)):
+            overview=self.client.get("/admin/mobile/management/overview")
+            self.assertEqual(overview.status_code,200)
+            self.assertEqual(overview.get_json()["customers"],2)
+            self.assertEqual(overview.get_json()["resellers"],1)
+            self.assertIsNone(overview.get_json()["active_vpns"])
+            self.assertIsNone(overview.get_json()["active_licenses"])
+            customers=self.client.get("/admin/mobile/management/customers")
+            self.assertEqual(customers.get_json()["customers"][0]["id"],"2")
+            self.assertEqual(customers.get_json()["customers"][1]["playlist_count"],1)
+            resellers=self.client.get("/admin/mobile/management/resellers")
+            self.assertEqual(len(resellers.get_json()["resellers"]),1)
+            detail=self.client.get("/admin/mobile/management/customers/1")
+            self.assertEqual(detail.get_json()["devices"][0]["name"],"Living Room")
+            self.assertEqual(detail.get_json()["playlists"][0]["name"],"4K Test")
+            reseller_detail=self.client.get("/admin/mobile/management/resellers/3")
+            self.assertEqual(len(reseller_detail.get_json()["customers"]),1)
+            self.assertEqual(self.client.get("/admin/mobile/management/customers/999").status_code,404)
+            for r in (overview,customers,resellers,detail,reseller_detail):
+                self.assertEqual(r.headers["Cache-Control"],"private, no-store")
+                self.assertNotIn("PRIVATE_USER",r.get_data(as_text=True))
+                self.assertNotIn("PRIVATE_PASSWORD",r.get_data(as_text=True))
+                self.assertNotIn("PRIVATE_MAC",r.get_data(as_text=True))
+
+    def test_schema_mismatch_fails_closed(self):
+        self.signin()
+        with tempfile.TemporaryDirectory() as other:
+            with sqlite3.connect(Path(other)/"provisioning.db") as con:
+                con.execute("CREATE TABLE customers (id INTEGER)")
+            from unittest import mock
+            with mock.patch.object(mobile_flask,"_base",return_value=Path(other)):
+                r=self.client.get("/admin/mobile/management/customers")
+            self.assertEqual(r.status_code,503)
+            self.assertNotIn("sqlite",r.get_data(as_text=True).lower())
+
+    def test_lists_bounded_and_report_more(self):
+        with sqlite3.connect(self.db) as con:
+            con.executemany("INSERT INTO customers VALUES (?, ?, 1, null)",
+                [(i,"Kunde "+str(i)) for i in range(1000,1120)])
+        value=api.customers(self.db)
+        self.assertEqual(len(value["customers"]),100)
+        self.assertTrue(value["has_more"])
+        self.assertEqual(api.overview(self.db)["customers"],122)
+
+
+if __name__=="__main__":
+    unittest.main()
