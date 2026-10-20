@@ -44,7 +44,7 @@ internal object NativeExpiryApi {
 
     private fun request(path:String,accept:String,max:Int):ByteArray {
         require(path.length<160 && path.matches(
-            Regex("^/admin/mobile/reports/expiry/(month|week|month\\.pdf)\\?[A-Za-z0-9=&-]+$")
+            Regex("^/admin/mobile/reports/expiry/(month|week|month\\.pdf|month\\.preview\\.pdf)\\?[A-Za-z0-9=&-]+$")
         ))
         val cookie=CookieManager.getInstance().getCookie(BASE) ?: ""
         if (cookie.isBlank()) throw IllegalStateException("Admin-Sitzung fehlt")
@@ -117,10 +117,14 @@ internal object NativeExpiryApi {
         }
     }
 
-    fun printMonthly(context:Context,yearMonth:YearMonth,done:(String)->Unit) {
+    fun printMonthly(context:Context,yearMonth:YearMonth,
+                     preview:Boolean=false,done:(String)->Unit) {
         thread(name="epi-private-pdf-print") {
             val result=try {
-                val path="/admin/mobile/reports/expiry/month.pdf?year=${yearMonth.year}&month=${yearMonth.monthValue}"
+                val path=if(preview)
+                    "/admin/mobile/reports/expiry/month.preview.pdf?year=${yearMonth.year}&month=${yearMonth.monthValue}"
+                else
+                    "/admin/mobile/reports/expiry/month.pdf?year=${yearMonth.year}&month=${yearMonth.monthValue}"
                 val bytes=request(path,"application/pdf",PDF_LIMIT)
                 if(bytes.size<5 || !bytes.copyOfRange(0,5).contentEquals("%PDF-".toByteArray()))
                     throw IllegalStateException("Ungültige PDF-Datei")
@@ -252,6 +256,17 @@ internal fun NativeExpiryScreen(modifier:Modifier=Modifier) {
                 }
             },modifier=Modifier.fillMaxWidth()){
             Text(if(printing)"Druckdaten werden geladen …" else "PDF drucken / als PDF speichern")
+        }
+        if(monthly) OutlinedButton(
+            enabled=!busy&&!printing,
+            onClick={
+                printing=true
+                NativeExpiryApi.printMonthly(context,period,preview=true) { message ->
+                    printing=false
+                    if(message.isNotBlank())error=message
+                }
+            },modifier=Modifier.fillMaxWidth()){
+            Text("Unvollständige Arbeitsliste drucken (inkl. unbekannter Abläufe)")
         }
         if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         if(error.isNotBlank()) Text(error,color=MaterialTheme.colorScheme.error)
