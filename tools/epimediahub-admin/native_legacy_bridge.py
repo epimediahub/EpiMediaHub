@@ -113,6 +113,36 @@ def _fields(action, values):
             if limit > 100000:
                 raise ValueError("limit too high")
             fields[item] = str(limit)
+    if action in ("add-playlist", "edit-playlist"):
+        raw = {k: values[k] for k in ACTIONS[action][1]}
+        if any(not isinstance(v, str) or len(v) > 1600 or
+               any(ord(c) < 32 or ord(c) == 127 for c in v)
+               for v in raw.values()):
+            raise ValueError("invalid playlist input")
+        kind = raw["playlist_type"].upper()
+        if kind not in ("M3U", "XTREAM"):
+            raise ValueError("unsupported playlist type")
+        name = _safe_name(raw["playlist_name"])
+        endpoint_key = "playlist_url" if kind == "M3U" else "xtream_server"
+        endpoint = raw[endpoint_key].strip()
+        if kind == "XTREAM":
+            endpoint = endpoint.rstrip("/")
+        if not endpoint.lower().startswith(("http://", "https://")):
+            raise ValueError("invalid playlist endpoint")
+        if kind == "XTREAM" and not raw["xtream_username"].strip():
+            raise ValueError("missing Xtream username")
+        if kind == "XTREAM" and action == "add-playlist" and not raw["xtream_password"]:
+            raise ValueError("missing Xtream password")
+        if len(raw["xtream_username"]) > 150 or len(raw["xtream_password"]) > 256:
+            raise ValueError("invalid provider credentials")
+        output = raw["xtream_output"].lower()
+        if output not in ("ts", "m3u8"):
+            raise ValueError("unsupported playlist output")
+        fields.update(raw)
+        fields["playlist_name"] = name
+        fields["playlist_type"] = kind
+        fields["xtream_output"] = output
+        fields[endpoint_key] = endpoint
     if action == "move-device":
         fields["customer_id"] = str(_number(values["customer_id"]))
     if action == "assign-reseller":
