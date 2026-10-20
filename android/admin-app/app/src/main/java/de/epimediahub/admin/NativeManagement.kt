@@ -239,7 +239,7 @@ internal fun NativeManagementScreen(
                 color = Secondary, fontSize = 12.sp)
             return@Column
         }
-        val overview = data.overview
+        val overview = data?.overview
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()) {
             ManagementMetric("Kunden", overview?.customers, Modifier.weight(1f))
@@ -266,7 +266,7 @@ internal fun NativeManagementScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp)
         )
-        val all = if (section == 0) data.customers else data.resellers
+        val all = if (section == 0) data?.customers.orEmpty() else data?.resellers.orEmpty()
         val filtered = all.filter { it.name.contains(query, ignoreCase = true) ||
             it.subtitle.contains(query, ignoreCase = true) }
         if (filtered.isEmpty()) {
