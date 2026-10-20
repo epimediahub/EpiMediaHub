@@ -16,10 +16,10 @@ import sys
 
 ROOT = Path("/opt/epimediahub/provisioning")
 OUT = Path("/root/epimediahub-native-final-gaps.json")
-MAX_MODULES = 160
+MAX_MODULES = 500
 MAX_SOURCE_BYTES = 2_500_000
 MAX_FLOW = 18000
-MAX_OUTPUT = 180_000
+MAX_OUTPUT = 300_000
 
 # Exact function names only. Callers and helpers are not executed.
 TARGETS = {
