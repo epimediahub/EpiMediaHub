@@ -29,7 +29,7 @@ MODULES=("mobile_flask.py","native_management_data.py")
 KNOWN_MAIN_SHA={"mobile_flask.py":"074979ed6e523ba899106f54549fcab1ec432f2c"}
 
 def blob_sha(blob:bytes)->str:
-    return hashlib.sha1(b"blob "+str(len(blob)).encode()+b"\\0"+blob).hexdigest()
+    return hashlib.sha1(b"blob "+str(len(blob)).encode()+bytes([0])+blob).hexdigest()
 
 def cmd(*parts):
     return subprocess.check_output(parts,timeout=40,text=True).strip()
