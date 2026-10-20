@@ -202,8 +202,11 @@ def native_management_overview():
 @bp.get("/admin/mobile/management/customers")
 def native_management_customers():
     _require_admin()
+    query=request.args.get("q","")
+    if not isinstance(query,str) or len(query)>80:
+        return _response({"error":"invalid_query"},400)
     try:
-        return _response(native_customers(_base()/"provisioning.db"))
+        return _response(native_customers(_base()/"provisioning.db",query=query))
     except (SchemaUnavailable, RuntimeError, sqlite3.Error, OSError, ValueError):
         return _response({"error":"management_unavailable"},503)
 
@@ -211,8 +214,11 @@ def native_management_customers():
 @bp.get("/admin/mobile/management/resellers")
 def native_management_resellers():
     _require_admin()
+    query=request.args.get("q","")
+    if not isinstance(query,str) or len(query)>80:
+        return _response({"error":"invalid_query"},400)
     try:
-        return _response(native_resellers(_base()/"provisioning.db"))
+        return _response(native_resellers(_base()/"provisioning.db",query=query))
     except (SchemaUnavailable, RuntimeError, sqlite3.Error, OSError, ValueError):
         return _response({"error":"management_unavailable"},503)
 
