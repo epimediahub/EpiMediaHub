@@ -30,11 +30,11 @@ class PrivateExpiryReportsTests(unittest.TestCase):
                 INSERT INTO customers VALUES (1,'Beispielkunde A',1,NULL);
                 INSERT INTO customers VALUES (2,'Beispielkunde B',1,77);
                 INSERT INTO customer_playlists VALUES (
-                    9,1,'THE BEST',1,'{"type":"XTREAM","xtream_password":"PRIVATE_PROVIDER_SECRETS"}');
+                    9,1,'THE BEST',1,'{"playlist_type":"XTREAM","xtream_password":"PRIVATE_PROVIDER_SECRETS"}');
                 INSERT INTO customer_playlists VALUES (
-                    10,1,'4K IPTV',1,'{"type":"XTREAM","xtream_password":"PRIVATE_PASSWORD"}');
+                    10,1,'4K IPTV',1,'{"playlist_type":"XTREAM","xtream_password":"PRIVATE_PASSWORD"}');
                 INSERT INTO customer_playlists VALUES (
-                    11,2,'THE BEST',1,'{"type":"XTREAM","xtream_password":"OTHER_CUSTOMER_PRIVATE"}');
+                    11,2,'THE BEST',1,'{"playlist_type":"XTREAM","xtream_password":"OTHER_CUSTOMER_PRIVATE"}');
             """)
         self.app=Flask("test-only-expiry-report")
         self.app.secret_key="synthetic-no-production"
