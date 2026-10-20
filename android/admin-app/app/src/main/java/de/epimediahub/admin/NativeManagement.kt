@@ -74,7 +74,9 @@ internal object NativeManagementApi {
         val authenticated: Boolean,
         val loaded: Boolean,
         val customerHasMore: Boolean = false,
-        val resellerHasMore: Boolean = false
+        val resellerHasMore: Boolean = false,
+        val customerNextId: String? = null,
+        val resellerNextId: String? = null
     )
 
     data class DetailItem(
@@ -167,12 +169,17 @@ internal object NativeManagementApi {
         return found
     }
 
+    private fun nextId(payload: JSONObject): String? {
+        val cursor = payload.optString("next_before_id", "")
+        return cursor.takeIf { Regex("[1-9][0-9]{0,17}").matches(it) }
+    }
+
     fun search(
         cookie: String, kind: String, term: String,
-        done: (List<Entry>?, Boolean, String) -> Unit
+        done: (List<Entry>?, Boolean, String?, String) -> Unit
     ) {
         if (cookie.isBlank() || kind !in setOf("customers", "resellers") || term.length > 80) {
-            main.post { done(null, false, "Bitte als Administrator anmelden.") }
+            main.post { done(null, false, null, "Bitte als Administrator anmelden.") }
             return
         }
         thread(name = "epi-admin-native-search") {
@@ -180,10 +187,32 @@ internal object NativeManagementApi {
                 val encoded = URLEncoder.encode(term, "UTF-8")
                 val payload = read("/admin/mobile/management/$kind?q=$encoded", cookie)
                 val found = entries(payload, kind)
-                val more = payload.optBoolean("has_more", false)
-                main.post { done(found, more, "") }
+                main.post { done(found, payload.optBoolean("has_more", false),
+                    nextId(payload), "") }
             } catch (_: Exception) {
-                main.post { done(null, false, "Suche vorübergehend nicht erreichbar.") }
+                main.post { done(null, false, null, "Suche vorübergehend nicht erreichbar.") }
+            }
+        }
+    }
+
+    fun loadMore(
+        cookie: String, kind: String, term: String, cursor: String,
+        done: (List<Entry>?, String?, String) -> Unit
+    ) {
+        if (cookie.isBlank() || kind !in setOf("customers", "resellers")
+            || term.length > 80 || !Regex("[1-9][0-9]{0,17}").matches(cursor)) {
+            main.post { done(null, null, "Weitere Einträge können nicht geladen werden.") }
+            return
+        }
+        thread(name = "epi-admin-native-next-page") {
+            try {
+                val encoded = URLEncoder.encode(term, "UTF-8")
+                val body = read("/admin/mobile/management/$kind?q=$encoded&before_id=$cursor",
+                    cookie)
+                val found = entries(body, kind)
+                main.post { done(found, nextId(body), "") }
+            } catch (_: Exception) {
+                main.post { done(null, null, "Weitere Einträge derzeit nicht erreichbar.") }
             }
         }
     }
@@ -251,7 +280,9 @@ internal object NativeManagementApi {
                     entries(resellers, "resellers"),
                     null, true, true,
                     customers.optBoolean("has_more", false),
-                    resellers.optBoolean("has_more", false)
+                    resellers.optBoolean("has_more", false),
+                    nextId(customers),
+                    nextId(resellers)
                 )
             } catch (error: Status) {
                 val message = when (error.code) {
