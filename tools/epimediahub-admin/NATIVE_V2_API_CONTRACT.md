@@ -251,6 +251,30 @@ must not be called with guessed form values. Authenticated staging verification,
 the fully certified provider refresh, secrets/signature readiness, a safe
 server upgrade, and one real Android device test remain release prerequisites.
 
+## Native EpiScene marker work queue (development only)
+
+The previously missing review screen now exists as
+`NativeMarkerReview.kt` and `native_marker_review.py`:
+- Authenticated read-only, cursor-paginated pending markers in source
+  `skip_records` joined with `skip_assets`, **only** analysis playlists 8/10.
+  Displayed fields are series title, season/episode, marker kind, proposed time
+  and analysis playlist, never stream URLs, device IDs or credentials.
+- One-marker **Approve** or **Reject** requires two CSRF proofs: the existing
+  mobile dashboard header and the ORIGINAL skip_markers session key. The latter
+  is extracted from the precise original `csrf()` function's constant
+  `session.get` AST; a different/dynamic contract fails closed.
+- Original Flask view `v082_skip_review` is called unmodified to preserve
+  marker business rules, history, proposal retirement and job wakeup behavior.
+  A confirmed success requires `skip_records.status` to become `approved`
+  or `rejected`. Private replay journal prevents uncertain duplicate POSTs.
+- **Disabled by default**. Operator can enable only after production-shaped
+  integration and safe device acceptance using
+  `EPIMEDIAHUB_NATIVE_EPISCENE_REVIEW_ENABLED=YES`. Approval always uses the
+  existing original time fields; editing arbitrary timecodes and bulk review
+  are deliberately not wired without independent business/UI acceptance.
+- Synthetic Flask tests verify authentication, both CSRF guards, privacy lane
+  filtering, replay behavior and unchanged original handler semantics.
+
 ## Mandatory release gates
 
 1. Confirm no HTML/WebView navigation for any admin operation, including login (CI guard now present).
