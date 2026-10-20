@@ -322,10 +322,24 @@ internal fun NativeManagementScreen(
     var query by remember { mutableStateOf("") }
     var searchResult by remember { mutableStateOf<List<NativeManagementApi.Entry>?>(null) }
     var searchHasMore by remember { mutableStateOf(false) }
+    var searchNextId by remember { mutableStateOf<String?>(null) }
     var searchError by remember { mutableStateOf("") }
     var searchBusy by remember { mutableStateOf(false) }
+    var additionalEntries by remember {
+        mutableStateOf<List<NativeManagementApi.Entry>>(emptyList())
+    }
+    var additionalNextId by remember { mutableStateOf<String?>(null) }
+    var additionalLoaded by remember { mutableStateOf(false) }
+    var loadingMore by remember { mutableStateOf(false) }
+    var moreError by remember { mutableStateOf("") }
     LaunchedEffect(query, section, data?.loaded) {
         searchResult = null
+        searchNextId = null
+        additionalEntries = emptyList()
+        additionalNextId = null
+        additionalLoaded = false
+        loadingMore = false
+        moreError = ""
         searchError = ""
         if (query.isNotBlank() && data?.loaded == true) {
             searchBusy = true
@@ -335,10 +349,11 @@ internal fun NativeManagementScreen(
             val kind = if (section == 0) "customers" else "resellers"
             val cookie = CookieManager.getInstance()
                 .getCookie("https://admin.epimediahub.com") ?: ""
-            NativeManagementApi.search(cookie, kind, requested) { list, more, error ->
+            NativeManagementApi.search(cookie, kind, requested) { list, more, cursor, error ->
                 if (query == requested && section == requestSection) {
                     searchResult = list
                     searchHasMore = more
+                    searchNextId = cursor
                     searchError = error
                     searchBusy = false
                 }
@@ -470,19 +485,26 @@ internal fun NativeManagementScreen(
             modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp)
         )
         val all = if (section == 0) data?.customers.orEmpty() else data?.resellers.orEmpty()
-        val filtered = if (query.isBlank()) all else searchResult.orEmpty()
-        if (searchBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        if (searchError.isNotBlank()) {
-            Text(searchError, color = Secondary, fontSize = 12.sp)
-        }
-        val more = if (query.isBlank()) {
+        val firstPage = if (query.isBlank()) all else searchResult.orEmpty()
+        val filtered = firstPage + additionalEntries
+        val initialCursor = if (query.isBlank()) {
+            if (section == 0) data?.customerNextId else data?.resellerNextId
+        } else searchNextId
+        val nextCursor = if (additionalLoaded) additionalNextId else initialCursor
+        val legacyMore = if (query.isBlank()) {
             if (section == 0) data?.customerHasMore == true
             else data?.resellerHasMore == true
         } else searchHasMore
-        if (more) {
-            Text("Mehr als 100 passende Einträge. Suche bitte genauer.",
-                color = Secondary, fontSize = 12.sp,
-                modifier = Modifier.padding(vertical = 6.dp))
+        if (searchBusy || loadingMore) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (searchError.isNotBlank()) {
+            Text(searchError, color = Secondary, fontSize = 12.sp)
+        }
+        if (moreError.isNotBlank()) {
+            Text(moreError, color = Secondary, fontSize = 12.sp)
+        }
+        if (nextCursor == null && !additionalLoaded && legacyMore) {
+            Text("Für weitere Einträge muss die Server-API aktualisiert werden. "
+                + "Bis dahin bitte genauer suchen.", color = Secondary, fontSize = 12.sp)
         }
         if (filtered.isEmpty() && !searchBusy && searchError.isBlank()) {
             Text("Keine Einträge für diese Auswahl.", color = Secondary,
@@ -508,6 +530,42 @@ internal fun NativeManagementScreen(
                         }
                         Icon(Icons.Outlined.ChevronRight, null, tint = Secondary)
                     }
+                }
+            }
+            if (nextCursor != null) {
+                item {
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !loadingMore && !searchBusy,
+                        onClick = {
+                            val cursor = nextCursor
+                            if (cursor != null) {
+                                val requestedSection = section
+                                val requestedQuery = query
+                                val kind = if (section == 0) "customers" else "resellers"
+                                val cookie = CookieManager.getInstance().getCookie(
+                                    "https://admin.epimediahub.com") ?: ""
+                                loadingMore = true
+                                moreError = ""
+                                NativeManagementApi.loadMore(
+                                    cookie, kind, requestedQuery, cursor
+                                ) { page, next, error ->
+                                    if (section == requestedSection && query == requestedQuery) {
+                                        loadingMore = false
+                                        if (page == null) {
+                                            moreError = error
+                                        } else {
+                                            val ids = filtered.map { it.id }.toSet()
+                                            additionalEntries = additionalEntries +
+                                                page.filterNot { it.id in ids }
+                                            additionalNextId = next
+                                            additionalLoaded = true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ) { Text("Weitere Einträge laden") }
                 }
             }
         }
