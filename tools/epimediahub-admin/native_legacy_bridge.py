@@ -34,6 +34,7 @@ ACTIONS = {
     "sync-device": ("v070_sync_device", ()),
     "move-device": ("v070_move_device", ("customer_id",)),
     "assign-reseller": ("v080_assign_customer_reseller", ("reseller_id",)),
+    "delete-playlist": ("v076_delete_customer_playlist", ()),
 }
 CREATE_ACTIONS = {"create-customer", "create-reseller"}
 IDENTIFIER = re.compile(r"^[1-9][0-9]{0,17}$")
@@ -131,7 +132,10 @@ def _snapshot(path, action, identifier, fields):
         if duplicates:
             raise ValueError("username already exists")
         return int(_read(path, "SELECT COALESCE(MAX(id),0) FROM resellers")[0][0])
-    if action == "rename-device":
+    if action == "delete-playlist":
+        rows = _read(path,
+            "SELECT id FROM customer_playlists WHERE id=?", (identifier,))
+    elif action == "rename-device":
         rows = _read(path, "SELECT display_name FROM devices WHERE id=?", (identifier,))
     elif action == "sync-device":
         rows = _read(path, "SELECT config_version FROM devices WHERE id=?", (identifier,))
@@ -173,6 +177,10 @@ def _postcondition(path, action, identifier, fields, previous):
             "SELECT id FROM resellers WHERE id>? AND name=? AND username=?",
             (previous, fields["name"], fields["username"]))
         return int(rows[0][0]) if len(rows) == 1 else None
+    if action == "delete-playlist":
+        rows = _read(path,
+            "SELECT id FROM customer_playlists WHERE id=?", (identifier,))
+        return identifier if not rows else None
     if action == "rename-device":
         rows = _read(path, "SELECT display_name FROM devices WHERE id=?", (identifier,))
         return identifier if rows and rows[0][0] == fields["name"] else None
@@ -268,10 +276,13 @@ def invoke_legacy(path, action, identifier, submitted):
             # The legacy business handler enforces its own validation,
             # auditing, quotas, migration and device config propagation.
             # A redirect or flash is never itself considered successful.
+            arg_names = {
+                "rename-device":"device_id", "sync-device":"device_id",
+                "move-device":"device_id", "assign-reseller":"customer_id",
+                "delete-playlist":"playlist_id",
+            }
             handler(**({} if action in CREATE_ACTIONS else
-                        {"device_id":identifier} if action in
-                        {"rename-device","sync-device","move-device"} else
-                        {"customer_id":identifier}))
+                {arg_names[action]:identifier}))
             result_id = _postcondition(path,action,identifier,fields,previous)
             if result_id is None:
                 # Maybe original handler rejected the request; never retry
