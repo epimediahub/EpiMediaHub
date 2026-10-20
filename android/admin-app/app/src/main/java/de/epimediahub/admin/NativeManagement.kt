@@ -317,6 +317,7 @@ internal fun NativeManagementScreen(
     }
     var selected by remember { mutableStateOf<NativeManagementApi.Entry?>(null) }
     var pendingRename by remember { mutableStateOf<NativeManagementApi.Entry?>(null) }
+    var inspectingDevice by remember { mutableStateOf<NativeManagementApi.DetailItem?>(null) }
     var renameValue by remember { mutableStateOf("") }
     var renameBusy by remember { mutableStateOf(false) }
     var renameResult by remember { mutableStateOf("") }
@@ -480,7 +481,7 @@ internal fun NativeManagementScreen(
     }
 
     selected?.let { item ->
-        if (pendingGrant == null && pendingRename == null) AlertDialog(
+        if (pendingGrant == null && pendingRename == null && inspectingDevice == null) AlertDialog(
             onDismissRequest = { if (!grantBusy) selected = null },
             title = { Text(item.name) },
             text = {
@@ -507,6 +508,12 @@ internal fun NativeManagementScreen(
                                 entries.take(30).forEach { entry ->
                                     Text("• " + entry.name +
                                         if (entry.enabled) " · Aktiv" else " · Inaktiv")
+                                    if (heading == "Geräte" && section == 0 &&
+                                        Regex("[1-9][0-9]{0,17}").matches(entry.id)) {
+                                        TextButton(onClick = { inspectingDevice = entry }) {
+                                            Text("Gerätediagnose")
+                                        }
+                                    }
                                     if (heading == "Geräte" && section == 0 &&
                                         detail.enabled && entry.enabled &&
                                         Regex("[1-9][0-9]{0,17}").matches(entry.id)) {
@@ -594,6 +601,13 @@ internal fun NativeManagementScreen(
                     }
                 ) { Text("Namen speichern") }
             }
+        )
+    }
+
+    inspectingDevice?.let { inspected ->
+        NativeDeviceDiagnosticsDialog(
+            deviceRowId=inspected.id,
+            close={ inspectingDevice=null }
         )
     }
 
