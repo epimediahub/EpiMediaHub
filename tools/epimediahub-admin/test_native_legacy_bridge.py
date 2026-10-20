@@ -38,6 +38,12 @@ class NativeLegacyBridgeTests(unittest.TestCase):
                 INSERT INTO customers VALUES(2,'Beta',1,NULL);
                 INSERT INTO resellers VALUES(3,'Partner','partner',1,20,40,'Brand');
                 INSERT INTO devices VALUES(7,1,'Living Room',5);
+                CREATE TABLE customer_playlists (
+                    id INTEGER PRIMARY KEY,customer_id INTEGER,name TEXT,
+                    enabled INTEGER,config_json TEXT
+                );
+                INSERT INTO customer_playlists VALUES
+                    (40,1,'Playlist A',1,'private-config-not-for-mobile');
             """)
         self.app = Flask("native-legacy-isolated")
         self.app.secret_key = "isolated-secret-not-live"
@@ -83,6 +89,9 @@ class NativeLegacyBridgeTests(unittest.TestCase):
                      "UPDATE customers SET reseller_id=? WHERE id=?",
                      (int(request.form["reseller_id"]) if request.form["reseller_id"]
                       else None, customer_id)))
+        register("v076_delete_customer_playlist",
+                 lambda con, playlist_id: con.execute(
+                     "DELETE FROM customer_playlists WHERE id=?", (playlist_id,)))
 
     def tearDown(self):
         self.env.stop()
@@ -184,6 +193,19 @@ class NativeLegacyBridgeTests(unittest.TestCase):
         self.assertEqual(second.status_code,409)
         self.assertEqual(self.scalar(
             "SELECT COUNT(*) FROM customers WHERE name='Crash Yet Written'"),1)
+
+    def test_playlist_delete_requires_confirmation_and_proves_deletion(self):
+        csrf = self.signin()
+        self.assertEqual(self.post("delete-playlist",40,csrf,{"confirm":"false"}).status_code,400)
+        wrong = self.post("delete-playlist",100,csrf)
+        self.assertEqual(wrong.status_code,400)
+        response = self.post("delete-playlist",40,csrf)
+        self.assertEqual(response.status_code,200)
+        self.assertTrue(response.get_json()["applied"])
+        self.assertEqual(self.scalar(
+            "SELECT COUNT(*) FROM customer_playlists WHERE id=40"),0)
+        self.assertEqual(self.calls["v076_delete_customer_playlist"],1)
+        self.assertNotIn("private-config-not-for-mobile",response.get_data(as_text=True))
 
     def test_original_redirect_is_not_success(self):
         csrf=self.signin()
