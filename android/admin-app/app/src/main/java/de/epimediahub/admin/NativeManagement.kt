@@ -316,6 +316,10 @@ internal fun NativeManagementScreen(
         }
     }
     var selected by remember { mutableStateOf<NativeManagementApi.Entry?>(null) }
+    var pendingRename by remember { mutableStateOf<NativeManagementApi.Entry?>(null) }
+    var renameValue by remember { mutableStateOf("") }
+    var renameBusy by remember { mutableStateOf(false) }
+    var renameResult by remember { mutableStateOf("") }
     var pendingGrant by remember {
         mutableStateOf<Pair<NativeManagementApi.DetailItem, String>?>(null)
     }
@@ -363,6 +367,10 @@ internal fun NativeManagementScreen(
             }
         }
         if (loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        if (renameResult.isNotBlank()) {
+            Text(renameResult, color = AccentBlue, fontSize = 12.sp,
+                modifier = Modifier.padding(vertical = 8.dp))
+        }
         if (data?.loaded != true) {
             Surface(
                 shape = RoundedCornerShape(18.dp), color = SurfaceNavy,
@@ -472,7 +480,7 @@ internal fun NativeManagementScreen(
     }
 
     selected?.let { item ->
-        if (pendingGrant == null) AlertDialog(
+        if (pendingGrant == null && pendingRename == null) AlertDialog(
             onDismissRequest = { if (!grantBusy) selected = null },
             title = { Text(item.name) },
             text = {
@@ -528,8 +536,63 @@ internal fun NativeManagementScreen(
                         color = Secondary, fontSize = 12.sp)
                 }
             },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        pendingRename = item
+                        renameValue = item.name
+                        renameResult = ""
+                    }
+                ) { Text("Umbenennen") }
+            },
             confirmButton = {
                 TextButton(onClick = { selected = null }) { Text("Schließen") }
+            }
+        )
+    }
+
+    pendingRename?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { if (!renameBusy) pendingRename = null },
+            title = { Text(if (section == 0) "Kunde umbenennen" else "Reseller umbenennen") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = renameValue,
+                        onValueChange = { renameValue = it.take(140) },
+                        label = { Text("Neuer Anzeigename") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text("Dies ändert nur den Anzeigenamen, nicht Playlists, "
+                        + "Geräte oder Zugangsdaten.", fontSize = 12.sp)
+                    if (renameBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRename = null },enabled = !renameBusy) {
+                    Text("Abbrechen")
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !renameBusy &&
+                        renameValue.trim().isNotBlank() &&
+                        renameValue.trim() != entry.name,
+                    onClick = {
+                        renameBusy = true
+                        val kind = if (section == 0) "customers" else "resellers"
+                        NativeAdminEdits.rename(kind,entry.id,entry.name,renameValue) { outcome ->
+                            renameBusy = false
+                            renameResult = outcome.message
+                            pendingRename = null
+                            if (outcome.success) {
+                                selected = null
+                                refresh()
+                            }
+                        }
+                    }
+                ) { Text("Namen speichern") }
             }
         )
     }
