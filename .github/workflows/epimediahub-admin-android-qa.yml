@@ -65,6 +65,19 @@ jobs:
                   print("configured=true",file=out)
                   print("Firebase Android client enabled; values kept out of logs.")
           PY
+      - name: Reject browser and embedded WebView usage in native Admin app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path("android/admin-app/app/src/main/java/de/epimediahub/admin")
+          source="\\n".join(p.read_text(encoding="utf-8") for p in root.rglob("*.kt"))
+          forbidden=("android.webkit.WebView","AndroidView(","loadUrl(","WebViewClient",
+                     "android.webkit.WebChromeClient")
+          hits=[token for token in forbidden if token in source]
+          if hits:
+              raise SystemExit("Native app still embeds browser components: "+", ".join(hits))
+          print("NATIVE_ADMIN_HAS_NO_WEBVIEW")
+          PY
       - name: Compile separate private Android Admin app
         working-directory: android/admin-app
         run: gradle --no-daemon :app:assembleDebug :app:lintDebug
