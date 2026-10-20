@@ -10,6 +10,7 @@ that UUID cannot execute a second write. An operator must reconcile it.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -198,6 +199,7 @@ def _postcondition(path, action, identifier, fields, previous):
     return None
 
 
+@contextmanager
 def _journal_file(path):
     root = Path(path).parent / "admin-mobile"
     if root.is_symlink():
@@ -215,14 +217,21 @@ def _journal_file(path):
         con = sqlite3.connect(journal, timeout=7)
     finally:
         os.umask(old_umask)
-    con.row_factory = sqlite3.Row
-    con.execute("PRAGMA busy_timeout=6000")
-    con.execute("""CREATE TABLE IF NOT EXISTS requests (
-        request_id TEXT PRIMARY KEY, action TEXT NOT NULL,
-        entity_id INTEGER NOT NULL, state TEXT NOT NULL,
-        result_id INTEGER, created_at TEXT NOT NULL
-    )""")
-    return con
+    try:
+        info = journal.stat()
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                or info.st_mode & 0o077):
+            raise LegacyUnavailable("journal must be private")
+        con.row_factory = sqlite3.Row
+        con.execute("PRAGMA busy_timeout=6000")
+        con.execute("""CREATE TABLE IF NOT EXISTS requests (
+            request_id TEXT PRIMARY KEY, action TEXT NOT NULL,
+            entity_id INTEGER NOT NULL, state TEXT NOT NULL,
+            result_id INTEGER, created_at TEXT NOT NULL
+        )""")
+        yield con
+    finally:
+        con.close()
 
 
 def _claim(journal, request_id, action, identifier):
