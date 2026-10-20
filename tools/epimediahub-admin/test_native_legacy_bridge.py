@@ -179,7 +179,7 @@ class NativeLegacyBridgeTests(unittest.TestCase):
         payload={"name":"Crash Yet Written","request_id":rid()}
         self.app.config["TESTING"]=False
         first=self.post("create-customer",0,csrf,payload)
-        self.assertEqual(first.status_code,500)
+        self.assertEqual(first.status_code,503)
         second=self.post("create-customer",0,csrf,payload)
         self.assertEqual(second.status_code,409)
         self.assertEqual(self.scalar(
