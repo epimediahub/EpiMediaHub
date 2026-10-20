@@ -25,7 +25,7 @@ BASE=Path("/opt/epimediahub/provisioning")
 SERVICE="epimediahub-provisioning.service"
 HERE=Path(__file__).resolve().parent
 MODULES=("mobile_flask.py","native_management_data.py","native_management_actions.py",
-         "native_management_edits.py","native_legacy_bridge.py",
+         "native_management_edits.py","native_legacy_bridge.py","native_delete_confirmation.py",
          "expiry_report_core.py","expiry_cache.py","expiry_provider_adapter.py",
          "expiry_report_rows.py","expiry_report_calendar.py","expiry_report_pdf.py",
          "expiry_report_publish.py")
