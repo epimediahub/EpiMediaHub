@@ -83,6 +83,25 @@ class NativeManagementTests(unittest.TestCase):
                 self.assertNotIn("PRIVATE_PASSWORD",r.get_data(as_text=True))
                 self.assertNotIn("PRIVATE_MAC",r.get_data(as_text=True))
 
+    def test_search_all_entries_and_escape_sql_wildcards(self):
+        self.signin()
+        with sqlite3.connect(self.db) as con:
+            con.execute("INSERT INTO customers VALUES (9,'A%_ Zeichen',1,null)")
+            con.execute("INSERT INTO customers VALUES (10,'Anderer Kunde',1,null)")
+        from unittest import mock
+        with mock.patch.object(mobile_flask, "_base", return_value=Path(self.root.name)):
+            route="/admin/mobile/management/customers"
+            found=self.client.get(route,query_string={"q":"A%_"})
+            self.assertEqual(found.status_code,200)
+            self.assertEqual([x["id"] for x in found.get_json()["customers"]],["9"])
+            another=self.client.get(route,query_string={"q":"Anderer"})
+            self.assertEqual(another.get_json()["customers"][0]["name"],"Anderer Kunde")
+            too_long=self.client.get(route,query_string={"q":"x"*81})
+            self.assertEqual(too_long.status_code,400)
+            reseller=self.client.get("/admin/mobile/management/resellers",
+                query_string={"q":"Partner"})
+            self.assertEqual(len(reseller.get_json()["resellers"]),1)
+
     def test_schema_mismatch_fails_closed(self):
         self.signin()
         with tempfile.TemporaryDirectory() as other:
