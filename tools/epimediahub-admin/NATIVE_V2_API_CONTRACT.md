@@ -208,6 +208,49 @@ remain unresolved. Do not expose any native destructive customer/reseller/
 device deletion or marker writes by guessing. Finish their verified contracts
 and test against a safe production-shaped fixture before final release.
 
+## Final integrated development additions — 2026-10-20 (NOT released)
+
+**Native customer/reseller/device deletes**:
+- A narrow server-side AST inspector (`native_delete_confirmation.py`) derives the
+  *existing business handler's* exact typed confirmation from its simple static
+  f-string and current numeric row ID. Arbitrary expressions, unknown tokens and
+  unsupported handlers fail closed; source is never evaluated. Endpoints return
+  the phrase only after authentication, and original handler still validates it.
+- The Compose app shows the required phrase and asks the admin to type it exactly.
+  Real mutation is delegated to `v073_delete_customer`,
+  `v080_delete_reseller` or `v074_delete_device`, journaled before invocation
+  and checked with a read-only postcondition.
+- For safety these routes remain disabled unless the operator explicitly sets
+  `EPIMEDIAHUB_NATIVE_ADMIN_ENABLE_DELETES=YES` **after** real
+  production-shaped integration testing. Original business constraints,
+  audit history and migrations are not replicated or bypassed.
+- Isolated Flask regression tests cover anonymous access, CSRF,
+  exact-match confirmation, rejection and actual deletion; they are **not**
+  evidence of live Hetzner behavioral acceptance.
+
+**Expiry reporting**:
+- Authentication-protected admin web route and monthly/weekly JSON routes,
+  A4 landscape PDF renderer and native Compose customer expiry viewer with
+  Android printing. A private cache stores provider-verified per-account
+  expiration date + observation timestamp, without URL/username/password.
+- A disabled-by-default one-shot schedule publisher creates month PDFs and
+  stable deduplicated weekly/monthly generic FCM events for *registered admin
+  devices only*. No PII in FCM messages. It requires
+  `EPIMEDIAHUB_EXPIRY_PROVIDER_COVERAGE_CERTIFIED=YES`.
+- The upstream production Xtream provider refresh producing complete verified
+  observations has not yet been mapped. `audit_xtream_expiry_source.py`
+  exports only safe aggregate field counts and source function names so that
+  final mapping can be implemented without guessing. Until then the live
+  report API fails closed (503) rather than supplying imagined dates.
+
+**Still a blocker**: a usable native EpiScene marker **review/approve/reject
+list and guarded write actions** have not been connected to the existing
+`skip_markers` database, session-CSRF and marker audit semantics. The analyzer
+status screen does not substitute for marker review. Existing site methods
+must not be called with guessed form values. Authenticated staging verification,
+the fully certified provider refresh, secrets/signature readiness, a safe
+server upgrade, and one real Android device test remain release prerequisites.
+
 ## Mandatory release gates
 
 1. Confirm no HTML/WebView navigation for any admin operation, including login (CI guard now present).
