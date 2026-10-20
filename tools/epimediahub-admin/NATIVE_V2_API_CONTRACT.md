@@ -180,6 +180,34 @@ manual review needs the validated decision values and legacy CSRF form
 requirements. Neither these tasks nor full real-device onboarding and
 authenticated production integration have been tested. No V2 release/merge.
 
+## Native playlist editor from verified final-gap audit (2026-10-20)
+
+The supplied `epimediahub-native-final-gaps.json` confirms these seven
+`_playlist_config` form keys: `playlist_name`, `playlist_type`,
+`playlist_url`, `xtream_server`, `xtream_username`,
+`xtream_password`, and `xtream_output`.
+
+Development implementations now provide **native Compose create/edit forms**
+for M3U and Xtream and call the existing
+`v076_add_customer_playlist` / `v076_update_customer_playlist` handlers.
+A request must have an existing eligible customer or playlist, a fresh
+per-request UUID, explicit user confirmation, authenticated session, and CSRF.
+The backend checks an actual changed/persisted playlist record and expected
+configuration values; it never returns the provider URL/password. A blank
+Xtream password in the edit form is preserved only by the original
+`_playlist_config(previous)` implementation. The UI never fetches existing
+credentials and explicitly requires re-entering the URL/username when editing.
+Isolated tests use artificial credentials.
+
+**Important:** The final-gap export did *not* include the nested
+`v082_skip_review`, `v152_intro_role`, and delete handlers. Those route
+functions were found by an earlier recursive audit, but the final one scans
+only module-top-level AST functions; this means review CSRF token expectations,
+provider confirmation strings, data ownership and marker postconditions
+remain unresolved. Do not expose any native destructive customer/reseller/
+device deletion or marker writes by guessing. Finish their verified contracts
+and test against a safe production-shaped fixture before final release.
+
 ## Mandatory release gates
 
 1. Confirm no HTML/WebView navigation for any admin operation, including login (CI guard now present).
