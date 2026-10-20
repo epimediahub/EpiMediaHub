@@ -225,6 +225,7 @@ internal fun NativeExpiryScreen(modifier:Modifier=Modifier) {
             fontWeight=FontWeight.Bold)
         Text("Direktkunden und Reseller-Kunden · Nur bestätigte Anbieter-Ablaufdaten",
             style=MaterialTheme.typography.bodySmall)
+        NativeExpiryCoverage()
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
             FilterChip(selected=monthly,onClick={monthly=true},
                 label={Text("Monatsbericht")})
