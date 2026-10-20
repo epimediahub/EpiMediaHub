@@ -28,7 +28,7 @@ MODULES=("mobile_flask.py","native_management_data.py","native_management_action
          "native_management_edits.py","native_legacy_bridge.py","native_delete_confirmation.py",
          "native_marker_review.py",
          "expiry_report_core.py","expiry_cache.py","expiry_provider_adapter.py",
-         "expiry_report_rows.py","expiry_report_calendar.py","expiry_report_pdf.py",
+         "expiry_report_rows.py","expiry_report_coverage.py","expiry_report_calendar.py","expiry_report_pdf.py",
          "expiry_report_publish.py")
 # Git blob SHA of released, already-deployed Android Admin v1 module on main.
 KNOWN_MAIN_SHA={"mobile_flask.py":"074979ed6e523ba899106f54549fcab1ec432f2c"}
