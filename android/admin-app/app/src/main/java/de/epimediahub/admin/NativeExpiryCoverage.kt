@@ -19,8 +19,10 @@ import kotlin.concurrent.thread
  * This screen never contacts IPTV servers or saves provider credentials.
  */
 private data class UnknownPlaylist(val name:String,val customers:List<String>)
+private data class HttpPlaylist(val name:String,val customers:List<String>)
 private data class ExpiryCoverageState(val total:Int,val confirmed:Int,
-    val missing:Int,val unknown:List<UnknownPlaylist>)
+    val provisional:Int,val missing:Int,val unknown:List<UnknownPlaylist>,
+    val observed:List<HttpPlaylist>)
 
 private fun readExpiryCoverage():ExpiryCoverageState {
     val base="https://admin.epimediahub.com"
@@ -57,14 +59,16 @@ private fun readExpiryCoverage():ExpiryCoverageState {
         val root=JSONObject(data)
         val total=root.getInt("active_accounts")
         val confirmed=root.getInt("confirmed_accounts")
+        val provisional=root.optInt("http_observed_accounts",0)
         val missing=root.getInt("unverified_accounts")
         if(total !in 0..10000 || confirmed !in 0..total
-            || missing!=total-confirmed)
+            || provisional !in 0..total || missing!=total-confirmed-provisional)
             throw IllegalStateException("Ungültige Kontenstatistik")
         val groups=root.getJSONArray("playlists")
         if(groups.length()>1000)
             throw IllegalStateException("Zu viele Playlists")
         val unknown=mutableListOf<UnknownPlaylist>()
+        val observed=mutableListOf<HttpPlaylist>()
         var totalEntries=0
         for(i in 0 until groups.length()){
             val g=groups.getJSONObject(i)
@@ -73,21 +77,29 @@ private fun readExpiryCoverage():ExpiryCoverageState {
             if(entries.length()>10000)
                 throw IllegalStateException("Zu viele Kunden")
             val customers=mutableListOf<String>()
+            val httpCustomers=mutableListOf<String>()
             for(j in 0 until entries.length()){
                 val row=entries.getJSONObject(j)
                 totalEntries++
                 when(row.getString("status")){
                     "unverified" -> customers.add(row.getString("customer").take(160))
+                    "http_observed" -> httpCustomers.add(
+                        row.getString("customer").take(160)+" – "+
+                        row.getString("expires_on"))
                     "confirmed" -> Unit
                     else -> throw IllegalStateException("Ungültiger Kontostatus")
                 }
             }
             if(customers.isNotEmpty())
                 unknown.add(UnknownPlaylist(name,customers))
+            if(httpCustomers.isNotEmpty())
+                observed.add(HttpPlaylist(name,httpCustomers))
         }
-        if(totalEntries!=total || unknown.sumOf{it.customers.size}!=missing)
+        if(totalEntries!=total || unknown.sumOf{it.customers.size}!=missing
+            || observed.sumOf{it.customers.size}!=provisional)
             throw IllegalStateException("Unvollständige Kontenstatistik")
-        return ExpiryCoverageState(total,confirmed,missing,unknown)
+        return ExpiryCoverageState(total,confirmed,provisional,missing,
+            unknown,observed)
     } finally { conn.disconnect() }
 }
 
@@ -114,10 +126,26 @@ internal fun NativeExpiryCoverage(){
         ElevatedCard(Modifier.fillMaxWidth()){
             Column(Modifier.padding(14.dp),
                 verticalArrangement=Arrangement.spacedBy(7.dp)){
-                Text("Ablaufdaten: ${state.confirmed} von ${state.total} Konten bestätigt",
+                Text("Ablaufdaten: ${state.total} aktive Konten",
                     fontWeight=FontWeight.Bold)
+                Text("${state.confirmed} gesichert bestätigt · "+
+                    "${state.provisional} über unverschlüsseltes HTTP beobachtet · "+
+                    "${state.missing} unbekannt",
+                    style=MaterialTheme.typography.bodySmall)
+                if(state.provisional>0){
+                    Text("HTTP-Angaben sind nicht gegen Manipulation geschützt. "+
+                        "Nur für die manuelle Arbeitsliste.",
+                        color=MaterialTheme.colorScheme.error,
+                        style=MaterialTheme.typography.bodySmall)
+                    state.observed.forEach { group ->
+                        Text(group.name+" – HTTP",fontWeight=FontWeight.SemiBold)
+                        group.customers.forEach { customer ->
+                            Text("• $customer",style=MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
                 if(state.missing>0){
-                    Text("${state.missing} Konten haben kein aktuell bestätigtes Ablaufdatum. "+
+                    Text("${state.missing} Konten haben kein aktuell bekanntes Ablaufdatum. "+
                         "Die Monatsübersicht ist möglicherweise unvollständig. "+
                         "Unbekannt bedeutet nicht abgelaufen.",
                         color=MaterialTheme.colorScheme.error,
@@ -129,8 +157,8 @@ internal fun NativeExpiryCoverage(){
                                 style=MaterialTheme.typography.bodySmall)
                         }
                     }
-                } else {
-                    Text("Für alle aktiven Konten liegen aktuelle Ablaufdaten vor.",
+                } else if(state.provisional==0) {
+                    Text("Für alle aktiven Konten liegen bestätigte Ablaufdaten vor.",
                         style=MaterialTheme.typography.bodySmall)
                 }
             }
