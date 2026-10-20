@@ -17,7 +17,10 @@ object AdminNativeStatus {
         val running: Int,
         val completed: Int,
         val failed: Int,
-        val lastCompletionEpoch: Long?
+        val lastCompletionEpoch: Long?,
+        val lastRunningEpoch: Long?,
+        val statusCounts: Map<String, Int>,
+        val completionStalled: Boolean
     )
     data class Snapshot(val sampledAtEpoch: Long, val lanes: List<Lane>)
     private const val URL_STATUS = "https://admin.epimediahub.com/admin/mobile/episcene/status"
@@ -66,7 +69,14 @@ object AdminNativeStatus {
                                 completed = row.getInt("completed").coerceAtLeast(0),
                                 failed = row.getInt("failed").coerceAtLeast(0),
                                 lastCompletionEpoch = if (row.isNull("last_completion_epoch")) null
-                                    else row.getLong("last_completion_epoch")
+                                    else row.getLong("last_completion_epoch"),
+                                lastRunningEpoch = if (row.isNull("last_running_epoch")) null
+                                    else row.getLong("last_running_epoch"),
+                                statusCounts = listOf("done","review","partial","no_match","no_reference")
+                                    .associateWith { key ->
+                                        row.optJSONObject("status_counts")?.optInt(key,0) ?: 0
+                                    },
+                                completionStalled = row.optBoolean("completion_stalled", false)
                             )
                         }.sortedBy { it.id }
                         require(parsed.map { it.id } == listOf(8, 10))

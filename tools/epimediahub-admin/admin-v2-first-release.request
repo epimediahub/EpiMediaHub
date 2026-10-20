@@ -1,0 +1,17 @@
+EpiMediaHub Admin V2 — PRIVATE SIGNED BUILD REQUEST
+
+Build: v2.0.0
+Android package: de.epimediahub.admin
+Version code: 200001
+Source: merge of PR #96 into main
+Trigger: one-time main-branch push matched by epimediahub-admin-private-release.yml
+
+The workflow can use only GitHub Actions' private existing
+EPI_ADMIN_RELEASE_SIGNING_JSON and EPI_ADMIN_FIREBASE_CLIENT_JSON secrets.
+It MUST validate signer fingerprint and produce a short-lived private
+workflow artifact; no GitHub Release/public download or automatic APK upload.
+
+This request does not authorize unsafe default app installs, rotating the
+existing keystore, publishing player-app updates, or enabling incomplete
+expiry-report/FCM automation. Deployment onto the private Admin updater is
+a separate SHA-256 verified, owner-account action after signer review.

@@ -77,7 +77,9 @@ def latest_signed_artifact(token: str):
         "/runs?branch=main&status=success&per_page=10")
     for run in runs.get("workflow_runs",[])[:10]:
         if (run.get("name")!="EpiMediaHub Admin private signed release" or
-            run.get("head_branch")!="main" or run.get("event")!="workflow_dispatch" or
+            run.get("head_branch")!="main" or
+            run.get("event") not in ("workflow_dispatch","push") or
+            run.get("path")!=".github/workflows/"+WORKFLOW or
             run.get("status")!="completed" or run.get("conclusion")!="success"):
             continue
         ident=run.get("id")

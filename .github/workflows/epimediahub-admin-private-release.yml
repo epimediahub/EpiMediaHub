@@ -1,5 +1,11 @@
 name: EpiMediaHub Admin private signed release
 on:
+  # One approved, private signed build when the V2 release-request file lands in main.
+  push:
+    branches:
+      - main
+    paths:
+      - 'tools/epimediahub-admin/admin-v2-first-release.request'
   pull_request:
     paths:
       - '.github/workflows/epimediahub-admin-private-release.yml'
@@ -25,7 +31,7 @@ jobs:
       - name: Validate release signing helper syntax
         run: bash -n tools/epimediahub-admin/create_release_signing_identity.sh
   verified-private-release:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -47,8 +53,8 @@ jobs:
         env:
           SIGNING_JSON: ${{ secrets.EPI_ADMIN_RELEASE_SIGNING_JSON }}
           FIREBASE_CLIENT_JSON: ${{ secrets.EPI_ADMIN_FIREBASE_CLIENT_JSON }}
-          EPI_ADMIN_RELEASE_VERSION_CODE: ${{ inputs.version_code }}
-          EPI_ADMIN_RELEASE_VERSION_NAME: ${{ inputs.version_name }}
+          EPI_ADMIN_RELEASE_VERSION_CODE: ${{ github.event_name == 'push' && '200001' || inputs.version_code }}
+          EPI_ADMIN_RELEASE_VERSION_NAME: ${{ github.event_name == 'push' && '2.0.0' || inputs.version_name }}
         shell: bash
         run: |
           set -euo pipefail

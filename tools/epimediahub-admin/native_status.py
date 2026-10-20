@@ -47,12 +47,17 @@ def summarize(con,now=None):
           "id":row["id"],"label":LANES[row["id"]],
           "enabled":bool(row["enabled"]==1 and row["archived"]==0),
           "queued":0,"running":0,"completed":0,"failed":0,
-          "last_completion_epoch":None}
+          "last_completion_epoch":None,
+          "last_running_epoch":None,
+          "status_counts":{"done":0,"review":0,"partial":0,
+            "no_match":0,"no_reference":0}}
     grouped=con.execute("""
       SELECT a.playlist_id pid,j.status state,COUNT(*) total,
         MAX(CASE WHEN j.status IN
           ('done','review','partial','no_match','no_reference')
-          THEN j.updated_at ELSE NULL END) latest
+          THEN j.updated_at ELSE NULL END) latest,
+        MAX(CASE WHEN j.status IN ('running','processing','in_progress')
+          THEN j.updated_at ELSE NULL END) last_running
       FROM skip_jobs j INNER JOIN skip_assets a
       ON j.asset_key=a.asset_key
       WHERE a.playlist_id IN (8,10)
@@ -60,15 +65,29 @@ def summarize(con,now=None):
     for row in grouped:
         entry=records[row["pid"]]
         state=row["state"]
+        if state in entry["status_counts"]:
+            entry["status_counts"][state]+=row["total"]
         if state=="queued":entry["queued"]+=row["total"]
         elif state in ("running","processing","in_progress"):
             entry["running"]+=row["total"]
         elif state in GOOD:entry["completed"]+=row["total"]
         elif state=="failed":entry["failed"]+=row["total"]
+        active=_epoch(row["last_running"])
+        if active is not None and active<=now+300:
+            previous=entry["last_running_epoch"]
+            if previous is None or active>previous:
+                entry["last_running_epoch"]=active
         latest=_epoch(row["latest"])
         if latest is not None and latest<=now+300:
             prev=entry["last_completion_epoch"]
             if prev is None or latest>prev:entry["last_completion_epoch"]=latest
+    for entry in records.values():
+        # No progress with a live backlog is a warning, not proof that the
+        # system is down or that any worker has failed.
+        elapsed=(now-entry["last_completion_epoch"]
+                 if entry["last_completion_epoch"] is not None else None)
+        entry["completion_stalled"]=(elapsed is not None and elapsed>=900
+             and entry["queued"]>0)
     return {"sampled_at_epoch":now,"lanes":[records[pid] for pid in sorted(LANES)],
             "scope":"independent_analysis_sources_only"}
 

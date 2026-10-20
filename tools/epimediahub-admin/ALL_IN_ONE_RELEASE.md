@@ -7,8 +7,10 @@ unverändert.
 
 ## Stand des Quellcodes
 
-- Android-Paket: `de.epimediahub.admin`, native Command-Center-Startseite,
-  EpiScene, Meldungen, geschützte WebView, Android-Entsperrung, Push-Opt-in.
+- Android-Paket: `de.epimediahub.admin`, vollständig native Compose-Startseite,
+  Kunden/Reseller/Playlists/Geräte, EpiScene-Status und gated Markerprüfliste,
+  Meldungen, Anbieter-Ablaufberichte mit Android-Druckfunktion,
+  Android-Entsperrung und Push-Opt-in; **keine eingebettete WebView**.
 - Android-Updater: private HTTPS-Endpunkte
   `/admin/mobile/update/status` und `/admin/mobile/update/apk`.
   Nur mit Dashboard-Session, Paket/Version/Größe/SHA256 geprüft; APK-

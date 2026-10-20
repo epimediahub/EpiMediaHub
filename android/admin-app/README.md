@@ -1,5 +1,30 @@
 # EpiMediaHub Admin – eigenständige private Android-App
 
+## Native V2 – Entwicklungszweig, noch keine Produktivfreigabe
+
+Die aktuelle Entwicklung ersetzt die zuvor eingebettete Desktop-Webseite vollständig
+durch native Android-Jetpack-Compose-Screens. Ein CI-Test verbietet WebView-Code.
+
+- Native Anmeldung an der vorhandenen Admin-Sitzung, Biometrie und Logout.
+- Native Live-Startseite, Kunden, Reseller, Suche, Geräte, Playlists,
+  EpiScene-Lanes, Meldungen und Update-Funktionen.
+- Die Buttons **1 Jahr App** und **7 Tage VPN-Test** öffnen native
+  Bestätigungsdialoge. Ein JSON-Adapter führt nur die vorhandenen Business-Handler
+  aus, nach Admin-Session, CSRF, eindeutiger Bestätigung und Prüfung der
+  tatsächlich aktiven Berechtigung. Kein Erfolg allein wegen HTML-Redirects.
+- Alle Änderungen derzeit nur in PR #96 und noch **nicht** auf dem produktiven
+  Hetzner-Backend oder als signierte V2-APK verteilt.
+- Kunden-/Reseller-/Playlist-CRUD sowie detaillierte EpiScene-Markerverwaltung
+  brauchen noch vollständige native Geschäftsfunktionen und End-to-End-Tests.
+
+Siehe `tools/epimediahub-admin/NATIVE_V2_API_CONTRACT.md` für Endpunkte,
+Sicherheitsgrenzen, Staging-Checks und Bedingungen vor dem finalen In-App-Update.
+
+---
+
+## Historische Beschreibung: bisherige Admin V1
+
+
 **Entwicklungs-Build.** Dieses Projekt hat die eigene Package-ID
 `de.epimediahub.admin` und ist vollständig vom TV-/Mobile-Player und dessen
 Updater getrennt. Es implementiert eine Android-Hülle für das bestehende
