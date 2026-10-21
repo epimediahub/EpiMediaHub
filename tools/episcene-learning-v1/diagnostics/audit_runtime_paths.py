@@ -149,7 +149,7 @@ def brief(data):
     for key,status in data['unavailable'].items():
         lines.append('UNAVAILABLE '+key+': '+status)
     lines.append('Keine Aenderung an Dateien, Freigaben, Diensten oder Playlist-Inhalten.')
-    return '\\n'.join(lines)
+    return '\n'.join(lines)
 
 
 if __name__=='__main__':
