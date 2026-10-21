@@ -13,5 +13,5 @@ jobs:
       - name: Check read-only data privacy, ownership and rerun-gate diagnostics
         working-directory: tools/episcene-learning-v1/diagnostics
         run: |
-          python3 -m py_compile one_report.py audit_runtime_paths.py inspect_priority_flow.py inspect_priority_sql.py export_priority_source.py census_language_evidence.py audit_metadata_coverage.py
-          python3 -m unittest -v test_one_report.py test_audit_runtime_paths.py test_inspect_priority_flow.py test_inspect_priority_sql.py test_export_priority_source.py test_census_language_evidence.py test_audit_metadata_coverage.py
+          python3 -m py_compile one_report.py audit_runtime_paths.py inspect_priority_flow.py inspect_priority_sql.py export_priority_source.py census_language_evidence.py audit_metadata_coverage.py probe_4k_xtream_categories.py
+          python3 -m unittest -v test_one_report.py test_audit_runtime_paths.py test_inspect_priority_flow.py test_inspect_priority_sql.py test_export_priority_source.py test_census_language_evidence.py test_audit_metadata_coverage.py test_probe_4k_xtream_categories.py
