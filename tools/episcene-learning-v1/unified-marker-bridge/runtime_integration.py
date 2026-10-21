@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 import sqlite3
 import time
 from pathlib import Path
@@ -62,8 +64,20 @@ def _cache_key(ep):
 
 def _cache_path(path):
     p = Path(path)
+    if p.parent.is_symlink() or not p.parent.is_dir():
+        raise ValueError("Cache parent must exist and not be a symlink")
+    if stat.S_IMODE(p.parent.stat().st_mode) & 0o077:
+        raise ValueError("Advisory cache directory must be private (0700)")
     if p.is_symlink() or (p.exists() and not p.is_file()):
         raise ValueError("Refusing nonregular/symlink advisory cache")
+    if not p.exists():
+        try:
+            fd = os.open(str(p), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(fd)
+        except FileExistsError:
+            pass
+    if p.is_symlink() or not p.is_file() or stat.S_IMODE(p.stat().st_mode) & 0o077:
+        raise ValueError("Advisory cache file must be private (0600)")
     return p
 
 
