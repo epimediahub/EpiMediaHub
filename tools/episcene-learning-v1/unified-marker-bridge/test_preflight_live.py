@@ -21,7 +21,7 @@ def schema(folder):
             id INT, asset_key TEXT, start_ms INT,end_ms INT,
             segment_type TEXT,status TEXT)""")
         db.execute("INSERT INTO skip_assets VALUES(?,?,?,?,?,?)",
-                   ("customer-SECRET-DO-NOT-PRINT", 8, "private", 1, 1, 40000))
+                   ("customer-SECRET-DO-NOT-PRINT", 8, "SECRET_TV_TITLE_DO_NOT_PRINT", 1, 1, 40000))
     with sqlite3.connect(feedback) as db:
         db.execute("""CREATE TABLE feedback_versions(
             marker_id INT,asset_key TEXT,playlist_id INT,season INT,episode INT,
@@ -48,7 +48,7 @@ class ReadOnlyPreflightTests(unittest.TestCase):
             report = diagnostic(paths, active=True)
             printed = json.dumps(report)
             self.assertEqual(report["preflight_for_private_snapshot"], "PASS")
-            for secret in ("customer-SECRET", "private", "source_url",
+            for secret in ("customer-SECRET", "SECRET_TV_TITLE_DO_NOT_PRINT", "source_url",
                            "playlist_password", "token=", "customer_id"):
                 self.assertNotIn(secret, printed)
             self.assertTrue(report["no_database_or_service_modified"])
