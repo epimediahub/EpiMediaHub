@@ -20,4 +20,4 @@ jobs:
         run: |
           python3 -m py_compile bridge.py runtime_integration.py preflight_live.py inspect_live_marker_contract.py test_bridge.py test_runtime_integration.py test_preflight_live.py test_inspect_live_marker_contract.py inspect_active_lookup_contract.py test_inspect_active_lookup_contract.py check_lookup_release_gate.py test_check_lookup_release_gate.py trusted_external.py test_trusted_external.py trusted_external_sync.py test_trusted_external_sync.py
           python3 -m unittest -v test_bridge.py test_runtime_integration.py test_preflight_live.py test_inspect_live_marker_contract.py test_inspect_active_lookup_contract.py test_check_lookup_release_gate.py test_trusted_external.py test_trusted_external_sync.py
-          bash -n install_unified.sh bootstrap_unified.sh install_trusted_external.sh
+          bash -n install_unified.sh bootstrap_unified.sh install_trusted_external.sh bootstrap_trusted_external.sh
