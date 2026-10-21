@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import os
+import shutil
 from pathlib import Path
 import re
 import sqlite3
@@ -169,6 +170,10 @@ def make_backup():
         raise RuntimeError('Unexpected backup or database symlink')
     BACKUPS.mkdir(mode=0o700,exist_ok=True)
     os.chmod(BACKUPS,0o700)
+    free=shutil.disk_usage(BACKUPS).free
+    needed=int(DB.stat().st_size*1.5)+256*1024*1024
+    if free<needed:
+        raise RuntimeError('Insufficient free space for verified SQLite backup')
     dest=BACKUPS/('pre-4k-scope-'+time.strftime('%Y%m%dT%H%M%SZ',time.gmtime())+'-'+str(os.getpid())+'.sqlite3')
     with sqlite3.connect(DB.resolve().as_uri()+'?mode=ro',uri=True,timeout=40) as old:
         with sqlite3.connect(dest,timeout=40) as snapshot:
