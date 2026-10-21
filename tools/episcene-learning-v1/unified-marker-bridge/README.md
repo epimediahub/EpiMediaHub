@@ -148,3 +148,48 @@ It exposes **functions**, not an unauthenticated HTTP endpoint.
 **Release status:** Installing the hourly private snapshot is useful backend
 preparation. It is **not** end-to-end production integration or an updated
 customer player APK, and should never be represented as such.
+
+
+## Trusted IntroDB + TheIntroDB (October 2026)
+
+**Trust policy:** Both external services may provide *playback-ready* skip
+segments without an extra manual review, provided the **trusted backend**
+establishes the correct episode identity from server-side metadata (IMDb /
+TVDB ID, season, episode and runtime). Never accept user-supplied IDs as
+verified metadata and never automatically seek. Explicit source disagreements,
+"no intro" negatives and known mismatched cut lengths block automatic
+promotion for those segments. Approved first-party segments take priority.
+
+- `trusted_external.py` implements public HTTPS lookup, source identity
+  checks, duration grouping, negative markers, cross-provider disagreement
+  detection, 6-hour cache and a backend-only facade named
+  `trusted_playback_resolution`.
+- `trusted_external_sync.py` uses **only** the existing *analysis* inventory
+  8 and 10, and only if those asset records **already have** canonical
+  `imdb_id` or `tvdb_id` fields. If not, it reports
+  `missing_canonical_external_ids`. Titles, hashes of metadata or incomplete
+  stream URLs are not made into fake identities. The hourly prefetch uses **no
+  IPTV streams**, modifies only its private cache, and respects rate-limited
+  responses.
+- `install_trusted_external.sh --check/--apply` installs these new files into
+  the already installed private EpiScene bridge and activates a separate
+  systemd hourly sync. It does not change the existing `skip_records` table,
+  the customer-facing route, or the Android build.
+- Backend integration: call `trusted_playback_resolution(request,
+  authorize=existing_permission_check,
+  trusted_identity=canonical_backend_metadata_lookup,
+  store=PRIVATE_VERIFIED_STORE,cache=PRIVATE_EXTERNAL_CACHE)` from the
+  **already authenticated, original playback route**. Preserve the route's
+  existing response fields, error status and per-device authentication. A
+  passing AST inventory alone is *not* proof of a safe insertion point.
+
+**Not yet proof of full deployment:** If the production `skip_assets` table
+does not contain IMDb/TVDB IDs, another *verified metadata mapping* must first
+be integrated. The player has not been rebuilt or verified against the live
+route. An installed prefetch timer is NOT the same as a working skip button.
+
+The two public APIs are independent providers:
+[IntroDB](https://introdb.app/docs/api) and
+[TheIntroDB v4](https://theintrodb.github.io/theintrodb-npm/functions.html).
+Both can be trusted for human-skippable segment suggestions; the result still
+depends on the exact video edition, including language cuts and recaps.
