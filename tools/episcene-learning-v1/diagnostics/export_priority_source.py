@@ -52,7 +52,12 @@ def safe_literal(value):
     if SQL_START.search(s) and SQL_INCLUDES.search(s):
         if SENSITIVE.search(s) or DOMAIN.search(s) or len(s)>12000:
             return '<REDACTED_SQL_SENSITIVE>'
-        return s
+        # Quoted SQL values can contain unexpected provider secrets or personal
+        # identifiers. Keep only the known finite set of machine-state labels.
+        def clean(match):
+            value=match.group(0)[1:-1].replace("''","'")
+            return match.group(0) if value.strip().lower() in ALLOWED_LITERAL else "'<REDACTED>'"
+        return SQL_QUOTED.sub(clean,s)
     return '<REDACTED>'
 
 
@@ -60,6 +65,8 @@ class Redact(ast.NodeTransformer):
     def visit_Constant(self,node):
         if isinstance(node.value,str):
             return ast.copy_location(ast.Constant(value=safe_literal(node.value)),node)
+        if type(node.value) in (int,float) and abs(node.value)>100_000_000:
+            return ast.copy_location(ast.Constant(value=0),node)
         return node
     def visit_JoinedStr(self,node):
         pieces=[]
