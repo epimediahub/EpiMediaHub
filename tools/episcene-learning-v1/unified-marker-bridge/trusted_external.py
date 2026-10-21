@@ -49,6 +49,8 @@ def _identity_ok(payload, ep, provider):
     else:
         if ep.tvdb_id and payload.get("tvdb_id") not in (None, ep.tvdb_id):
             return False
+        if ep.tmdb_id and payload.get("tmdb_id") not in (None, ep.tmdb_id):
+            return False
     for field in ("season", "episode"):
         if field in payload and payload[field] is not None:
             try:
@@ -84,7 +86,9 @@ def _get_candidates(ep, fetch):
                             else reply["status"])
     else:
         status["introdb"] = "missing_imdb_id"
-    key, value = ("tvdb_id", ep.tvdb_id) if ep.tvdb_id else ("imdb_id", ep.imdb_id)
+    key, value = (("tvdb_id", ep.tvdb_id) if ep.tvdb_id else
+                  ("tmdb_id", ep.tmdb_id) if ep.tmdb_id else
+                  ("imdb_id", ep.imdb_id))
     if value:
         url = "https://api.theintrodb.org/v4/media?" + urlencode({
             key: value, "season": ep.season, "episode": ep.episode,
@@ -147,7 +151,7 @@ def _promote(rows, absent):
 
 def _key(ep):
     # Known-cut duration prevents blindly reusing timestamp sets for other edits.
-    return json.dumps([ep.imdb_id, ep.tvdb_id, ep.mapping, ep.season,
+    return json.dumps([ep.imdb_id, ep.tvdb_id, ep.tmdb_id, ep.mapping, ep.season,
                        ep.episode, ep.duration_ms], separators=(",", ":"))
 
 
@@ -158,7 +162,7 @@ def resolve_external(ep: Episode, cache: Path, *, fetch=_get_json, now=None,
     Never stores customer credentials, device identifiers or provider URLs.
     """
     now = int(time.time()) if now is None else int(now)
-    if not ep.imdb_id and not ep.tvdb_id:
+    if not ep.imdb_id and not ep.tvdb_id and not ep.tmdb_id:
         return {"trusted_segments": [], "conflicts": [],
                 "sources": {"introdb": "missing_imdb_id",
                             "theintrodb": "missing_external_id"},
