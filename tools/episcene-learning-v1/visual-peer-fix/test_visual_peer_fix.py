@@ -178,6 +178,25 @@ class PeerSeedTests(unittest.TestCase):
             next_plan=self.module.plan(db,self.module.collect(db),max_jobs=2)
             self.assertEqual({r['episode'] for r in next_plan},{3,4})
 
+    def test_no_language_priority_table_required_for_peer_selection(self):
+        db=fixture()
+        db.execute('DROP TABLE skip_language_priority')
+        with db:
+            candidates=self.module.collect(db)
+            self.assertEqual(len(candidates),4)
+            plan=self.module.plan(db,candidates,max_jobs=2)
+            self.assertEqual({r['episode'] for r in plan},{1,2})
+
+    def test_language_priority_values_do_not_change_selected_episodes(self):
+        db=fixture()
+        db.execute("UPDATE skip_language_priority SET priority=999 WHERE asset_key='episode-1'")
+        db.execute("UPDATE skip_language_priority SET priority=-999 WHERE asset_key='episode-4'")
+        with db:
+            candidates=self.module.collect(db)
+            self.assertEqual(len(candidates),4)
+            plan=self.module.plan(db,candidates,max_jobs=2)
+            self.assertEqual({r['episode'] for r in plan},{1,2})
+
     def test_disagreement_and_open_manual_correction_are_never_requeued(self):
         db=fixture()
         db.execute("""UPDATE skip_auto_evidence SET evidence_json=?
