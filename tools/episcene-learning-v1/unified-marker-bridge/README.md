@@ -193,3 +193,38 @@ The two public APIs are independent providers:
 [TheIntroDB v4](https://theintrodb.github.io/theintrodb-npm/functions.html).
 Both can be trusted for human-skippable segment suggestions; the result still
 depends on the exact video edition, including language cuts and recaps.
+
+
+## Fix for existing EpiScene identity tables (22 Oct 2026)
+
+The actual analysis Hetzner installation reported
+`missing_canonical_external_ids`. A read-only schema scan showed that
+`imdb_id` and `tmdb_id` already exist in the **original**
+`skip_records`, `skip_identities`, `skip_auto_identities` tables,
+**not** directly in `skip_assets`.
+
+The `analysis_identity.py` module uses exact `asset_key` or
+`source_key` equality to link these existing identities to analysis
+episodes (only playlist 8 and 10). It refuses contradictory valid IDs.
+`trusted_external_sync.py` then requests IntroDB using IMDb IDs and
+TheIntroDB v4 using TVDB, TMDB or IMDb IDs, by that priority. No title-only
+guesses, customer inventory scans or IPTV streams are permitted.
+
+`install_existing_identity_fix.sh` refuses deployment if any previously
+installed source module differs from the known fixed release. It backs up
+three original files to a private directory, runs local tests and a
+read-only ID preflight, replaces the three modules and installs
+`analysis_identity.py`, then restarts only the one-shot external source
+prefetch. If setup fails, original files are restored. The original
+provisioning database, 313 approved markers and public lookup are untouched.
+
+The preflight reports *how many* already-linked episodes have usable IDs
+without printing titles, asset identifiers or credentials. An installed
+hourly timer alone does not prove that external markers have actually been
+downloaded. Read the first prefetch result (`analysed`, `trusted_segments`,
+`identity_conflicts_skipped`) before describing the integration as live.
+
+Finally: this fixes automatic external metadata **fetch and cache**. The
+live device endpoint `/v1/device/skip/lookup` has not yet been patched to
+return the cached external markers, and the current Android player version
+remains unverified.
