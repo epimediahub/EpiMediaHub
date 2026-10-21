@@ -76,6 +76,11 @@ class GateTests(unittest.TestCase):
         db.execute("INSERT INTO skip_jobs VALUES('new-foreign','queued',0)")
         self.assertEqual(db.execute("SELECT status FROM skip_jobs WHERE asset_key='new-foreign'").fetchone()[0],
                          'language_hold')
+        # A job can arrive ahead of its asset metadata in recovery imports.
+        db.execute("INSERT INTO skip_jobs VALUES('job-before-asset','queued',0)")
+        db.execute("INSERT INTO skip_assets VALUES('job-before-asset',8,'episode')")
+        self.assertEqual(db.execute("SELECT status FROM skip_jobs WHERE asset_key='job-before-asset'").fetchone()[0],
+                         'language_hold')
         db.execute("INSERT INTO skip_assets VALUES('moved-from-best',10,'episode')")
         db.execute("INSERT INTO skip_jobs VALUES('moved-from-best','queued',0)")
         db.execute("UPDATE skip_assets SET playlist_id=8 WHERE asset_key='moved-from-best'")
@@ -85,7 +90,7 @@ class GateTests(unittest.TestCase):
                          'queued')
         db.commit()
         restored=gate.rollback_guard(db)
-        self.assertEqual(restored,4)
+        self.assertEqual(restored,5)
         self.assertEqual(db.execute("SELECT status FROM skip_jobs WHERE asset_key='foreign-two'").fetchone()[0],
                          'queued')
         self.assertEqual(db.execute("SELECT status FROM skip_jobs WHERE asset_key='german-two'").fetchone()[0],
