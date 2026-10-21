@@ -20,6 +20,13 @@ import tempfile
 import time
 
 APP=Path('/opt/epimediahub/provisioning')
+LEARNING=Path('/opt/episcene-learning')
+LEARN_FILE=LEARNING/'safe_release_rollout_v2.py'
+# Fingerprint of the prior installed peer-learning helper (original official installer).
+OLD_LEARN_SHA='6653aab53d22d5c2fa08a2163f42487bf7bd92b0a4658b6ef150156bf5fa49d2'
+LEARN_REV='d63d66c81cf05410052ee7e76b209a4c1a666851'
+LEARN_URL=('https://raw.githubusercontent.com/epimediahub/EpiMediaHub/'+LEARN_REV+
+           '/tools/episcene-learning-v1/visual-peer-fix/safe_release_rollout_v2.py')
 DATA=Path('/var/lib/epimediahub')
 DB=DATA/'provisioning.db'
 WORKER_LOCK=DATA/'skip-analysis.lock'
@@ -107,7 +114,15 @@ def prepare(folder,neutralizer):
         compile(contents,str(APP/name),'exec')
         (folder/('patched-'+name)).write_bytes(contents)
     print('BASELINE OK: '+str(len(edits))+' exact-version Python modules; syntax verified',flush=True)
-    return edits
+    if LEARNING.is_symlink() or not LEARNING.is_dir() or LEARN_FILE.is_symlink() or not LEARN_FILE.is_file():
+        raise RuntimeError('Missing trusted learning installation')
+    if hashlib.sha256(LEARN_FILE.read_bytes()).hexdigest()!=OLD_LEARN_SHA:
+        raise RuntimeError('Learning helper was changed independently; no installation')
+    peer=folder/'safe_release_rollout_v2.py'
+    command('curl','-fsSL','--retry','2','--max-time','60',LEARN_URL,'-o',str(peer),timeout=90)
+    compile(peer.read_bytes(),str(LEARN_FILE),'exec')
+    print('LEARNING BASELINE OK: independent candidate selection upgrade staged',flush=True)
+    return edits,peer.read_bytes()
 
 
 def check_core():
@@ -165,7 +180,7 @@ def install(*,dry_run=False):
         with tempfile.TemporaryDirectory(prefix='episcene-stage-') as path:
             folder=Path(path)
             neutralizer=download_patcher(folder)
-            edits=prepare(folder,neutralizer)
+            edits,peer=prepare(folder,neutralizer)
             if dry_run:
                 print('DRY RUN OK: no files, timers or DB records changed')
                 return
@@ -177,6 +192,7 @@ def install(*,dry_run=False):
             archive.mkdir(mode=0o700)
             for name in edits:
                 shutil.copy2(APP/name,archive/name)
+            shutil.copy2(LEARN_FILE,archive/'safe_release_rollout_v2.py')
             backup_database(archive/'provisioning.sqlite3')
             print('BACKUP OK: module originals and SQLite consistent snapshot',flush=True)
             timer_states={unit:active(unit) for unit in (ANALYSIS_TIMER,)+OTHER_TIMERS}
@@ -190,20 +206,27 @@ def install(*,dry_run=False):
                 for name,expected in neutralizer.BASELINE.items():
                     if hashlib.sha256((APP/name).read_bytes()).hexdigest()!=expected:
                         raise RuntimeError('Module changed after preflight: '+name)
+                if hashlib.sha256(LEARN_FILE.read_bytes()).hexdigest()!=OLD_LEARN_SHA:
+                    raise RuntimeError('Learning helper changed after preflight')
                 for name,content in edits.items():
                     atomic_write(APP/name,content,reference=archive/name)
                     altered.append(name)
+                atomic_write(LEARN_FILE,peer,reference=archive/'safe_release_rollout_v2.py')
+                altered.append('learning/safe_release_rollout_v2.py')
                 for service in (COMPUTE,WEB):
                     command('systemctl','restart',service,timeout=90)
                     if not active(service):
                         raise RuntimeError('Service did not become healthy: '+service)
-                print('INSTALL OK: language-ranking neutral in EpiScene core; services restarted',flush=True)
+                print('INSTALL OK: language-ranking neutral in core and peer learning; services restarted',flush=True)
                 print('NO DB MARKERS OR PLAYLIST CONTENT CHANGED',flush=True)
             except BaseException:
                 if altered:
                     print('ROLLBACK: restoring original modules',flush=True)
                     for name in altered:
-                        atomic_write(APP/name,(archive/name).read_bytes(),reference=archive/name)
+                        if name=='learning/safe_release_rollout_v2.py':
+                            atomic_write(LEARN_FILE,(archive/'safe_release_rollout_v2.py').read_bytes(),reference=archive/'safe_release_rollout_v2.py')
+                        else:
+                            atomic_write(APP/name,(archive/name).read_bytes(),reference=archive/name)
                     for service in (COMPUTE,WEB):
                         try:command('systemctl','restart',service,timeout=90)
                         except Exception:print('WARNING: rollback restart failed for '+service,flush=True)
