@@ -43,6 +43,7 @@ class Episode:
     duration_ms: int
     imdb_id: str = ""
     tvdb_id: int = 0
+    tmdb_id: int = 0
     fingerprint: str = ""
     title: str = ""
     mapping: str = "default"
@@ -55,6 +56,7 @@ class Episode:
             duration_ms=int(data["duration_ms"]),
             imdb_id=str(data.get("imdb_id") or ""),
             tvdb_id=int(data.get("tvdb_id") or 0),
+            tmdb_id=int(data.get("tmdb_id") or 0),
             fingerprint=str(data.get("fingerprint") or "").lower(),
             title=str(data.get("title") or "").strip(),
             mapping=str(data.get("mapping") or "default").lower())
@@ -66,8 +68,8 @@ class Episode:
             raise ValueError("Invalid IMDb id")
         if ep.mapping not in {"default", "official", "dvd", "alternate", "absolute", "regional"}:
             raise ValueError("Invalid TVDB episode ordering")
-        if ep.tvdb_id < 0:
-            raise ValueError("Invalid TVDB id")
+        if ep.tvdb_id < 0 or ep.tmdb_id < 0:
+            raise ValueError("Invalid TVDB/TMDB id")
         if ep.fingerprint and not FINGERPRINT_RE.fullmatch(ep.fingerprint):
             raise ValueError("Expected a SHA-256 cut fingerprint")
         return ep
@@ -165,7 +167,9 @@ def remote_candidates(ep, fetch=_get_json):
             results += parse_introdb(reply["data"], ep)
     else:
         source_status["introdb"] = "no_imdb_identity"
-    key = ("tvdb_id", ep.tvdb_id) if ep.tvdb_id else ("imdb_id", ep.imdb_id)
+    key = (("tvdb_id", ep.tvdb_id) if ep.tvdb_id else
+           ("tmdb_id", ep.tmdb_id) if ep.tmdb_id else
+           ("imdb_id", ep.imdb_id))
     if key[1]:
         params = {key[0]: key[1], "season": ep.season, "episode": ep.episode,
                   "duration_ms": ep.duration_ms, "details": "true",
