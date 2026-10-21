@@ -182,6 +182,13 @@ def make_backup():
 def apply_guard(db,scope):
     db.execute('BEGIN IMMEDIATE')
     try:
+        # Recheck against a locked, current DB snapshot after the worker has
+        # drained: the catalogue may have changed while waiting.
+        verify_database(db,scope)
+        best_before=dict(db.execute("""
+            SELECT j.status,COUNT(*) FROM skip_jobs j JOIN skip_assets a USING(asset_key)
+            WHERE a.playlist_id=10 GROUP BY j.status
+        """))
         objects={name for (name,) in db.execute("SELECT name FROM sqlite_master WHERE name LIKE 'episcene_scope_4k_%'")}
         if objects:
             raise RuntimeError('EpiScene 4K scope objects already exist, refusing duplicate install')
@@ -257,6 +264,12 @@ def apply_guard(db,scope):
         if left:
             raise RuntimeError('Post-install queued foreign count '+str(left))
         held=db.execute('SELECT COUNT(*) FROM episcene_scope_4k_held').fetchone()[0]
+        best_after=dict(db.execute("""
+            SELECT j.status,COUNT(*) FROM skip_jobs j JOIN skip_assets a USING(asset_key)
+            WHERE a.playlist_id=10 GROUP BY j.status
+        """))
+        if best_before!=best_after:
+            raise RuntimeError('THE BEST was unexpectedly modified')
         db.commit()
         return held
     except BaseException:
