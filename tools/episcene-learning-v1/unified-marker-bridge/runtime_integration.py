@@ -41,14 +41,35 @@ def playback_resolution(request: dict, *, authorize: Callable[[int, str], bool],
     if authorize(ep.playlist_id, ep.asset_key) is not True:
         raise PermissionError("Episode not authorized for this playback session")
     result = evaluate(ep, store, external=False)
+    # When trusted annotations from two releases overlap, prefer labels made
+    # against this exact asset. If the conflicting labels share the same
+    # evidence rank, withhold both rather than guessing which scene to skip.
+    ready = result["ready_verified"]
+    excluded = set()
+    overlaps = []
+    for i, first in enumerate(ready):
+        for j in range(i + 1, len(ready)):
+            second = ready[j]
+            length = min(first["end_ms"], second["end_ms"]) - max(
+                first["start_ms"], second["start_ms"])
+            if length <= 1000:
+                continue
+            first_exact = first["match"] == "same_asset"
+            second_exact = second["match"] == "same_asset"
+            if first_exact != second_exact:
+                excluded.add(j if first_exact else i)
+            else:
+                excluded.update((i, j))
+            overlaps.append((first["kind"], second["kind"]))
+    ready = [marker for i, marker in enumerate(ready) if i not in excluded]
     return {
         "asset_key": ep.asset_key,
         "playlist_id": ep.playlist_id,
         "markers": [{"type": marker["kind"], "start_ms": marker["start_ms"],
                      "end_ms": marker["end_ms"], "source": marker["source"],
                      "marker_id": marker["marker_id"]}
-                    for marker in result["ready_verified"]],
-        "conflicts": result["conflicts"],
+                    for marker in ready],
+        "conflicts": result["conflicts"] + ["overlap:" + a + ":" + b for a, b in overlaps],
         "schema": "episcene_verified_skip_v1",
         "only_authenticated_verified_markers": True
     }
