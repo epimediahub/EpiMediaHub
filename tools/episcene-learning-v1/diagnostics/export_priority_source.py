@@ -42,6 +42,7 @@ SQL_START=re.compile(r'(?is)^\s*(?:SELECT|WITH|UPDATE|INSERT|DELETE|REPLACE|CREA
 SENSITIVE=re.compile(r'(?i)(https?://|password|passwd|secret|token|authorization|credential|api.?key|bearer|cookie|private.?key|[a-z0-9_-]+@[a-z0-9.-]+|\b\d{1,3}(?:\.\d{1,3}){3}\b)')
 DOMAIN=re.compile(r'(?i)\b[a-z0-9-]+\.(?:com|net|org|io|de|it|tv|xyz|info|local)\b')
 SQL_INCLUDES=re.compile(r'(?is)\b(select|from|join|where|order\s+by|group\s+by|limit|skip_language_priority)\b')
+SQL_QUOTED=re.compile(r"'(?:''|[^'])*'")
 
 
 def safe_literal(value):
