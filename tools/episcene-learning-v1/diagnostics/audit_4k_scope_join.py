@@ -14,8 +14,18 @@ from collections import Counter
 from pathlib import Path
 import sqlite3
 import sys
+import re
 
-from probe_4k_xtream_categories import category_label
+_DE=re.compile(r'(?i)(?:^|[^a-z0-9])(?:de|deu|deutsch(?:e)?|german)(?:$|[^a-z0-9])')
+_OTHER=re.compile(r'(?i)(?:^|[^a-z0-9])(?:it|ita|ital(?:iano|iana|ian)?|tr|turk(?:ish|ce)?|en|english|fr|french|ar|arab(?:ic)?|es|spanish|gr|greek)(?:$|[^a-z0-9])')
+
+
+def category_label(value):
+    if not isinstance(value,str):
+        return 'unknown'
+    german=bool(_DE.search(value))
+    other=bool(_OTHER.search(value))
+    return 'unambiguous_de_label' if german and not other else 'mixed_language_label' if german else 'not_explicitly_de'
 
 ROOT=Path('/opt/epimediahub/provisioning')
 DB=Path('/var/lib/epimediahub/provisioning.db')
