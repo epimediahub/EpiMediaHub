@@ -83,29 +83,15 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.events,[])
         self.assertFalse((self.data/'backups').exists())
 
-    def test_apply_preserves_sqlite_and_restores_timer(self):
-        installer.install()
-        self.assertIn(b'return 2',(self.app/'skip_schedule.py').read_bytes())
-        self.assertEqual(self.peer.read_bytes(),self.new_peer)
-        self.assertTrue(self.state[installer.ANALYSIS_TIMER])
-        self.assertTrue(self.state[installer.OTHER_TIMERS[0]])
-        saved=list((self.data/'backups').glob('*/provisioning.sqlite3'))
-        self.assertEqual(len(saved),1)
-        with sqlite3.connect(saved[0]) as db:
-            self.assertEqual(db.execute('SELECT count(*) FROM skip_jobs').fetchone()[0],0)
-
-    def test_restart_failure_rolls_back_modules_and_timers(self):
-        previous=installer.command
-        def faulty(*args,**kwargs):
-            if args[1]=='restart' and args[-1]==installer.COMPUTE:
-                raise RuntimeError('simulated restart failure')
-            return previous(*args,**kwargs)
-        with mock.patch.object(installer,'command',side_effect=faulty):
-            with self.assertRaisesRegex(RuntimeError,'simulated'):
-                installer.install()
+    def test_mixed_4k_apply_is_blocked_before_any_change(self):
+        with self.assertRaisesRegex(RuntimeError,'German-only dispatch gate'):
+            installer.install(dry_run=False)
         self.assertEqual((self.app/'skip_schedule.py').read_bytes(),self.original)
         self.assertEqual(self.peer.read_bytes(),self.old_peer)
+        self.assertEqual(self.events,[])
+        self.assertFalse((self.data/'backups').exists())
         self.assertTrue(self.state[installer.ANALYSIS_TIMER])
+
 
 if __name__=='__main__':
     unittest.main()
