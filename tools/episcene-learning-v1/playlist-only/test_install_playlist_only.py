@@ -26,6 +26,11 @@ class InstallerTests(unittest.TestCase):
         self.app=self.root/'provisioning';self.app.mkdir()
         self.data=self.root/'state';self.data.mkdir()
         self.db=self.data/'provisioning.db'
+        self.learning=self.root/'learning';self.learning.mkdir()
+        self.peer=self.learning/'safe_release_rollout_v2.py'
+        self.old_peer=b'def requeue():\n    return 1\n'
+        self.new_peer=b'def requeue():\n    return 2\n'
+        self.peer.write_bytes(self.old_peer)
         self.original=b'def scheduler():\n    return 0\n'
         (self.app/'skip_schedule.py').write_bytes(self.original)
         with sqlite3.connect(self.db) as db:
@@ -44,12 +49,18 @@ class InstallerTests(unittest.TestCase):
         def act(unit):return self.state.get(unit,False)
         def run(*args,**kwargs):
             unit=args[-1]
+            if args[0]=='curl':
+                Path(unit).write_bytes(self.new_peer)
+                return ''
             self.events.append((args[1],unit))
             if args[1]=='stop':self.state[unit]=False
             elif args[1] in ('start','restart'):self.state[unit]=True
             return ''
         patches=[
             mock.patch.object(installer,'APP',self.app),
+            mock.patch.object(installer,'LEARNING',self.learning),
+            mock.patch.object(installer,'LEARN_FILE',self.peer),
+            mock.patch.object(installer,'OLD_LEARN_SHA',hashlib.sha256(self.old_peer).hexdigest()),
             mock.patch.object(installer,'DATA',self.data),
             mock.patch.object(installer,'DB',self.db),
             mock.patch.object(installer,'WORKER_LOCK',self.data/'skip-analysis.lock'),
@@ -68,12 +79,14 @@ class InstallerTests(unittest.TestCase):
     def test_check_only_never_touches_live_sources_or_timers(self):
         installer.install(dry_run=True)
         self.assertEqual((self.app/'skip_schedule.py').read_bytes(),self.original)
+        self.assertEqual(self.peer.read_bytes(),self.old_peer)
         self.assertEqual(self.events,[])
         self.assertFalse((self.data/'backups').exists())
 
     def test_apply_preserves_sqlite_and_restores_timer(self):
         installer.install()
         self.assertIn(b'return 2',(self.app/'skip_schedule.py').read_bytes())
+        self.assertEqual(self.peer.read_bytes(),self.new_peer)
         self.assertTrue(self.state[installer.ANALYSIS_TIMER])
         self.assertTrue(self.state[installer.OTHER_TIMERS[0]])
         saved=list((self.data/'backups').glob('*/provisioning.sqlite3'))
@@ -91,6 +104,7 @@ class InstallerTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'simulated'):
                 installer.install()
         self.assertEqual((self.app/'skip_schedule.py').read_bytes(),self.original)
+        self.assertEqual(self.peer.read_bytes(),self.old_peer)
         self.assertTrue(self.state[installer.ANALYSIS_TIMER])
 
 if __name__=='__main__':
