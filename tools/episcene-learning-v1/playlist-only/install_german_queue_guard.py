@@ -237,6 +237,18 @@ def apply_guard(db,scope):
                 WHERE asset_key=NEW.asset_key AND status='queued';
             END
         """)
+        db.execute("""
+            CREATE TRIGGER episcene_scope_4k_asset_insert AFTER INSERT ON skip_assets
+            WHEN NEW.playlist_id=8 AND NOT EXISTS(
+                SELECT 1 FROM episcene_scope_4k_allowed v WHERE v.asset_key=NEW.asset_key)
+            BEGIN
+                INSERT OR IGNORE INTO episcene_scope_4k_held(asset_key,previous_status)
+                SELECT j.asset_key,'queued' FROM skip_jobs j
+                WHERE j.asset_key=NEW.asset_key AND j.status='queued';
+                UPDATE skip_jobs SET status='language_hold'
+                WHERE asset_key=NEW.asset_key AND status='queued';
+            END
+        """)
         left=db.execute("""
            SELECT COUNT(*) FROM skip_jobs j JOIN skip_assets a USING(asset_key)
            WHERE a.playlist_id=8 AND j.status='queued'
@@ -258,7 +270,7 @@ def rollback_guard(db):
         present={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE name LIKE 'episcene_scope_4k_%'")}
         required={'episcene_scope_4k_allowed','episcene_scope_4k_held',
                   'episcene_scope_4k_insert','episcene_scope_4k_requeue',
-                  'episcene_scope_4k_asset_move'}
+                  'episcene_scope_4k_asset_move','episcene_scope_4k_asset_insert'}
         if not required<=present:
             raise RuntimeError('Incomplete EpiScene guard; refusing partial rollback')
         for name in sorted(required):
