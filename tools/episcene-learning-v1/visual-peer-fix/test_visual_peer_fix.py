@@ -197,6 +197,46 @@ class PeerSeedTests(unittest.TestCase):
             plan=self.module.plan(db,candidates,max_jobs=2)
             self.assertEqual({r['episode'] for r in plan},{1,2})
 
+    def test_unequal_backlogs_cannot_hide_other_playlist(self):
+        db=fixture()
+        db.executescript("""
+            INSERT INTO skip_analysis_playlists VALUES(10,0);
+            INSERT INTO skip_analysis_sources VALUES(10,1);
+            INSERT INTO skip_auto_settings VALUES(10,1);
+            INSERT INTO skip_release_settings VALUES(10,1);
+        """)
+        # 920 early 4K candidates would occupy a global LIMIT 900/1800
+        # eventually; per-playlist sampling must keep the other source.
+        for i in range(920):
+            key='fourk-overflow-'+str(i)
+            db.execute('INSERT INTO skip_assets VALUES(?,?,?,?,?,?,?)',
+                       (key,'large-fourk-season',8,1,i+10,3600000,'episode'))
+            db.execute('INSERT INTO skip_jobs VALUES(?,?,?,3,?,?)',
+                       (1000+i,key,'review','2024-01-01T00:00:00Z',''))
+            db.execute('INSERT INTO skip_records VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                       (2000+i,key,'large-fourk-season',1,i+10,3600000,
+                        'audio_repetition','outro','pending',0,'episode'))
+            db.execute('INSERT INTO skip_auto_evidence VALUES(?,?,0)',
+                       (2000+i,json.dumps({'episcene_required':True})))
+        for i in range(3):
+            key='italian-'+str(i)
+            db.execute('INSERT INTO skip_assets VALUES(?,?,?,?,?,?,?)',
+                       (key,'italian-season',10,1,i+1,3600000,'episode'))
+            db.execute('INSERT INTO skip_jobs VALUES(?,?,?,3,?,?)',
+                       (4000+i,key,'review','2026-10-21T00:00:00Z',''))
+            db.execute('INSERT INTO skip_records VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                       (5000+i,key,'italian-season',1,i+1,3600000,
+                        'audio_repetition','outro','pending',0,'episode'))
+            db.execute('INSERT INTO skip_auto_evidence VALUES(?,?,0)',
+                       (5000+i,json.dumps({'episcene_required':True})))
+        with db:
+            candidates=self.module.collect(db)
+            self.assertLessEqual(len(candidates),1800)
+            self.assertTrue(any(r['playlist_id']==10 for r in candidates))
+            planned=self.module.plan(db,candidates,max_jobs=4,models=set())
+            self.assertEqual({r['playlist_id'] for r in planned},{8,10})
+            self.assertEqual(sum(r['playlist_id']==10 for r in planned),2)
+
     def test_disagreement_and_open_manual_correction_are_never_requeued(self):
         db=fixture()
         db.execute("""UPDATE skip_auto_evidence SET evidence_json=?
