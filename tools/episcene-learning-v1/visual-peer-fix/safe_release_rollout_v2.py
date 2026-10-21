@@ -83,28 +83,33 @@ def collect(con):
     allowed={p for p in (8,10) if not active[p] and release_enabled(con,p)}
     if not allowed:return []
     # This SQL intentionally DOES NOT join customer_playlists.
-    rows=con.execute("""
-      SELECT j.id job_id,j.asset_key,j.status original_status,
-             a.playlist_id,a.source_key,a.season,a.episode,a.duration_ms,
-             r.segment_type kind,r.id marker_id,e.evidence_json
-      FROM skip_jobs j JOIN skip_assets a ON a.asset_key=j.asset_key
-      JOIN skip_analysis_playlists p ON p.id=a.playlist_id AND p.archived=0
-      JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id AND s.enabled=1
-      JOIN skip_auto_settings x ON x.playlist_id=a.playlist_id AND x.enabled=1
-      JOIN skip_records r ON r.asset_key=a.asset_key AND r.status='pending'
-        AND r.source IN ('audio','audio_repetition','episcene','theintrodb','chapter')
-        AND r.media_type='episode' AND r.source_key=a.source_key
-        AND r.season=a.season AND r.episode=a.episode
-        AND ABS(r.duration_ms-a.duration_ms)<=2000
-      LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
-      WHERE a.playlist_id IN (8,10) AND a.media_type='episode'
-        AND a.duration_ms>0
-        AND j.status IN ('done','review','no_match','no_reference','partial')
-        AND NOT EXISTS(SELECT 1 FROM episcene_safe_release_retries z
-                       WHERE z.asset_key=j.asset_key)
-      ORDER BY j.updated_at,j.id
-      LIMIT 1800
-    """).fetchall()
+    # Query each independent playlist separately. A large 4K backlog must
+    # never consume the entire bounded visual-peer candidate sample and hide
+    # Italian families from THE BEST (or vice versa).
+    rows=[]
+    for playlist_id in sorted(allowed):
+        rows.extend(con.execute("""
+          SELECT j.id job_id,j.asset_key,j.status original_status,
+                 a.playlist_id,a.source_key,a.season,a.episode,a.duration_ms,
+                 r.segment_type kind,r.id marker_id,e.evidence_json
+          FROM skip_jobs j JOIN skip_assets a ON a.asset_key=j.asset_key
+          JOIN skip_analysis_playlists p ON p.id=a.playlist_id AND p.archived=0
+          JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id AND s.enabled=1
+          JOIN skip_auto_settings x ON x.playlist_id=a.playlist_id AND x.enabled=1
+          JOIN skip_records r ON r.asset_key=a.asset_key AND r.status='pending'
+            AND r.source IN ('audio','audio_repetition','episcene','theintrodb','chapter')
+            AND r.media_type='episode' AND r.source_key=a.source_key
+            AND r.season=a.season AND r.episode=a.episode
+            AND ABS(r.duration_ms-a.duration_ms)<=2000
+          LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
+          WHERE a.playlist_id=? AND a.media_type='episode'
+            AND a.duration_ms>0
+            AND j.status IN ('done','review','no_match','no_reference','partial')
+            AND NOT EXISTS(SELECT 1 FROM episcene_safe_release_retries z
+                           WHERE z.asset_key=j.asset_key)
+          ORDER BY j.updated_at,j.id
+          LIMIT 900
+        """,(playlist_id,)).fetchall())
     by_asset=defaultdict(list)
     for r in rows:
         d=dict(r)
