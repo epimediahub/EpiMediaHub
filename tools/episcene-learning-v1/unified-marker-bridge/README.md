@@ -7,14 +7,14 @@ This is an *integration component*, not a production deployment or new Android A
 ## What exists in this package
 
 - Reads **authenticated, still-active positive feedback** from
-  \`feedback_versions\` in the existing EpiScene learning service.
-  Reads \`skip_assets\` from the original analyzer **read-only**.
-  Rejects weak \`source=device\` / \`status=approved\` claims.
+  `feedback_versions` in the existing EpiScene learning service.
+  Reads `skip_assets` from the original analyzer **read-only**.
+  Rejects weak `source=device` / `status=approved` claims.
   Rebuilds the isolated verified marker snapshot so revocations propagate.
 - Two **independent external read-only adapters**:
-  [IntroDB](https://introdb.app/docs/api) \`GET /segments\` (IMDb)
+  [IntroDB](https://introdb.app/docs/api) `GET /segments` (IMDb)
   and [TheIntroDB](https://theintrodb.github.io/theintrodb-npm/migration-v3-to-v4.html)
-  \`GET /v4/media\` (prefer TVDB, fallback IMDb, duration-based version selection).
+  `GET /v4/media` (prefer TVDB, fallback IMDb, duration-based version selection).
   They are **not** the same database. Missing IDs skip the corresponding source.
   HTTPS URLs are fixed, timeouts and response-size bounds apply.
 - Search hints: recap first 3 minutes, intro first 10 minutes, outro last
@@ -25,26 +25,26 @@ This is an *integration component*, not a production deployment or new Android A
   SHA-256 content fingerprint and near-identical duration. An authenticated
   match for the exact same asset also works without fingerprint.
 - Conflicting confirmed markers are withheld; external markers go to
-  \`review_candidates\`, **never directly to customer devices**.
+  `review_candidates`, **never directly to customer devices**.
 
 ### Integrating with the existing EpiScene service
 
 Install the module alongside the backend and wire the existing server's
-episode-resolution endpoint to \`evaluate()\`. Provide \`playlist_id\`,
-\`asset_key\`, \`season\`, \`episode\`, \`duration_ms\`, IMDb or TVDB ID (when
+episode-resolution endpoint to `evaluate()`. Provide `playlist_id`,
+`asset_key`, `season`, `episode`, `duration_ms`, IMDb or TVDB ID (when
 available), and **verified content fingerprint** (only when actually measured).
 Do **not** derive a cut fingerprint from title, stream URL, language, provider
 name or duration alone.
 
-\`ready_verified\` may be sent to the existing marker playback endpoint **only
+`ready_verified` may be sent to the existing marker playback endpoint **only
 after integration tests against the actual backend and app contract**. Keep
-external \`review_candidates\` internal. If no actual content fingerprint exists,
+external `review_candidates` internal. If no actual content fingerprint exists,
 sharing *across providers* is deliberately disabled. This safeguards German
 and Italian releases with different recaps/edits.
 
 Authenticated input example for resolution:
 
-\`\`\`json
+```json
 {
   "playlist_id": 8,
   "asset_key": "episode-123",
@@ -56,11 +56,11 @@ Authenticated input example for resolution:
   "fingerprint": "",
   "title": "Sample series"
 }
-\`\`\`
+```
 
 ### CLI (on backend, not on users' devices)
 
-\`\`\`bash
+```bash
 python3 bridge.py sync-verified \
   --feedback /var/lib/episcene-learning/reference-round-40/feedback.sqlite3 \
   --production /var/lib/epimediahub/provisioning.db \
@@ -69,7 +69,7 @@ python3 bridge.py sync-verified \
 echo '{"playlist_id":8,"asset_key":"episode-123","season":1,"episode":1,"duration_ms":2700000,"imdb_id":"tt0903747"}' \
  | python3 bridge.py evaluate \
     --store /var/lib/episcene-learning/unified-markers.sqlite3
-\`\`\`
+```
 
 Use the service's established protection and permissions for the output SQLite
 file. The command deliberately cannot modify the production analyzer or
@@ -92,10 +92,10 @@ cross-provider publication stays gated.
 
 ### Verification
 
-\`\`\`bash
+```bash
 python3 -m unittest -v test_bridge.py
 python3 -m py_compile bridge.py test_bridge.py
-\`\`\`
+```
 
 All tests use in-memory fixtures / temporary SQLite files with no external
 streams or HTTP requests. The GitHub Actions workflow performs these checks.
