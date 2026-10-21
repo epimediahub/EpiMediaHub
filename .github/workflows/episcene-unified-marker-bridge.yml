@@ -1,0 +1,22 @@
+name: EpiScene unified marker bridge tests
+on:
+  pull_request:
+    paths:
+      - 'tools/episcene-learning-v1/unified-marker-bridge/**'
+      - '.github/workflows/episcene-unified-marker-bridge.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'tools/episcene-learning-v1/unified-marker-bridge/**'
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax and isolated regression tests
+        working-directory: tools/episcene-learning-v1/unified-marker-bridge
+        run: |
+          python3 -m py_compile bridge.py test_bridge.py
+          python3 -m unittest -v test_bridge.py
