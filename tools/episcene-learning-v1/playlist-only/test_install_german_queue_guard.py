@@ -54,9 +54,8 @@ class GateTests(unittest.TestCase):
         db=fixture()
         mapped=gate.assets_for_series(db,{'100'})
         self.assertEqual(mapped,{'german-one','german-two'})
-        with unittest.mock.patch.object(gate,'verify_database',wraps=gate.verify_database):
-            with self.assertRaisesRegex(RuntimeError,'mismatch'):
-                gate.verify_database(db,{'german-one','foreign-one'})
+        with self.assertRaisesRegex(RuntimeError,'mismatch'):
+            gate.verify_database(db,{'german-one','foreign-one'})
 
     def test_install_holds_only_foreign_and_catches_requeues(self):
         db=fixture()
@@ -84,6 +83,7 @@ class GateTests(unittest.TestCase):
                          'language_hold')
         self.assertEqual(db.execute("SELECT status FROM skip_jobs WHERE asset_key='best-one'").fetchone()[0],
                          'queued')
+        db.commit()
         restored=gate.rollback_guard(db)
         self.assertEqual(restored,4)
         self.assertEqual(db.execute("SELECT status FROM skip_jobs WHERE asset_key='foreign-two'").fetchone()[0],
