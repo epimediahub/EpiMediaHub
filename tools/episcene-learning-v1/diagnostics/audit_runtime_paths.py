@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import ast
 import json
+import sys
 from pathlib import Path
-import subprocess
 from datetime import datetime, timezone
 
 APP=Path('/opt/epimediahub/provisioning')
@@ -19,7 +19,6 @@ LANGUAGE_PRIORITY=('skip_language_priority','language_priority',
                    'lang_priority','preferred_language','language_rank')
 SOURCE_LANGUAGE=('skip_source_preferences','preferred_languages',
                  'language_preferences','source_language')
-SCHEDULING=('queued','retry','requeue','max_attempts','timeout','budget','deadline')
 TARGETS=('skip_', 'safe_release_rollout', 'feedback_learning', 'reference_engine')
 
 
@@ -131,5 +130,31 @@ def report(root=APP,learn=LEARNING):
                 'This probe does not modify configuration or determine whether an automatic release is safe.']}
 
 
+def brief(data):
+    """Screen-sized summary for a phone SSH session; detailed JSON remains available."""
+    lines=['EPISCENE CODE CHECK (NUR LESEN)',
+           'SPRACH-PRIORITAET Fundstellen: '+str(data['summary']['internal_language_priority_locations'])]
+    for item in data['language_priority_references'][:22]:
+        lines.append('  '+item['area']+'/'+item['file']+':'+str(item['line'])+
+                     ' '+item['scope']+' ('+str(item['hits'])+')')
+    if len(data['language_priority_references'])>22:
+        lines.append('  weitere Fundstellen: '+str(len(data['language_priority_references'])-22))
+    lines.append('QUELLSPRACHE-/MAPPING Fundstellen: '+
+                 str(data['summary']['language_source_mapping_locations']))
+    for item in data['language_mapping_references'][:10]:
+        lines.append('  '+item['area']+'/'+item['file']+':'+str(item['line'])+' '+item['scope'])
+    for key,limits in data['numeric_limits'].items():
+        compact=','.join(str(name)+'='+str(val) for name,val in sorted(limits.items()))
+        lines.append('LIMITS '+key+': '+compact)
+    for key,status in data['unavailable'].items():
+        lines.append('UNAVAILABLE '+key+': '+status)
+    lines.append('Keine Aenderung an Dateien, Freigaben, Diensten oder Playlist-Inhalten.')
+    return '\\n'.join(lines)
+
+
 if __name__=='__main__':
-    print(json.dumps(report(),ensure_ascii=False,indent=2))
+    data=report()
+    if '--brief' in sys.argv[1:]:
+        print(brief(data))
+    else:
+        print(json.dumps(data,ensure_ascii=False,indent=2))
