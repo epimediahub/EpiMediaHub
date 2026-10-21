@@ -13,5 +13,5 @@ jobs:
       - name: Check syntax and exact-scope patching
         working-directory: tools/episcene-learning-v1/playlist-only
         run: |
-          python3 -m py_compile neutralize_priority.py install_playlist_only.py test_neutralize_priority.py test_install_playlist_only.py
-          python3 -m unittest -v test_neutralize_priority.py test_install_playlist_only.py
+          python3 -m py_compile neutralize_priority.py install_playlist_only.py language_policy.py test_neutralize_priority.py test_install_playlist_only.py test_language_policy.py
+          python3 -m unittest -v test_neutralize_priority.py test_install_playlist_only.py test_language_policy.py
