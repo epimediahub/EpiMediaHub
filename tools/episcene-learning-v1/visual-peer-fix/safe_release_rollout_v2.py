@@ -86,8 +86,7 @@ def collect(con):
     rows=con.execute("""
       SELECT j.id job_id,j.asset_key,j.status original_status,
              a.playlist_id,a.source_key,a.season,a.episode,a.duration_ms,
-             r.segment_type kind,r.id marker_id,e.evidence_json,
-             COALESCE(l.priority,2) language_priority
+             r.segment_type kind,r.id marker_id,e.evidence_json
       FROM skip_jobs j JOIN skip_assets a ON a.asset_key=j.asset_key
       JOIN skip_analysis_playlists p ON p.id=a.playlist_id AND p.archived=0
       JOIN skip_analysis_sources s ON s.playlist_id=a.playlist_id AND s.enabled=1
@@ -98,13 +97,12 @@ def collect(con):
         AND r.season=a.season AND r.episode=a.episode
         AND ABS(r.duration_ms-a.duration_ms)<=2000
       LEFT JOIN skip_auto_evidence e ON e.record_id=r.id
-      LEFT JOIN skip_language_priority l ON l.asset_key=a.asset_key
       WHERE a.playlist_id IN (8,10) AND a.media_type='episode'
         AND a.duration_ms>0
         AND j.status IN ('done','review','no_match','no_reference','partial')
         AND NOT EXISTS(SELECT 1 FROM episcene_safe_release_retries z
                        WHERE z.asset_key=j.asset_key)
-      ORDER BY COALESCE(l.priority,2),j.updated_at,j.id
+      ORDER BY j.updated_at,j.id
       LIMIT 1800
     """).fetchall()
     by_asset=defaultdict(list)
@@ -170,14 +168,13 @@ def plan(con, candidates, max_jobs=MAX_NEW_PER_RUN, *, models=None):
         epis={}
         for r in rows:
             episodic=epis.setdefault(r['episode'],r)
-            if r['language_priority']<episodic['language_priority']:
+            if r['job_id']<episodic['job_id']:
                 epis[r['episode']]=r
         if len(set(epis)|seeded[key])<3 and key not in references:
             continue
-        roster=sorted(epis.values(),key=lambda x:(x['language_priority'],x['episode'],x['job_id']))
+        roster=sorted(epis.values(),key=lambda x:(x['episode'],x['job_id']))
         priority=(not bool(seeded[key]),key not in models,key not in references,
-                  -len(set(epis)|seeded[key]),min(r['language_priority'] for r in roster),
-                  key[0],roster[0]['job_id'])
+                  -len(set(epis)|seeded[key]),key[0],roster[0]['job_id'])
         queue.append((priority,key,roster))
     queue.sort(key=lambda x:x[0])
     output=[];taken=set();by_playlist=Counter()
@@ -208,7 +205,7 @@ def requeue(con,limit=MAX_NEW_PER_RUN):
         con.execute("""INSERT INTO episcene_safe_release_retries
             (asset_key,last_requeued_utc,attempt_count,original_job_status)
             VALUES(?,?,1,?)""",(r['asset_key'],stamp,r['original_status']))
-        # Normal scheduler owns resource/playback/language constraints.
+        # Normal scheduler owns resource and playback constraints.
         request_series(con,r['asset_key'],reason='playback')
         selected.append({'job_id':r['job_id'],'playlist_id':r['playlist_id'],
                          'kind':r['kind']})
