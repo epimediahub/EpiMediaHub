@@ -18,6 +18,7 @@ import os
 import shutil
 from pathlib import Path
 import re
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -362,6 +363,11 @@ def guarded_maintenance(task,scope=None):
 
 
 def main():
+    # SIGTERM also unwinds the timer-restoration finally block instead of
+    # abruptly leaving the shared 4K/THE BEST scheduling timer paused.
+    def interrupted(signum,frame):
+        raise RuntimeError('Interrupted by signal; restoring scheduler timer')
+    signal.signal(signal.SIGTERM,interrupted)
     p=argparse.ArgumentParser()
     modes=p.add_mutually_exclusive_group(required=True)
     modes.add_argument('--check',action='store_true')
