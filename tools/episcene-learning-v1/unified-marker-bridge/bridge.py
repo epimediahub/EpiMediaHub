@@ -45,6 +45,7 @@ class Episode:
     tvdb_id: int = 0
     fingerprint: str = ""
     title: str = ""
+    mapping: str = "default"
 
     @classmethod
     def from_dict(cls, data):
@@ -55,13 +56,16 @@ class Episode:
             imdb_id=str(data.get("imdb_id") or ""),
             tvdb_id=int(data.get("tvdb_id") or 0),
             fingerprint=str(data.get("fingerprint") or "").lower(),
-            title=str(data.get("title") or "").strip())
+            title=str(data.get("title") or "").strip(),
+            mapping=str(data.get("mapping") or "default").lower())
         if not ep.asset_key or len(ep.asset_key) > 240 or ep.season < 0 or ep.episode < 0:
             raise ValueError("Invalid episode identity")
         if ep.duration_ms < 30000 or ep.duration_ms > 86400000:
             raise ValueError("Invalid episode duration")
         if ep.imdb_id and not IMDB_RE.fullmatch(ep.imdb_id):
             raise ValueError("Invalid IMDb id")
+        if ep.mapping not in {"default", "official", "dvd", "alternate", "absolute", "regional"}:
+            raise ValueError("Invalid TVDB episode ordering")
         if ep.tvdb_id < 0:
             raise ValueError("Invalid TVDB id")
         if ep.fingerprint and not FINGERPRINT_RE.fullmatch(ep.fingerprint):
@@ -85,7 +89,7 @@ def _milliseconds(value):
 
 def segment(kind, start, end, ep, source, confidence=None):
     a, b = _milliseconds(start), _milliseconds(end)
-    if a is None or b is None or not 0 <= a < b <= ep.duration_ms + 1500:
+    if a is None or b is None or not 0 <= a < b <= ep.duration_ms + 1500 or a >= ep.duration_ms:
         return None
     if confidence is not None and (
         type(confidence) not in (int, float) or not 0 <= confidence <= 1
@@ -164,7 +168,8 @@ def remote_candidates(ep, fetch=_get_json):
     key = ("tvdb_id", ep.tvdb_id) if ep.tvdb_id else ("imdb_id", ep.imdb_id)
     if key[1]:
         params = {key[0]: key[1], "season": ep.season, "episode": ep.episode,
-                  "duration_ms": ep.duration_ms, "details": "true"}
+                  "duration_ms": ep.duration_ms, "details": "true",
+                  "mapping": ep.mapping}
         url = "https://api.theintrodb.org/v4/media?" + urlencode(params)
         reply = fetch(url)
         source_status["theintrodb"] = reply["status"]
