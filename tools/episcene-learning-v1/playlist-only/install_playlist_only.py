@@ -35,6 +35,9 @@ PENDING=DATA/'episcene-visual-peer-reload-pending'
 BACKUPS=DATA/'episcene-playlist-only-backups'
 ANALYSIS='epimediahub-skip-analysis.service'
 SHADOW='episcene-visual-shadow-capture.service'
+LEARN_SERVICES=('episcene-safe-release-learning.service',
+                'episcene-owner-learning-shadow.service',
+                'episcene-learning-reference-40.service')
 COMPUTE='epimediahub-analysis-worker.service'
 WEB='epimediahub-provisioning.service'
 ANALYSIS_TIMER='epimediahub-skip-analysis.timer'
@@ -49,7 +52,7 @@ URL=('https://raw.githubusercontent.com/epimediahub/EpiMediaHub/'+PATCH_REV+
 def command(*args,timeout=80):
     result=subprocess.run(args,check=False,capture_output=True,text=True,timeout=timeout)
     if result.returncode!=0:
-        raise RuntimeError('Command failed: '+args[0]+' '+args[1] if len(args)>1 else args[0])
+        raise RuntimeError('Command failed: '+ ' '.join(str(x) for x in args[:2]))
     return result.stdout
 
 
@@ -150,14 +153,15 @@ def wait_quiet(timeout_seconds=540):
     while time.monotonic()<deadline:
         if playback():
             raise RuntimeError('Playback became active; postponing deployment safely')
-        busy=active(ANALYSIS) or active(SHADOW)
+        busy=active(ANALYSIS) or active(SHADOW) or any(active(unit) for unit in LEARN_SERVICES)
         if not busy:
             if not WORKER_LOCK.is_file():
                 raise RuntimeError('Original analysis worker lock is missing')
             lock=WORKER_LOCK.open('rb')
             try:
                 fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-                if not active(ANALYSIS) and not active(SHADOW) and not playback():
+                if (not active(ANALYSIS) and not active(SHADOW)
+                        and not any(active(unit) for unit in LEARN_SERVICES) and not playback()):
                     return lock
             except BlockingIOError:
                 pass
@@ -218,7 +222,7 @@ def install(*,dry_run=False):
                     if not active(service):
                         raise RuntimeError('Service did not become healthy: '+service)
                 print('INSTALL OK: language-ranking neutral in core and peer learning; services restarted',flush=True)
-                print('NO DB MARKERS OR PLAYLIST CONTENT CHANGED',flush=True)
+                print('Installer issued no direct database updates, approvals or playlist edits',flush=True)
             except BaseException:
                 if altered:
                     print('ROLLBACK: restoring original modules',flush=True)
