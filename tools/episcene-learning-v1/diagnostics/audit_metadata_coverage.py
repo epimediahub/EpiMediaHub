@@ -49,8 +49,12 @@ def report(db):
                         if isinstance(value,dict):
                             sample+=1
                             for key in value:
-                                if any(x in key.lower() for x in ('lang','category','group','bouquet','audio')):
-                                    hist[key]+=1
+                                # Never emit provider-controlled raw JSON key strings.
+                                # The only output is a fixed set of field families.
+                                if isinstance(key,str):
+                                    for label in ('lang','category','group','bouquet','audio'):
+                                        if label in key.lower():
+                                            hist[label]+=1
                     info['catalogue_payload_keys'][str(pid)]={'sampled':sample,'matching_keys':dict(sorted(hist.items()))}
         if table_exists(db,'skip_catalogue_episodes'):
             c=cols(db,'skip_catalogue_episodes')
