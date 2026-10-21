@@ -117,7 +117,7 @@ def assets_for_series(db,series_ids):
     return out
 
 
-def verify_database(db,scope):
+def verify_database(db,scope,*,minimum=100):
     tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     needed={'skip_assets','skip_jobs','skip_catalogue_episodes',
             'skip_language_priority','skip_analysis_playlists','skip_analysis_sources'}
@@ -134,7 +134,7 @@ def verify_database(db,scope):
     """)}
     only_old=len(ranked-scope)
     only_new=len(scope-ranked)
-    if only_old or only_new or len(scope)<100:
+    if only_old or only_new or len(scope)<minimum:
         raise RuntimeError('Category-vs-priority asset mismatch: old_only='+str(only_old)+
                            ',new_only='+str(only_new)+'. No changes made.')
     return {'category_mapped_episodes':len(scope),
@@ -179,12 +179,12 @@ def make_backup():
     return dest
 
 
-def apply_guard(db,scope):
+def apply_guard(db,scope,*,minimum=100):
     db.execute('BEGIN IMMEDIATE')
     try:
         # Recheck against a locked, current DB snapshot after the worker has
         # drained: the catalogue may have changed while waiting.
-        verify_database(db,scope)
+        verify_database(db,scope,minimum=minimum)
         best_before=dict(db.execute("""
             SELECT j.status,COUNT(*) FROM skip_jobs j JOIN skip_assets a USING(asset_key)
             WHERE a.playlist_id=10 GROUP BY j.status
