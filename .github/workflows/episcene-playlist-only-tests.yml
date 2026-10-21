@@ -1,0 +1,17 @@
+name: EpiScene playlist-only scheduler regression
+on:
+  pull_request:
+    paths:
+      - 'tools/episcene-learning-v1/playlist-only/**'
+      - '.github/workflows/episcene-playlist-only-tests.yml'
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check syntax and exact-scope patching
+        working-directory: tools/episcene-learning-v1/playlist-only
+        run: |
+          python3 -m py_compile neutralize_priority.py test_neutralize_priority.py
+          python3 -m unittest -v test_neutralize_priority.py
