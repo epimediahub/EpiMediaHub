@@ -26,7 +26,7 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(result['by_playlist']['8']['series_language_codes']['populated'],1)
         self.assertEqual(result['by_playlist']['8']['asset_language_codes']['populated'],0)
         self.assertEqual(result['by_playlist']['8']['catalogue_priority_distribution']['0'],1)
-        self.assertIn('category_id',result['catalogue_payload_keys']['8']['matching_keys'])
+        self.assertIn('category',result['catalogue_payload_keys']['8']['matching_keys'])
         view=json.dumps(result)
         for secret in ('secret-series','Secret TV Name','private-asset-id','private.test'):
             self.assertNotIn(secret,view)
