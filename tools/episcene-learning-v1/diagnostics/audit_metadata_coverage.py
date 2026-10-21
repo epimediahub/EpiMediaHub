@@ -96,7 +96,17 @@ def main():
         con.execute('PRAGMA query_only=ON')
         data=report(con)
     print('EPISCENE METADATEN-CHECK (NUR LESEN)')
-    print(json.dumps(data,indent=2,ensure_ascii=False))
+    if '--brief' in __import__('sys').argv[1:]:
+        for pid in ('8','10'):
+            p=data['by_playlist'][pid]
+            print('PLAYLIST '+pid)
+            for key in ('series_language_codes','asset_language_codes','catalogue_series','catalogue_episodes'):
+                print('  '+key+': '+str(p[key]))
+            print('  priority_counts: '+str(p['catalogue_priority_distribution']))
+            print('  provider_metadata_field_groups: '+str(data['catalogue_payload_keys'].get(pid,{})))
+        print('ACHTUNG: Alte Prioritaet 0 ist KEIN Deutschnachweis.')
+    else:
+        print(json.dumps(data,indent=2,ensure_ascii=False))
 
 
 if __name__=='__main__':
