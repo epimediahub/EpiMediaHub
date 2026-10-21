@@ -174,6 +174,8 @@ def wait_quiet(timeout_seconds=540):
 
 
 def install(*,dry_run=False):
+    if not dry_run:
+        raise RuntimeError('Mixed-language 4K source still lacks fully integrated German-only dispatch gate; deployment blocked')
     check_core()
     if playback():
         raise RuntimeError('Viewer playback active; leave current work untouched')
