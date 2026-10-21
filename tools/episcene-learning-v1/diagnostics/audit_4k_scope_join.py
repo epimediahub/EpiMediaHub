@@ -107,6 +107,28 @@ def local_coverage(db, eligible):
         for (key,) in matches:
             covered.add(key)
             matched_rows+=1
+    # Audit whether historical priority=0 denotes the same exact episode set as
+    # the independently verified provider DE categories. Equal *counts* alone
+    # cannot prove equality. This is read-only and does not endorse priority.
+    priority_validation={'available':False}
+    if 'skip_language_priority' in tables:
+        priority_fields={r[1] for r in db.execute('PRAGMA table_info(skip_language_priority)')}
+        if {'asset_key','priority'}<=priority_fields:
+            priority_zero={
+                key for (key,) in db.execute("""
+                    SELECT a.asset_key FROM skip_assets a
+                    JOIN skip_language_priority l ON l.asset_key=a.asset_key
+                    WHERE a.playlist_id=? AND a.media_type='episode' AND l.priority=0
+                """,(PLAYLIST,))
+            }
+            priority_validation={
+                'available':True,
+                'rank0_4k_assets':len(priority_zero),
+                'provider_de_assets':len(covered),
+                'rank0_not_provider_de':len(priority_zero-covered),
+                'provider_de_not_rank0':len(covered-priority_zero),
+                'exact_same_asset_set':priority_zero==covered
+            }
     all_jobs=Counter()
     allowed_jobs=Counter()
     for asset,status in db.execute("""
@@ -123,6 +145,7 @@ def local_coverage(db, eligible):
       'catalogue_episode_assets':denominator,
       'catalogue_assets_matching_de_category':len(covered),
       'mapping_row_matches':matched_rows,
+      'legacy_rank0_vs_provider_de':priority_validation,
       'jobs_by_status':dict(sorted(all_jobs.items())),
       'mapped_german_category_jobs_by_status':dict(sorted(allowed_jobs.items())),
       'not_mapped_jobs_by_status':dict(sorted((all_jobs-allowed_jobs).items()))
