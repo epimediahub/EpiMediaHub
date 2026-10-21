@@ -99,3 +99,52 @@ python3 -m py_compile bridge.py test_bridge.py
 
 All tests use in-memory fixtures / temporary SQLite files with no external
 streams or HTTP requests. The GitHub Actions workflow performs these checks.
+
+
+## Backend integration step (October 21, 2026)
+
+The next-stage integration is implemented in `runtime_integration.py`.
+It exposes **functions**, not an unauthenticated HTTP endpoint.
+
+1. **Authenticated playback**: the existing playback handler must validate
+   the real device/session, playlist ownership and stream asset identity;
+   call `playback_resolution(payload, authorize=trusted_authorizer,
+   store=private_knowledge_file)` only after those checks.
+   The callback MUST independently validate both playlist ID and asset key.
+   Render returned `markers` in the existing Fire TV/Android seek overlay.
+   Never consume `review_candidates` as active skip buttons.
+2. **Analysis**: the scheduler may call
+   `external_review_resolution(payload,cache=private_advisory_db)` for
+   **analysis IDs 8 and 10 only**. This sends requests only to IntroDB /
+   TheIntroDB and opens zero provider video streams. The result must feed
+   the existing independent visual/audio verifier, not bypass it.
+   `planning_hints` is restricted to one suggested task per provider and
+   does NOT modify the live scheduler or reserve slots.
+3. **Knowledge sync**: from the checked-out repo, on the *correct* Hetzner
+   host, use `sudo bash install_unified.sh --check`. Only when every
+   preflight and schema check is green, execute
+   `sudo bash install_unified.sh --apply` **once**. The installer sets up a
+   separate private verified-marker database and hourly systemd snapshot.
+   Existing approval tables, clients and workers are not rewritten.
+   Existing/unknown systemd units or knowledge files result in a safe STOP.
+
+### Remaining external dependencies
+
+- The deployed Hetzner source of the existing Flask/API application and its
+  **real** device-session/playlist authorization handler are required to call
+  `playback_resolution` from an actual secured route.
+- The current Android TV/player 1.x source is required to display these
+  verified skip markers; the old Enigma2 packages and Android 0.4.x patches
+  in this repository are **not** an adequate substitute.
+- Actual identical-cut matching still needs a verified A/V fingerprint or
+  another reliable mapping supplied by the existing analyzer. A SHA-256 of
+  an image-window cache is **not** evidence that two full files share a cut.
+- TheIntroDB API v4 respects `mapping`; passing a season/episode number
+  without knowing its release order can select an unrelated episode.
+- Public external hints require per-episode metadata (IMDb/TVDB IDs)
+  from an authorized metadata source. We do not open customer streams or
+  infer IDs from similarity of display titles.
+
+**Release status:** Installing the hourly private snapshot is useful backend
+preparation. It is **not** end-to-end production integration or an updated
+customer player APK, and should never be represented as such.

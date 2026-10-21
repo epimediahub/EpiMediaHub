@@ -18,5 +18,6 @@ jobs:
       - name: Python syntax and isolated regression tests
         working-directory: tools/episcene-learning-v1/unified-marker-bridge
         run: |
-          python3 -m py_compile bridge.py test_bridge.py
-          python3 -m unittest -v test_bridge.py
+          python3 -m py_compile bridge.py runtime_integration.py test_bridge.py test_runtime_integration.py
+          python3 -m unittest -v test_bridge.py test_runtime_integration.py
+          bash -n install_unified.sh
