@@ -61,7 +61,7 @@ class GateTests(unittest.TestCase):
         db=fixture()
         scope={'german-one','german-two'}
         before_best=db.execute("SELECT status FROM skip_jobs WHERE asset_key='best-one'").fetchone()[0]
-        held=gate.apply_guard(db,scope)
+        held=gate.apply_guard(db,scope,minimum=0)
         self.assertEqual(held,2)
         status=dict(db.execute("SELECT asset_key,status FROM skip_jobs"))
         self.assertEqual(status['german-one'],'queued')
@@ -100,7 +100,7 @@ class GateTests(unittest.TestCase):
         db=fixture()
         db.execute('CREATE TABLE episcene_scope_4k_unknown(id INTEGER)')
         with self.assertRaisesRegex(RuntimeError,'already exist'):
-            gate.apply_guard(db,{'german-one','german-two'})
+            gate.apply_guard(db,{'german-one','german-two'},minimum=0)
         self.assertEqual(db.execute("SELECT status FROM skip_jobs WHERE asset_key='foreign-one'").fetchone()[0],
                          'queued')
         self.assertNotIn('episcene_scope_4k_allowed',
