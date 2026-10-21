@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -91,15 +92,28 @@ def inspect(root=ROOT, state=systemd_state):
         return {"mode": "READ_ONLY", "backend_present": False,
                 "backend_route_inventory": [], "status": "BLOCKED"}
     modules = []
-    for item in p.rglob("*.py"):
-        try:
-            rel = item.relative_to(p)
-            if (len(rel.parts) > 3 or item.is_symlink()
-                    or not item.is_file() or item.stat().st_size > MAX_BYTES):
+    # Avoid walking the application virtualenv or secret/config subtrees.
+    for base, directories, filenames in os.walk(p, followlinks=False):
+        relbase = Path(base).relative_to(p)
+        directories[:] = [d for d in directories if
+                          d not in (".venv", "venv", ".git", "__pycache__",
+                                    "site-packages", "secrets", "private",
+                                    "certificates", "node_modules")
+                          and len(relbase.parts) < 2
+                          and not (Path(base) / d).is_symlink()]
+        for name in filenames:
+            if not name.endswith(".py"):
                 continue
-            modules.append((str(rel), item))
-        except (OSError, ValueError):
-            continue
+            item = Path(base) / name
+            try:
+                if (item.is_symlink() or not item.is_file()
+                        or item.stat().st_size > MAX_BYTES):
+                    continue
+                modules.append((str(item.relative_to(p)), item))
+            except (OSError, ValueError):
+                continue
+            if len(modules) >= MAX_FILES:
+                break
         if len(modules) >= MAX_FILES:
             break
 
