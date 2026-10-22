@@ -1,0 +1,17 @@
+name: EpiScene shared marker knowledge regression
+on:
+  pull_request:
+    paths:
+      - 'tools/episcene-learning-v1/shared-knowledge/**'
+      - '.github/workflows/episcene-shared-knowledge-tests.yml'
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test pure reference resolver without production data
+        working-directory: tools/episcene-learning-v1/shared-knowledge
+        run: |
+          python3 -m py_compile shared_knowledge.py test_shared_knowledge.py
+          python3 -m unittest -v test_shared_knowledge.py
