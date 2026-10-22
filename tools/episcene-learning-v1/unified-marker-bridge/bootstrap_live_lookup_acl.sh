@@ -53,7 +53,7 @@ if grep -Eq '/var/lib/episcene-learning|/var/lib($|[[:space:]])' <<< "$ISOLATION
 fi
 
 # Known reviewed revision. Update this immutable hash only after CI passes.
-REV=__REVIEWED_COMMIT_SHA__
+REV=68c4129edcc1c76c859f03863944181cadcdff74
 BASE="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$REV/tools/episcene-learning-v1/unified-marker-bridge"
 TEMP="$(mktemp -d -t episcene-api-acl.XXXXXXXX)"
 trap 'rm -rf -- "$TEMP"' EXIT
