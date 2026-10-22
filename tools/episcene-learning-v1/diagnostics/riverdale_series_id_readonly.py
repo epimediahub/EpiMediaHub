@@ -91,7 +91,20 @@ def api_fetch(analysis,url):
         value=json.loads(data)
     except (ValueError,UnicodeError):
         return 'NON_JSON_RESPONSE',None
-    return ('OK',value) if isinstance(value,dict) else ('INVALID_RESPONSE_SHAPE',None)
+    if isinstance(value,dict):
+        return 'OK',value
+    # Report only a categorical response shape: no raw provider content.
+    if isinstance(value,list):
+        return ('XTREAM_EMPTY_ARRAY' if not value else 'XTREAM_NONEMPTY_ARRAY'),None
+    if value is None:
+        return 'XTREAM_JSON_NULL',None
+    if type(value) is bool:
+        return ('XTREAM_JSON_TRUE' if value else 'XTREAM_JSON_FALSE'),None
+    if type(value) is str:
+        return 'XTREAM_JSON_STRING',None
+    if type(value) in (int,float):
+        return 'XTREAM_JSON_NUMBER',None
+    return 'XTREAM_UNSUPPORTED_JSON_SHAPE',None
 
 def evaluate(catalog,episode):
     sections=catalog.get('episodes')
