@@ -83,11 +83,54 @@ def _cache_key(ep):
     }, sort_keys=True, separators=(",", ":"))
 
 
+TRUSTED_SOURCE_CACHE = Path("/var/lib/episcene-learning/trusted-sources.sqlite3")
+TRUSTED_SOURCE_READER = "epimediahub"
+
+
+def _trusted_cache_readonly_acl(p):
+    """Permit only the exact Linux POSIX ACL for the API's read-only cache.
+
+    POSIX ACL masks appear in stat() group bits. Do not weaken the general
+    0700/0600 advisory-store rule for other paths or unrestricted ACLs.
+    """
+    import pwd
+    import struct
+
+    if p != TRUSTED_SOURCE_CACHE or p.is_symlink() or not p.is_file():
+        return False
+    try:
+        uid = pwd.getpwnam(TRUSTED_SOURCE_READER).pw_uid
+        d, f = p.parent.stat(), p.stat()
+        if uid in (d.st_uid, f.st_uid):
+            return False
+        if stat.S_IMODE(d.st_mode) != 0o710 or stat.S_IMODE(f.st_mode) != 0o640:
+            return False
+        specs = ((p.parent, 0o7, 0o1), (p, 0o6, 0o4))
+        for path, owner_perms, reader_perms in specs:
+            acl = os.getxattr(path, "system.posix_acl_access")
+            if len(acl) != 44 or struct.unpack_from("<I", acl)[0] != 2:
+                return False
+            entries = [struct.unpack_from("<HHI", acl, i) for i in range(4, len(acl), 8)]
+            expected = [
+                (1, owner_perms, 0xffffffff),  # owning user
+                (2, reader_perms, uid),        # API account only
+                (4, 0, 0xffffffff),            # owning group: denied
+                (16, reader_perms, 0xffffffff),# effective ACL mask
+                (32, 0, 0xffffffff),           # everyone else: denied
+            ]
+            if entries != expected:
+                return False
+        return True
+    except (KeyError, OSError, ValueError, struct.error):
+        return False
+
+
 def _cache_path(path):
     p = Path(path)
     if p.parent.is_symlink() or not p.parent.is_dir():
         raise ValueError("Cache parent must exist and not be a symlink")
-    if stat.S_IMODE(p.parent.stat().st_mode) & 0o077:
+    acl_private = _trusted_cache_readonly_acl(p)
+    if stat.S_IMODE(p.parent.stat().st_mode) & 0o077 and not acl_private:
         raise ValueError("Advisory cache directory must be private (0700)")
     if p.is_symlink() or (p.exists() and not p.is_file()):
         raise ValueError("Refusing nonregular/symlink advisory cache")
@@ -97,7 +140,8 @@ def _cache_path(path):
             os.close(fd)
         except FileExistsError:
             pass
-    if p.is_symlink() or not p.is_file() or stat.S_IMODE(p.stat().st_mode) & 0o077:
+    if (p.is_symlink() or not p.is_file() or
+            (stat.S_IMODE(p.stat().st_mode) & 0o077 and not acl_private)):
         raise ValueError("Advisory cache file must be private (0600)")
     return p
 
