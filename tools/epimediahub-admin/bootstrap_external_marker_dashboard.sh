@@ -7,7 +7,7 @@ for b in curl mktemp python3 bash; do
   command -v "$b" >/dev/null || { echo "STOP: missing $b"; exit 2; }
 done
 BASE=https://raw.githubusercontent.com/epimediahub/EpiMediaHub
-REV=09ce61f0962ff6829a391285e38c0afb2f02fa05
+REV=6cb21138febe840764de108c1a5bf9550c04af60
 OLD=104f041fd8d367f3b4c89e49f1e2eea9c94c0295
 WORK="$(mktemp -d -t episcene-marker-dashboard.XXXXXXXX)"
 trap 'rm -rf -- "$WORK"' EXIT
