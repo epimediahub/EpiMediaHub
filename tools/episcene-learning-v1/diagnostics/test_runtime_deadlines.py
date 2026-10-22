@@ -62,7 +62,7 @@ class RuntimeTriageTest(unittest.TestCase):
     def test_dates_and_logs_are_bounded(self):
         self.assertIsNone(m.date_seconds("nonsense"))
         self.assertIsNotNone(m.date_seconds("2026-10-22T15:00:00Z"))
-        with mock.patch.object(m, "run", return_value=(0, "timeout for user 123\npartial\n")),
+        with mock.patch.object(m, "run", return_value=(0, "timeout for user 123\npartial\n")), \
              mock.patch.object(m, "SERVICE_NAMES", ("fake.service",)):
             data = m.journal_counts()
             self.assertEqual(data["fake.service"]["timeouts"], 1)
