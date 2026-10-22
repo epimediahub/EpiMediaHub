@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import ast
 from collections import Counter
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -48,22 +47,20 @@ def source_refs(text, needle):
         parsed=ast.parse(text)
     except (SyntaxError,UnicodeError):
         return []
-    def parent_function(node):
-        # AST descendants inherit the deepest function scope.
-        mapping={}
-        def visit(n,chain):
-            for child in ast.iter_child_nodes(n):
-                current=chain
-                if isinstance(child,(ast.FunctionDef,ast.AsyncFunctionDef)):
-                    current=child.name
-                mapping[id(child)]=current
-                visit(child,current)
-        visit(parsed,'<module>')
-        return mapping.get(id(node),'<module>')
+    # Build the function map once: the live files may contain thousands of literals.
+    mapping={}
+    def visit(n,scope):
+        for child in ast.iter_child_nodes(n):
+            current=scope
+            if isinstance(child,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                current=child.name
+            mapping[id(child)]=current
+            visit(child,current)
+    visit(parsed,'<module>')
     hits=[]
     for node in ast.walk(parsed):
         if isinstance(node,ast.Constant) and isinstance(node.value,str) and node.value.strip()==needle.strip():
-            name=parent_function(node)
+            name=mapping.get(id(node),'<module>')
             if not re.fullmatch(r'[a-zA-Z_][\w]{0,90}',name):
                 name='KNOWN_FUNCTION'
             hits.append({'function':name,'line':node.lineno})
