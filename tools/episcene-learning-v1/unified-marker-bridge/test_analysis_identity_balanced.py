@@ -74,6 +74,7 @@ class BalancedCatalogTests(unittest.TestCase):
                 conn.execute("""CREATE TABLE trusted_source_sync_cursor(
                     singleton INT PRIMARY KEY,playlist_id INT,asset_key TEXT)""")
                 conn.execute("INSERT INTO trusted_source_sync_cursor VALUES(1,8,'asset-8-0005')")
+            cache.chmod(0o600)
             rows,status,meta=catalog_batch(prod,cache,limit=4)
             self.assertEqual(status,'ok')
             ids={8:[],10:[]}
