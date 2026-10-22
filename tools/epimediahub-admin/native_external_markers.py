@@ -6,6 +6,7 @@ marker report. Missing trusted bridge code or source databases fail closed.
 from __future__ import annotations
 
 from collections import Counter
+from functools import lru_cache
 import importlib
 import sqlite3
 import sys
@@ -16,6 +17,7 @@ TRUSTED_BRIDGE = Path("/opt/episcene-learning/unified")
 CACHE = Path("/var/lib/episcene-learning/trusted-sources.sqlite3")
 MAX_ROWS = 5000
 PAGE_SIZE = 50
+REFRESH_INTERVAL_SECONDS = 90
 PLAYLISTS = {"8": "4K ANALYSE", "10": "THE BEST"}
 SOURCES = {"introdb": "IntroDB", "theintrodb": "TheIntroDB"}
 KINDS = {"intro", "recap", "outro"}
@@ -56,26 +58,40 @@ def validate_filter(playlist="", source="", state="", q="", page="1"):
     return playlist, source, state, q.strip().casefold(), value
 
 
-def list_external_markers(production: Path, *, cache: Path = CACHE,
-                          playlist="", source="", state="", q="", page="1"):
-    playlist, source, state, q, page = validate_filter(playlist, source, state, q, page)
+class _RecentCache:
+    """Narrow SQL proxy: only recent cache rows, never modifies source DB."""
+    def __init__(self, conn):
+        self.conn = conn
+
+    def execute(self, sql):
+        if sql.strip() != "SELECT identity,response,expires_at FROM trusted_external_cache":
+            raise ExternalMarkerUnavailable("unexpected_external_report_query")
+        return self.conn.execute(sql + " ORDER BY created_at DESC LIMIT ?", (MAX_ROWS,))
+
+
+@lru_cache(maxsize=5)
+def _snapshot(production: str, cache: str, bucket: int):
     report = _report_module()
     try:
-        with report.ro(cache) as db:
-            # Bound memory/CPU even if the hourly prefetch grows for years.
+        with report.ro(Path(cache)) as db:
             size = int(db.execute("SELECT COUNT(*) FROM trusted_external_cache").fetchone()[0])
-            if size > MAX_ROWS:
-                raise ExternalMarkerUnavailable("cache_too_large_for_live_view")
-            _, entries = report.accepted_entries(db)
+            _, entries = report.accepted_entries(_RecentCache(db))
         if entries:
-            with report.ro(production) as prod:
+            with report.ro(Path(production)) as prod:
                 linked = report.series_matches(prod, entries)
         else:
             linked = {}
+        return size, entries, linked
     except (sqlite3.Error, OSError, ValueError) as exc:
         raise ExternalMarkerUnavailable("readonly_marker_source_unavailable") from exc
 
+
+def list_external_markers(production: Path, *, cache: Path = CACHE,
+                          playlist="", source="", state="", q="", page="1"):
+    playlist, source, state, q, page = validate_filter(playlist, source, state, q, page)
     now = int(time.time())
+    size, entries, linked = _snapshot(str(production), str(cache),
+                                       now // REFRESH_INTERVAL_SECONDS)
     rows = []
     for index, item in enumerate(entries):
         active = item["expires"] > now
@@ -131,6 +147,7 @@ def list_external_markers(production: Path, *, cache: Path = CACHE,
         "source_counts": {k: int(totals[k]) for k in SOURCES},
         "cached_episode_count": len(entries),
         "cache_entry_count": size,
+        "truncated_to_recent": size > MAX_ROWS,
         "generated_at_epoch": now,
         "notice": "Cache-Marker; keine Garantie fuer Anzeige am Endgeraet",
     }
