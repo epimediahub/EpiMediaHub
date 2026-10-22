@@ -45,9 +45,9 @@ paused retryable disabled account network stream source failed
 """.split())
 
 def allowlisted(detail):
-    scrubbed=re.sub(r'(?i)\\b(?:[a-z][a-z0-9+.-]*://|www\\.)\\S+', ' ', str(detail or ''))
-    scrubbed=re.sub(r'(?i)\\b(?:[a-z0-9-]+\\.)+[a-z]{2,24}(?:/\\S+)?', ' ', scrubbed)
-    words=re.findall(r'[^\\W\\d_]+',scrubbed.casefold(),flags=re.UNICODE)
+    scrubbed=re.sub(r'(?i)\b(?:[a-z][a-z0-9+.-]*://|www\.)\S+', ' ', str(detail or ''))
+    scrubbed=re.sub(r'(?i)\b(?:[a-z0-9-]+\.)+[a-z]{2,24}(?:/\S+)?', ' ', scrubbed)
+    words=re.findall(r'[^\W\d_]+',scrubbed.casefold(),flags=re.UNICODE)
     return [word for word in words if word in WORDS][:24]
 
 def function_map(tree):
