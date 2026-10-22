@@ -73,16 +73,40 @@ class Redact(ast.NodeTransformer):
 
 def build_review(source: str):
     module = ast.parse(source)
-    defined = {fn.name: fn for fn in module.body
-               if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))}
-    if TARGET not in defined:
-        raise ValueError("Active lookup not found")
-    target = defined[TARGET]
+    # The active server registers its device lookup inside a route-binding
+    # function, not necessarily in module.body. The previous top-level-only
+    # lookup incorrectly reported "Active lookup not found".
+    defined = {}
+    for fn in ast.walk(module):
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            defined.setdefault(fn.name, []).append(fn)
+    candidates = defined.get(TARGET, [])
+    def has_device_route(fn):
+        return any(
+            isinstance(dec, ast.Call) and dec.args
+            and isinstance(dec.args[0], ast.Constant)
+            and dec.args[0].value == "/v1/device/skip/lookup"
+            for dec in fn.decorator_list
+        )
+    matching = [fn for fn in candidates if has_device_route(fn)]
+    if len(matching) == 1:
+        target = matching[0]
+    elif len(candidates) == 1 and not matching:
+        # Support routes registered via add_url_rule rather than a decorator.
+        target = candidates[0]
+    else:
+        raise ValueError(
+            "Expected one device lookup handler; found "
+            + str(len(candidates)) + " candidate(s) and "
+            + str(len(matching)) + " matching decorator(s)"
+        )
     invoked = {node.func.id for node in ast.walk(target)
                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
-    chosen = [TARGET] + [
-        name for name in sorted(invoked)
-        if name != TARGET and name in defined][:MAX_FUNCTIONS - 1]
+    # Duplicated helper names are ambiguous: never pick an arbitrary one.
+    chosen = [(TARGET, target)] + [
+        (name, defined[name][0]) for name in sorted(invoked)
+        if name != TARGET and len(defined.get(name, [])) == 1
+    ][:MAX_FUNCTIONS - 1]
     result = [
         "EpiScene /v1/device/skip/lookup — private redacted review",
         "READ ONLY: AST parse only; no backend import or execution.",
@@ -90,11 +114,10 @@ def build_review(source: str):
         "NOT A DEPLOYABLE PYTHON MODULE.",
         "Active function shape: " +
         hashlib.sha256(ast.dump(target, include_attributes=False).encode()).hexdigest()[:16],
-        "Included functions: " + ", ".join(chosen),
+        "Included functions: " + ", ".join(name for name, _ in chosen),
         "--- REDACTED CONTROL FLOW ---",
     ]
-    for name in chosen:
-        original = defined[name]
+    for name, original in chosen:
         tree = Redact().visit(ast.fix_missing_locations(
             ast.parse(ast.unparse(original))))
         snippet = ast.unparse(tree)

@@ -34,6 +34,58 @@ class RedactionTests(unittest.TestCase):
         self.assertIn("start_ms", out)
         self.assertIn("REDACTED_STRING", out)
 
+    def test_nested_route_is_discovered_and_redacted(self):
+        # The real deployed Flask handler is nested in a route registration
+        # function, which the old module.body-only scanner missed.
+        source = '''
+def attach_skip_routes(app):
+    def verify_device(device):
+        return device == "SECRET_DEVICE_ID"
+    @app.post("/v1/device/skip/lookup")
+    def v082_skip_lookup():
+        password = "SERVER_SECRET_DO_NOT_SHOW"
+        if not verify_device(request.get_json()):
+            return jsonify({"error": "SECRET_ERROR"})
+        return jsonify({"asset_key": "hidden", "segments": []})
+    return v082_skip_lookup
+'''
+        result = build_review(source)
+        self.assertIn("def v082_skip_lookup", result)
+        self.assertIn("def verify_device(", result)
+        self.assertIn("if not verify_device(", result)
+        self.assertIn("/v1/device/skip/lookup", result)
+        self.assertNotIn("SERVER_SECRET_DO_NOT_SHOW", result)
+        self.assertNotIn("SECRET_DEVICE_ID", result)
+        self.assertNotIn("SECRET_ERROR", result)
+
+    def test_duplicate_nested_handler_selects_route_decorator(self):
+        source = '''
+def unused():
+    def v082_skip_lookup():
+        return {"segments": []}
+    return v082_skip_lookup
+def register(app):
+    @app.route("/v1/device/skip/lookup", methods=["POST"])
+    def v082_skip_lookup():
+        return jsonify({"segments": []})
+'''
+        result = build_review(source)
+        self.assertIn("def v082_skip_lookup", result)
+        self.assertIn("/v1/device/skip/lookup", result)
+        self.assertNotIn("def unused", result)
+
+    def test_ambiguous_duplicate_route_fails_closed(self):
+        source = '''
+def bind_first(app):
+    @app.post("/v1/device/skip/lookup")
+    def v082_skip_lookup(): pass
+def bind_second(app):
+    @app.post("/v1/device/skip/lookup")
+    def v082_skip_lookup(): pass
+'''
+        with self.assertRaisesRegex(ValueError, "Expected one device lookup"):
+            build_review(source)
+
     def test_no_active_function_fails(self):
         with self.assertRaises(ValueError):
             build_review("def unrelated(): pass")
