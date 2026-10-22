@@ -1,5 +1,9 @@
 name: EpiScene one-read-only-report diagnostics
 on:
+  push:
+    paths:
+      - 'tools/episcene-learning-v1/diagnostics/**'
+      - '.github/workflows/episcene-one-report-check.yml'
   pull_request:
     paths:
       - 'tools/episcene-learning-v1/diagnostics/**'
