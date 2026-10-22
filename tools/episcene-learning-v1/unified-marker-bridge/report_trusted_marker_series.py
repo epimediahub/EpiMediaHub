@@ -5,6 +5,7 @@ Reads the trusted prefetch cache and only dedicated analysis playlists 8/10.
 Never accesses customer playlists, changes databases, calls IPTV or external APIs.
 Titles are matched by a canonical IMDb/TVDB/TMDb ID, season, episode and cut
 duration, not by guessing from titles or provider names.
+A cache hit does not prove a marker was displayed by an Android device.
 """
 from __future__ import annotations
 
