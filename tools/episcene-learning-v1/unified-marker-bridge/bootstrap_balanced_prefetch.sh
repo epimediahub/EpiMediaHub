@@ -48,7 +48,8 @@ trap 'rm -rf -- "$TEMP"' EXIT
 mkdir -m 0700 -- "$TEMP/baseline"
 for name in analysis_identity_balanced.py trusted_external_sync.py \
             test_analysis_identity_balanced.py test_analysis_identity.py \
-            test_trusted_external_sync.py test_trusted_external.py; do
+            test_trusted_external_sync.py test_trusted_external.py \
+            test_bridge.py; do
   curl --fail --silent --show-error --location --retry 2 --max-time 45 \
     "$ROOT/$NEW/$SUB/$name" -o "$TEMP/$name"
   [[ -s "$TEMP/$name" ]] || { echo "STOP: missing tested file $name" >&2; exit 2; }
