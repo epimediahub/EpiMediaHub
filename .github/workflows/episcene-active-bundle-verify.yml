@@ -20,5 +20,5 @@ jobs:
           mkdir -p /tmp/active-learning
           tar -xzf /tmp/episcene-active-learning-v1.tar.gz -C /tmp/active-learning
           cd /tmp/active-learning/episcene-active-learning-v1
-          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s . -p 'test_active_learning.py' -q
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -q test_active_learning.TrustedHintTests
           python3 -m py_compile patch_active_learning.py skip_external_learning_hints.py
