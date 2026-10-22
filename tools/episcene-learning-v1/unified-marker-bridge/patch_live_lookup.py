@@ -199,7 +199,7 @@ def apply(source, patch, dependency_path, *, unit=UNIT):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("mode", choices=["--check", "--apply"])
+    p.add_argument("mode", choices=["check", "apply"])
     p.add_argument("--dependency", required=True)
     args = p.parse_args()
     if os.geteuid() != 0:
@@ -215,7 +215,7 @@ def main():
     print("ACTIVE_LOOKUP_SHAPE_OK")
     print("PRESERVES_EXISTING_DEVICE_AUTH_RATE_LIMIT_AND_API_RESPONSE")
     print("NO_CUSTOMER_PLAYLIST_OR_MARKER_DATABASE_CHANGES")
-    if args.mode == "--check":
+    if args.mode == "check":
         print("CHECK_OK_NO_PRODUCTION_CHANGES")
         return
     saved = apply(SOURCE, patched, dependency)
