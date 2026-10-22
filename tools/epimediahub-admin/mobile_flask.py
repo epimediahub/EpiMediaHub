@@ -253,8 +253,9 @@ th{font-size:12px;color:#a7c8e0}tr:last-child td{border:0}
 <span>{{data.total}} Marker · gefiltert</span>
 <span>IntroDB: {{data.source_counts.introdb}}</span>
 <span>TheIntroDB: {{data.source_counts.theintrodb}}</span>
-<span>{{data.cached_episode_count}} Cache-Folgen insgesamt</span>
+<span>{{data.cached_episode_count}} Cache-Folgen aus neuester Stichprobe</span>
 </div>
+{% if data.truncated_to_recent %}<p>Es werden nur die neuesten 5000 Cache-Einträge ausgewertet.</p>{% endif %}
 <div class="wrap"><table><thead><tr>
 <th>Playlist</th><th>Serie</th><th>Folge</th><th>Quelle</th><th>Art</th><th>Zeit</th><th>Cache</th>
 </tr></thead><tbody>
