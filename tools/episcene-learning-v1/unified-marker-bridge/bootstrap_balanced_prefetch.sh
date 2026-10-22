@@ -102,7 +102,7 @@ rollback() {
   result=$?
   if [[ "$COMPLETE" -ne 1 ]]; then
     echo "ROLLBACK: restoring original trusted source module" >&2
-    install -m 0644 "$BACKUP/trusted_external_sync.py" "$DEST/.trusted_external_sync.py.recover"
+    cp -p -- "$BACKUP/trusted_external_sync.py" "$DEST/.trusted_external_sync.py.recover"
     mv -f -- "$DEST/.trusted_external_sync.py.recover" "$BASE"
     rm -f -- "$HELPER"
     systemctl start "$TIMER" >/dev/null 2>&1 || true
