@@ -131,9 +131,26 @@ def preflight(source=SOURCE, data=DATA):
         raise ValueError("STOP: cannot determine service identity")
     user = service_user.stdout.strip()
     if user not in ("", "root"):
-        raise ValueError("STOP: API service cannot read root-private cache; "
-                         "requires a least-privilege read-only bridge")
-    return {"api_service_active": True, "cache_access": "root_service_only"}
+        import re
+        if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,63}", user):
+            raise ValueError("STOP: unexpected API service account")
+        # Permission-probe the actual cache as the actual systemd account.
+        # Never make the entire knowledge directory world-readable.
+        probe = (
+            "import sqlite3;"
+            "from pathlib import Path;"
+            "p=Path('/var/lib/episcene-learning/trusted-sources.sqlite3');"
+            "c=sqlite3.connect(p.as_uri()+'?mode=ro',uri=True,timeout=3);"
+            "c.execute('PRAGMA query_only=ON');"
+            "c.execute('SELECT COUNT(*) FROM trusted_external_cache').fetchone();"
+            "c.close()"
+        )
+        if _run("runuser", "-u", user, "--", "python3", "-c", probe).returncode != 0:
+            raise ValueError(
+                "STOP: API account still cannot read trusted cache; "
+                "grant read-only account ACL before proceeding"
+            )
+    return {"api_service_active": True, "cache_access": "least_privilege_read_verified"}
 
 
 def apply(source, patch, dependency_path, *, expected_original_sha, unit=UNIT):
