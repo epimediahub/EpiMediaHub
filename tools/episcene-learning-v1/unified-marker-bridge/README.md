@@ -228,3 +228,26 @@ Finally: this fixes automatic external metadata **fetch and cache**. The
 live device endpoint `/v1/device/skip/lookup` has not yet been patched to
 return the cached external markers, and the current Android player version
 remains unverified.
+
+
+## Trusted marker cache: least-privilege API reader (22 Oct 2026)
+
+The active external prefetch writes a private SQLite cache. The API account
+`epimediahub` must have directory **traverse only** and SQLite **read only**.
+A previous hardening `chmod 0700` / `chmod 0600` reset the POSIX ACL
+effective masks to zero while retaining named ACL entries. GitHub's reviewed
+`bootstrap_fix_cache_acl.sh` restores those masks only for the designated
+reader, retaining `group::---` and `other::---`.
+
+The cache writer's `runtime_integration._cache_path` formerly rejected ACL
+masks just because POSIX `stat` reflects the mask as group bits. It now
+accepts exactly one fully validated Linux POSIX ACL for the named API account
+at the fixed trusted-source cache path (directory owner-only + reader traverse;
+file owner-only + reader read); all other cache paths retain their former
+0700/0600 requirement. The repair script saves the old ACL and runtime file,
+runs regression tests, verifies API read-only access, and executes a real
+prefetch before reporting success. On failure it restores both.
+
+This enables the external marker **cache** read path only. Confirm the actual
+skip/lookup response in a Fire TV playback test before treating a source
+marker as validated end-to-end.
