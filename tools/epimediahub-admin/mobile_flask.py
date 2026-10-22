@@ -29,6 +29,7 @@ from native_management_actions import invoke_grant, valid_confirmation
 from native_legacy_bridge import invoke_legacy, LegacyUnavailable
 from native_delete_confirmation import expected_confirmation, ConfirmationUnavailable
 from native_marker_review import list_pending as native_pending_markers, csrf_token as marker_csrf, invoke_review as original_marker_review, MarkerReviewUnavailable
+from native_external_markers import list_external_markers, ExternalMarkerUnavailable
 from native_management_edits import rename as native_rename, EditUnavailable
 from expiry_cache import read_verified, Unavailable as ExpiryUnavailable
 from expiry_report_rows import linked_expiries, require_complete_xtream_coverage
@@ -52,7 +53,7 @@ border-radius:12px;padding:14px;margin:11px 0}
 button{background:#315b95;border:0;color:white;padding:9px 12px;border-radius:8px}
 small{color:#a1b1c3}form{margin-top:10px}
 </style><body>
-<div class="head"><h1>Admin · Meldungen</h1><a href="/admin/diagnostics">Diagnose</a></div>
+<div class="head"><h1>Admin · Meldungen</h1><a href="/admin/mobile/episcene/markers/view">EpiScene-Marker</a><a href="/admin/diagnostics">Diagnose</a></div>
 <small>Nur bestätigte Alarmzustände. Ausbleibende Messwerte gelten nicht als Entwarnung.</small>
 {% if not incidents %}<p>Zurzeit keine offenen oder bestätigten Meldungen im Alarmregister.</p>{% endif %}
 {% for item in incidents %}
@@ -204,6 +205,112 @@ def episcene_status():
 
 def _marker_review_enabled():
     return os.environ.get("EPIMEDIAHUB_NATIVE_EPISCENE_REVIEW_ENABLED")=="YES"
+
+
+
+MARKERS_HTML="""<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EpiScene · Externe Marker</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}
+body{margin:0;background:#0b1320;color:#e8f1ff;font:15px system-ui,sans-serif}
+main{max-width:1220px;margin:auto;padding:24px 18px}
+a{color:#7dd5ff} h1{margin:12px 0 6px;font-size:27px}
+p,small{color:#afc1d5} .filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin:24px 0}
+input,select,button{width:100%;border:1px solid #36485e;border-radius:10px;
+background:#16253a;color:#f1f7ff;padding:12px;font:inherit}
+button{background:#315b95;cursor:pointer}
+label{display:block;color:#b8cbe0;font-size:12px;margin-bottom:5px}
+.summary{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.summary>span{background:#15243a;border:1px solid #30445c;border-radius:12px;padding:10px 14px}
+.wrap{overflow-x:auto;border:1px solid #34455b;border-radius:14px}
+table{border-collapse:collapse;width:100%;min-width:740px}
+th,td{text-align:left;padding:12px 13px;border-bottom:1px solid #25364a}
+th{font-size:12px;color:#a7c8e0}tr:last-child td{border:0}
+.state{font-weight:700} .expired{color:#f2b97a}.active{color:#76d9b6}
+.pages{display:flex;gap:20px;align-items:center;margin:18px 0}
+</style></head><body><main>
+<a href="/admin/mobile/alerts">← Admin</a>
+<h1>EpiScene · Externe Marker</h1>
+<p>Vertrauenswürdige Marker aus IntroDB und TheIntroDB; schreibgeschützt und nur für 4K ANALYSE / THE BEST.</p>
+<form class="filters" method="get">
+<div><label for="playlist">Playlist</label><select name="playlist" id="playlist">
+<option value="">Beide</option>{% for id,label in [("8","4K ANALYSE"),("10","THE BEST")] %}
+<option value="{{id}}" {% if filters.playlist==id %}selected{% endif %}>{{label}}</option>{% endfor %}
+</select></div>
+<div><label for="source">Quelle</label><select name="source" id="source">
+<option value="">Beide</option>{% for code,label in [("introdb","IntroDB"),("theintrodb","TheIntroDB")] %}
+<option value="{{code}}" {% if filters.source==code %}selected{% endif %}>{{label}}</option>{% endfor %}
+</select></div>
+<div><label for="state">Cache-Status</label><select name="state" id="state">
+<option value="">Alle</option><option value="active" {% if filters.state=="active" %}selected{% endif %}>Aktiv</option>
+<option value="expired" {% if filters.state=="expired" %}selected{% endif %}>Abgelaufen</option>
+</select></div>
+<div><label for="q">Serie suchen</label><input id="q" name="q" maxlength="80" value="{{filters.q}}" placeholder="Serienname"></div>
+<div><label>Auswertung</label><button type="submit">Anzeigen</button></div>
+</form>
+<div class="summary">
+<span>{{data.total}} Marker · gefiltert</span>
+<span>IntroDB: {{data.source_counts.introdb}}</span>
+<span>TheIntroDB: {{data.source_counts.theintrodb}}</span>
+<span>{{data.cached_episode_count}} Cache-Folgen aus neuester Stichprobe</span>
+</div>
+{% if data.truncated_to_recent %}<p>Es werden nur die neuesten 5000 Cache-Einträge ausgewertet.</p>{% endif %}
+<div class="wrap"><table><thead><tr>
+<th>Playlist</th><th>Serie</th><th>Folge</th><th>Quelle</th><th>Art</th><th>Zeit</th><th>Cache</th>
+</tr></thead><tbody>
+{% for item in data.markers %}
+<tr><td>{{item.playlist}}</td><td>{{item.title}}</td>
+<td>S{{'%02d'|format(item.season)}}E{{'%02d'|format(item.episode)}}</td>
+<td>{{'IntroDB' if item.source=='introdb' else 'TheIntroDB'}}</td>
+<td>{{ {'intro':'Intro','recap':'Rückblick','outro':'Abspann'}[item.kind] }}</td>
+<td>{{'%02d:%02d'|format(item.start_ms//60000,(item.start_ms//1000)%60)}}–{{'%02d:%02d'|format(item.end_ms//60000,(item.end_ms//1000)%60)}}</td>
+<td class="state {{item.cache_status}}">{{'Aktiv' if item.cache_status=='active' else 'Abgelaufen'}}</td></tr>
+{% else %}<tr><td colspan="7">Keine externen Marker für die gewählten Filter.</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="pages">
+{% if data.page>1 %}<a href="?playlist={{filters.playlist|urlencode}}&source={{filters.source|urlencode}}&state={{filters.state|urlencode}}&q={{filters.q|urlencode}}&page={{data.page-1}}">← Zurück</a>{% endif %}
+<span>Seite {{data.page}}</span>
+{% if data.has_more %}<a href="?playlist={{filters.playlist|urlencode}}&source={{filters.source|urlencode}}&state={{filters.state|urlencode}}&q={{filters.q|urlencode}}&page={{data.page+1}}">Weiter →</a>{% endif %}
+</div>
+<small>Externe Marker im Cache sind nicht automatisch ein Nachweis der Anzeige auf dem Fire TV. Abgelaufene Einträge müssen erst erfolgreich erneuert werden.</small>
+</main></body></html>"""
+
+
+def _external_marker_filters():
+    return {name: request.args.get(name, default)
+            for name, default in (("playlist",""),("source",""),("state",""),("q",""),("page","1"))}
+
+
+@bp.get("/admin/mobile/episcene/markers")
+def native_episcene_external_markers():
+    _require_admin()
+    try:
+        payload = list_external_markers(_base() / "provisioning.db",
+                                        **_external_marker_filters())
+        return _response(payload)
+    except ValueError:
+        return _response({"error": "invalid_marker_filter"}, 400)
+    except (ExternalMarkerUnavailable,sqlite3.Error,OSError,RuntimeError):
+        return _response({"error": "external_marker_list_unavailable"}, 503)
+
+
+@bp.get("/admin/mobile/episcene/markers/view")
+def native_episcene_external_markers_view():
+    _require_admin()
+    try:
+        filters = _external_marker_filters()
+        payload = list_external_markers(_base() / "provisioning.db", **filters)
+    except ValueError:
+        abort(400)
+    except (ExternalMarkerUnavailable,sqlite3.Error,OSError,RuntimeError):
+        abort(503)
+    from flask import make_response
+    result = make_response(render_template_string(MARKERS_HTML,data=payload,filters=filters))
+    result.headers["Cache-Control"] = "private, no-store"
+    result.headers["X-Content-Type-Options"] = "nosniff"
+    result.headers["X-Frame-Options"] = "DENY"
+    return result
 
 
 @bp.get("/admin/mobile/episcene/reviews")

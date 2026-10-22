@@ -937,6 +937,8 @@ class MainActivity : FragmentActivity() {
                     color = Muted, fontSize = 13.sp)
             }
             HorizontalDivider(color = Border)
+            NativeExternalMarkerPanel()
+            HorizontalDivider(color = Border)
             NativeMarkerReviewPanel()
             Spacer(Modifier.height(8.dp))
         }
