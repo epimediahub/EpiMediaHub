@@ -42,35 +42,32 @@ def chosen_episode(db):
       ORDER BY j.updated_at DESC LIMIT 1""").fetchone()
 
 def candidate_series_ids(db,episode):
-    """Only exact catalogue joins; never guess a series ID from the title."""
-    number=str(episode['stream_id'])
-    source=str(episode['source_key'])
-    found=set()
-    statuses=[]
-    for table in ('skip_catalogue_episodes','skip_catalogue_episode',
-                  'skip_catalogue_series','skip_auto_series'):
-        fields=cols(db,table)
-        if not fields:
-            continue
-        id_field=next((name for name in ('series_id','provider_series_id','xtream_series_id')
-                       if name in fields),None)
-        if id_field is None or 'playlist_id' not in fields:
-            statuses.append(table+':no_series_id')
-            continue
-        episode_field=next((name for name in (
-            'stream_id','episode_id','provider_episode_id','xtream_episode_id')
-            if name in fields),None)
-        for key,value in ((episode_field,number),('source_key',source)):
-            if key is None or key not in fields:
-                continue
-            rows=db.execute(
-                f'SELECT DISTINCT {id_field} FROM {table} WHERE playlist_id=10 AND CAST({key} AS TEXT)=? LIMIT 5',
-                (value,)).fetchall()
-            for (v,) in rows:
-                if re.fullmatch(r'[1-9][0-9]{0,12}',str(v)):
-                    found.add(str(v))
-        statuses.append(table+':has_series_id')
-    return sorted(found),statuses
+    """Exact original catalogue ownership: asset_key + playlist_id.
+
+    The original catalogue table's ID is a SERIES ID; the player episode's
+    stream_id belongs to skip_assets, not to skip_catalogue_episodes.
+    Fail closed for absent or conflicting catalogue links.
+    """
+    table='skip_catalogue_episodes'
+    required={'playlist_id','asset_key','series_id'}
+    columns=cols(db,table)
+    if not required.issubset(columns):
+        return [],['skip_catalogue_episodes:unavailable_exact_asset_link']
+    rows=db.execute("""
+        SELECT DISTINCT c.series_id FROM skip_catalogue_episodes c
+        WHERE c.playlist_id=? AND c.asset_key=?
+        LIMIT 8
+    """,(episode['playlist_id'],episode['asset_key'])).fetchall()
+    if not rows:
+        return [],['skip_catalogue_episodes:asset_link_absent']
+    valid=set()
+    if len(rows)>1:
+        return [],['skip_catalogue_episodes:conflicting_asset_links']
+    for (value,) in rows:
+        if not re.fullmatch(r'[1-9][0-9]{0,12}',str(value)):
+            return [],['skip_catalogue_episodes:invalid_series_id']
+        valid.add(str(value))
+    return sorted(valid),['skip_catalogue_episodes:exact_asset_key_link']
 
 def api_fetch(analysis,url):
     opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
