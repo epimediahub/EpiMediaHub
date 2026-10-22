@@ -63,3 +63,33 @@ separately signed private Android APK and end-to-end on-device tests.
 cd tools/epimediahub-admin
 python3 -m unittest discover -v -p 'test_*.py'
 ```
+
+## Externe EpiScene-Marker im Admin-Dashboard
+
+Die EpiScene-Ansicht erhält eine **rein lesende**, authentifizierte
+IntroDB-/TheIntroDB-Übersicht. Beide Darstellungen nutzen dieselbe Admin-API:
+
+- Native Android-App: **EpiScene → IntroDB & TheIntroDB** (kein WebView).
+- PC/Browser: /admin/mobile/episcene/markers/view (nach Admin-Anmeldung).
+- JSON: GET /admin/mobile/episcene/markers (Admin-Sitzung erforderlich).
+- Filter: Playlist 8 / 10, Quelle, Cache aktiv/abgelaufen und Serienname.
+  Maximal 50 Einträge pro Seite, Seiten 1–100.
+
+Der Server verknüpft externe Marker nur über vorhandene kanonische IDs,
+Staffel, Folge und passende Laufzeit mit den Analyse-Playlisten. Nicht
+eindeutig zuordenbare Marker werden keiner Playlist zugeschrieben.
+Keine Kunden-Playlisten, keine Streamaufrufe, keine Marker-Freigabe oder
+Produktionsdatenbankänderungen. Abgelaufene Einträge sind gekennzeichnet.
+Der Cache ist kein Beweis einer tatsächlichen Skip-Anzeige auf dem Fire TV.
+
+### Kontrollierte Serverinstallation
+
+Nach Merge und Prüfung auf dem Analyse-/Admin-Hetzner das gepinnte
+bootstrap_external_marker_dashboard.sh einmal als root ausführen.
+Check und Apply erfolgen mit Backup und Rollback in einem Durchgang.
+Wenn die vorhandene mobile_flask.py-Version lokal abweicht, erfolgt ein
+sicherer STOP statt eines Überschreibens.
+
+**Separat erforderlich:** Für die native Android-Ansicht muss das signierte
+Admin-APK über den bestehenden privaten In-App-Updater freigegeben werden.
+Die Installation aktualisiert weder die IPTV-/Reseller-App noch Android-APKs.
