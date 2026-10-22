@@ -9,6 +9,7 @@ on:
       - main
     paths:
       - 'tools/episcene-learning-v1/unified-marker-bridge/**'
+      - '.github/workflows/episcene-unified-marker-bridge.yml'
 jobs:
   tests:
     runs-on: ubuntu-latest
