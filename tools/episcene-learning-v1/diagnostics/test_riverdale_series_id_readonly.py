@@ -52,4 +52,38 @@ class SeriesLookupTests(unittest.TestCase):
         self.assertNotIn('789',str(stale))
         self.assertNotIn('456',str(stale))
 
+
+    def test_unexpected_json_shapes_classified_without_private_content(self):
+        import json
+        from contextlib import contextmanager
+        from unittest.mock import patch
+
+        class FakeAnalysis:
+            @staticmethod
+            @contextmanager
+            def _provider_proxy_local(source, predicate):
+                yield 'http://127.0.0.1:55555/opaque'
+
+        for response, expected in (
+            ([], 'XTREAM_EMPTY_ARRAY'),
+            ([{'private_password':'DO_NOT_EXPORT'}], 'XTREAM_NONEMPTY_ARRAY'),
+            (None, 'XTREAM_JSON_NULL'),
+            (False, 'XTREAM_JSON_FALSE'),
+            ('PRIVATE_MESSAGE', 'XTREAM_JSON_STRING'),
+            ({'episodes':{}}, 'OK'),
+        ):
+            class Response:
+                status=200
+                def __enter__(self): return self
+                def __exit__(self, *_): return False
+                def read(self, max_length): return json.dumps(response).encode()[:max_length]
+            class Opener:
+                def open(self,*_,**__): return Response()
+            with self.subTest(expected=expected):
+                with patch('urllib.request.build_opener',return_value=Opener()):
+                    kind, data=module.api_fetch(FakeAnalysis,'PRIVATE_PROVIDER_URL')
+                self.assertEqual(kind,expected)
+                self.assertNotIn('DO_NOT_EXPORT',str((kind,data)))
+                self.assertNotIn('PRIVATE_PROVIDER_URL',str((kind,data)))
+
 if __name__=='__main__':unittest.main()
