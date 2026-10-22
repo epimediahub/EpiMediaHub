@@ -108,6 +108,7 @@ restore_on_failure() {
     echo "ROLLBACK: restoring original EpiScene ACL permissions" >&2
     setfacl --restore="$ACL_BACKUP" || true
   fi
+  rm -rf -- "$TEMP"
   exit "$result"
 }
 trap restore_on_failure EXIT
@@ -133,7 +134,7 @@ systemctl is-active --quiet "$UNIT"
 systemctl is-active --quiet episcene-unified-sync.timer
 systemctl is-active --quiet episcene-trusted-sources.timer
 COMPLETED=1
-trap - EXIT
+trap 'rm -rf -- "$TEMP"' EXIT
 echo "EPISCENE LEAST_PRIVILEGE LIVE LOOKUP INSTALL SUCCESS"
 echo "Existing first-party approval data and customer playlists unchanged."
 echo "The original device lookup was restarted; Fire TV end-to-end check still required."
