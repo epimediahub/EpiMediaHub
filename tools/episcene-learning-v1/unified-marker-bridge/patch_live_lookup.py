@@ -136,11 +136,15 @@ def preflight(source=SOURCE, data=DATA):
     return {"api_service_active": True, "cache_access": "root_service_only"}
 
 
-def apply(source, patch, dependency_path, *, unit=UNIT):
+def apply(source, patch, dependency_path, *, expected_original_sha, unit=UNIT):
     """Install exact reviewed source and dependency with rollback if needed."""
     if os.geteuid() != 0:
         raise ValueError("STOP: root required")
     original = source.read_bytes()
+    if hashlib.sha256(original).hexdigest() != expected_original_sha:
+        raise ValueError("STOP: live source changed after review; no modifications")
+    if DEST.exists() or DEST.is_symlink():
+        raise ValueError("STOP: trusted lookup module already installed")
     mode = stat.S_IMODE(source.stat().st_mode)
     stat_info = source.stat()
     stash = DATA / "live-lookup-backups"
@@ -154,8 +158,6 @@ def apply(source, patch, dependency_path, *, unit=UNIT):
         raise ValueError("STOP: backup name already used")
     backup.write_bytes(original)
     os.chmod(backup, 0o600)
-    if DEST.exists() or DEST.is_symlink():
-        raise ValueError("STOP: trusted lookup module already installed")
     if not _regular(dependency_path):
         raise ValueError("STOP: lookup bridge source unavailable")
     installed_new = False
@@ -173,6 +175,8 @@ def apply(source, patch, dependency_path, *, unit=UNIT):
                 fh.write(patch.encode("utf-8"))
             os.chmod(tmp, mode)
             os.chown(tmp, stat_info.st_uid, stat_info.st_gid)
+            if hashlib.sha256(source.read_bytes()).hexdigest() != expected_original_sha:
+                raise ValueError("STOP: live source changed during installation")
             os.replace(tmp, source)
             modified_original = True
         finally:
@@ -205,7 +209,8 @@ def main():
     if os.geteuid() != 0:
         raise SystemExit("STOP: run as root on the analysis server")
     preflight()
-    source = SOURCE.read_text(encoding="utf-8")
+    original_bytes = SOURCE.read_bytes()
+    source = original_bytes.decode("utf-8")
     patched = patch_source(source)
     dependency = Path(args.dependency)
     if not _regular(dependency):
@@ -213,15 +218,16 @@ def main():
     compile(dependency.read_text(encoding="utf-8"),
             "<EpiScene-reviewed-cache-adapter>", "exec")
     print("ACTIVE_LOOKUP_SHAPE_OK")
-    print("PRESERVES_EXISTING_DEVICE_AUTH_RATE_LIMIT_AND_API_RESPONSE")
+    print("STATIC_GUARD_OK: original device auth and rate-limit code not rewritten")
     print("NO_CUSTOMER_PLAYLIST_OR_MARKER_DATABASE_CHANGES")
     if args.mode == "check":
         print("CHECK_OK_NO_PRODUCTION_CHANGES")
         return
-    saved = apply(SOURCE, patched, dependency)
+    saved = apply(SOURCE, patched, dependency,
+                  expected_original_sha=hashlib.sha256(original_bytes).hexdigest())
     print("LIVE_DEVICE_LOOKUP_PATCH_INSTALLED")
     print("ROLLBACK_BACKUP_CREATED_IN_PRIVATE_STORE")
-    print("API_RESTART_SUCCESSFUL")
+    print("API_RESTART_SUCCESSFUL_DEVICE_PLAYBACK_NOT_YET_VERIFIED")
     print("EXTERNAL_CACHE_ACCEPTANCE_REQUIRES_REAL_DEVICE_TEST")
 
 
