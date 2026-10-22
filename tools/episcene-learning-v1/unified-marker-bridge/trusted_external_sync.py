@@ -11,7 +11,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from analysis_identity import catalog_batch as identity_catalog_batch, STATE
+from analysis_identity_balanced import catalog_batch as identity_catalog_batch, STATE
 from bridge import Episode
 from runtime_integration import _cache_path
 from trusted_external import resolve_external
@@ -50,18 +50,23 @@ def sync(prod=PRODUCTION, cache=CACHE, *, limit=40, fetch=None):
         except (ValueError, TypeError, sqlite3.Error, OSError):
             result["invalid_metadata_rows"] = result.get("invalid_metadata_rows", 0)+1
 
-    # Update cursor only after the entire chunk. Crashes reprocess a chunk
-    # harmlessly via cache. Also advance when records have conflicting IDs.
-    last = meta.get("last")
-    if last is not None:
+    # Persist independent playlist cursors only after the bounded batch.
+    # On crash, cache hits may be replayed, but no episode can be skipped.
+    last_by_playlist = meta.get("last_by_playlist") or {}
+    if last_by_playlist:
         with sqlite3.connect(_cache_path(cache), timeout=6) as db:
             db.executescript(STATE)
             with db:
+                db.executemany(
+                    "INSERT INTO trusted_source_balanced_cursor VALUES(?,?) "
+                    "ON CONFLICT(playlist_id) DO UPDATE SET asset_key=excluded.asset_key",
+                    [(int(pid), key) for pid,key in last_by_playlist.items()])
                 db.execute(
-                    "INSERT INTO trusted_source_sync_cursor VALUES(1,?,?) "
+                    "INSERT INTO trusted_source_balanced_turn VALUES(1,?) "
                     "ON CONFLICT(singleton) DO UPDATE SET "
-                    "playlist_id=excluded.playlist_id,asset_key=excluded.asset_key",
-                    (last["playlist_id"], last["asset_key"]))
+                    "next_playlist_id=excluded.next_playlist_id",
+                    (meta["next_playlist_id"],))
+    result["analysis_playlist_candidates"] = meta.get("per_playlist_candidates", {})
     return result
 
 
