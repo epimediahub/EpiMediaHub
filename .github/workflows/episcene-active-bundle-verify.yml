@@ -4,6 +4,7 @@ on:
     paths:
       - 'tools/episcene-learning-v1/active-guided-learning/episcene-active-learning-v1.tar.gz.b64'
       - '.github/workflows/episcene-active-bundle-verify.yml'
+      - 'tools/episcene-learning-v1/active-guided-learning/install-direct.sh'
   workflow_dispatch:
 jobs:
   verify:
@@ -14,6 +15,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          bash -n tools/episcene-learning-v1/active-guided-learning/install-direct.sh
           base64 -d tools/episcene-learning-v1/active-guided-learning/episcene-active-learning-v1.tar.gz.b64 > /tmp/episcene-active-learning-v1.tar.gz
           echo '6e39b26a2ba342bfa90f64e86bd124633bd1e07c1b58dbc6e34776d7e2492e6e  /tmp/episcene-active-learning-v1.tar.gz' | sha256sum -c -
           tar -tzf /tmp/episcene-active-learning-v1.tar.gz
