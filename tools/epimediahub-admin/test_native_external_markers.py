@@ -12,7 +12,10 @@ import native_external_markers as external
 class FakeDatabase:
     def execute(self, query):
         assert "SELECT COUNT(*) FROM trusted_external_cache" in query
-        return [(3,)]
+        return self
+
+    def fetchone(self):
+        return (3,)
 
 
 class FakeReport:
