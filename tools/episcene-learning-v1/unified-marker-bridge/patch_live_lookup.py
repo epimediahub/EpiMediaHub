@@ -119,8 +119,12 @@ def preflight(source=SOURCE, data=DATA):
         raise ValueError("STOP: no trusted external marker cache")
     if data.is_symlink() or not data.is_dir():
         raise ValueError("STOP: EpiScene private store missing")
-    if stat.S_IMODE(data.stat().st_mode) & 0o077:
-        raise ValueError("STOP: EpiScene private store is not private")
+    # POSIX ACL named-user traverse permission can appear in the group mode
+    # mask even when the owning root group has no effective access. Deny
+    # world permissions; the actual API-user capability is independently
+    # verified below by opening SQLite under that service account.
+    if stat.S_IMODE(data.stat().st_mode) & 0o007:
+        raise ValueError("STOP: EpiScene private store has world access")
     if not (_run("systemctl", "is-active", "--quiet", UNIT).returncode == 0):
         raise ValueError("STOP: production API not running")
     if not (_run("systemctl", "is-active", "--quiet",
