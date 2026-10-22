@@ -1,0 +1,24 @@
+name: EpiScene Active Guided Learning Package Check
+on:
+  push:
+    paths:
+      - 'tools/episcene-learning-v1/active-guided-learning/episcene-active-learning-v1.tar.gz.b64'
+      - '.github/workflows/episcene-active-bundle-verify.yml'
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify package checksum and safe archive members
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d tools/episcene-learning-v1/active-guided-learning/episcene-active-learning-v1.tar.gz.b64 > /tmp/episcene-active-learning-v1.tar.gz
+          echo '6e39b26a2ba342bfa90f64e86bd124633bd1e07c1b58dbc6e34776d7e2492e6e  /tmp/episcene-active-learning-v1.tar.gz' | sha256sum -c -
+          tar -tzf /tmp/episcene-active-learning-v1.tar.gz
+          mkdir -p /tmp/active-learning
+          tar -xzf /tmp/episcene-active-learning-v1.tar.gz -C /tmp/active-learning
+          cd /tmp/active-learning/episcene-active-learning-v1
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s . -p 'test_active_learning.py' -q
+          python3 -m py_compile patch_active_learning.py skip_external_learning_hints.py
