@@ -1,0 +1,17 @@
+name: EpiScene playlist-only scheduler regression
+on:
+  pull_request:
+    paths:
+      - 'tools/episcene-learning-v1/playlist-only/**'
+      - '.github/workflows/episcene-playlist-only-tests.yml'
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check syntax and exact-scope patching
+        working-directory: tools/episcene-learning-v1/playlist-only
+        run: |
+          python3 -m py_compile neutralize_priority.py install_playlist_only.py language_policy.py install_german_queue_guard.py test_neutralize_priority.py test_install_playlist_only.py test_language_policy.py test_install_german_queue_guard.py
+          python3 -m unittest -v test_neutralize_priority.py test_install_playlist_only.py test_language_policy.py test_install_german_queue_guard.py
