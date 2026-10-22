@@ -27,9 +27,9 @@ class AuditTests(unittest.TestCase):
                     CREATE TABLE skip_jobs(id INT,asset_key TEXT,status TEXT);
                 ''')
                 conn.executemany('INSERT INTO skip_assets VALUES(?,?,?)',[
-                    ('for8',8,'episode'),('for10',10,'episode'),('customer',55,'episode')])
+                    ('for8',8,'episode'),('for10',10,'episode'),('PRIVATE_CUSTOMER_ASSET_SENTINEL',55,'episode')])
                 conn.executemany('INSERT INTO skip_jobs VALUES(?,?,?)',[
-                    (1,'for8','queued'),(2,'for10','queued'),(3,'customer','queued')])
+                    (1,'for8','queued'),(2,'for10','queued'),(3,'PRIVATE_CUSTOMER_ASSET_SENTINEL','queued')])
             old=db.read_bytes()
             with patch('audit_knowledge_first_live._load_helper',return_value=Stub()):
                 result=inspect(db=db,worker=worker,helper=helper)
@@ -39,7 +39,7 @@ class AuditTests(unittest.TestCase):
             self.assertEqual(result['per_playlist']['8']['eligible_preview_by_kind']['intro']['introdb'],1)
             self.assertEqual(result['per_playlist']['10']['eligible_preview_by_kind']['outro']['own'],1)
             self.assertEqual(db.read_bytes(),old)
-            self.assertNotIn('customer',str(result))
+            self.assertNotIn('PRIVATE_CUSTOMER_ASSET_SENTINEL',str(result))
             self.assertNotIn('for8',str(result))
 
     def test_missing_original_hook_fails_before_any_reads(self):
