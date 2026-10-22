@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import time
 from pathlib import Path
 
 IMDB_PATTERN = re.compile(r"^tt[0-9]{7,9}$")
@@ -18,6 +19,7 @@ CACHE = Path("/var/lib/episcene-learning/trusted-sources.sqlite3")
 MAX_SEGMENTS = 12
 MAX_MATCHING_CACHE_ROWS = 40
 MAX_DURATION_DELTA_MS = 1500
+MAX_LOOKUP_WALL_SECONDS = 0.07  # never stall live video on a large cache
 
 
 def _valid_id(name, value):
@@ -139,8 +141,11 @@ def augment_authorized_segments(
         return current
     try:
         with sqlite3.connect(p.resolve().as_uri()+"?mode=ro", uri=True,
-                             timeout=0.4) as conn:
+                             timeout=0.1) as conn:
             conn.execute("PRAGMA query_only=ON")
+            deadline = time.monotonic() + MAX_LOOKUP_WALL_SECONDS
+            conn.set_progress_handler(
+                lambda: 1 if time.monotonic() > deadline else 0, 1000)
             batches = _cache_candidates(conn, ids, (season,episode), duration)
     except (sqlite3.Error, OSError, ValueError):
         return current
