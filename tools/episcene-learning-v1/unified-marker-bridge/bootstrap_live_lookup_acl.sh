@@ -23,10 +23,19 @@ BACKEND=/opt/epimediahub/provisioning/skip_markers.py
    -f "$BACKEND" && ! -L "$BACKEND" ]] || {
   echo "STOP: expected knowledge cache or original API missing/symlink" >&2; exit 2;
 }
-[[ "$(stat -c %u "$KNOWLEDGE")" -eq 0 &&
-   "$(stat -c %u "$CACHE")" -eq 0 ]] || {
-  echo "STOP: original private EpiScene cache ownership unexpected" >&2; exit 2;
-}
+# Respect existing cache ownership: EpiScene installations may store
+# the private database under their dedicated sync account rather than root.
+# The API must never own either resource, and neither can be world-accessible.
+# An ACL grants *read only*, no chown or chmod to broaden access.
+for resource in "$KNOWLEDGE" "$CACHE"; do
+  perms="$(stat -c %a "$resource")"
+  [[ "$perms" =~ ^[0-7]{3,4}$ ]] || {
+    echo "STOP: unexpected private cache permissions" >&2; exit 2;
+  }
+  [[ "$((8#$perms & 7))" -eq 0 ]] || {
+    echo "STOP: private cache is already accessible by other users" >&2; exit 2;
+  }
+done
 systemctl is-active --quiet "$UNIT" || {
   echo "STOP: original device API not active" >&2; exit 2;
 }
@@ -45,6 +54,14 @@ fi
   echo "STOP: invalid service account identifier" >&2; exit 2;
 }
 id -u "$SERVICE_USER" >/dev/null || { echo "STOP: unknown API service account" >&2; exit 2; }
+API_UID="$(id -u "$SERVICE_USER")"
+for resource in "$KNOWLEDGE" "$CACHE"; do
+  [[ "$(stat -c %u "$resource")" != "$API_UID" ]] || {
+    echo "STOP: API account already owns private cache resource; "
+    echo "read-only ACL cannot restrict a file owner" >&2
+    exit 2
+  }
+done
 
 # Review the unit namespace before assuming an ACL can give usable access.
 ISOLATION="$(systemctl show -p InaccessiblePaths -p RootDirectory -p RootImage "$UNIT")"
@@ -122,6 +139,14 @@ with sqlite3.connect("file:/var/lib/episcene-learning/trusted-sources.sqlite3?mo
                      uri=True, timeout=3) as db:
     db.execute("PRAGMA query_only=ON")
     db.execute("SELECT COUNT(*) FROM trusted_external_cache").fetchone()
+from pathlib import Path
+import os
+cache=Path("/var/lib/episcene-learning/trusted-sources.sqlite3")
+private=cache.parent
+if os.access(cache, os.W_OK, effective_ids=True):
+    raise SystemExit("STOP: API can modify trusted cache")
+if os.access(private, os.W_OK, effective_ids=True):
+    raise SystemExit("STOP: API can modify private EpiScene directory")
 print("LEAST_PRIVILEGE_API_READ_ONLY_ACCESS_CONFIRMED")
 PY
 echo "=== Repeat original guarded API preflight ==="
