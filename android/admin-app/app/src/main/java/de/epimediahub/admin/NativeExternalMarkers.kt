@@ -25,7 +25,8 @@ internal object NativeExternalMarkerApi {
     )
     data class Page(
         val items: List<Marker>, val total: Int, val introdb: Int,
-        val theintrodb: Int, val page: Int, val hasMore: Boolean
+        val theintrodb: Int, val page: Int, val hasMore: Boolean,
+        val truncated: Boolean
     )
 
     fun load(playlist: String, source: String, state: String, query: String, page: Int,
@@ -94,7 +95,8 @@ internal object NativeExternalMarkerApi {
                     Page(items,response.getInt("total").coerceAtLeast(0),
                         counts.optInt("introdb",0).coerceAtLeast(0),
                         counts.optInt("theintrodb",0).coerceAtLeast(0),
-                        response.getInt("page"),response.getBoolean("has_more")) to ""
+                        response.getInt("page"),response.getBoolean("has_more"),
+                        response.optBoolean("truncated_to_recent",false)) to ""
                 } finally { connection.disconnect() }
             } catch (e: Exception) {
                 null to (e.message?.take(150) ?: "Markerübersicht nicht erreichbar")
@@ -168,6 +170,8 @@ internal fun NativeExternalMarkerPanel() {
         result?.let { current ->
             Text(current.total.toString()+" Marker · IntroDB "+
                 current.introdb+" · TheIntroDB "+current.theintrodb)
+            if (current.truncated) Text("Nur die neuesten 5000 Cache-Einträge.",
+                style=MaterialTheme.typography.bodySmall)
             if (current.items.isEmpty()) Text("Keine Treffer für diese Filter.")
             for (marker in current.items) {
                 ElevatedCard(Modifier.fillMaxWidth()) {
