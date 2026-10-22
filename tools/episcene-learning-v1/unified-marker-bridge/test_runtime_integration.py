@@ -95,5 +95,49 @@ class RuntimeIntegrationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             planning_hints(data, max_per_playlist=2)
 
+class TrustedCacheACLTests(unittest.TestCase):
+    def test_exact_readonly_acl_allowed_without_relaxing_others(self):
+        import struct
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from runtime_integration import _cache_path
+
+        api_uid = 123456
+        def acl(owner_perm, reader_perm, *, extra=False, mask=None):
+            entries = [(1, owner_perm, 0xffffffff),
+                       (2, reader_perm, api_uid),
+                       (4, 0, 0xffffffff),
+                       (16, reader_perm if mask is None else mask, 0xffffffff),
+                       (32, 0, 0xffffffff)]
+            if extra:
+                entries.insert(3, (8, 4, 12345))
+            return struct.pack("<I", 2) + b"".join(
+                struct.pack("<HHI", *entry) for entry in entries)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path = folder / "trusted-sources.sqlite3"
+            path.touch()
+            folder.chmod(0o710)
+            path.chmod(0o640)
+            def xattr(target, _key):
+                return acl(7, 1) if Path(target) == folder else acl(6, 4)
+            with (patch("runtime_integration.TRUSTED_SOURCE_CACHE", path),
+                  patch("pwd.getpwnam", return_value=SimpleNamespace(pw_uid=api_uid)),
+                  patch("runtime_integration.os.getxattr", side_effect=xattr)):
+                self.assertEqual(_cache_path(path), path)
+            def bad_acl(target, _key):
+                return acl(7, 1) if Path(target) == folder else acl(6, 4, extra=True)
+            with (patch("runtime_integration.TRUSTED_SOURCE_CACHE", path),
+                  patch("pwd.getpwnam", return_value=SimpleNamespace(pw_uid=api_uid)),
+                  patch("runtime_integration.os.getxattr", side_effect=bad_acl)):
+                with self.assertRaises(ValueError):
+                    _cache_path(path)
+            other = folder / "different.sqlite3"
+            other.touch()
+            other.chmod(0o640)
+            with self.assertRaises(ValueError):
+                _cache_path(other)
+
 if __name__ == "__main__":
     unittest.main()
