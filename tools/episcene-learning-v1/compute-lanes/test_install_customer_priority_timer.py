@@ -37,6 +37,7 @@ class PriorityTimerInstallerTests(unittest.TestCase):
             patch.object(m,"UNIT",self.unit),
             patch.object(m,"TIMER",self.timer),
             patch.object(m,"SOURCE",self.source),
+            patch.object(m,"service_unit_text",return_value=m.SERVICE_CONTENT.format(uid=996,gid=987)),
             patch.object(m.os,"geteuid",return_value=0),
             patch.object(m,"active",return_value=True),
             patch.object(m,"load",return_value=FakePriority),
@@ -63,7 +64,7 @@ class PriorityTimerInstallerTests(unittest.TestCase):
         self.assertTrue(result["customer_priority_timer_active"])
         self.assertFalse(result["analysis_worker_restarted"])
         self.assertEqual(self.source.read_bytes(),m.SCRIPT.read_bytes())
-        self.assertEqual(self.unit.read_text(),m.SERVICE_CONTENT)
+        self.assertEqual(self.unit.read_text(),m.SERVICE_CONTENT.format(uid=996,gid=987))
         self.assertEqual(self.timer.read_text(),m.TIMER_CONTENT)
         self.assertEqual(self.calls[0],("daemon-reload",))
         self.assertEqual(self.calls[1],("start",m.PRIORITY_SERVICE))
@@ -100,6 +101,8 @@ class PriorityTimerInstallerTests(unittest.TestCase):
 
     def test_timer_disables_network_and_bounds_resources(self):
         self.assertIn("PrivateNetwork=true",m.SERVICE_CONTENT)
+        self.assertIn("User={uid}",m.SERVICE_CONTENT)
+        self.assertIn("CapabilityBoundingSet=",m.SERVICE_CONTENT)
         self.assertIn("ProtectSystem=strict",m.SERVICE_CONTENT)
         self.assertIn("CPUQuota=30%",m.SERVICE_CONTENT)
         self.assertIn("MemoryMax=512M",m.SERVICE_CONTENT)
