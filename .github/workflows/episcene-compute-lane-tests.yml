@@ -1,0 +1,28 @@
+name: EpiScene guarded priority and worker coherence
+on:
+  pull_request:
+    paths:
+      - 'tools/episcene-learning-v1/compute-lanes/**'
+      - '.github/workflows/episcene-compute-lane-tests.yml'
+  push:
+    paths:
+      - 'tools/episcene-learning-v1/compute-lanes/**'
+      - '.github/workflows/episcene-compute-lane-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate all implementation files
+        run: python -m compileall -q tools/episcene-learning-v1/compute-lanes
+      - name: Run isolated no-provider unit tests
+        run: |
+          cd tools/episcene-learning-v1/compute-lanes
+          python -m unittest -v test_smart_priority test_worker_version_gate
