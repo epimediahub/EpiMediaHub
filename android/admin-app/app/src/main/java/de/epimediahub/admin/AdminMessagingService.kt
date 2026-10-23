@@ -25,7 +25,7 @@ class AdminMessagingService : FirebaseMessagingService() {
         val allowed = setOf(
             "analysis_stalled", "playlist_access", "worker_preflight",
             "service_down", "build_failed", "playback_errors", "daily_report",
-            "expiry_monthly", "expiry_weekly"
+            "expiry_monthly", "expiry_weekly", "push_test"
         )
         if (kind !in allowed) return
         val channelId = "epi-admin-alerts"
@@ -42,7 +42,8 @@ class AdminMessagingService : FirebaseMessagingService() {
             "playback_errors" to "Kundenwiedergabe prüfen",
             "daily_report" to "EpiScene-Tagesbericht ist verfügbar",
             "expiry_monthly" to "Die Monatsübersicht ist zum Drucken bereit",
-            "expiry_weekly" to "Die Wochenübersicht ist bereit"
+            "expiry_weekly" to "Die Wochenübersicht ist bereit",
+            "push_test" to "Push-Test erfolgreich: Dieses Gerät empfängt Benachrichtigungen"
         )
         val intent = Intent(this, MainActivity::class.java)
             .putExtra("open_reports", kind.startsWith("expiry_"))
