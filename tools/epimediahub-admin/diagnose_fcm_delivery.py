@@ -226,7 +226,9 @@ def main():
     # Child prints only categories; never echo raw stderr, even on failure.
     if run.stdout:
         safe_lines=run.stdout.splitlines()
-        allowed_prefix=("SERVER_SERVICE_ACCOUNT_PROJECT_MATCH:",
+        allowed_prefix=("SERVER_USES_EPIMEDIAHUB_FCM_ACCOUNT:",
+                        "SERVER_USES_FIREBASE_ADMIN_SDK_ACCOUNT:",
+                        "SERVER_SERVICE_ACCOUNT_PROJECT_MATCH:",
                         "NOTE: cross-project","REGISTERED_ADMIN_DEVICE_COUNT_BOUND:",
                         "FCM_AUTH_STAGE:","FCM_SEND_STATUS:","FCM_HTTP_STATUS:",
                         "GOOGLE_STATUS:","FCM_ERROR:","GOOGLE_REASON:",
