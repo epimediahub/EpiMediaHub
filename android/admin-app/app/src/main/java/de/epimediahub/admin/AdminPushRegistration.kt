@@ -62,6 +62,44 @@ object AdminPushRegistration {
         }
     }
 
+    fun testPush(context: Context, cookie: String, onDone: (String) -> Unit) {
+        val application=context.applicationContext
+        val handler=Handler(Looper.getMainLooper())
+        thread(name="admin-push-test") {
+            val prefs=application.getSharedPreferences("admin-push",Context.MODE_PRIVATE)
+            val installation=prefs.getString("installation_id",null)
+            val message=if (cookie.isBlank() || installation.isNullOrBlank() ||
+                !prefs.getBoolean("registered",false)) {
+                "Gerät zuerst für Push registrieren."
+            } else try {
+                val (bootstrapCode,body)=call("/admin/mobile/bootstrap",cookie)
+                if (bootstrapCode!=200) {
+                    "Admin-Sitzung abgelaufen. Bitte neu anmelden."
+                } else {
+                    val metadata=JSONObject(body)
+                    if (!metadata.optBoolean("push_sender_configured",false)) {
+                        "Der Firebase-Versanddienst auf dem Server ist nicht eingerichtet."
+                    } else {
+                        val csrf=metadata.getString("csrf")
+                        val (status,_)=call("/admin/mobile/test-push",cookie,
+                            JSONObject().put("installation_id",installation),csrf)
+                        when(status) {
+                            200 -> "Firebase hat die Testnachricht angenommen. Bitte Android-Benachrichtigungen prüfen."
+                            429 -> "Test bereits angefordert. In zwei Minuten erneut versuchen."
+                            404 -> "Gerät nicht auf dem Server registriert. Erneut verbinden."
+                            401,403 -> "Admin-Sitzung ungültig. Erneut anmelden."
+                            503 -> "Firebase-Zustellung am Server fehlgeschlagen. Server-Konfiguration prüfen."
+                            else -> "Test-Push fehlgeschlagen (HTTP $status)."
+                        }
+                    }
+                }
+            } catch (_:Exception) {
+                "Push-Test konnte den Admin-Server nicht erreichen."
+            }
+            handler.post { onDone(message) }
+        }
+    }
+
     fun register(context: Context, token: String, cookie: String, onDone: (String) -> Unit) {
         val application = context.applicationContext
         val handler = Handler(Looper.getMainLooper())
@@ -71,7 +109,9 @@ object AdminPushRegistration {
                 if (status != 200) {
                     "Admin-App: Bitte im Dashboard anmelden (oder Server-Modul noch nicht installiert)."
                 } else {
-                    val csrf = JSONObject(body).getString("csrf")
+                    val bootstrap = JSONObject(body)
+                    val csrf = bootstrap.getString("csrf")
+                    val senderConfigured = bootstrap.optBoolean("push_sender_configured", false)
                     val prefs = application.getSharedPreferences("admin-push", Context.MODE_PRIVATE)
                     val installId = prefs.getString("installation_id", null)
                         ?: UUID.randomUUID().toString().also {
@@ -83,8 +123,12 @@ object AdminPushRegistration {
                         .put("platform", "android-admin")
                     val (registerStatus, _) = call("/admin/mobile/register", cookie, data, csrf)
                     if (registerStatus == 201 || registerStatus == 200) {
-                        prefs.edit().putBoolean("registered", true).apply()
-                        "Push-Gerät registriert. Alarme erscheinen, sobald die Serverzustellung aktiv ist."
+                        prefs.edit().putBoolean("registered", true)
+                            .putBoolean("opted_in", true).apply()
+                        if (senderConfigured)
+                            "Gerät registriert. Mit »Test-Push senden« die Zustellung prüfen."
+                        else
+                            "Gerät registriert, aber Firebase-Versand ist auf dem Server noch nicht eingerichtet."
                     } else {
                         "Push konnte nicht registriert werden (HTTP $registerStatus)."
                     }
