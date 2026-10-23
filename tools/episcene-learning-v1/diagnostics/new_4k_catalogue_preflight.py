@@ -111,19 +111,24 @@ def snapshot(con,now):
     out["latest_generation_catalogue_episodes"]=latest_count
     out["previous_generations_catalogue_episodes"]=other_count
 
-    # Outer query uses EXISTS to avoid multiplying jobs with duplicate mappings.
-    rows=con.execute("""SELECT j.status,
-      CASE WHEN EXISTS(SELECT 1 FROM skip_catalogue_episodes c
-         WHERE c.playlist_id=? AND c.asset_key=a.asset_key
-           AND c.seen_generation=?) THEN 'LATEST'
-      WHEN EXISTS(SELECT 1 FROM skip_catalogue_episodes c
-         WHERE c.playlist_id=? AND c.asset_key=a.asset_key
-           AND c.seen_generation IS NOT NULL) THEN 'OLDER_OR_ZERO'
-      ELSE 'UNMAPPED' END AS generation_class,
-      COUNT(*) n
+    # Aggregate catalogue mapping once. Avoid a nested full scan for every
+    # queued episode when this database has no supporting catalogue index.
+    rows=con.execute("""WITH mapped AS (
+        SELECT asset_key,
+          MAX(CASE WHEN seen_generation=? THEN 1 ELSE 0 END) latest,
+          MAX(CASE WHEN seen_generation IS NOT NULL THEN 1 ELSE 0 END) known
+        FROM skip_catalogue_episodes WHERE playlist_id=?
+        GROUP BY asset_key
+      )
+      SELECT j.status,
+        CASE WHEN m.latest=1 THEN 'LATEST'
+        WHEN m.known=1 THEN 'OLDER_OR_ZERO'
+        ELSE 'UNMAPPED' END AS generation_class,
+        COUNT(*) n
       FROM skip_jobs j JOIN skip_assets a ON a.asset_key=j.asset_key
+      LEFT JOIN mapped m ON m.asset_key=a.asset_key
       WHERE a.playlist_id=? AND j.status IN ('queued','failed','review','partial')
-      GROUP BY j.status,generation_class""",(PID,latest,PID,PID)).fetchall()
+      GROUP BY j.status,generation_class""",(latest,PID,PID)).fetchall()
     buckets={}
     for row in rows:
         target=buckets.setdefault(row["status"],{})
