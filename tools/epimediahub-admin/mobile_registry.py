@@ -55,6 +55,34 @@ class AdminMobileRegistry:
                 PRIMARY KEY(installation_id,alert_key,generation_epoch)
             )""")
 
+    def begin_push_test(self, installation_id: str, now_epoch: int | None=None):
+        """Throttle generic push test to once per two minutes per opted-in device."""
+        try:
+            normalized=str(uuid.UUID(installation_id))
+        except (TypeError,ValueError,AttributeError):
+            return "not_registered", None
+        now=int(time.time()) if now_epoch is None else int(now_epoch)
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE IF NOT EXISTS admin_mobile_push_tests(
+                installation_id TEXT PRIMARY KEY,
+                attempted_epoch INTEGER NOT NULL
+            )""")
+            row=db.execute("""SELECT fcm_token FROM admin_mobile_devices
+                WHERE installation_id=? AND enabled=1""",(normalized,)).fetchone()
+            if row is None:
+                return "not_registered", None
+            previous=db.execute("""SELECT attempted_epoch FROM admin_mobile_push_tests
+                WHERE installation_id=?""",(normalized,)).fetchone()
+            if previous and now-int(previous[0])<120:
+                return "rate_limited", None
+            db.execute("""INSERT INTO admin_mobile_push_tests(
+                installation_id,attempted_epoch) VALUES(?,?)
+                ON CONFLICT(installation_id)
+                DO UPDATE SET attempted_epoch=excluded.attempted_epoch
+            """,(normalized,now))
+            return "ready", row["fcm_token"]
+
     def _connect(self):
         db=sqlite3.connect(self.path, timeout=10)
         db.row_factory=sqlite3.Row
@@ -97,6 +125,10 @@ class AdminMobileRegistry:
                            (normalized,))
             db.execute("DELETE FROM admin_mobile_outbox WHERE installation_id=?",
                        (normalized,))
+            if db.execute("""SELECT 1 FROM sqlite_master WHERE
+                  type='table' AND name='admin_mobile_push_tests'""").fetchone():
+                db.execute("DELETE FROM admin_mobile_push_tests WHERE installation_id=?",
+                           (normalized,))
             return row.rowcount==1
 
     def tokens(self):
