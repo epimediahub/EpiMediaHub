@@ -24,7 +24,7 @@ def sample_source():
     for r in rows:
         if r["playlist_id"] not in ANALYSIS_PLAYLISTS or r["kind"] not in KINDS:
             continue
-    return {"from_playlists": list(ANALYSIS_PLAYLISTS)}
+    return {"from_playlists": list(ANALYSIS_PLAYLISTS),}
 '''
 
 
