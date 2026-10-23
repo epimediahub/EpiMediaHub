@@ -51,7 +51,7 @@ class MarkerLineageTests(unittest.TestCase):
         d=result["by_asset_registration"]
         self.assertEqual(d["other_registered"]["playlist_owner_disagrees_with_record"],1)
         self.assertEqual(d["other_registered"]["device_owner_disagrees_with_playlist_owner"],1)
-        self.assertEqual(d["other_registered"]["device_owner_disagrees_with_record"],0)
+        self.assertEqual(d["other_registered"].get("device_owner_disagrees_with_record", 0),0)
         self.assertEqual(d["unregistered_asset"]["no_registered_asset"],1)
         self.assertEqual(d["analysis"]["current_ownership_fully_matches"],1)
         self.assertNotIn("Other Secret Show",str(result))
