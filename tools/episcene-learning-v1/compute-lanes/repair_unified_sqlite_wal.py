@@ -66,10 +66,14 @@ def properties(service):
 def local_db_preflight(database=DB):
     if database.is_symlink() or not database.is_file() or database.parent.is_symlink():
         raise Stop("PRODUCTION_DB_MISSING_OR_SYMLINK")
+    # SQLite may remove -wal/-shm after checkpoint. Their ABSENCE is normal;
+    # only an unexpected existing sidecar must stop the guarded repair.
     for suffix in ("-wal", "-shm"):
         sidecar = Path(str(database) + suffix)
-        if sidecar.is_symlink() or not sidecar.is_file():
-            raise Stop("EXPECTED_WAL_SIDECAR_MISSING")
+        if sidecar.is_symlink():
+            raise Stop("UNEXPECTED_WAL_SIDECAR_SYMLINK")
+        if sidecar.exists() and not sidecar.is_file():
+            raise Stop("UNEXPECTED_WAL_SIDECAR_TYPE")
     try:
         with sqlite3.connect(database.resolve().as_uri() + "?mode=ro",
                              uri=True, timeout=6) as con:
