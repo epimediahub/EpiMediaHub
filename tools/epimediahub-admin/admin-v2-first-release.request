@@ -1,17 +1,20 @@
-EpiMediaHub Admin V2 — PRIVATE SIGNED BUILD REQUEST
+EpiMediaHub Admin — private signed maintenance update request
 
-Build: v2.0.0
+Release: 2.0.1
 Android package: de.epimediahub.admin
-Version code: 200001
-Source: merge of PR #96 into main
-Trigger: one-time main-branch push matched by epimediahub-admin-private-release.yml
+Version code: 200002
+Scope: native customer dashboard vertical scrolling and opt-in FCM self-test.
+Firebase Android client configuration: existing EPI_ADMIN_FIREBASE_CLIENT_JSON.
+Signing identity: existing pinned EPI_ADMIN_RELEASE_SIGNING_JSON; do not rotate.
+Source: current main branch following 2026-10-23 Admin UI and push changes.
+Build: one private signed CI artifact with SHA-256 release manifest.
 
-The workflow can use only GitHub Actions' private existing
-EPI_ADMIN_RELEASE_SIGNING_JSON and EPI_ADMIN_FIREBASE_CLIENT_JSON secrets.
-It MUST validate signer fingerprint and produce a short-lived private
-workflow artifact; no GitHub Release/public download or automatic APK upload.
+Server-side push test was installed on the user's provisioning host:
+PUSH_TEST_INSTALLED, DASHBOARD_HEALTH_OK, registered_devices=1.
+Still requires physical phone push test to prove end-to-end notification delivery.
 
-This request does not authorize unsafe default app installs, rotating the
-existing keystore, publishing player-app updates, or enabling incomplete
-expiry-report/FCM automation. Deployment onto the private Admin updater is
-a separate SHA-256 verified, owner-account action after signer review.
+DO NOT:
+- publish to IPTV player updater or change customer/playlists/VPN/markers;
+- log credentials, upload Firebase server secrets, or rotate signing identity;
+- claim a Firebase-accepted message has arrived on Android without device proof.
+Private Admin updater publication remains SHA256- and certificate-verified.
