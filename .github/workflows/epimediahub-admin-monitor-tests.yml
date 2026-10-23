@@ -1,5 +1,10 @@
 name: EpiMediaHub Admin monitor and private mobile backend tests
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/epimediahub-admin/**'
+      - '.github/workflows/epimediahub-admin-monitor-tests.yml'
   pull_request:
     paths:
       - 'tools/epimediahub-admin/**'
