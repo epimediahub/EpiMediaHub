@@ -102,6 +102,7 @@ class MainActivity : FragmentActivity() {
     private var loginBusy by mutableStateOf(false)
     private var loginMessage by mutableStateOf("")
     private var pushRegistered by mutableStateOf(false)
+    private var pushResyncRequested = false
     private var updateReady by mutableStateOf<AdminUpdater.Release?>(null)
     private var updateNotice by mutableStateOf("")
     private var updateCheckedForSession = false
@@ -160,6 +161,7 @@ class MainActivity : FragmentActivity() {
         unlocked = false
         backendAuthenticated = false
         checkingSession = true
+        pushResyncRequested = false
         super.onStop()
     }
 
@@ -190,6 +192,20 @@ class MainActivity : FragmentActivity() {
         loadManagement()
         loadEpiscene()
         loadNativeAlerts()
+        // Explicitly opted-in devices reconnect after login, including FCM
+        // token rotation. Never request notification permission silently.
+        if (!pushResyncRequested) {
+            pushResyncRequested = true
+            val prefs = getSharedPreferences("admin-push", MODE_PRIVATE)
+            if ((prefs.getBoolean("opted_in",false) ||
+                    prefs.getBoolean("registered",false)) &&
+                FirebaseApp.getApps(this).isNotEmpty() &&
+                (Build.VERSION.SDK_INT < 33 ||
+                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED)) {
+                registerPush(silent = true)
+            }
+        }
     }
 
     private fun signOutNative() {
@@ -736,7 +752,7 @@ class MainActivity : FragmentActivity() {
                         Text("Push-Benachrichtigungen", color = White,
                             fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Text(
-                            if (pushRegistered) "Dieses Gerät ist registriert."
+                            if (pushRegistered) "Gerät registriert · Zustellung noch nicht geprüft."
                             else "Noch nicht für dieses Gerät aktiviert.",
                             color = Muted, fontSize = 11.sp
                         )
@@ -767,6 +783,19 @@ class MainActivity : FragmentActivity() {
                         Text("Abmelden", fontSize = 12.sp, maxLines = 1)
                     }
                 }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        val cookie = CookieManager.getInstance().getCookie(ADMIN_BASE) ?: ""
+                        AdminPushRegistration.testPush(this@MainActivity, cookie) {
+                            notice = it
+                        }
+                    },
+                    enabled = pushRegistered,
+                    modifier = Modifier.fillMaxWidth(),
+                    border = BorderStroke(1.dp, Blue.copy(alpha = .45f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("Test-Push auf dieses Handy senden", fontSize = 12.sp) }
                 if (notice.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
                     Text(notice, color = Warning, fontSize = 12.sp, lineHeight = 17.sp)
@@ -1140,8 +1169,8 @@ class MainActivity : FragmentActivity() {
         registerPush()
     }
 
-    private fun registerPush() {
-        notice = "Push-Verbindung wird geprüft …"
+    private fun registerPush(silent: Boolean = false) {
+        if (!silent) notice = "Push-Verbindung wird geprüft …"
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
                 val cookie = CookieManager.getInstance().getCookie(ADMIN_BASE) ?: ""
