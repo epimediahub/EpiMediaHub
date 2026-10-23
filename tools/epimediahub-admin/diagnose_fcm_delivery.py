@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import shutil
 import re
 import sqlite3
 import subprocess
@@ -46,7 +47,7 @@ def category(payload):
     if not isinstance(detail,dict):
         return result
     status=detail.get("status")
-    if status in STATUSES:
+    if type(status) is str and status in STATUSES:
         result["google_status"]=status
     entries=detail.get("details")
     if isinstance(entries,list):
@@ -56,11 +57,11 @@ def category(payload):
             typename=entry.get("@type")
             if typename=="type.googleapis.com/google.firebase.fcm.v1.FcmError":
                 code=entry.get("errorCode")
-                if code in FCM_CODES:
+                if type(code) is str and code in FCM_CODES:
                     result["fcm_error"]=code
             if typename=="type.googleapis.com/google.rpc.ErrorInfo":
                 reason=entry.get("reason")
-                if reason in GOOGLE_REASONS:
+                if type(reason) is str and reason in GOOGLE_REASONS:
                     result["google_reason"]=reason
     return result
 
@@ -125,6 +126,7 @@ def environment_of_service():
     return name,found
 
 def child():
+    sys.path.insert(0,str(PROVISIONING))
     from fcm_sender import make_payload
     project=os.environ.get("EPIMEDIAHUB_ADMIN_FCM_PROJECT_ID","")
     credential=Path(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS","/dev/null"))
@@ -208,8 +210,9 @@ def main():
     venv=PROVISIONING/".venv/bin/python"
     if not venv.is_file():
         raise RuntimeError("STOP_BACKEND_PYTHON_NOT_FOUND")
+    runuser=shutil.which("runuser") or "/usr/sbin/runuser"
     run=subprocess.run(
-        ["runuser","-u",name,"--",str(venv),str(Path(__file__).resolve()),
+        [runuser,"-u",name,"--",str(venv),str(Path(__file__).resolve()),
          "--service-probe"],
         cwd=str(PROVISIONING),capture_output=True,text=True,timeout=60,
         env=allowed_env,check=False)
