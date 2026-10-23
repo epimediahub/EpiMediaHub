@@ -218,7 +218,11 @@ def import_authenticated_feedback(feedback_db, production_db, store_db):
                             kind,decision,active,start_ms,end_ms,provenance,reviewed_at
                             FROM feedback_versions WHERE active=1 AND decision='positive'""")
         for r in rows:
-            if r["playlist_id"] not in ANALYSIS_PLAYLISTS or r["kind"] not in KINDS:
+            # Validated, authenticated manual feedback is useful from ANY
+            # properly owned playlist. Provider streams are never added here.
+            # Playback reuse remains restricted to exact asset or proven cut.
+            if (type(r["playlist_id"]) is not int or r["playlist_id"] < 1
+                    or r["kind"] not in KINDS):
                 continue
             if r["provenance"] not in ("device_authenticated_direct", "admin_reviewed_machine"):
                 continue
@@ -245,7 +249,7 @@ def import_authenticated_feedback(feedback_db, production_db, store_db):
             db.execute("DELETE FROM verified_markers")
             db.executemany("INSERT INTO verified_markers VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", chosen)
     return {"imported_authenticated_markers": len(chosen),
-            "from_playlists": list(ANALYSIS_PLAYLISTS),
+            "from_playlists": sorted({v[2] for v in chosen}),
             "production_database_written": False,
             "external_markers_auto_published": False}
 
