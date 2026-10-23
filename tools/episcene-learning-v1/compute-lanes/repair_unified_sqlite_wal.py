@@ -13,6 +13,7 @@ or if the service still fails, fail closed and remove the exception.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -27,6 +28,8 @@ WRITE_ROOT = DB.parent
 DROPIN_DIR = Path("/etc/systemd/system/episcene-unified-sync.service.d")
 DROPIN = DROPIN_DIR / "90-episcene-sqlite-wal.conf"
 UNIT_SOURCE = Path("/opt/episcene-learning/unified/bridge.py")
+# Exact installed bridge digest from 2026-10-23 read-only inventory; fail if drifted.
+PINNED_BRIDGE_SHA256 = "db7ac24db2b2333d46ae504526a2db29578c91258f4cc4a226da235b6b36ed2e"
 CONTENT = ("# Permit read-only SQLite WAL consumers to access the active -shm file.\n"
            "# The bridge itself must retain mode=ro and PRAGMA query_only=ON.\n"
            "[Service]\n"
@@ -98,6 +101,10 @@ def validate(props):
         raise Stop("UNKNOWN_SYSTEMD_UNIT_LOCATION")
     if Path(fragment).is_symlink():
         raise Stop("UNIT_SYMLINK")
+    if UNIT_SOURCE.is_symlink() or not UNIT_SOURCE.is_file():
+        raise Stop("UNIFIED_BRIDGE_UNAVAILABLE")
+    if hashlib.sha256(UNIT_SOURCE.read_bytes()).hexdigest() != PINNED_BRIDGE_SHA256:
+        raise Stop("UNIFIED_BRIDGE_VERSION_DRIFT")
     if DROPIN_DIR.is_symlink() or DROPIN.exists() or DROPIN.is_symlink():
         raise Stop("EXISTING_DROPIN_REQUIRES_REVIEW")
     if WRITE_ROOT.is_symlink() or not WRITE_ROOT.is_dir():
@@ -167,8 +174,10 @@ def run(*, apply=False):
     if not apply:
         return dict(state, preflight="PASS", changes_made=0)
     created_dir = False
+    dropin_created = False
     try:
         created_dir = install_dropin()
+        dropin_created = True
         if command("systemctl", "daemon-reload", timeout=15).returncode:
             raise Stop("DAEMON_RELOAD_FAILED")
         started = command("systemctl", "start", SERVICE, timeout=90)
@@ -187,7 +196,8 @@ def run(*, apply=False):
         return state
     except (Stop, OSError, sqlite3.Error) as exc:
         reason = str(exc) if isinstance(exc, Stop) else "IO_ERROR"
-        return dict(state, applied=False, rolled_back=undo(created_dir),
+        rolled_back = undo(created_dir) if dropin_created else True
+        return dict(state, applied=False, rolled_back=rolled_back,
                     stop_reason=reason)
 
 
