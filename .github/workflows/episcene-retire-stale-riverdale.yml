@@ -1,15 +1,19 @@
-name: Safe EpiScene Riverdale retirement
+name: Safe EpiScene maintenance tests
 on:
   push:
     branches: [main]
     paths:
       - 'tools/episcene-learning-v1/maintenance/retire_stale_riverdale.py'
       - 'tools/episcene-learning-v1/maintenance/test_retire_stale_riverdale.py'
+      - 'tools/episcene-learning-v1/maintenance/recheck_approved_visual_peers.py'
+      - 'tools/episcene-learning-v1/maintenance/test_recheck_approved_visual_peers.py'
       - '.github/workflows/episcene-retire-stale-riverdale.yml'
   pull_request:
     paths:
       - 'tools/episcene-learning-v1/maintenance/retire_stale_riverdale.py'
       - 'tools/episcene-learning-v1/maintenance/test_retire_stale_riverdale.py'
+      - 'tools/episcene-learning-v1/maintenance/recheck_approved_visual_peers.py'
+      - 'tools/episcene-learning-v1/maintenance/test_recheck_approved_visual_peers.py'
       - '.github/workflows/episcene-retire-stale-riverdale.yml'
 jobs:
   tests:
@@ -20,5 +24,5 @@ jobs:
       - name: Compile and run isolated retirement tests
         working-directory: tools/episcene-learning-v1/maintenance
         run: |
-          python3 -m py_compile retire_stale_riverdale.py test_retire_stale_riverdale.py
-          python3 -m unittest -v test_retire_stale_riverdale.py
+          python3 -m py_compile retire_stale_riverdale.py test_retire_stale_riverdale.py recheck_approved_visual_peers.py test_recheck_approved_visual_peers.py
+          python3 -m unittest -v test_retire_stale_riverdale.py test_recheck_approved_visual_peers.py
