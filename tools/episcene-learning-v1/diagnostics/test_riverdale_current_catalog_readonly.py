@@ -9,8 +9,14 @@ class RiverdaleCatalogueTests(unittest.TestCase):
         self.assertTrue(m.series_name_matches('Riverdale'))
         self.assertTrue(m.series_name_matches('IT: Riverdale'))
         self.assertTrue(m.series_name_matches('[DE] Riverdale (2017)'))
+        self.assertTrue(m.series_name_matches('ITA | Riverdale (2017)'))
+        self.assertTrue(m.series_name_matches('Riverdale [ITALIANO] FHD'))
+        self.assertTrue(m.series_name_matches('DE: Riverdale HD'))
         self.assertFalse(m.series_name_matches('Riverdale Stories'))
         self.assertFalse(m.series_name_matches('Riverdale S7 E6'))
+
+    def test_bounded_big_catalog_limit(self):
+        self.assertEqual(m.MAX_BODY,48*1024*1024)
 
     def test_series_discovery_deduplicates_and_omits_ids_from_status(self):
         sample=[{'name':'Riverdale','series_id':123},
