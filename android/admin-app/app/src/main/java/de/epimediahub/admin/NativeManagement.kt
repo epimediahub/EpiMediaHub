@@ -435,7 +435,8 @@ internal fun NativeManagementScreen(
     }
 
     if (selected == null) {
-    Column(modifier = modifier.fillMaxWidth().background(Navy).padding(horizontal = 18.dp)) {
+    Column(modifier = modifier.fillMaxWidth().background(Navy)
+        .verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 17.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -563,8 +564,10 @@ internal fun NativeManagementScreen(
             Text("Keine Einträge für diese Auswahl.", color = Secondary,
                 modifier = Modifier.padding(12.dp))
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            items(filtered, key = { it.id }) { item ->
+        // One vertically scrollable parent: the summary/search header and
+        // customer rows remain reachable even on short Android screens.
+        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            filtered.forEach { item ->
                 Surface(
                     modifier = Modifier.fillMaxWidth().clickable { selected = item },
                     shape = RoundedCornerShape(15.dp), color = SurfaceNavy,
@@ -587,8 +590,7 @@ internal fun NativeManagementScreen(
                 }
             }
             if (nextCursor != null) {
-                item {
-                    OutlinedButton(
+                OutlinedButton(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !loadingMore && !searchBusy,
                         onClick = {
@@ -620,7 +622,6 @@ internal fun NativeManagementScreen(
                             }
                         }
                     ) { Text("Weitere Einträge laden") }
-                }
             }
         }
     }
