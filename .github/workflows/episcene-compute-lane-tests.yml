@@ -27,7 +27,7 @@ jobs:
       - name: Run isolated no-provider unit tests
         run: |
           cd tools/episcene-learning-v1/compute-lanes
-          python -m unittest -v test_smart_priority test_worker_version_gate test_offline_capacity test_readonly_server_snapshot test_diagnose_unified_sync test_diagnose_sqlite_wal_gate test_repair_unified_sqlite_wal test_enable_authenticated_all_playlist_bridge test_inspect_pending_manual_ownership test_inspect_manual_marker_lineage test_reconcile_lincoln_lawyer_manual test_audit_asset_key_collision test_audit_global_registration_lineage test_asset_registry_scope test_fix_customer_scope_migration test_verify_customer_markers_live
+          python -m unittest -v test_smart_priority test_worker_version_gate test_offline_capacity test_readonly_server_snapshot test_diagnose_unified_sync test_diagnose_sqlite_wal_gate test_repair_unified_sqlite_wal test_enable_authenticated_all_playlist_bridge test_inspect_pending_manual_ownership test_inspect_manual_marker_lineage test_reconcile_lincoln_lawyer_manual test_audit_asset_key_collision test_audit_global_registration_lineage test_asset_registry_scope test_fix_customer_scope_migration test_verify_customer_markers_live test_scoped_customer_priority
       - name: Test cross-playlist authenticated knowledge import
         run: |
           cd tools/episcene-learning-v1/unified-marker-bridge
