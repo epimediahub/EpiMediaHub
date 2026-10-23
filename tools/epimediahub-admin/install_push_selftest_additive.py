@@ -27,8 +27,7 @@ BACKUP_ROOT = Path("/var/backups/epimediahub")
 SERVICE = "epimediahub-provisioning.service"
 FILES = ("fcm_sender.py", "mobile_registry.py", "mobile_flask.py")
 
-TEST_REGISTRY = '''
-    def begin_push_test(self, installation_id: str, now_epoch: int | None=None):
+TEST_REGISTRY = '''    def begin_push_test(self, installation_id: str, now_epoch: int | None=None):
         """Throttle generic push test to once per two minutes per opted-in device."""
         try:
             normalized=str(uuid.UUID(installation_id))
