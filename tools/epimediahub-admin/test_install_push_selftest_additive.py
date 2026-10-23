@@ -16,8 +16,28 @@ class TestPushInstall(unittest.TestCase):
                            '"expiry_monthly","expiry_weekly",')
         self.assertNotEqual(old,latest)
         result=deploy.patch_sender(old)
-        self.assertEqual(result,latest)
+        self.assertIn('"push_test"',result)
         self.assertEqual(deploy.patch_sender(result),result)
+        self.assertEqual(deploy.patch_sender(latest),latest)
+        ast.parse(result)
+        self.assertIn('def send(fcm_token: str, kind: str)',result)
+
+    def test_sender_legacy_without_expiry_alerts(self):
+        old=self.source('fcm_sender.py').replace(
+            '    "expiry_monthly","expiry_weekly","push_test",\n','')
+        self.assertIn('ALLOWED_KINDS=frozenset',old)
+        result=deploy.patch_sender(old)
+        self.assertIn('"push_test"',result)
+        self.assertNotIn('"expiry_monthly"',result)
+        self.assertIn('"analysis_stalled"',result)
+        self.assertEqual(deploy.patch_sender(result),result)
+
+    def test_sender_suspicious_allowlist_fails_closed(self):
+        original=self.source('fcm_sender.py')
+        with self.assertRaisesRegex(RuntimeError,'STOP_'):
+            deploy.patch_sender(original.replace('"push_test",','"unreviewed_private_kind",'))
+        with self.assertRaisesRegex(RuntimeError,'STOP_'):
+            deploy.patch_sender(original.replace('frozenset((', 'eval(('))
 
     def test_registry_legacy_and_idempotent(self):
         latest=self.source('mobile_registry.py')
