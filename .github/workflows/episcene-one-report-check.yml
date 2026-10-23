@@ -17,5 +17,5 @@ jobs:
       - name: Check read-only data privacy, ownership and rerun-gate diagnostics
         working-directory: tools/episcene-learning-v1/diagnostics
         run: |
-          python3 -m py_compile one_report.py runtime_deadlines.py release_gap_readonly.py failure_visual_audit.py failure_template_triage.py http405_age_readonly.py private_failure_reason.py riverdale_series_id_readonly.py
-          python3 -m unittest -v test_one_report.py test_runtime_deadlines.py test_failure_visual_audit.py test_release_gap_readonly.py test_failure_template_triage.py test_http405_age_readonly.py test_private_failure_reason.py test_riverdale_series_id_readonly.py
+          python3 -m py_compile one_report.py runtime_deadlines.py release_gap_readonly.py failure_visual_audit.py failure_template_triage.py http405_age_readonly.py private_failure_reason.py riverdale_series_id_readonly.py riverdale_current_catalog_readonly.py
+          python3 -m unittest -v test_one_report.py test_runtime_deadlines.py test_failure_visual_audit.py test_release_gap_readonly.py test_failure_template_triage.py test_http405_age_readonly.py test_private_failure_reason.py test_riverdale_series_id_readonly.py test_riverdale_current_catalog_readonly.py
