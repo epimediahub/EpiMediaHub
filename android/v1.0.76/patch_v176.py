@@ -92,7 +92,12 @@ new='''        }
 @Composable
 private fun V112PlayerControlChip('''
 one(player,old,new)
+intro=here/"epimedia_intro_v8.mp4"
+if not intro.is_file() or intro.is_symlink() or intro.stat().st_size<128_000:
+    raise SystemExit("v176 synchronized, decoder-friendly intro asset not produced")
+shutil.copy2(intro,root/"app/src/main/res/raw/epimedia_intro_v5.mp4")
+assert "V161IntroVideoScreen" in (ui/"V070Intro.kt").read_text()
 assert "V176SmartTubeQuality.supportedHeights" in player.read_text()
 assert "KEYCODE_MENU" in browse.read_text()
 assert "setMaxVideoSize" in (ui/"V176SmartTubeQuality.kt").read_text()
-print("v176: first-party SmartTube can select available HLS/DASH video qualities; fixed MP4 unchanged")
+print("v176: SmartTube adaptive quality and 17.5s optimized intro QA candidate; needs physical-device verification")
