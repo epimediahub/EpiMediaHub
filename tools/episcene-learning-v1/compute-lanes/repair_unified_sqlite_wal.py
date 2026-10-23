@@ -90,7 +90,7 @@ def validate(props):
         raise Stop("UNEXPECTED_SANDBOX_POLICY")
     if props.get("ActiveState") not in ("failed", "inactive"):
         raise Stop("SERVICE_NOT_IDLE")
-    if str(DB) in props.get("ReadWritePaths", ""):
+    if str(DB.parent) in props.get("ReadWritePaths", ""):
         raise Stop("WRITE_PATH_ALREADY_ALLOWED")
     start = props.get("ExecStart", "")
     if (str(UNIT_SOURCE) not in start or " sync-verified " not in start
