@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'tools/episcene-learning-v1/compute-lanes/**'
+      - 'tools/episcene-learning-v1/unified-marker-bridge/bridge.py'
+      - 'tools/episcene-learning-v1/unified-marker-bridge/test_bridge.py'
       - '.github/workflows/episcene-compute-lane-tests.yml'
   push:
     paths:
@@ -26,3 +28,7 @@ jobs:
         run: |
           cd tools/episcene-learning-v1/compute-lanes
           python -m unittest -v test_smart_priority test_worker_version_gate test_offline_capacity test_readonly_server_snapshot test_diagnose_unified_sync
+      - name: Test cross-playlist authenticated knowledge import
+        run: |
+          cd tools/episcene-learning-v1/unified-marker-bridge
+          python -m unittest -v test_bridge
