@@ -24,7 +24,7 @@ APP=Path('/opt/epimediahub/provisioning')
 LOCK=Path('/var/lib/epimediahub/skip-analysis.lock')
 TIMER='epimediahub-skip-analysis.timer'
 SERVICE='epimediahub-skip-analysis.service'
-MAX_BODY=6*1024*1024
+MAX_BODY=48*1024*1024
 
 def systemctl(*args):
     return subprocess.run(['systemctl',*args],capture_output=True,text=True,
@@ -95,11 +95,13 @@ def series_name_matches(label):
     """Conservative name-only discovery; requires episode metadata confirmation."""
     if not isinstance(label,str) or len(label)>160:
         return False
-    text=label.strip().casefold()
-    text=re.sub(r'^\s*(?:\[|\()\s*(?:de|ger|it|ita|en|eng)\s*(?:\]|\))\s*[-|:]?\s*','',text)
-    text=re.sub(r'^\s*(?:de|ger|it|ita|en|eng)\s*[:|]\s*','',text)
-    text=re.sub(r'\s*\(\s*2017\s*\)\s*$','',text)
-    return text.strip()=='riverdale'
+    # Common provider language and quality labels may surround the title.
+    # Treat names only as candidates, never as cut/episode proof.
+    tokens=re.findall(r'[a-z0-9]+',label.casefold())
+    allowed={'riverdale','de','ger','german','deutsch','it','ita',
+             'italian','italiano','italienisch','en','eng','english',
+             '2017','hd','fhd','uhd','4k'}
+    return tokens.count('riverdale')==1 and all(t in allowed for t in tokens)
 
 def candidate_series(value):
     """Exact title discovery only, with bounded candidate count and no auto-ID change."""
@@ -167,7 +169,7 @@ def get_json(analysis,url):
     except Exception as err:
         return 'NETWORK_OR_PROVIDER_'+type(err).__name__,None
     if len(raw)>MAX_BODY:
-        return 'RESPONSE_EXCEEDS_6MB',None
+        return 'RESPONSE_EXCEEDS_48MB',None
     try:
         return 'OK',json.loads(raw)
     except (UnicodeError,ValueError):
