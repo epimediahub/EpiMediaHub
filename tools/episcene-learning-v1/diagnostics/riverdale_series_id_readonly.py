@@ -69,6 +69,24 @@ def candidate_series_ids(db,episode):
         valid.add(str(value))
     return sorted(valid),['skip_catalogue_episodes:exact_asset_key_link']
 
+def control_series_ids(db, riverdale_id):
+    """Two independently catalogued series for an API endpoint control test."""
+    need={'playlist_id','series_id','asset_key','seen_generation'}
+    if not need.issubset(cols(db,'skip_catalogue_episodes')):
+        return []
+    rows=db.execute("""
+      SELECT c.series_id
+      FROM skip_catalogue_episodes c
+      JOIN skip_assets a ON a.asset_key=c.asset_key AND a.playlist_id=c.playlist_id
+      WHERE c.playlist_id=10 AND c.series_id<>? AND a.media_type='episode'
+      GROUP BY c.series_id
+      HAVING COUNT(*) BETWEEN 2 AND 100
+      ORDER BY MAX(c.seen_generation) DESC, COUNT(*) DESC
+      LIMIT 2
+    """,(riverdale_id,)).fetchall()
+    return [str(r[0]) for r in rows
+            if re.fullmatch(r'[1-9][0-9]{0,12}',str(r[0]))]
+
 def api_fetch(analysis,url):
     opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
@@ -161,6 +179,10 @@ def main():
         print('SAFE_STOP: SERIES_ID_JOIN_'+('UNAVAILABLE' if not series_ids else 'AMBIGUOUS'))
         print('NO_PROVIDER_REQUEST; NO_DATABASE_OR_MARKER_CHANGES')
         return 0
+    # Compare the Riverdale response with two independently indexed series.
+    # No titles, series identifiers or raw provider JSON are exported.
+    with read_only() as db:
+        controls=control_series_ids(db,series_ids[0])
     # This metadata call does not open or decode any video.
     with using(read_only):
         with read_only() as db:
@@ -177,6 +199,24 @@ def main():
     print('XTREAM_SERIES_INFO_STATUS:',result)
     if result=='OK':
         print('EPISODE_COMPARISON:',json.dumps(evaluate(data,episode),sort_keys=True))
+    if result=='XTREAM_EMPTY_ARRAY':
+        other_results=[]
+        for index,sid in enumerate(controls[:2]):
+            query=urllib.parse.urlencode({
+                'username':cfg['xtream_username'],'password':cfg['xtream_password'],
+                'action':'get_series_info','series_id':sid})
+            control_url=cfg['xtream_server'].rstrip('/')+'/player_api.php?'+query
+            status,_=api_fetch(analysis,control_url)
+            other_results.append(status)
+            print('CONTROL_'+('A' if index==0 else 'B')+'_STATUS:',status)
+        if not other_results:
+            print('INTERPRETATION: NO_INDEPENDENT_REFERENCE_SERIES')
+        elif all(status=='XTREAM_EMPTY_ARRAY' for status in other_results) and len(other_results)>=2:
+            print('INTERPRETATION: SERIES_INFO_EMPTY_ACROSS_THREE_DISTINCT_SERIES')
+        elif 'OK' in other_results:
+            print('INTERPRETATION: RIVERDALE_SERIES_ID_NOT_RETURNED_BUT_OTHER_SERIES_WORK')
+        else:
+            print('INTERPRETATION: ENDPOINT_SUPPORT_INCONCLUSIVE')
     print('NO_VIDEO_STREAM_OPENED; NO_DATABASE_OR_MARKER_CHANGES')
     return 0
 
