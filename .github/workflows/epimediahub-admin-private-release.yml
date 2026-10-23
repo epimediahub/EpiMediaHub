@@ -53,8 +53,8 @@ jobs:
         env:
           SIGNING_JSON: ${{ secrets.EPI_ADMIN_RELEASE_SIGNING_JSON }}
           FIREBASE_CLIENT_JSON: ${{ secrets.EPI_ADMIN_FIREBASE_CLIENT_JSON }}
-          EPI_ADMIN_RELEASE_VERSION_CODE: ${{ github.event_name == 'push' && '200001' || inputs.version_code }}
-          EPI_ADMIN_RELEASE_VERSION_NAME: ${{ github.event_name == 'push' && '2.0.0' || inputs.version_name }}
+          EPI_ADMIN_RELEASE_VERSION_CODE: ${{ github.event_name == 'push' && '200002' || inputs.version_code }}
+          EPI_ADMIN_RELEASE_VERSION_NAME: ${{ github.event_name == 'push' && '2.0.1' || inputs.version_name }}
         shell: bash
         run: |
           set -euo pipefail
