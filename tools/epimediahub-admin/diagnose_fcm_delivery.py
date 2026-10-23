@@ -143,6 +143,13 @@ def child():
     credentials_source_project=config.get("project_id","")
     print("SERVER_SERVICE_ACCOUNT_PROJECT_MATCH:",
           credentials_source_project==project,flush=True)
+    identity=config.get("client_email","")
+    print("SERVER_USES_EPIMEDIAHUB_FCM_ACCOUNT:",
+          identity=="epimediahub-admin-fcm@epimediahub-admin.iam.gserviceaccount.com",
+          flush=True)
+    print("SERVER_USES_FIREBASE_ADMIN_SDK_ACCOUNT:",
+          identity=="firebase-adminsdk-fbsvc@epimediahub-admin.iam.gserviceaccount.com",
+          flush=True)
     if credentials_source_project!=project:
         print("NOTE: cross-project service accounts require explicit FCM IAM access")
     if DB.is_symlink() or not DB.is_file():
