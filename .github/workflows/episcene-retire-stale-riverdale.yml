@@ -1,0 +1,24 @@
+name: Safe EpiScene Riverdale retirement
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/episcene-learning-v1/maintenance/retire_stale_riverdale.py'
+      - 'tools/episcene-learning-v1/maintenance/test_retire_stale_riverdale.py'
+      - '.github/workflows/episcene-retire-stale-riverdale.yml'
+  pull_request:
+    paths:
+      - 'tools/episcene-learning-v1/maintenance/retire_stale_riverdale.py'
+      - 'tools/episcene-learning-v1/maintenance/test_retire_stale_riverdale.py'
+      - '.github/workflows/episcene-retire-stale-riverdale.yml'
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run isolated retirement tests
+        working-directory: tools/episcene-learning-v1/maintenance
+        run: |
+          python3 -m py_compile retire_stale_riverdale.py test_retire_stale_riverdale.py
+          python3 -m unittest -v test_retire_stale_riverdale.py
