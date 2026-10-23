@@ -22,11 +22,25 @@ import sys
 import time
 
 DB=Path("/var/lib/epimediahub/provisioning.db")
-SCHEDULER=Path("/opt/epimediahub/provisioning/skip_schedule.py")
-WORKER=Path("/opt/epimediahub/provisioning/skip_analysis_worker.py")
+PROVISION=Path("/opt/epimediahub/provisioning")
+REMOTE=Path("/opt/epimediahub/analysis")
+SOURCE_PATHS={
+ "scheduler":PROVISION/"skip_schedule.py",
+ "analysis_worker":PROVISION/"skip_analysis_worker.py",
+ "scene":PROVISION/"skip_scene.py",
+ "scene_reliability":PROVISION/"skip_scene_reliability.py",
+ "automation":PROVISION/"skip_automation.py",
+ "release":PROVISION/"skip_release.py",
+ "remote_worker":REMOTE/"skip_remote_worker.py",
+}
 EXPECTED_SHA={
  "scheduler":"5dffbcad78c666a74a6d5af668fdd565e6d89f094b2c2ecebee6e561ebc408a4",
  "analysis_worker":"e062daaedce4150114fa5b2b154f82adc2a37e3a1b7a3b50b10f237361fdca26",
+ "scene":"6b83cf399dc825b679e69e9bd0973e0bfb496e121e2ea2f95d79be7e4e747ed1",
+ "scene_reliability":"65350baf4bf160aaecb82364a4814c8422f0f07aec3f01ddbc5c26ba32489031",
+ "automation":"7dc0681ae329c1aef76b6350591308a1f73f49bfc478305686b8a09b5405c7dd",
+ "release":"6ffde912fad22255d6236fddcb62c20ff99e87ecd212830632981ae2df47560b",
+ "remote_worker":"0fbc8d2457593eeeae1a268baacbf82336822c26fe90809acb89189a81787010",
 }
 KINDS=("intro","recap","outro")
 TARGETS=(8,10)
@@ -50,7 +64,7 @@ SCHEMA={
 class Stop(Exception):pass
 
 def versions(paths=None):
-    paths=paths or {"scheduler":SCHEDULER,"analysis_worker":WORKER}
+    paths=paths or SOURCE_PATHS
     out={}
     for name,path in paths.items():
         if path.is_symlink() or not path.is_file():
