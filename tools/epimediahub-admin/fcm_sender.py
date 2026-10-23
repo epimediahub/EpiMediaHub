@@ -15,7 +15,7 @@ PROJECT_VAR="EPIMEDIAHUB_ADMIN_FCM_PROJECT_ID"
 ALLOWED_KINDS=frozenset((
     "analysis_stalled","playlist_access","worker_preflight","service_down",
     "build_failed","playback_errors","daily_report",
-    "expiry_monthly","expiry_weekly",
+    "expiry_monthly","expiry_weekly","push_test",
 ))
 
 
