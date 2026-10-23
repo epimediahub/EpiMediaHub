@@ -151,6 +151,9 @@ def perform():
     print("SERVICE_ACCOUNT_PROJECT_MATCHES_TARGET:",matches)
     print("TARGETS_ONE_OPTED_IN_ADMIN_DEVICE: true")
     try:
+        # Standalone probe lives outside the installed provisioning package.
+        # Import the exact deployed sender after dropping to the service UID.
+        sys.path.insert(0,str(BASE))
         import fcm_sender
         bearer=fcm_sender._access_token()
     except Exception as exc:
