@@ -20,6 +20,7 @@ DATABASE=Path("/var/lib/epimediahub/provisioning.db")
 CGROUP=Path("/sys/fs/cgroup")
 UNITS={
     "analysis":"epimediahub-analysis-worker.service",
+    "analysis_runner":"epimediahub-skip-analysis.service",
     "api":"epimediahub-provisioning.service",
     "priority":"episcene-customer-smart-priority.service",
     "learning":"episcene-customer-learning.service",
@@ -120,7 +121,7 @@ def calculate(begin,end,start_cpu,end_cpu,start_services,end_services,elapsed):
         verdict="INCONCLUSIVE_NO_JOB_PROGRESS_DURING_SAMPLE"
     elif host<45:
         verdict="CPU_HEADROOM_OBSERVED_PROVIDER_OR_WAIT_MAY_DOMINATE"
-    elif host>=80 and (service["analysis"] or 0)>=125:
+    elif host>=80 and max((service.get(n) or 0) for n in ("analysis","analysis_runner"))>=125:
         verdict="CPU_PRESSURE_OBSERVED_TEST_OFFLINE_CACHE_ADAPTER_SEPARATELY"
     else:
         verdict="MIXED_USAGE_MORE_OFFLINE_BENCHMARK_REQUIRED"
