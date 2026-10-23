@@ -26,7 +26,7 @@ class GuardTests(unittest.TestCase):
             "ActiveState": "failed",
             "ReadWritePaths": "/var/lib/episcene-learning",
             "ExecStart": ("{ path=/usr/bin/python3 ; argv[]=/usr/bin/python3 "
-                          "/opt/episcene-learning/unified/bridge.py sync-verified "
+                          + str(self.source) + " sync-verified "
                           "--production /var/lib/epimediahub/provisioning.db ; }"),
             "FragmentPath": "/etc/systemd/system/episcene-unified-sync.service",
         }
