@@ -25,4 +25,4 @@ jobs:
       - name: Run isolated no-provider unit tests
         run: |
           cd tools/episcene-learning-v1/compute-lanes
-          python -m unittest -v test_smart_priority test_worker_version_gate test_offline_capacity
+          python -m unittest -v test_smart_priority test_worker_version_gate test_offline_capacity test_readonly_server_snapshot
