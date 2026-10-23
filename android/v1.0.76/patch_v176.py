@@ -28,7 +28,7 @@ shutil.copy2(here/"V176SmartTubeQualityTest.kt",tests/"V176SmartTubeQualityTest.
 
 browse=ui/"V124SmartTubeBrowseLayer.kt"
 one(browse,'onTogglePlayback: () -> Unit, onSeek: (Long) -> Unit, onShowControls: () -> Unit,',
-    'onTogglePlayback: () -> Unit, onSeek: (Long) -> Unit, onShowControls: () -> Unit,\n    onQuality: () -> Unit,')
+    'onTogglePlayback: () -> Unit, onSeek: (Long) -> Unit, onShowControls: () -> Unit,\n    onQuality: () -> Unit = {},')
 one(browse,'                browsing -> false // The focused card owns OK and Left/Right; never seek behind it.',
     '                browsing -> false // The focused card owns OK and Left/Right; never seek behind it.\n'
     '                event.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU -> {\n'
