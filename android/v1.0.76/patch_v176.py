@@ -20,8 +20,8 @@ def one(path,old,new):
     path.write_text(value.replace(old,new,1),encoding="utf-8")
 
 gradle=root/"app/build.gradle.kts"
-one(gradle,"versionCode = 1075","versionCode = 1076")
-one(gradle,'versionName = "1.0.75"','versionName = "1.0.76"')
+one(gradle,"versionCode = 1075","versionCode = 1077")
+one(gradle,'versionName = "1.0.75"','versionName = "1.0.77"')
 shutil.copy2(here/"V176SmartTubeQuality.kt",ui/"V176SmartTubeQuality.kt")
 tests.mkdir(parents=True,exist_ok=True)
 shutil.copy2(here/"V176SmartTubeQualityTest.kt",tests/"V176SmartTubeQualityTest.kt")
