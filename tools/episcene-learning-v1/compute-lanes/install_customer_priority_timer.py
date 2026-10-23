@@ -36,6 +36,8 @@ After=epimediahub-provisioning.service
 
 [Service]
 Type=oneshot
+User={uid}
+Group={gid}
 ExecStart=/usr/bin/python3 /opt/episcene-learning/customer-smart-priority/priority.py --apply
 NoNewPrivileges=true
 PrivateNetwork=true
@@ -62,6 +64,19 @@ WantedBy=timers.target
 """
 
 class Stop(Exception):pass
+
+def service_unit_text():
+    # Run as the actual SQLite file owner: root with all capabilities dropped
+    # cannot traverse the 0700 database directory, and root-created WAL files
+    # could otherwise disrupt the long-running provisioning API user.
+    path=Path("/var/lib/epimediahub/provisioning.db")
+    if path.is_symlink() or not path.is_file() or path.parent.is_symlink():
+        raise Stop("PRODUCTION_DB_PATH_UNTRUSTED")
+    dbstat=path.stat()
+    dirstat=path.parent.stat()
+    if (dbstat.st_uid!=dirstat.st_uid or dbstat.st_gid!=dirstat.st_gid):
+        raise Stop("DB_FILE_DIRECTORY_OWNER_MISMATCH")
+    return SERVICE_CONTENT.format(uid=dbstat.st_uid,gid=dbstat.st_gid)
 
 def ctl(*args,timeout=15):
     try:
@@ -98,6 +113,7 @@ def preflight():
     safe_no_existing_units()
     if not active(API) or not active(ANALYSIS):
         raise Stop("EXISTING_PRODUCTION_SERVICE_NOT_ACTIVE")
+    service_unit_text()
     module=load()
     check=module.run(apply=False)
     if check.get("check")!="PASS" or check.get("analysis_jobs_modified")!=0:
@@ -149,7 +165,7 @@ def install():
         raw=SOURCE.read_bytes()
         atomic_new(SCRIPT,raw)
         created.append(SCRIPT)
-        atomic_new(UNIT,SERVICE_CONTENT.encode())
+        atomic_new(UNIT,service_unit_text().encode())
         created.append(UNIT)
         atomic_new(TIMER,TIMER_CONTENT.encode())
         created.append(TIMER)
@@ -177,7 +193,7 @@ def verify():
         hashlib.sha256(SCRIPT.read_bytes()).digest()!=hashlib.sha256(SOURCE.read_bytes()).digest()):
         raise Stop("DEPLOYED_SMART_PRIORITY_VERSION_DRIFT")
     if UNIT.is_symlink() or TIMER.is_symlink() or (
-        not UNIT.is_file() or UNIT.read_text()!=SERVICE_CONTENT or
+        not UNIT.is_file() or UNIT.read_text()!=service_unit_text() or
         not TIMER.is_file() or TIMER.read_text()!=TIMER_CONTENT):
         raise Stop("DEPLOYED_SERVICE_UNIT_DRIFT")
     if not active(PRIORITY_TIMER) or not active(API) or not active(ANALYSIS):
