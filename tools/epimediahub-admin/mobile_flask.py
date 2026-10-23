@@ -18,6 +18,7 @@ from io import BytesIO
 from flask import Blueprint, abort, jsonify, redirect, render_template_string, request, session, url_for, send_file
 from incident_store import IncidentStore
 from mobile_registry import AdminMobileRegistry
+import fcm_sender
 from mobile_updates import read_release
 from native_status import read_status
 from native_management_data import (SchemaUnavailable, overview as native_overview,
@@ -111,11 +112,21 @@ def _response(data,status=200):
     response.headers["X-Content-Type-Options"]="nosniff"
     return response,status
 
+def _push_transport_prepared():
+    """Metadata check only: readiness still requires an actual FCM delivery test."""
+    credential_path=os.environ.get("GOOGLE_APPLICATION_CREDENTIALS","")
+    if not fcm_sender.enabled() or not credential_path:
+        return False
+    file=Path(credential_path)
+    return file.is_file() and not file.is_symlink() and not file.stat().st_mode & 0o077
+
+
 @bp.get("/admin/mobile/bootstrap")
 def bootstrap():
     _require_admin()
     return _response({"csrf":_csrf(),
        "push_available":bool(os.environ.get("EPIMEDIAHUB_ADMIN_FCM_PROJECT_ID")),
+       "push_sender_configured":_push_transport_prepared(),
        "app":"EpiMediaHub Admin"})
 
 @bp.post("/admin/mobile/register")
@@ -135,6 +146,34 @@ def register():
     except (ValueError,TypeError,PermissionError):
         return _response({"error":"invalid_installation_or_token"},400)
     return _response({"registered":True},201)
+
+@bp.post("/admin/mobile/test-push")
+def test_push():
+    """Private one-device FCM test: server accepts a device ID, never a token."""
+    _require_admin()
+    _require_csrf()
+    if not _push_transport_prepared():
+        return _response({"error":"push_sender_not_configured"},503)
+    if (request.content_length is None or request.content_length>400
+            or not request.is_json):
+        return _response({"error":"invalid_request"},400)
+    data=request.get_json(silent=True)
+    if not isinstance(data,dict) or set(data)!={"installation_id"}:
+        return _response({"error":"invalid_request"},400)
+    state,token=_registry().begin_push_test(data["installation_id"])
+    if state=="not_registered":
+        return _response({"error":"device_not_registered"},404)
+    if state=="rate_limited":
+        return _response({"error":"retry_after_two_minutes"},429)
+    try:
+        accepted=fcm_sender.send(token,"push_test")
+    except Exception:
+        accepted=False
+    if not accepted:
+        return _response({"error":"fcm_delivery_not_accepted"},503)
+    return _response({"fcm_accepted":True,
+                      "device_receipt_not_yet_confirmed":True})
+
 
 @bp.post("/admin/mobile/unregister")
 def unregister():
