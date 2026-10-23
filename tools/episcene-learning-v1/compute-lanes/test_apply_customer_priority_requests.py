@@ -78,12 +78,12 @@ class PriorityRequestsTests(unittest.TestCase):
         self.patch.stop()
         self.temp.cleanup()
 
-    def run(self,apply=False):
+    def execute(self,apply=False):
         return mod.run(apply=apply,database=self.db,paths=self.paths,now=self.now)
 
     def test_check_does_not_touch_database_or_priorities(self):
         original=self.db.read_bytes()
-        r=self.run()
+        r=self.execute()
         self.assertEqual(r["priority_requests_proposed"],2)
         self.assertEqual(r["changes_made"],0)
         self.assertEqual(self.db.read_bytes(),original)
@@ -91,19 +91,19 @@ class PriorityRequestsTests(unittest.TestCase):
         self.assertEqual(r["worker_restarts"],0)
 
     def test_apply_adds_expiring_native_scheduler_requests(self):
-        r=self.run(apply=True)
+        r=self.execute(apply=True)
         self.assertEqual(r["changes_made"],2)
         with sqlite3.connect(self.db) as con:
             saved=con.execute("SELECT playlist_id,reason,reference_asset FROM skip_schedule_requests ORDER BY playlist_id").fetchall()
             self.assertEqual(saved,[(8,"customer_verified",""),(10,"customer_verified","")])
             self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_jobs WHERE status='queued'").fetchone()[0],4)
-        self.assertEqual(self.run(apply=True)["changes_made"],0)
+        self.assertEqual(self.execute(apply=True)["changes_made"],0)
 
     def test_existing_manual_reference_is_never_overwritten(self):
         with sqlite3.connect(self.db) as con:
             con.execute("""INSERT INTO skip_schedule_requests VALUES
                 (8,'analysis-show',4,1,'some-reference','reference',1760000000,1980000000)""")
-        r=self.run(apply=True)
+        r=self.execute(apply=True)
         self.assertEqual(r["changes_made"],1)
         with sqlite3.connect(self.db) as con:
             existing=con.execute("SELECT reason,reference_asset FROM skip_schedule_requests WHERE playlist_id=8").fetchone()
@@ -112,27 +112,27 @@ class PriorityRequestsTests(unittest.TestCase):
     def test_bad_account_or_disabled_device_gives_no_requests(self):
         with sqlite3.connect(self.db) as con:
             con.execute("UPDATE skip_customer_marker_provenance SET account_key='different'")
-        self.assertEqual(self.run(apply=True)["changes_made"],0)
+        self.assertEqual(self.execute(apply=True)["changes_made"],0)
         with sqlite3.connect(self.db) as con:
             con.execute("UPDATE skip_customer_marker_provenance SET account_key='account'")
             con.execute("UPDATE devices SET enabled=0")
-        self.assertEqual(self.run(apply=True)["changes_made"],0)
+        self.assertEqual(self.execute(apply=True)["changes_made"],0)
 
     def test_run_does_not_approve_disabled_markers(self):
         with sqlite3.connect(self.db) as con:
             con.execute("UPDATE skip_records SET disabled=1")
-        self.assertEqual(self.run(apply=True)["changes_made"],0)
+        self.assertEqual(self.execute(apply=True)["changes_made"],0)
 
     def test_job_needs_queued_and_enabled_source(self):
         with sqlite3.connect(self.db) as con:
             con.execute("UPDATE skip_jobs SET attempts=3 WHERE id=20")
             con.execute("UPDATE skip_analysis_sources SET enabled=0 WHERE playlist_id=10")
-        self.assertEqual(self.run(apply=True)["changes_made"],0)
+        self.assertEqual(self.execute(apply=True)["changes_made"],0)
 
     def test_worker_digest_change_blocks_any_action(self):
         self.scheduler.write_text("def select_job(): return 2")
         with self.assertRaisesRegex(mod.Stop,"WORKER_VERSION_DRIFT"):
-            self.run(apply=True)
+            self.execute(apply=True)
         with sqlite3.connect(self.db) as con:
             self.assertEqual(con.execute("SELECT COUNT(*) FROM skip_schedule_requests").fetchone()[0],0)
 
