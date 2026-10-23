@@ -1,4 +1,4 @@
-name: EpiMediaHub v1.0.76 private player quality and lighter intro signed QA
+name: EpiMediaHub v1.0.77 signed global player release
 on:
   push:
     branches: [feature/v176-player-galabox-intro-smarttube-20261023]
@@ -7,6 +7,9 @@ on:
       - 'android/v1.0.76/**'
       - 'build_tools/prepare_intro_v176.py'
   workflow_dispatch:
+concurrency:
+  group: epimediahub-v177-global-release
+  cancel-in-progress: true
 permissions:
   contents: write
   actions: read
@@ -236,13 +239,13 @@ jobs:
             info="$RUNNER_TEMP/$abi-badging.txt"
             "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$src" > "$info"
             grep -F "package: name='de.epimediahub.app'" "$info"
-            grep -F "versionCode='1076'" "$info"
-            grep -F "versionName='1.0.76'" "$info"
+            grep -F "versionCode='1077'" "$info"
+            grep -F "versionName='1.0.77'" "$info"
             signature="$RUNNER_TEMP/$abi-signature.txt"
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$src" > "$signature"
             cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$signature" | tr '[:lower:]' '[:upper:]')"
             test "$cert" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
-            cp "$src" "qa-artifacts/EpiMediaHub-Android-v1.0.76-$abi.apk"
+            cp "$src" "qa-artifacts/EpiMediaHub-Android-v1.0.77-$abi.apk"
           done
           (cd qa-artifacts && sha256sum *.apk > SHA256SUMS.txt)
       - name: Verify GalaBox isolated VPN path, hidden player debug, and intact Fire TV video cadence
@@ -337,3 +340,102 @@ jobs:
           path: ${{ env.PROJECT_ROOT }}/app/build/qa/*.png
           retention-days: 14
           if-no-files-found: warn
+
+      - name: Prepare signed distribution assets and verified manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for abi in arm64-v8a armeabi-v7a universal; do
+            cp "qa-artifacts/EpiMediaHub-Android-v1.0.77-$abi.apk" "dist/EpiMediaHub_Android_v1.0.77-$abi.apk"
+          done
+          cp dist/EpiMediaHub_Android_v1.0.77-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+          python3 - <<'PY'
+          import hashlib, json, os, re
+          from pathlib import Path
+          gradle=(Path(os.environ['PROJECT_ROOT'])/'app/build.gradle.kts').read_text()
+          assert re.search(r'versionCode\s*=\s*1077\b',gradle)
+          assert re.search(r'versionName\s*=\s*"1.0.77"',gradle)
+          apks={}
+          for abi in ('arm64-v8a','armeabi-v7a','universal'):
+              filename=f'EpiMediaHub_Android_v1.0.77-{abi}.apk'
+              p=Path('dist')/filename
+              assert p.is_file() and p.stat().st_size>1_000_000
+              apks[abi]={'url':'https://download.epimediahub.com/android/'+filename,
+                         'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),
+                         'size':p.stat().st_size}
+          manifest={'version':'1.0.77','versionCode':1077,
+                    'notes':'GalaBox-Updates, Player-Diagnose über Info statt roter Daueranzeige, 17,5s synchronisiertes H.264-Intro, SmartTube-Auflösungswahl bei geeigneten HLS/DASH-Streams. Lizenzen, VPN und Playlisten unverändert.',
+                    'apks':apks}
+          for filename in ('android-latest.json','latest.json'):
+              Path('dist',filename).write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
+          print('Verified 1.0.77 manifest for all 3 signed APK variants')
+          PY
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+          cat > dist/RELEASE_NOTES.txt <<'EOF'
+          EpiMediaHub Android v1.0.77
+          - GalaBox- und Player-Anpassungen
+          - Keine permanente rote Player-Diagnose mehr; abrufbar im Info-Menü
+          - 17,5 Sekunden Intro mit gemeinsamer Audio-/Video-Zeitbasis und Funktionshinweisen
+          - SmartTube-Auflösungswahl für unterstützte adaptive HLS-/DASH-Streams
+          - Bestehende Kunden-Playlisten, VPN-Zuweisungen und Fire-TV-Lizenzen bleiben erhalten
+          EOF
+
+      - name: Check licensing and monotonic updater before public rollout
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, urllib.request
+          req=urllib.request.Request('https://api.epimediahub.com/v1/license/capabilities',
+                headers={'User-Agent':'EpiMediaHub-Release/1.0.77','Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=20) as r:
+              policy=json.load(r)
+          assert policy.get('licensing_ready') is True, 'License backend unavailable'
+          assert policy.get('trial_days') == 7, 'Trial policy changed'
+          assert policy.get('activation_credits') == 1, 'Credit policy changed'
+          print('Production licence policy verified')
+          PY
+          mkdir -p "$RUNNER_TEMP/prior-manifest"
+          gh release download v0.7.0-test -p android-latest.json -D "$RUNNER_TEMP/prior-manifest" --clobber
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          manifest=json.loads((Path(os.environ['RUNNER_TEMP'])/'prior-manifest/android-latest.json').read_text())
+          assert type(manifest.get('versionCode')) is int and manifest['versionCode']<1077, 'Rollback or version collision'
+          print('Old version code:',manifest['versionCode'])
+          PY
+
+      - name: Publish signed update to the existing rolling Android release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=v0.7.0-test
+          TITLE="EpiMediaHub Android v1.0.77 - GalaBox, Intro und SmartTube"
+          gh release view "$TAG" >/dev/null
+          # No metadata switch until all APK binaries are uploaded successfully.
+          for f in dist/EpiMediaHub_Android_v1.0.77-*.apk dist/EpiMediaHub_Android_v0.7.0-test.apk dist/SHA256SUMS.txt; do
+            timeout 15m gh release upload "$TAG" "$f" --clobber
+          done
+          gh release view "$TAG" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/new-assets.txt"
+          for abi in arm64-v8a armeabi-v7a universal; do
+            grep -Fx "EpiMediaHub_Android_v1.0.77-$abi.apk" "$RUNNER_TEMP/new-assets.txt"
+          done
+          timeout 15m gh release upload "$TAG" dist/android-latest.json dist/latest.json --clobber
+          gh release edit "$TAG" --title "$TITLE" --notes-file dist/RELEASE_NOTES.txt --prerelease --draft=false
+          echo "PUBLIC_1_0_77_RELEASE_PUBLISHED"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: EpiMediaHub-v177-global-release-manifest
+          path: |
+            dist/android-latest.json
+            dist/latest.json
+            dist/SHA256SUMS.txt
+          if-no-files-found: warn
+          retention-days: 30
