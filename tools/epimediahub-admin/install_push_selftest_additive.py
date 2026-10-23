@@ -10,6 +10,7 @@ No APK, Fire TV, customer, reseller, IPTV, EpiScene worker or VPN change.
 from __future__ import annotations
 
 import argparse
+import ast
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -106,15 +107,60 @@ def insert_once(source: str, anchor: str, replacement: str, label: str):
 
 
 def patch_sender(source: str):
-    if '"push_test"' in source:
-        if '"push_test"' not in source.split("ALLOWED_KINDS=", 1)[-1]:
-            raise RuntimeError("STOP_PUSH_TEST_NOT_ALLOWLISTED")
+    """Extend a verified legacy FCM enum regardless of its line wrapping.
+
+    Fail closed for arbitrary expressions, mutated payload logic, unknown
+    alert types or unexpected declarations. Rewrites only ALLOWED_KINDS.
+    """
+    try:
+        module=ast.parse(source)
+    except SyntaxError:
+        raise RuntimeError("STOP_INVALID_SENDER_SOURCE") from None
+    declarations=[
+        node for node in module.body
+        if isinstance(node,ast.Assign)
+        and any(isinstance(t,ast.Name) and t.id=="ALLOWED_KINDS"
+                for t in node.targets)
+    ]
+    if len(declarations)!=1:
+        raise RuntimeError("STOP_UNEXPECTED_SENDER_ALLOWLIST_DECLARATION")
+    declaration=declarations[0]
+    value=declaration.value
+    if (len(declaration.targets)!=1 or
+        not isinstance(value,ast.Call) or
+        not isinstance(value.func,ast.Name) or
+        value.func.id!="frozenset" or
+        len(value.args)!=1 or value.keywords or
+        not isinstance(value.args[0],(ast.Tuple,ast.List))):
+        raise RuntimeError("STOP_UNEXPECTED_SENDER_ALLOWLIST_FORMAT")
+    try:
+        kinds=ast.literal_eval(value.args[0])
+    except (ValueError,TypeError,SyntaxError,MemoryError):
+        raise RuntimeError("STOP_UNEXPECTED_SENDER_ALLOWLIST_VALUES") from None
+    if (not isinstance(kinds,(tuple,list))
+        or len(kinds)!=len(set(kinds))
+        or any(type(kind) is not str for kind in kinds)):
+        raise RuntimeError("STOP_INVALID_SENDER_ALLOWLIST")
+    required={"analysis_stalled","playlist_access","worker_preflight",
+              "service_down","build_failed","playback_errors","daily_report"}
+    permitted=required|{"expiry_monthly","expiry_weekly","push_test"}
+    if (not required.issubset(kinds) or not set(kinds).issubset(permitted)
+        or "if kind not in ALLOWED_KINDS:" not in source
+        or "def make_payload(" not in source or "def send(" not in source):
+        raise RuntimeError("STOP_UNSUPPORTED_SENDER_POLICY")
+    if "push_test" in kinds:
         return source
-    if 'ALLOWED_KINDS=' not in source:
-        raise RuntimeError("STOP_NO_SENDER_ALLOWLIST")
-    return insert_once(source, '"expiry_monthly","expiry_weekly",',
-                       '"expiry_monthly","expiry_weekly","push_test",',
-                       'SENDER_ALLOWLIST')
+    lines=source.splitlines(keepends=True)
+    start=sum(len(part) for part in lines[:declaration.lineno-1])+declaration.col_offset
+    end=sum(len(part) for part in lines[:declaration.end_lineno-1])+declaration.end_col_offset
+    replacement="ALLOWED_KINDS=frozenset((\n"+''.join(
+        '    "'+kind+'",\n' for kind in (*kinds,"push_test"))+"))"
+    changed=source[:start]+replacement+source[end:]
+    try:
+        compile(changed,"fcm_sender.py","exec")
+    except SyntaxError:
+        raise RuntimeError("STOP_NEW_SENDER_SYNTAX") from None
+    return changed
 
 
 def patch_registry(source: str):
