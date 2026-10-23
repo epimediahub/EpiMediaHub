@@ -43,6 +43,10 @@ one(player,'    var controlsVisible by remember(video.videoId) { mutableStateOf(
         mutableStateOf<List<Int>>(emptyList())
     }
     var v176ChosenHeight by remember(video.videoId) { mutableStateOf<Int?>(null) }''')
+one(player,'        DisposableEffect(player, video.videoId, playback.url) {',
+    '''        DisposableEffect(player, video.videoId, playback.url) {
+            // The player may be pooled; never retain another video's quality cap.
+            V176SmartTubeQuality.apply(player, null)''')
 one(player,'                override fun onIsPlayingChanged(playing: Boolean) {',
     '''                override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
                     v176Qualities = V176SmartTubeQuality.supportedHeights(
