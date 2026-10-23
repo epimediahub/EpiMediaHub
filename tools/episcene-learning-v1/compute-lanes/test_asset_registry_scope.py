@@ -2,11 +2,13 @@
 from pathlib import Path
 import importlib.util
 import sqlite3
+import sys
 import unittest
 
 spec=importlib.util.spec_from_file_location(
     "asset_registry_scope",Path(__file__).with_name("asset_registry_scope.py"))
 scope=importlib.util.module_from_spec(spec)
+sys.modules[spec.name]=scope
 spec.loader.exec_module(scope)
 
 
