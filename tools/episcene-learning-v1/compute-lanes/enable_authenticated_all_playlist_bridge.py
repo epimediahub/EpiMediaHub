@@ -13,7 +13,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 import sqlite3
 import stat
 import subprocess
@@ -125,8 +124,12 @@ def install_bytes(raw, previous_stat):
 def preflight():
     if os.geteuid() != 0:
         raise Stop("ROOT_REQUIRED")
-    for path in (SOURCE, FEEDBACK, PRODUCTION, STORE, VENV):
+    for path in (SOURCE, FEEDBACK, PRODUCTION, STORE):
         component(path)
+    # Standard Python venv executables are often symlinks to the interpreter;
+    # the installed systemd service uses the same trusted venv path.
+    if not VENV.exists() or not os.access(VENV, os.X_OK):
+        raise Stop("VENV_PYTHON_UNAVAILABLE")
     if SOURCE.parent.is_symlink():
         raise Stop("SOURCE_DIRECTORY_SYMLINK")
     if not service_is_active(ANALYSIS_SERVICE):
