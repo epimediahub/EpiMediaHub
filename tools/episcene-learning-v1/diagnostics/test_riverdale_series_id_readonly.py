@@ -86,4 +86,31 @@ class SeriesLookupTests(unittest.TestCase):
                 self.assertNotIn('DO_NOT_EXPORT',str((kind,data)))
                 self.assertNotIn('PRIVATE_PROVIDER_URL',str((kind,data)))
 
+
+    def test_controls_use_distinct_analysis_series_only(self):
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory=sqlite3.Row
+            db.executescript("""
+                CREATE TABLE skip_catalogue_episodes(
+                    playlist_id INTEGER,series_id TEXT,asset_key TEXT,seen_generation INTEGER);
+                CREATE TABLE skip_assets(
+                    playlist_id INTEGER,asset_key TEXT,media_type TEXT);
+            """)
+            values=[(10,'100','riverdale','episode'),
+                    (10,'200','a1','episode'),(10,'200','a2','episode'),
+                    (10,'300','b1','episode'),(10,'300','b2','episode'),
+                    (8,'400','c1','episode'),(8,'400','c2','episode'),
+                    (10,'500','x1','movie'),(10,'500','x2','movie')]
+            for pid,sid,asset,media in values:
+                db.execute("INSERT INTO skip_catalogue_episodes VALUES (?,?,?,?)",
+                           (pid,sid,asset,42))
+                db.execute("INSERT INTO skip_assets VALUES (?,?,?)",(pid,asset,media))
+            self.assertEqual(module.control_series_ids(db,'100'),['200','300'])
+
+    def test_controls_absent_without_verified_catalogue_schema(self):
+        with sqlite3.connect(':memory:') as db:
+            db.row_factory=sqlite3.Row
+            db.execute("CREATE TABLE skip_catalogue_episodes(playlist_id INTEGER,series_id TEXT,asset_key TEXT)")
+            self.assertEqual(module.control_series_ids(db,'100'),[])
+
 if __name__=='__main__':unittest.main()
