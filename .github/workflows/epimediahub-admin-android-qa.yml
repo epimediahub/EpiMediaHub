@@ -1,5 +1,10 @@
 name: Private EpiMediaHub Admin Android QA
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/admin-app/**'
+      - '.github/workflows/epimediahub-admin-android-qa.yml'
   pull_request:
     paths:
       - "android/admin-app/**"
