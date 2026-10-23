@@ -55,10 +55,11 @@ def age(value,now):
 def alerts(now):
     print('ADMIN_ALERTS:')
     with ro(DATA/'incidents.sqlite3') as db:
-        rows=db.execute("""SELECT alert_key,state,first_seen_epoch,
+        rows=db.execute("""SELECT alert_key,kind,state,first_seen_epoch,
             last_seen_epoch,occurrences FROM admin_incidents
-            WHERE alert_key IN ('analysis_stalled:8','analysis_stalled:10')
-            ORDER BY first_seen_epoch DESC""").fetchall()
+            WHERE kind IN ('analysis_stalled','worker_preflight',
+                           'playlist_access','daily_report')
+            ORDER BY last_seen_epoch DESC LIMIT 12""").fetchall()
     if not rows:
         print('  NO_RECORDED_EPISCENE_STALL_INCIDENTS')
         return
@@ -77,7 +78,10 @@ def alerts(now):
         rows=db.execute("""SELECT alert_key,generation_epoch,
             MIN(sent_epoch) sent_epoch, COUNT(*) n
             FROM admin_mobile_outbox
-            WHERE alert_key IN ('analysis_stalled:8','analysis_stalled:10')
+            WHERE alert_key LIKE 'analysis_stalled:%'
+               OR alert_key LIKE 'worker_preflight:%'
+               OR alert_key LIKE 'playlist_access:%'
+               OR alert_key LIKE 'daily_report:%'
             GROUP BY alert_key,generation_epoch
             ORDER BY generation_epoch DESC LIMIT 8""").fetchall()
     for row in rows:
