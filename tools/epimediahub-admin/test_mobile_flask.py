@@ -67,6 +67,40 @@ class TestPrivateAdminMobile(unittest.TestCase):
             headers={"X-Dashboard-CSRF":csrf}).status_code,200)
         self.assertEqual(registry.active_count(),0)
 
+    def test_push_self_test_requires_admin_csrf_existing_device_and_throttle(self):
+        route="/admin/mobile/test-push"
+        self.assertEqual(self.client.post(route,json={"installation_id":self.install}).status_code,401)
+        self.signin()
+        csrf=self.client.get("/admin/mobile/bootstrap").get_json()["csrf"]
+        self.assertEqual(self.client.post(route,json={"installation_id":self.install}).status_code,403)
+        headers={"X-Dashboard-CSRF":csrf}
+        with mock.patch.object(mobile_flask,"_push_transport_prepared",return_value=True):
+            self.assertEqual(self.client.post(route,json={"installation_id":self.install},
+                                              headers=headers).status_code,404)
+            self.client.post("/admin/mobile/register",json={
+                "installation_id":self.install,"fcm_token":self.token,
+                "platform":"android-admin"},headers=headers)
+            with mock.patch.object(mobile_flask.fcm_sender,"send",return_value=True) as sender:
+                result=self.client.post(route,json={"installation_id":self.install},headers=headers)
+                self.assertEqual(result.status_code,200)
+                self.assertEqual(result.get_json()["fcm_accepted"],True)
+                self.assertEqual(sender.call_args.args,(self.token,"push_test"))
+                self.assertNotIn(self.token,result.get_data(as_text=True))
+                second=self.client.post(route,json={"installation_id":self.install},headers=headers)
+                self.assertEqual(second.status_code,429)
+                self.assertEqual(sender.call_count,1)
+
+    def test_push_self_test_denied_without_fcm_backend_identity(self):
+        self.signin()
+        csrf=self.client.get("/admin/mobile/bootstrap").get_json()["csrf"]
+        with mock.patch.object(mobile_flask,"_push_transport_prepared",return_value=False):
+            boot=self.client.get("/admin/mobile/bootstrap").get_json()
+            self.assertFalse(boot["push_sender_configured"])
+            result=self.client.post("/admin/mobile/test-push",
+               json={"installation_id":self.install},headers={"X-Dashboard-CSRF":csrf})
+            self.assertEqual(result.status_code,503)
+            self.assertNotIn(self.token,result.get_data(as_text=True))
+
     def test_untrusted_fields_or_platform_blocked(self):
         self.signin()
         csrf=self.client.get("/admin/mobile/bootstrap").get_json()["csrf"]
