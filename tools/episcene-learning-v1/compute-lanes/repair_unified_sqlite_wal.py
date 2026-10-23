@@ -192,7 +192,7 @@ def run(*, apply=False):
         if state["marker_count_after"] is None:
             raise Stop("VERIFIED_STORE_UNAVAILABLE")
         state.update(applied=True, sync_result="success",
-                     "analysis_worker_still_active": True)
+                     analysis_worker_still_active=True)
         return state
     except (Stop, OSError, sqlite3.Error) as exc:
         reason = str(exc) if isinstance(exc, Stop) else "IO_ERROR"
