@@ -66,6 +66,30 @@ class GuardTests(unittest.TestCase):
         with self.assertRaisesRegex(fix.Stop, "WRITE_PATH_ALREADY_ALLOWED"):
             fix.validate(self.props)
 
+    def test_checkpointed_database_without_wal_or_shm_is_valid(self):
+        import sqlite3
+        database = self.root / "test.db"
+        with sqlite3.connect(database) as con:
+            con.execute("CREATE TABLE skip_assets(asset_key TEXT)")
+        self.assertFalse(Path(str(database) + "-wal").exists())
+        self.assertFalse(Path(str(database) + "-shm").exists())
+        # A normal SQLite checkpoint may remove both sidecars; not a failure.
+        self.assertIsNone(fix.local_db_preflight(database))
+
+    def test_unexpected_sidecar_is_rejected(self):
+        import sqlite3
+        database = self.root / "test.db"
+        with sqlite3.connect(database) as con:
+            con.execute("CREATE TABLE skip_assets(asset_key TEXT)")
+        bad_sidecar = Path(str(database) + "-wal")
+        bad_sidecar.mkdir()
+        with self.assertRaisesRegex(fix.Stop, "UNEXPECTED_WAL_SIDECAR_TYPE"):
+            fix.local_db_preflight(database)
+        bad_sidecar.rmdir()
+        bad_sidecar.symlink_to(database)
+        with self.assertRaisesRegex(fix.Stop, "UNEXPECTED_WAL_SIDECAR_SYMLINK"):
+            fix.local_db_preflight(database)
+
     def test_single_allowlist_dropin_is_the_only_written_change(self):
         created = fix.install_dropin()
         self.assertTrue(created)
