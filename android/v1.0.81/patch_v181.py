@@ -220,4 +220,39 @@ assert "v181QualityFocus.requestFocus()" in source
 assert "controlsShown -> false" in browse.read_text(encoding="utf-8")
 assert "onCreatorChannel()" in source
 print("V181_SMARTTUBE_VISIBLE_FOCUSABLE_REMOTE_PLAYER_MASK_READY")
-print("V181_INTRO_NOT_REPLACED_WITH_OLD_V180_CROPPED_VIDEO")
+
+# The user-approved new 34-second concept is a SEPARATE movie, not a cropped
+# section of the old v178/v180 intro. This must never silently substitute it.
+import hashlib
+import json
+import re
+import shutil
+import subprocess
+approved = Path(__file__).resolve().parent / "EpiMediaHub_EpiScene_Heartbeat_Konzept_34s_v2.mp4"
+checksum = approved.with_suffix(".sha256")
+if not approved.is_file() or not checksum.is_file():
+    raise SystemExit(
+        "STOP_V181_APPROVED_NEW_34S_INTRO_MISSING: "
+        "EpiMediaHub_EpiScene_Heartbeat_Konzept_34s_v2.mp4 and its SHA-256 required; "
+        "NEVER substitute old v178/v180 footage"
+    )
+sha256 = hashlib.sha256(approved.read_bytes()).hexdigest()
+if not re.fullmatch(r"[0-9a-f]{64}", checksum.read_text(encoding="ascii").strip()):
+    raise SystemExit("STOP_V181_APPROVED_SOURCE_HASH_FORMAT")
+if sha256 != checksum.read_text(encoding="ascii").strip():
+    raise SystemExit("STOP_V181_APPROVED_NEW_34S_SOURCE_HASH_MISMATCH")
+info = json.loads(subprocess.check_output([
+    "ffprobe", "-v", "error", "-show_format", "-show_streams", "-of", "json",
+    str(approved)
+], text=True))
+if abs(float(info["format"]["duration"]) - 34.0) > 0.09:
+    raise SystemExit("STOP_V181_APPROVED_NEW_34S_DURATION_MISMATCH")
+video_stream = next(s for s in info["streams"] if s["codec_type"] == "video")
+audio_stream = next(s for s in info["streams"] if s["codec_type"] == "audio")
+if (video_stream["width"], video_stream["height"]) != (1280,720):
+    raise SystemExit("STOP_V181_APPROVED_NEW_34S_DIMENSIONS_MISMATCH")
+if video_stream["codec_name"] != "h264" or audio_stream["codec_name"] != "aac":
+    raise SystemExit("STOP_V181_APPROVED_NEW_34S_CODECS_MISMATCH")
+shutil.copy2(approved, root / "app/src/main/res/raw/epimedia_intro_v5.mp4")
+print("V181_APPROVED_NEW_EPI_SCENE_34S_VIDEO_INCLUDED_UNCROPPED", sha256)
+\nprint("V181_INTRO_NOT_REPLACED_WITH_OLD_V180_CROPPED_VIDEO")
