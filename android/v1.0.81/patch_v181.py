@@ -2,7 +2,7 @@
 """v1.0.81 SmartTube controls: visible overlay above PlayerView + remote-first focus.
 
 Apply AFTER v1.0.80. This release intentionally refuses the old v180 intro;
-the separately approved EpiScene Heartbeat Konzept 34s v2 is required.
+the final 34s v2 movie with the ORIGINAL EpiMediaHub brand-logo finale is required.
 """
 from pathlib import Path
 import os
@@ -186,7 +186,7 @@ import json
 import re
 import shutil
 import subprocess
-approved = Path(__file__).resolve().parent / "EpiMediaHub_EpiScene_Heartbeat_Konzept_34s_v2.mp4"
+approved = Path(__file__).resolve().parent / "EpiMediaHub_EpiScene_34s_v2_ORIGINAL_LOGO.mp4"
 checksum = approved.with_suffix(".sha256")
 if os.environ.get("EPIMEDIA_V181_PRIVATE_SOURCE_ONLY") == "1":
     print("PRIVATE_KOTLIN_COMPILE_ONLY_NEW_APPROVED_INTRO_NOT_INCLUDED_NOT_RELEASABLE")
@@ -194,7 +194,7 @@ if os.environ.get("EPIMEDIA_V181_PRIVATE_SOURCE_ONLY") == "1":
 if not approved.is_file() or not checksum.is_file():
     raise SystemExit(
         "STOP_V181_APPROVED_NEW_34S_INTRO_MISSING: "
-        "EpiMediaHub_EpiScene_Heartbeat_Konzept_34s_v2.mp4 and its SHA-256 required; "
+        "EpiMediaHub_EpiScene_34s_v2_ORIGINAL_LOGO.mp4 and its SHA-256 required; "
         "NEVER substitute old v178/v180 footage"
     )
 sha256 = hashlib.sha256(approved.read_bytes()).hexdigest()
