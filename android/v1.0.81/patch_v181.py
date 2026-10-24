@@ -76,9 +76,14 @@ key_new = """        .onPreviewKeyEvent { event ->
                     if (!repeated) onShowControls()
                     true
                 }
-                // A second DOWN can still open the existing recommendations shelf.
-                // While controls are visible the focused Compose buttons own
-                // Left/Right/OK. Never steal button OK for playback toggling.
+                // A second DOWN opens recommendations without detaching video.
+                // The first DOWN must expose quality/creator buttons before browsing.
+                controlsShown && event.key == Key.DirectionDown -> {
+                    if (!repeated) browsing = true
+                    true
+                }
+                // While controls are visible, focused Compose buttons own OK,
+                // Left and Right. Never hijack their remote actions.
                 controlsShown -> false
                 else -> false
             }
@@ -177,6 +182,23 @@ assert "controlsShown = controlsVisible" in source
 assert "v181QualityFocus.requestFocus()" in source
 assert "controlsShown -> false" in browse.read_text(encoding="utf-8")
 assert "onCreatorChannel()" in source
+# Replace the old first-DOWN/OK playback assumptions with explicit v181
+# remote-first navigation coverage. Keep recommendation/focus tests and extend
+# them for both first-key mask visibility and second-DOWN browsing.
+tests = root / "app/src/test/java/de/epimediahub/app/ui"
+source_test = Path(__file__).resolve().parent / "V181SmartTubeBrowseTest.kt"
+target_test = tests / "V124SmartTubeBrowseTest.kt"
+if not source_test.is_file() or not target_test.is_file():
+    raise SystemExit("STOP_V181_REMOTE_TEST_SOURCE_MISSING")
+original_test = target_test.read_text(encoding="utf-8")
+if "downBrowsesWhileVideoStaysMountedAndCardKeysNeverSeekOrPause" not in original_test:
+    raise SystemExit("STOP_V181_REMOTE_TEST_BASELINE_DRIFT")
+updated_test = source_test.read_text(encoding="utf-8")
+assert "firstOkAndArrowsOpenPlayerMaskWithoutUnexpectedSeekOrPause" in updated_test
+assert "smallTvShowsSelectableCardsAndKeepsFocusOnRefresh" in updated_test
+assert "asyncResultsTakeFocusAfterEmptyLoadingStateAndNewVideoClosesShelf" in updated_test
+target_test.write_text(updated_test, encoding="utf-8")
+
 print("V181_SMARTTUBE_VISIBLE_FOCUSABLE_REMOTE_PLAYER_MASK_READY")
 
 # The user-approved new 34-second concept is a SEPARATE movie, not a cropped
