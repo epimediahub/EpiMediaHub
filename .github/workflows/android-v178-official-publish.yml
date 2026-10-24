@@ -1,0 +1,207 @@
+name: Publish EpiMediaHub Android v1.0.78 official signed release
+on:
+  push:
+    branches: [feature/v178-20s-functional-intro-20261024]
+    paths:
+      - '.github/workflows/android-v178-official-publish.yml'
+  workflow_dispatch:
+concurrency:
+  group: epimediahub-official-player-publish
+  cancel-in-progress: false
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-verified-v178:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_SOURCE_RUN: '40067528472'
+      EXPECTED_SOURCE_COMMIT: '922b041bd2c93941cd6f80f8c08a9ae7bf24d3c0'
+      SOURCE_ARTIFACT: 'EpiMediaHub-v178-20-second-intro-signed-qa'
+      CERT_SHA256: '7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E'
+    steps:
+      - name: Checkout tested EpiMediaHub intro candidate
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v178-20s-functional-intro-20261024
+
+      - name: Validate provenance of successfully tested APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$EXPECTED_SOURCE_RUN" --jq .conclusion)" = "success"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$EXPECTED_SOURCE_RUN" --jq .head_sha)" = "$EXPECTED_SOURCE_COMMIT"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$EXPECTED_SOURCE_RUN" --jq .head_branch)" = "feature/v178-20s-functional-intro-20261024"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$EXPECTED_SOURCE_RUN/artifacts" --jq ".artifacts[] | select(.name == \"$SOURCE_ARTIFACT\") | .expired")" = "false"
+          echo 'Approved source: complete Android unit tests, signed APK identity and 20-second film passed'
+
+      - name: Obtain the exact signed QA artifacts (no rebuilding)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-artifacts
+          gh run download "$EXPECTED_SOURCE_RUN" --repo "$GITHUB_REPOSITORY" -n "$SOURCE_ARTIFACT" -D qa-artifacts
+          for abi in arm64-v8a armeabi-v7a universal; do
+            test -s "qa-artifacts/EpiMediaHub-Android-v1.0.78-$abi.apk"
+          done
+          test "$(find qa-artifacts -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 3
+          du -h qa-artifacts/*
+
+      - name: Set up Android signature verification
+        uses: android-actions/setup-android@v3
+      - name: Install APK inspection toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" >/dev/null
+
+      - name: Verify all three APK identities and signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          SIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          mkdir -p dist
+          for abi in arm64-v8a armeabi-v7a universal; do
+            in="qa-artifacts/EpiMediaHub-Android-v1.0.78-$abi.apk"
+            "$AAPT" dump badging "$in" > /tmp/"$abi"-badge.txt
+            grep -F "package: name='de.epimediahub.app'" /tmp/"$abi"-badge.txt
+            grep -F "versionCode='1078'" /tmp/"$abi"-badge.txt
+            grep -F "versionName='1.0.78'" /tmp/"$abi"-badge.txt
+            "$SIGNER" verify --verbose --print-certs "$in" > /tmp/"$abi"-signing.txt
+            got="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/"$abi"-signing.txt | tr '[:lower:]' '[:upper:]')"
+            test "$got" = "$CERT_SHA256"
+            cp "$in" "dist/EpiMediaHub_Android_v1.0.78-$abi.apk"
+          done
+          cp dist/EpiMediaHub_Android_v1.0.78-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+
+      - name: Verify production licence readiness and updater monotonicity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, urllib.request
+          req=urllib.request.Request('https://api.epimediahub.com/v1/license/capabilities',
+                headers={'User-Agent':'EpiMediaHub-Release/1.0.78','Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=20) as r:
+              policy=json.load(r)
+          assert policy.get('licensing_ready') is True
+          assert policy.get('trial_days')==7
+          assert policy.get('activation_credits')==1
+          print('Production license policy intact')
+          PY
+          mkdir -p /tmp/epimedia-prior
+          gh release download v0.7.0-test -p android-latest.json -D /tmp/epimedia-prior --clobber
+          python3 - <<'PY'
+          import json
+          with open('/tmp/epimedia-prior/android-latest.json') as f:
+              prior=json.load(f)
+          assert type(prior.get('versionCode'))==int
+          assert prior['versionCode']<1078, 'Refuse updater downgrade or version collision'
+          print('Prior update version:',prior['versionCode'])
+          PY
+          if gh release view v1.0.78 >/dev/null 2>&1; then
+            echo '::error::Stable v1.0.78 already exists: refuse overwriting another release'
+            exit 1
+          fi
+
+      - name: Generate stable & rolling release manifests and accurate notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          apks={}
+          for abi in ('arm64-v8a','armeabi-v7a','universal'):
+              fn=f'EpiMediaHub_Android_v1.0.78-{abi}.apk'
+              p=Path('dist')/fn
+              assert p.is_file() and p.stat().st_size>1_000_000
+              apks[abi]={'url':f'https://github.com/epimediahub/EpiMediaHub/releases/download/v0.7.0-test/{fn}',
+                         'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),
+                         'size':p.stat().st_size}
+          note=('20 Sekunden cineastisches Intro mit Rückblick-/Intro-/Outro-Erkennung, '
+                'bestätigten EpiScene-Lernmarkern und playlistbezogener VPN-Anbindung. '
+                'SmartTube-Qualitätswahl bei adaptiven HLS-/DASH-Streams. '
+                'Fire-TV-Lizenzen, bestehende Playlisten und VPN-Konfiguration unverändert.')
+          manifest={'version':'1.0.78','versionCode':1078,'notes':note,'apks':apks}
+          for name in ('android-latest.json','latest.json'):
+              (Path('dist')/name).write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
+          PY
+          cat > dist/RELEASE_NOTES.txt <<'EOF'
+          EpiMediaHub Android v1.0.78 – 20-Sekunden-Funktionsintro
+
+          - Neues cineastisches 20-Sekunden-Intro: Live-TV, EPG, Filme und Serien verständlicher vorgestellt
+          - EpiScene erklärt Rückblick-, Intro- und Outro-Skip sowie nächste Folge und bestätigte Lernmarker
+          - VPN-Anbindung mit Playlist-Steuerung und Standortwahl im Intro hervorgehoben
+          - SmartTube (adaptive Qualitätswahl), Speedtest und finales Markenlogo vorgestellt
+          - Gemeinsame 20-Sekunden-Zeitbasis, 720p H.264/AAC für schwächere Decoder
+          - Erhält alle bisherigen v1.0.77 Verbesserungen für GalaBox, Player und SmartTube
+          - Keine Änderung an Fire-TV-Lizenzen, Kunden-Playlisten, VPN-Zuweisungen und EpiScene-Backend
+          EOF
+
+      - name: Publish NEW stable release v1.0.78 with verified APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create v1.0.78 \
+            dist/EpiMediaHub_Android_v1.0.78-arm64-v8a.apk \
+            dist/EpiMediaHub_Android_v1.0.78-armeabi-v7a.apk \
+            dist/EpiMediaHub_Android_v1.0.78-universal.apk \
+            dist/SHA256SUMS.txt \
+            --target "$EXPECTED_SOURCE_COMMIT" \
+            --title "EpiMediaHub Android v1.0.78 – 20 Sekunden Funktionsintro" \
+            --notes-file dist/RELEASE_NOTES.txt \
+            --latest
+          gh release view v1.0.78 --json assets --jq '.assets[].name' > /tmp/epimedia-stable-assets.txt
+          for abi in arm64-v8a armeabi-v7a universal; do
+            grep -Fx "EpiMediaHub_Android_v1.0.78-$abi.apk" /tmp/epimedia-stable-assets.txt
+          done
+          echo 'STABLE_V1_0_78_PUBLISHED'
+
+      - name: Update the existing in-app rolling channel without losing v1.0.77
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=v0.7.0-test
+          gh release view "$TAG" >/dev/null
+          # Upload versioned assets first: prior customer release remains available.
+          for abi in arm64-v8a armeabi-v7a universal; do
+            timeout 15m gh release upload "$TAG" \
+              "dist/EpiMediaHub_Android_v1.0.78-$abi.apk" --clobber
+          done
+          gh release view "$TAG" --json assets --jq '.assets[].name' > /tmp/epimedia-rolling-assets.txt
+          for abi in arm64-v8a armeabi-v7a universal; do
+            grep -Fx "EpiMediaHub_Android_v1.0.78-$abi.apk" /tmp/epimedia-rolling-assets.txt
+          done
+          # Existing direct-Downloader alias, only after all real binaries exist.
+          timeout 15m gh release upload "$TAG" dist/EpiMediaHub_Android_v0.7.0-test.apk --clobber
+          timeout 15m gh release upload "$TAG" dist/SHA256SUMS.txt --clobber
+          timeout 15m gh release upload "$TAG" dist/android-latest.json dist/latest.json --clobber
+          gh release edit "$TAG" --title "EpiMediaHub Android v1.0.78 – EpiScene, VPN, 20s Intro" \
+            --notes-file dist/RELEASE_NOTES.txt --prerelease --draft=false
+          echo 'ROLLING_IN_APP_V1_0_78_PUBLISHED'
+
+      - name: Verify customer-visible releases and complete channel manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view v1.0.78 --json isPrerelease,isDraft,assets \
+            --jq '{prerelease:.isPrerelease,draft:.isDraft,assets:[.assets[].name]}'
+          gh release view v0.7.0-test --json isDraft,assets \
+            --jq '{draft:.isDraft,assets:[.assets[].name]}'
+          mkdir -p /tmp/epimedia-verify
+          gh release download v0.7.0-test -p android-latest.json -D /tmp/epimedia-verify --clobber
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/epimedia-verify/android-latest.json').read_text())
+          assert p['version']=='1.0.78' and p['versionCode']==1078
+          assert all(p['apks'][a]['url'].endswith(f'EpiMediaHub_Android_v1.0.78-{a}.apk')
+              for a in ('arm64-v8a','armeabi-v7a','universal'))
+          print('OFFICIAL_V1_0_78_RELEASE_AND_UPDATER_VERIFIED')
+          PY
