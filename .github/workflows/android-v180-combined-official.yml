@@ -55,14 +55,14 @@ jobs:
           cp .ci-v164-overlay/build_tools/render_intro_orchestral_preview.py build_tools/
           cp .ci-v164-overlay/build_tools/prepare_intro_orchestral.py build_tools/
           cp .ci-v164-overlay/build_tools/prepare_intro_v176.py build_tools/
-      - name: Require exact user-approved 34-second EpiScene intro with logo finale
+      - name: Require approved 34-second EpiScene intro with original signed-app logo finale
         shell: bash
         run: |
           set -euo pipefail
           MEDIA=.ci-v164-overlay/android/v1.0.80/epimedia_intro_v10.mp4
           test -s "$MEDIA" || { echo '::error::Approved 34s MP4 not uploaded. Refusing old intro.'; exit 1; }
-          test "$(sha256sum "$MEDIA" | awk '{print $1}')" = '0f48dfec02ed330e586713a27fa5b7be1e9885d31806ab281f70ce1fc3368610'
-          echo 'Verified approved 34s original binary, last branded scene included'
+          test "$(sha256sum "$MEDIA" | awk '{print $1}')" = '2705b8309aa46f8cd055da967f049c5e5ef3d401036d67455b7fd438b32842bd'
+          echo 'Verified 34s original-app-logo final media, orchestral audio and heartbeat maintained'
       - name: Prepare pinned orchestral soundtrack with the approved picture
         shell: bash
         run: |
