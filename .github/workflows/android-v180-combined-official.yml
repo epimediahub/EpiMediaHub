@@ -5,6 +5,12 @@ on:
     paths:
       - 'android/v1.0.80/epimedia_intro_v10.mp4'
   workflow_dispatch:
+    inputs:
+      release_to_customers:
+        description: 'Nur bei vollständig abgenommenen 34s-Intro-, Geräte-, Logo- und Updater-Checks'
+        type: boolean
+        required: true
+        default: false
 concurrency:
   group: epimediahub-official-player-publish
   cancel-in-progress: true
@@ -386,7 +392,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: BLOCK public updater until all original-logo and real-device QA requirements are signed off
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_to_customers == true }}
+        shell: bash
+        env:
+          INPUT_RELEASE_TO_CUSTOMERS: ${{ inputs.release_to_customers }}
+        run: |
+          set -euo pipefail
+          python3 android/v1.0.80/validate_release_gate.py
+
       - name: Stage signed and media-verified APKs for official publication
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_to_customers == true }}
         shell: bash
         run: |
           set -euo pipefail
@@ -400,6 +416,7 @@ jobs:
           (cd dist && sha256sum *.apk > SHA256SUMS.txt)
 
       - name: Verify production licence readiness and updater monotonicity
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_to_customers == true }}
         shell: bash
         run: |
           set -euo pipefail
@@ -430,6 +447,7 @@ jobs:
           fi
 
       - name: Generate stable & rolling release manifests and accurate notes
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_to_customers == true }}
         shell: bash
         run: |
           set -euo pipefail
@@ -465,6 +483,7 @@ jobs:
           EOF
 
       - name: Publish NEW stable release v1.0.80 with verified APKs
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_to_customers == true }}
         shell: bash
         run: |
           set -euo pipefail
@@ -484,6 +503,7 @@ jobs:
           echo 'STABLE_V1_0_80_PUBLISHED'
 
       - name: Update the existing in-app rolling channel without losing older signed versions
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_to_customers == true }}
         shell: bash
         run: |
           set -euo pipefail
@@ -507,6 +527,7 @@ jobs:
           echo 'ROLLING_IN_APP_V1_0_80_PUBLISHED'
 
       - name: Verify customer-visible releases and complete channel manifest
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_to_customers == true }}
         shell: bash
         run: |
           set -euo pipefail
