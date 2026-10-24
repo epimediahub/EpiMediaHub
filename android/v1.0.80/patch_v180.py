@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """v1.0.80: approved 34s EpiScene+VPN cinematic and v1.0.79 SmartTube.
 
-FAIL-CLOSED: exactly approved concept v2 is required. Never substitute the old
+FAIL-CLOSED: approved v2 with extracted ORIGINAL signed-app EpiMediaHub logo required. Never substitute the old
 20-second intro, a screenshot, a logo mockup, or a regenerated soundtrack.
-The video's final branded EpiMediaHub logo/heartbeat is preserved verbatim.
+The original signed-app EpiMediaHub logo replaces the concept mark; music and heartbeats remain unchanged.
 """
 import hashlib
 import json
@@ -15,8 +15,8 @@ from pathlib import Path
 root=Path(os.environ["PROJECT_ROOT"])
 here=Path(__file__).resolve().parent
 src=here/"epimedia_intro_v10.mp4"
-expected="0f48dfec02ed330e586713a27fa5b7be1e9885d31806ab281f70ce1fc3368610"
-if not src.is_file() or src.is_symlink() or src.stat().st_size<10_000_000:
+expected="2705b8309aa46f8cd055da967f049c5e5ef3d401036d67455b7fd438b32842bd"
+if not src.is_file() or src.is_symlink() or src.stat().st_size<5_000_000:
     raise SystemExit("STOP_APPROVED_34S_VIDEO_NOT_UPLOADED; cannot release old intro as new")
 if hashlib.sha256(src.read_bytes()).hexdigest()!=expected:
     raise SystemExit("STOP_APPROVED_34S_VIDEO_CHECKSUM_MISMATCH")
