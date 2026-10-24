@@ -1,0 +1,34 @@
+name: EpiMediaHub v181 inspect remote-control test source (diagnostics only)
+on:
+  push:
+    branches: [feature/v181-visible-smarttube-controls-real-new-intro-20261024]
+    paths:
+      - '.github/workflows/android-v181-source-diagnostics.yml'
+permissions:
+  contents: read
+jobs:
+  export-android-test-source:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 4eb73efd17b28fecbb824875137e43cede07c27f
+      - name: Extract embedded Android source for inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .diagnostics
+          cat android/source_parts/source_* | base64 -d > .diagnostics/source.tar.gz
+          test "$(sha256sum .diagnostics/source.tar.gz | awk '{print $1}')" = "192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          tar -xzf .diagnostics/source.tar.gz -C .diagnostics
+          ROOT="$(find .diagnostics -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          mkdir -p exported-tests
+          cp "$ROOT/app/src/test/java/de/epimediahub/app/ui/V124SmartTubeBrowseTest.kt" exported-tests/
+          cp "$ROOT/app/src/main/java/de/epimediahub/app/ui/V124SmartTubeBrowseLayer.kt" exported-tests/
+          echo 'SmartTube browse test sources extracted for regression fix'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-v181-SmartTube-browse-unit-tests-source
+          path: exported-tests/
+          retention-days: 3
