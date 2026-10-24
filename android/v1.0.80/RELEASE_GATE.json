@@ -1,0 +1,19 @@
+{
+  "release_approved": false,
+  "version": "1.0.80",
+  "versionCode": 1080,
+  "approved_intro_sha256": "",
+  "official_logo_reference_sha256": "",
+  "approved_intro_34s_reviewed": false,
+  "original_logo_verified_in_final_frames": false,
+  "heartbeat_audible_and_in_sync": false,
+  "episcene_explanation_verified": false,
+  "smarttube_quality_on_real_stream_verified": false,
+  "smarttube_creator_channel_navigation_verified": false,
+  "galabox_player_and_red_status_verified": false,
+  "fire_tv_playback_frequency_and_av_sync_verified": false,
+  "galabox_intro_playback_and_av_sync_verified": false,
+  "in_app_updater_signed_upgrade_verified": false,
+  "iptv_vpn_episcene_and_licensing_regression_passed": false,
+  "qa_evidence_url": ""
+}
