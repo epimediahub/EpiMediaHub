@@ -32,7 +32,8 @@ jobs:
           assert gate["official_logo_reference_sha256"] == ""
           assert all(v is False for k,v in gate.items() if k.endswith("_verified") or k.endswith("_reviewed"))
           workflow=Path(".github/workflows/android-v180-combined-official.yml").read_text()
-          guards=workflow.count("if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_to_customers == true }}")
+          guard="if: " + chr(36) + "{{ github.event_name == 'workflow_dispatch' && inputs.release_to_customers == true }}"
+          guards=workflow.count(guard)
           assert guards==7, f"Require 1 approval check + 6 protected distribution steps, got {guards}"
           assert "default: false" in workflow
           assert "python3 android/v1.0.80/validate_release_gate.py" in workflow
