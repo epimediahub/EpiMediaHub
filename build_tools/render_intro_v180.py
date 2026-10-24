@@ -111,7 +111,7 @@ def render():
         )
         audio = (
           "[0:a]atrim=duration=18,asetpts=PTS-STARTPTS[a0];"
-          "[0:a]atrim=duration=17,asetpts=PTS-STARTPTS[a1];"
+          "[4:a]atrim=duration=17,asetpts=PTS-STARTPTS[a1];"
           "[a0][a1]acrossfade=d=1:c1=tri:c2=tri,"
           "atrim=duration=34,volume=0.85[bg];"
           "[3:a]atrim=duration=34,volume=1.0[beat];"
@@ -123,7 +123,7 @@ def render():
         run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(SOURCE),
              "-loop", "1", "-framerate", "30", "-t", "14", "-i", str(temp / "earth.jpg"),
              "-loop", "1", "-framerate", "30", "-t", "5", "-i", str(temp / "logo.jpg"),
-             "-i", str(pulse), "-filter_complex", video + ";" + audio,
+             "-i", str(pulse), "-i", str(SOURCE), "-filter_complex", video + ";" + audio,
              "-map", "[vout]", "-map", "[aout]",
              "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
              "-maxrate", "2600k", "-bufsize", "5200k", "-r", "30",
