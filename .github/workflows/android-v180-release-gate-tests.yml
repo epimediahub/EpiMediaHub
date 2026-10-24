@@ -1,0 +1,56 @@
+name: EpiMediaHub v1.0.80 release safety gate checks (no distribution)
+on:
+  push:
+    branches: [feature/v180-approved-cinematic-smarttube-20261024]
+    paths:
+      - '.github/workflows/android-v180-release-gate-tests.yml'
+      - '.github/workflows/android-v180-combined-official.yml'
+      - 'android/v1.0.80/RELEASE_GATE.json'
+      - 'android/v1.0.80/validate_release_gate.py'
+      - 'android/v1.0.80/patch_v180.py'
+      - 'build_tools/render_intro_v180.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release-safety-checks:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Python source and closed release gate by default
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile android/v1.0.80/validate_release_gate.py android/v1.0.80/patch_v180.py build_tools/render_intro_v180.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          gate=json.loads(Path("android/v1.0.80/RELEASE_GATE.json").read_text())
+          assert gate["release_approved"] is False
+          assert gate["versionCode"]==1080 and gate["version"]=="1.0.80"
+          assert gate["approved_intro_sha256"] == ""
+          assert gate["official_logo_reference_sha256"] == ""
+          assert all(v is False for k,v in gate.items() if k.endswith("_verified") or k.endswith("_reviewed"))
+          workflow=Path(".github/workflows/android-v180-combined-official.yml").read_text()
+          guard="if: " + chr(36) + "{{ github.event_name == 'workflow_dispatch' && inputs.release_to_customers == true }}"
+          guards=workflow.count(guard)
+          assert guards==7, f"Require 1 approval check + 6 protected distribution steps, got {guards}"
+          assert "default: false" in workflow
+          assert "python3 android/v1.0.80/validate_release_gate.py" in workflow
+          assert 'versionCode = 1080' in Path("android/v1.0.80/patch_v180.py").read_text()
+          print("PRIVATE_RELEASE_GATE_LOCKED; no user-visible update")
+          PY
+      - name: Verify unauthorized release execution fails closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if python3 android/v1.0.80/validate_release_gate.py >/tmp/gate.out 2>&1; then
+            echo "::error::Public release unexpectedly permitted"; exit 1
+          fi
+          grep -q STOP_PUBLIC_RELEASE_REQUIRES_MANUAL_DISPATCH /tmp/gate.out
+          if GITHUB_EVENT_NAME=workflow_dispatch INPUT_RELEASE_TO_CUSTOMERS=true python3 android/v1.0.80/validate_release_gate.py >/tmp/gate-input.out 2>&1; then
+            echo "::error::Release unexpectedly permitted with no approved MP4"; exit 1
+          fi
+          grep -q STOP_RELEASE_GATE_OR_APPROVED_INTRO_MISSING /tmp/gate-input.out
+          echo "PUBLIC_RELEASE_REFUSED_UNTIL_ALL_APPROVAL_REQUIREMENTS_ARE_FULFILLED"
