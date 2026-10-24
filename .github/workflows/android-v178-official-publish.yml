@@ -50,6 +50,11 @@ jobs:
           test "$(find qa-artifacts -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 3
           du -h qa-artifacts/*
 
+      - name: Set up Java 17 required for Android SDK manager
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - name: Set up Android signature verification
         uses: android-actions/setup-android@v3
       - name: Install APK inspection toolchain
