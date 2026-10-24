@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/android-v181-smarttube-ui-only-qa.yml'
       - 'android/v1.0.81/patch_v181.py'
+      - 'android/v1.0.81/V181SmartTubeBrowseTest.kt'
 concurrency:
   group: epimediahub-v181-private-ui-source-qa
   cancel-in-progress: true
