@@ -76,7 +76,7 @@ once(
 source = player.read_text(encoding="utf-8")
 top_anchor = "        if (!browsing && controlsVisible && player != null) {"
 overlay_anchor = "        if (controlsVisible && !browsing && errorText.isBlank()) {"
-error_anchor = "        if (errorText.isNotBlank()) {"
+error_anchor = "        if (errorText.isNotBlank() && !browsing) {"
 if source.count(top_anchor) != 1 or source.count(overlay_anchor) != 1:
     raise SystemExit("STOP_V182_EXPECTED_V181_TOP_CONTROL_LAYOUT_MISSING")
 a = source.index(top_anchor)
