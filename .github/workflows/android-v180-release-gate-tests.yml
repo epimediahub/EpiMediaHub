@@ -8,6 +8,7 @@ on:
       - 'android/v1.0.80/RELEASE_GATE.json'
       - 'android/v1.0.80/validate_release_gate.py'
       - 'android/v1.0.80/patch_v180.py'
+      - 'build_tools/render_intro_v180.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile android/v1.0.80/validate_release_gate.py android/v1.0.80/patch_v180.py
+          python3 -m py_compile android/v1.0.80/validate_release_gate.py android/v1.0.80/patch_v180.py build_tools/render_intro_v180.py
           python3 - <<'PY'
           import json
           from pathlib import Path
