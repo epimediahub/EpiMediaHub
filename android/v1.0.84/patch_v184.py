@@ -183,6 +183,45 @@ once(browse,
                 }
                 event.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU -> {""")
 
+
+# v181 correctly stopped seek while remote was navigating focused buttons, but
+# changed requirements now demand +/-10s when the mask is HIDDEN. Keep the
+# visible-controls and suggestion-shelf focus safeguards, and update the one
+# superseded assertion instead of suppressing the navigation test suite.
+test_browse = tests / "V124SmartTubeBrowseTest.kt"
+once(test_browse,
+     """    @Test fun firstOkAndArrowsOpenPlayerMaskWithoutUnexpectedSeekOrPause(){
+        launch()
+        press(Key.Enter)
+        assertTrue("OK must show controls", controlsShown)
+        assertEquals(0,toggled);assertEquals(0L,seeked)
+        compose.runOnIdle{back.onBackPressed()};settle()
+        assertFalse("Back must hide controls",controlsShown);assertEquals(0,exited)
+        press(Key.DirectionLeft)
+        assertTrue("Left must show controls",controlsShown);assertEquals(0L,seeked)
+        compose.runOnIdle{back.onBackPressed()};settle()
+        press(Key.DirectionRight)
+        assertTrue("Right must show controls",controlsShown);assertEquals(0L,seeked)
+        assertEquals(0,toggled)
+    }""",
+     """    @Test fun fullscreenDpadSeeksTenSecondsAndControlsStillOwnFocus(){
+        launch()
+        press(Key.Enter)
+        assertTrue("OK must show controls", controlsShown)
+        assertEquals(0,toggled);assertEquals(0L,seeked)
+        compose.runOnIdle{back.onBackPressed()};settle()
+        assertFalse("Back must hide controls",controlsShown);assertEquals(0,exited)
+        press(Key.DirectionLeft)
+        assertEquals("Left should rewind when player controls are hidden",-10_000L,seeked)
+        press(Key.DirectionRight)
+        assertEquals("Right should fast-forward when controls are hidden",0L,seeked)
+        press(Key.Enter)
+        assertTrue(controlsShown)
+        press(Key.DirectionLeft)
+        assertEquals("Focus navigation must not seek behind visible buttons",0L,seeked)
+        assertEquals(0,toggled)
+    }""")
+
 assert 'v184ReturnPlayback = activePlayback' in shell.read_text()
 assert shell.read_text().count("returnFromCreator()") == 3
 assert 'V184SmartTubeResume.read' in player.read_text()
