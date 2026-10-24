@@ -19,6 +19,8 @@ jobs:
       TESTED_HEAD: 789ae3632c515431d24efc20d772fb2e0961019a
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 10
       - name: Confirm exact same app source as tested and signed APK run
         shell: bash
         run: |
