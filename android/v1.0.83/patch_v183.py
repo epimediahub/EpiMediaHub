@@ -65,7 +65,7 @@ finish = '                if (!video.live) {'
 a = source.index(start_tag)
 b = source.index(finish, a)
 old_identity = source[a:b]
-if '"▶  " + video.author' not in old_identity or 'onCreatorChannel' not in old_identity:
+if '"▶  " + video.author' not in old_identity:
     raise SystemExit("STOP_V183_OLD_CHANNEL_IDENTITY_NOT_FOUND")
 new_identity = '''                            .testTag("smarttube-channel-identity")
                     ) {
