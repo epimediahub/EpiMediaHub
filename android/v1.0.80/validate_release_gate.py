@@ -39,6 +39,9 @@ def validate():
         if gate.get(key) is not True:
             raise ValueError("STOP_UNVERIFIED_RELEASE_REQUIREMENT: " + key)
     digest = hashlib.sha256(VIDEO.read_bytes()).hexdigest()
+    # Earlier concept-video digest was created before the genuine signed-app logo was proven.
+    if digest == "2705b8309aa46f8cd055da967f049c5e5ef3d401036d67455b7fd438b32842bd":
+        raise ValueError("STOP_CONCEPT_LOGO_NOT_ACCEPTED_AS_ORIGINAL")
     if gate.get("approved_intro_sha256") != digest:
         raise ValueError("STOP_APPROVED_VIDEO_HASH_NOT_MATCHED")
     logo_ref = gate.get("official_logo_reference_sha256", "")
