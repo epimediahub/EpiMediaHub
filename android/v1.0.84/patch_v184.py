@@ -102,19 +102,16 @@ once(player,
                 lastResumeSaveAt = now
             }""")
 once(player,
-     """    BackHandler {
-        runCatching { player?.stop() }
-        onBack()
-    }""",
-     """    BackHandler {
-        // Save BEFORE stop, otherwise ExoPlayer may reset position to zero.
-        if (!video.live && player != null) {
-            V184SmartTubeResume.save(context, historyAccountKey, video.videoId,
-                player.currentPosition, player.duration)
-        }
-        runCatching { player?.stop() }
-        onBack()
-    }""")
+     "        onExit = { runCatching { player?.stop() }; onBack() }",
+     """        onExit = {
+            // Save BEFORE stop, otherwise ExoPlayer may reset position to zero.
+            if (!video.live && player != null) {
+                V184SmartTubeResume.save(context, historyAccountKey, video.videoId,
+                    player.currentPosition, player.duration)
+            }
+            runCatching { player?.stop() }
+            onBack()
+        }""")
 once(player,
      """                        endDispatched = true
                         reportProgress(video,""",
