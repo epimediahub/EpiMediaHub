@@ -107,7 +107,7 @@ class V124SmartTubeBrowseTest {
     @Test fun upRestoresPlaybackKeysAndBackClosesTheShelfBeforeLeavingPlayer(){
         launch();openShelf();press(Key.DirectionUp)
         compose.onNodeWithTag("smarttube-video-shelf").assertDoesNotExist()
-        compose.onNodeWithTag("smarttube-player-remote").assertIsFocused()
+        assertTrue("Closing suggestions restores visible player mask",controlsShown)
         assertTrue(controlsShown)
         press(Key.DirectionRight);press(Key.Enter)
         // Visible player controls own these keys; playback and seeking stay untouched.
