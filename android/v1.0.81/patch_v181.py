@@ -258,4 +258,5 @@ if video_stream["codec_name"] != "h264" or audio_stream["codec_name"] != "aac":
     raise SystemExit("STOP_V181_APPROVED_NEW_34S_CODECS_MISMATCH")
 shutil.copy2(approved, root / "app/src/main/res/raw/epimedia_intro_v5.mp4")
 print("V181_APPROVED_NEW_EPI_SCENE_34S_VIDEO_INCLUDED_UNCROPPED", sha256)
-\nprint("V181_INTRO_NOT_REPLACED_WITH_OLD_V180_CROPPED_VIDEO")
+
+print("V181_INTRO_NOT_REPLACED_WITH_OLD_V180_CROPPED_VIDEO")
