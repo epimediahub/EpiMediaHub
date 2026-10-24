@@ -144,7 +144,17 @@ jobs:
           python3 android/v1.0.78/patch_v178.py
           python3 android/v1.0.79/patch_v179.py
           python3 android/v1.0.80/patch_v180.py
+          mkdir -p qa-v181-baseline
+          cp "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V112SmartTubePlayer.kt" qa-v181-baseline/
+          cp "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V124SmartTubeBrowseLayer.kt" qa-v181-baseline/
           EPIMEDIA_V181_PRIVATE_SOURCE_ONLY=1 python3 android/v1.0.81/patch_v181.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: EpiMediaHub-v181-actual-SmartTube-player-baseline
+          path: qa-v181-baseline/
+          retention-days: 4
+          if-no-files-found: warn
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
