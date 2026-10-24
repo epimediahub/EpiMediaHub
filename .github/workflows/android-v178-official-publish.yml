@@ -55,13 +55,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Set up Android signature verification
-        uses: android-actions/setup-android@v3
       - name: Install APK inspection toolchain
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" >/dev/null
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" >/dev/null
 
       - name: Verify all three APK identities and signatures
         shell: bash
