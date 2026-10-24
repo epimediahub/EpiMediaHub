@@ -1,0 +1,390 @@
+name: EpiMediaHub v1.0.81 SmartTube remote-control source QA ONLY - no customer release
+on:
+  push:
+    branches: [feature/v181-visible-smarttube-controls-real-new-intro-20261024]
+    paths:
+      - '.github/workflows/android-v181-smarttube-ui-only-qa.yml'
+      - 'android/v1.0.81/patch_v181.py'
+concurrency:
+  group: epimediahub-v181-private-ui-source-qa
+  cancel-in-progress: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  compile-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+    env:
+      EPIMEDIAHUB_OFFICIAL_CANDIDATE: '1'
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 4eb73efd17b28fecbb824875137e43cede07c27f
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .ci-v164-overlay
+      - name: Add v163 candidate files
+        run: |
+          cp -a .ci-v164-overlay/android/v1.0.61 android/v1.0.61
+          cp -a .ci-v164-overlay/android/v1.0.62 android/v1.0.62
+          cp -a .ci-v164-overlay/android/v1.0.63 android/v1.0.63
+          cp -a .ci-v164-overlay/android/v1.0.64 android/v1.0.64
+          cp -a .ci-v164-overlay/android/v1.0.65 android/v1.0.65
+          cp -a .ci-v164-overlay/android/v1.0.66 android/v1.0.66
+          cp -a .ci-v164-overlay/android/v1.0.67 android/v1.0.67
+          cp -a .ci-v164-overlay/android/v1.0.68 android/v1.0.68
+          cp -a .ci-v164-overlay/android/v1.0.69 android/v1.0.69
+          cp -a .ci-v164-overlay/android/v1.0.70 android/v1.0.70
+          cp -a .ci-v164-overlay/android/v1.0.71 android/v1.0.71
+          cp -a .ci-v164-overlay/android/v1.0.72 android/v1.0.72
+          cp -a .ci-v164-overlay/android/v1.0.73 android/v1.0.73
+          cp -a .ci-v164-overlay/android/v1.0.74 android/v1.0.74
+          cp -a .ci-v164-overlay/android/v1.0.75 android/v1.0.75
+          cp -a .ci-v164-overlay/android/v1.0.76 android/v1.0.76
+          cp -a .ci-v164-overlay/android/v1.0.78 android/v1.0.78
+          cp -a .ci-v164-overlay/android/v1.0.79 android/v1.0.79
+          cp -a .ci-v164-overlay/android/v1.0.80 android/v1.0.80
+          cp -a .ci-v164-overlay/android/v1.0.81 android/v1.0.81
+          cp .ci-v164-overlay/build_tools/prepare_intro_v178.py build_tools/
+          cp .ci-v164-overlay/build_tools/test_prepare_intro_v178.py build_tools/
+          cp .ci-v164-overlay/build_tools/render_intro_synced.py build_tools/
+          cp .ci-v164-overlay/build_tools/prepare_intro_synced.py build_tools/
+          cp .ci-v164-overlay/build_tools/render_intro_orchestral_preview.py build_tools/
+          cp .ci-v164-overlay/build_tools/prepare_intro_orchestral.py build_tools/
+          cp .ci-v164-overlay/build_tools/prepare_intro_v176.py build_tools/
+          cp .ci-v164-overlay/build_tools/render_intro_v180.py build_tools/
+      - name: Require reproducible candidate intro renderer
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .ci-v164-overlay/build_tools/render_intro_v180.py
+          echo 'TEMPORARY QA ONLY: source compile with old film, cannot be released; new v2 intro required for customer build'
+      - name: Prepare pinned orchestral soundtrack with the approved picture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check numpy==1.26.4 scipy==1.13.1
+          command -v ffmpeg >/dev/null || { sudo apt-get update; sudo apt-get install -y ffmpeg; }
+          python3 build_tools/prepare_intro_orchestral.py
+          python3 build_tools/prepare_intro_synced.py
+          python3 build_tools/prepare_intro_v176.py
+          python3 -m unittest discover -s build_tools -p test_prepare_intro_v178.py -v
+          python3 build_tools/prepare_intro_v178.py
+          python3 build_tools/render_intro_v180.py
+      - name: Reconstruct verified source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* | base64 -d > .ci-android/source.tar.gz
+          test "$(sha256sum .ci-android/source.tar.gz | awk '{print $1}')" = "192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+      - name: Pin Android toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+      - name: Apply v149 through v163 patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash build_tools/install_android_v1033_source.sh
+          python3 android/v1.0.34-vpn/patch_wireguard_spike.py
+          python3 android/v1.0.34-vpn/patch_playlist_routing.py
+          for v in 149 150 151 152 153 154 155 156 157 158 159 160 161 162 163; do
+            python3 "android/v1.0.$((10#$v - 100))/patch_v$v.py"
+          done
+      - name: Record reconstructed v163 player source for lifecycle inspection
+        shell: bash
+        run: |
+          mkdir -p qa-source
+          cp "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/MainViewModel.kt" qa-source/
+          cp "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/EpiMediaHubApp.kt" qa-source/
+          cp "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/PlayerScreen.kt" qa-source/
+          cp "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt" qa-source/
+          cp "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/XtreamClient.kt" qa-source/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-v173-galabox-vpn-private-baseline-source
+          path: qa-source/
+          retention-days: 7
+      - name: Apply v164 retained playback and restore v166 EPG
+        run: |
+          python3 android/v1.0.64/patch_v164.py
+          python3 android/v1.0.65/patch_v165.py
+          python3 android/v1.0.66/patch_v166.py
+          python3 android/v1.0.67/patch_v167.py
+          python3 android/v1.0.68/patch_v168.py
+          python3 android/v1.0.69/patch_v169.py
+          python3 android/v1.0.70/patch_v170.py
+          python3 android/v1.0.71/patch_v171.py
+          python3 android/v1.0.72/patch_v172.py
+          python3 android/v1.0.73/patch_v173.py
+          python3 android/v1.0.74/patch_v174.py
+          python3 android/v1.0.75/patch_v175.py
+          python3 android/v1.0.76/patch_v176.py
+          python3 android/v1.0.78/patch_v178.py
+          python3 android/v1.0.79/patch_v179.py
+          python3 android/v1.0.80/patch_v180.py
+          EPIMEDIA_V181_PRIVATE_SOURCE_ONLY=1 python3 android/v1.0.81/patch_v181.py
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Restore Android audio native cache
+        id: audio-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.PROJECT_ROOT }}/ffmpeg-audio/src/main/jni/ffmpeg/android-libs
+            ${{ env.PROJECT_ROOT }}/ffmpeg-6.1.6.tar.xz
+          key: audio-ffmpeg-6.1.6-ndk26b-api25-${{ runner.os }}-${{ hashFiles('build_tools/build_android_audio_v123.sh', 'android/v1.0.23/upstream.json') }}
+      - name: Prepare audio-only Android native dependencies
+        run: bash build_tools/build_android_audio_v123.sh
+      - name: Configure official signing from repository secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          KEYSTORE="$RUNNER_TEMP/epimediahub-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias epimediahub > /dev/null
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_ROOT'])/'app/build.gradle.kts'
+          s=p.read_text()
+          # The actual reconstructed Gradle DSL may omit buildTypes entirely.
+          # Add an explicit release signing configuration to the android extension.
+          # Do not guess indentation or depend on legacy release {} blocks.
+          anchor='android {\n'
+          if s.count(anchor)<1: raise SystemExit('Android DSL block missing')
+          # The project intentionally contains two android {} blocks (release optimization override).
+          # Inject into the first one only; both configure the same AGP extension.
+          if 'signingConfigs {' in s or 'signingConfig = ' in s:
+              raise SystemExit('Unexpected existing signing configuration; refusing to override')
+          signing='''    signingConfigs {
+              create("release") {
+                  storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))
+                  storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                  keyAlias = "epimediahub"
+                  keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+              }
+          }
+          buildTypes {
+              getByName("release") {
+                  signingConfig = signingConfigs.getByName("release")
+              }
+          }
+
+          '''
+          s=s.replace(anchor,anchor+signing,1)
+          p.write_text(s)
+          print('Official release signing bound in android extension (no buildTypes assumptions)')
+          PY
+      - name: Check official v1.0.66 Kotlin compilation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          gradle :app:compileDebugKotlin --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+      - name: Run complete Android unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          # The legacy V140 loopback-speed-test sometimes races with its own
+          # local server and throws IndexOutOfBoundsException during teardown.
+          # Re-run the ENTIRE unit suite once ONLY for that single known flaky
+          # test; any other failure, or a second failure, blocks publication.
+          first_log="$RUNNER_TEMP/v166-unit-first-attempt.log"
+          if gradle :app:testDebugUnitTest --no-daemon --stacktrace -Dorg.gradle.workers.max=2 2>&1 | tee "$first_log"; then
+            echo 'Complete Android test suite passed.'
+          elif grep -Eq 'V140SpeedTransferTest > .* FAILED' "$first_log" && \
+               grep -Eq '[0-9]+ tests completed, 1 failed' "$first_log"; then
+            echo '::warning::Only V140SpeedTransferTest failed (known local test-server race); repeating the COMPLETE test suite exactly once.'
+            gradle :app:testDebugUnitTest --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+          else
+            echo '::error::Android unit tests failed; no publishing and no unrelated failures concealed.'
+            exit 1
+          fi
+      - name: Assemble official signed APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          gradle :app:assembleRelease --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+      - name: Verify official package and signing identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-artifacts
+          RELEASE="$PROJECT_ROOT/app/build/outputs/apk/release"
+          for abi in arm64-v8a armeabi-v7a universal; do
+            src="$RELEASE/app-$abi-release.apk"
+            test -s "$src"
+            info="$RUNNER_TEMP/$abi-badging.txt"
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$src" > "$info"
+            grep -F "package: name='de.epimediahub.app'" "$info"
+            grep -F "versionCode='1081'" "$info"
+            grep -F "versionName='1.0.81'" "$info"
+            signature="$RUNNER_TEMP/$abi-signature.txt"
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$src" > "$signature"
+            cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$signature" | tr '[:lower:]' '[:upper:]')"
+            test "$cert" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+            cp "$src" "qa-artifacts/EpiMediaHub-Android-v1.0.81-UI_ONLY_NOT_RELEASABLE-$abi.apk"
+          done
+          (cd qa-artifacts && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Verify GalaBox isolated VPN path, hidden player debug, and intact Fire TV video cadence
+        run: |
+          set -euo pipefail
+          ROOT="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app"
+          test "$(grep -Fc 'V167HistoryIdentity.key(item)' "$ROOT/data/PrefsRepository.kt")" -eq 1
+          grep -Fq 'list.take(200)' "$ROOT/data/PrefsRepository.kt"
+          grep -Fq 'CHANGE_FRAME_RATE_ALWAYS' "$ROOT/ui/V121VodSurface.kt"
+          grep -Fq 'preferredDisplayModeId = target.id' "$ROOT/ui/V121VodSurface.kt"
+          grep -Fq 'if (!television || (cinemaVod && !enabled) || (!cinemaVod && !liveEnabled))' "$ROOT/ui/V121VodSurface.kt"
+          grep -Fq 'cinemaVod = true' "$ROOT/ui/V116VodPlayer.kt"
+          grep -Fq 'displayLease.restore()' "$ROOT/ui/V121VodSurface.kt"
+          grep -Fq 'V169CinemaModePolicy.matchingMode' "$ROOT/ui/V121VodSurface.kt"
+          grep -Fq 'cinema_allow_1080p_fallback' "$ROOT/ui/V121VodSurface.kt"
+          grep -Fq 'V170LiveCadencePolicy.matchingMode' "$ROOT/ui/V121VodSurface.kt"
+          grep -Fq 'match_live_frame_rate' "$ROOT/ui/V121VodSurface.kt"
+          grep -Fq 'if (!cinemaVod)' "$ROOT/ui/V121VodSurface.kt"
+          grep -Fq 'outroSkipFocus' "$ROOT/ui/V115PlayerChrome.kt"
+          grep -Fq 'outroNextFocus' "$ROOT/ui/V115PlayerChrome.kt"
+          grep -Fq '&& !nextVisible && rootFocused' "$ROOT/ui/V115PlayerChrome.kt"
+          grep -Fq 'focusProperties { right = outroNextFocus }' "$ROOT/ui/V115PlayerChrome.kt"
+          grep -Fq 'if (dialog == "info") V122PlaybackInfoDialog' "$ROOT/ui/V115PlayerChrome.kt"
+          grep -Fq 'onInfo = { dialog = "info" }' "$ROOT/ui/V115PlayerChrome.kt"
+          ! grep -Fq 'Text("Player / Diagnose")' "$ROOT/ui/PlayerScreen.kt"
+          ! grep -Fq 'if (!controls && next != null && active.any { it.kind == V115SegmentKind.OUTRO }' "$ROOT/ui/V115PlayerChrome.kt"
+          grep -Fq 'val deadline = SystemClock.elapsedRealtime() + 10_000' "$ROOT/vpn/V140VpnLossMonitor.kt"
+          grep -Fq 'kein Direkt-Fallback' "$ROOT/vpn/V140VpnLossMonitor.kt"
+          grep -Fq 'V168VlcVodPlayer(' "$ROOT/ui/PlayerScreen.kt"
+          ! grep -Fq 'Player / Diagnose' "$ROOT/ui/PlayerScreen.kt"
+          grep -Fq 'V173GalaBoxKeyCompat.enabled(context)' "$ROOT/vpn/V142VpnPrivateKeyStore.kt"
+          grep -Fq 'V173GalaBoxKeyCompat.PROFILE_ALIAS' "$ROOT/vpn/V139VpnEncryptedProfileStore.kt"
+          grep -Fq 'V173GalaBoxKeyCompat.supported(context)' "$ROOT/vpn/V141VpnSettings.kt"
+          grep -Fq 'manufacturer.contains("amazon"' "$ROOT/vpn/V173GalaBoxKeyCompat.kt"
+          grep -Fq 'ENCRYPTION_PADDING_RSA_OAEP' "$ROOT/vpn/V173GalaBoxKeyCompat.kt"
+          grep -Fq 'AES/GCM/NoPadding' "$ROOT/vpn/V173GalaBoxKeyCompat.kt"
+          ! grep -Fq 'VPN 1 Jahr' "$ROOT/vpn/V173GalaBoxKeyCompat.kt"
+          grep -Fq 'V174GalaBoxKeystoreProbe.summary(context)' "$ROOT/vpn/V141VpnSettings.kt"
+          grep -Fq 'AndroidKeyStore AES-128 GCM' "$ROOT/vpn/V174GalaBoxKeystoreProbe.kt"
+          grep -Fq 'temporaryKeyStoreAlias' "$ROOT/vpn/V174GalaBoxKeystoreProbe.kt"
+          grep -Fq 'V175GalaBoxServerVault.open(context, "identity", raw)' "$ROOT/vpn/V142VpnPrivateKeyStore.kt"
+          grep -Fq 'V175GalaBoxServerVault.open(context, "profile", input)' "$ROOT/vpn/V139VpnEncryptedProfileStore.kt"
+          grep -Fq 'V173GalaBoxKeyCompat.enabled(context)' "$ROOT/vpn/V175GalaBoxServerVault.kt"
+          grep -Fq 'https://api.epimediahub.com' "$ROOT/vpn/V175GalaBoxServerVault.kt"
+          grep -Fq 'AES/GCM/NoPadding' "$ROOT/vpn/V175GalaBoxServerVault.kt"
+          grep -Fq 'KEYCODE_MENU' "$ROOT/ui/V168VlcVodPlayer.kt"
+          grep -Fq 'V176SmartTubeQuality.supportedHeights' "$ROOT/ui/V112SmartTubePlayer.kt"
+          grep -Fq 'setMaxVideoSize' "$ROOT/ui/V176SmartTubeQuality.kt"
+          grep -Fq 'V176SmartTubeQualityDialog' "$ROOT/ui/V112SmartTubePlayer.kt"
+      - name: Verify performance-encoded single-timeline intro through APK resource IDs
+        shell: bash
+        run: |
+          python3 - <<'PYINTRO'
+          import hashlib, os, re, subprocess, zipfile
+          from pathlib import Path
+          media = Path('android/v1.0.80/epimedia_intro_v10.mp4')
+          expected = hashlib.sha256(media.read_bytes()).hexdigest()
+          expected_size = media.stat().st_size
+          project=Path(os.environ['PROJECT_ROOT'])
+          ids=set()
+          for symbols in (project/'app/build/intermediates').rglob('R.txt'):
+              if 'release' in symbols.parts:
+                  ids.update(re.findall(r'(?m)^int raw epimedia_intro_v5 (0x[0-9a-fA-F]+)\s*$',symbols.read_text()))
+          assert len(ids)==1, ('Expected one release resource ID',sorted(ids))
+          resource_id=next(iter(ids)).lower()
+          aapt2=Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0/aapt2'
+          apks=sorted(Path('qa-artifacts').glob('*.apk'))
+          assert len(apks)==3
+          for apk in apks:
+              with zipfile.ZipFile(apk) as archive:
+                  matches=[info.filename for info in archive.infolist()
+                      if info.file_size==expected_size and hashlib.sha256(archive.read(info)).hexdigest()==expected]
+              assert len(matches)==1, (apk.name,'Exact orchestral media missing or duplicated',matches)
+              resources=subprocess.check_output([str(aapt2),'dump','resources',str(apk)],text=True)
+              blocks=re.findall(r'(?ms)^\s*resource\s+(0x[0-9a-fA-F]+)\b(.*?)(?=^\s*resource\s+0x|\Z)',resources)
+              mappings=[body for rid,body in blocks if rid.lower()==resource_id]
+              assert len(mappings)==1 and matches[0] in mappings[0], (apk.name,resource_id,matches)
+              print(apk.name,'UI-ONLY OLD 34s film verified for source compilation, NOT RELEASABLE:',resource_id,'->',matches[0])
+          PYINTRO
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: EpiMediaHub-v181-UI_ONLY_NOT_RELEASABLE-smarttube-remote
+          path: qa-artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: EpiMediaHub-v181-UI_ONLY-player-ui-verification
+          path: ${{ env.PROJECT_ROOT }}/app/build/qa/*.png
+          retention-days: 14
+          if-no-files-found: warn
+
+
+      - name: Verify 34-second cinematic transport and feature cards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYINTRO'
+          import json
+          import subprocess
+          from pathlib import Path
+          media=Path('android/v1.0.80/epimedia_intro_v10.mp4')
+          probe=json.loads(subprocess.check_output(['ffprobe','-v','error',
+              '-show_format','-show_streams','-of','json',str(media)],text=True))
+          assert abs(float(probe['format']['duration'])-34)<.08, 'Intro not exactly 34s'
+          video=next(s for s in probe['streams'] if s['codec_type']=='video')
+          audio=next(s for s in probe['streams'] if s['codec_type']=='audio')
+          assert video['width']==1280 and video['height']==720
+          assert video['codec_name']=='h264' and audio['codec_name']=='aac'
+          assert abs(float(video.get('start_time','0')))<.05
+          assert abs(float(audio.get('start_time','0')))<.05
+          print('UI ONLY SOURCE CHECK: old film is not approved for v181 release')
+          PYINTRO
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: EpiMediaHub-v181-UI_ONLY-old-media-NOT_NEW_INTRO
+          path: android/v1.0.80/epimedia_intro_v10.mp4
+          if-no-files-found: warn
+          retention-days: 14
+
