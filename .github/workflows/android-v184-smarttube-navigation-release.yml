@@ -484,7 +484,7 @@ jobs:
                'EpiMediaHub-Logo im Finale, unveraenderter v2-Tonspur; '
                'SmartTube: Echter Kanalzugang, Kanalbild, Abonnentenanzahl und Kommentare direkt im Player. '
                'Vom Eigentümer zur praktischen Fire-TV-/GalaBox-Pruefung freigegeben.')
-          data={'version':'1.0.84','versionCode':1083,'notes':msg,'apks':apks}
+          data={'version':'1.0.84','versionCode':1084,'notes':msg,'apks':apks}
           for name in ('android-latest.json','latest.json'):
               (Path('dist')/name).write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
           PY
@@ -547,7 +547,7 @@ jobs:
           import json
           from pathlib import Path
           data=json.loads(Path('public-verify/android-latest.json').read_text())
-          assert data['version']=='1.0.84' and data['versionCode']==1083
+          assert data['version']=='1.0.84' and data['versionCode']==1084
           for abi in ('arm64-v8a','armeabi-v7a','universal'):
               assert data['apks'][abi]['url'].endswith(f'EpiMediaHub_Android_v1.0.84-{abi}.apk')
           print('V184_IN_APP_UPDATER_VERIFIED')
