@@ -3,7 +3,9 @@ on:
   push:
     branches: [feature/v180-approved-cinematic-smarttube-20261024]
     paths:
-      - 'android/v1.0.80/epimedia_intro_v10.mp4'
+      - 'build_tools/render_intro_v180.py'
+      - 'android/v1.0.80/patch_v180.py'
+      - '.github/workflows/android-v180-combined-official.yml'
   workflow_dispatch:
     inputs:
       release_to_customers:
@@ -61,14 +63,13 @@ jobs:
           cp .ci-v164-overlay/build_tools/render_intro_orchestral_preview.py build_tools/
           cp .ci-v164-overlay/build_tools/prepare_intro_orchestral.py build_tools/
           cp .ci-v164-overlay/build_tools/prepare_intro_v176.py build_tools/
-      - name: Require approved 34-second EpiScene intro with original signed-app logo finale
+          cp .ci-v164-overlay/build_tools/render_intro_v180.py build_tools/
+      - name: Require reproducible candidate intro renderer
         shell: bash
         run: |
           set -euo pipefail
-          MEDIA=.ci-v164-overlay/android/v1.0.80/epimedia_intro_v10.mp4
-          test -s "$MEDIA" || { echo '::error::Approved 34s MP4 not uploaded. Refusing old intro.'; exit 1; }
-          test "$(sha256sum "$MEDIA" | awk '{print $1}')" = '2705b8309aa46f8cd055da967f049c5e5ef3d401036d67455b7fd438b32842bd'
-          echo 'Verified 34s original-app-logo final media, orchestral audio and heartbeat maintained'
+          test -s .ci-v164-overlay/build_tools/render_intro_v180.py
+          echo 'Render QA cinematic from existing original-logo signed-release video'
       - name: Prepare pinned orchestral soundtrack with the approved picture
         shell: bash
         run: |
@@ -80,6 +81,7 @@ jobs:
           python3 build_tools/prepare_intro_v176.py
           python3 -m unittest discover -s build_tools -p test_prepare_intro_v178.py -v
           python3 build_tools/prepare_intro_v178.py
+          python3 build_tools/render_intro_v180.py
       - name: Reconstruct verified source
         shell: bash
         run: |
@@ -345,12 +347,12 @@ jobs:
               blocks=re.findall(r'(?ms)^\s*resource\s+(0x[0-9a-fA-F]+)\b(.*?)(?=^\s*resource\s+0x|\Z)',resources)
               mappings=[body for rid,body in blocks if rid.lower()==resource_id]
               assert len(mappings)==1 and matches[0] in mappings[0], (apk.name,resource_id,matches)
-              print(apk.name,'34-second approved EpiScene cinematic logo intro verified:',resource_id,'->',matches[0])
+              print(apk.name,'34-second candidate EpiScene cinematic logo intro packaged:',resource_id,'->',matches[0])
           PYINTRO
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: EpiMediaHub-v180-approved-34s-logo-smarttube-signed-qa
+          name: EpiMediaHub-v180-34s-candidate-smarttube-signed-qa
           path: qa-artifacts/
           retention-days: 14
           if-no-files-found: warn
@@ -382,12 +384,12 @@ jobs:
           assert video['codec_name']=='h264' and audio['codec_name']=='aac'
           assert abs(float(video.get('start_time','0')))<.05
           assert abs(float(audio.get('start_time','0')))<.05
-          print('34-second user-approved EpiScene intro/heartbeats verified; official release gated by signed QA')
+          print('34-second render candidate media transport verified; official release gated by physical device QA')
           PYINTRO
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: EpiMediaHub-v180-approved-34s-video-reference
+          name: EpiMediaHub-v180-34s-candidate-video-reference
           path: android/v1.0.80/epimedia_intro_v10.mp4
           if-no-files-found: warn
           retention-days: 14
