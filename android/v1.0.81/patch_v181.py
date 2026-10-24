@@ -154,7 +154,7 @@ once(player,
         delay(100L) // Compose must attach the remote-focus target first.
         runCatching {
             if (controlsVisible) v181QualityFocus.requestFocus()
-            # Hidden-mask focus returns to V124 remote input layer.
+            // Hidden-mask focus returns to V124 remote input layer.
         }
     }''')
 once(player,
