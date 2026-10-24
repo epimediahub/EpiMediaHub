@@ -83,10 +83,8 @@ once(shell,
 # Opening another video from the creator page intentionally drops the old
 # return target; its progress was already saved when it was detached.
 once(shell,
-     """                    resolvingId = null
-                    activePlayback = video to playback""",
-     """                    resolvingId = null
-                    if (v179ChannelName != null) {
+     "                    activePlayback = video to playback",
+     """                    if (v179ChannelName != null) {
                         v184ReturnPlayback = null
                         v184ReturnRows = emptyList()
                     }
