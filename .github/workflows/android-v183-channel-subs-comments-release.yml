@@ -330,7 +330,7 @@ jobs:
           grep -Fq 'testTag("smarttube-quality-button")' "$P"
           grep -Fq 'testTag("smarttube-channel-button")' "$P"
           grep -Fq 'testTag("smarttube-more-videos-button")' "$P"
-          grep -Fq 'browseRequest = v183BrowseRequest' "$P"
+          grep -Fq 'browseRequest = v182BrowseRequest' "$P"
           grep -Fq 'if (browseRequest > 0) browsing = true' "$B"
           ! grep -Fq 'Alignment.TopEnd).padding(top = 14.dp, end = 20.dp)' "$P"
           test "$(grep -Fc 'testTag("smarttube-quality-button")' "$P")" -eq 1
