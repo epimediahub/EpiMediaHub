@@ -190,9 +190,13 @@ bottom_bar = """
         }
 
 """
-if source.count(error_anchor) != 1:
-    raise SystemExit("STOP_V182_ERROR_OVERLAY_ANCHOR_DRIFT")
-source = source.replace(error_anchor, bottom_bar + error_anchor, 1)
+# Several playback failure helpers use this condition. The bottom bar belongs
+# specifically AFTER the controls/timeline overlay, before its error Surface.
+overlay_pos = source.index(overlay_anchor)
+error_pos = source.find(error_anchor, overlay_pos + len(overlay_anchor))
+if error_pos < 0:
+    raise SystemExit("STOP_V182_PLAYER_ERROR_SURFACE_NOT_FOUND")
+source = source[:error_pos] + bottom_bar + source[error_pos:]
 if source.index("AndroidView(") > source.index('testTag("smarttube-bottom-actions")'):
     raise SystemExit("STOP_V182_BOTTOM_ACTIONS_BEHIND_SURFACE")
 if source.count('testTag("smarttube-quality-button")') != 1:
