@@ -140,7 +140,7 @@ jobs:
             dist/EpiMediaHub_Android_v1.0.83-armeabi-v7a.apk \
             dist/EpiMediaHub_Android_v1.0.83-universal.apk \
             dist/SHA256SUMS.txt \
-            --target "$TESTED_HEAD" \
+            --target "$GITHUB_SHA" \
             --title "EpiMediaHub v1.0.83 – YouTube-Kanal, Abonnenten und Kommentare" \
             --notes-file dist/RELEASE_NOTES.txt --latest
       - name: Publish v1.0.83 through existing in-app updater
