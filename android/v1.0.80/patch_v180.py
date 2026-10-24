@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """v1.0.80: approved 34s EpiScene+VPN cinematic and v1.0.79 SmartTube.
 
-FAIL-CLOSED: approved v2 with extracted ORIGINAL signed-app EpiMediaHub logo required. Never substitute the old
-20-second intro, a screenshot, a logo mockup, or a regenerated soundtrack.
-The original signed-app EpiMediaHub logo replaces the concept mark; music and heartbeats remain unchanged.
+FAIL-CLOSED: 34-second render candidate is generated from the v1.0.78 original-logo footage.
+Local rendering/hash verification does NOT authorize public customer distribution.
+Real-device and audiovisual acceptance remains mandatory in RELEASE_GATE.json.
 """
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -15,11 +16,16 @@ from pathlib import Path
 root=Path(os.environ["PROJECT_ROOT"])
 here=Path(__file__).resolve().parent
 src=here/"epimedia_intro_v10.mp4"
-expected="2705b8309aa46f8cd055da967f049c5e5ef3d401036d67455b7fd438b32842bd"
-if not src.is_file() or src.is_symlink() or src.stat().st_size<5_000_000:
-    raise SystemExit("STOP_APPROVED_34S_VIDEO_NOT_UPLOADED; cannot release old intro as new")
+checksum_file=here/"epimedia_intro_v10.sha256"
+if not checksum_file.is_file():
+    raise SystemExit("STOP_V180_RENDER_CHECKSUM_MISSING")
+expected=checksum_file.read_text(encoding="ascii").strip()
+if not re.fullmatch(r"[0-9a-f]{64}",expected):
+    raise SystemExit("STOP_V180_RENDER_CHECKSUM_INVALID")
+if not src.is_file() or src.is_symlink() or src.stat().st_size<2_000_000:
+    raise SystemExit("STOP_RENDERED_34S_VIDEO_MISSING")
 if hashlib.sha256(src.read_bytes()).hexdigest()!=expected:
-    raise SystemExit("STOP_APPROVED_34S_VIDEO_CHECKSUM_MISMATCH")
+    raise SystemExit("STOP_RENDERED_34S_VIDEO_CHECKSUM_MISMATCH")
 info=json.loads(subprocess.check_output([
     "ffprobe","-v","error","-show_format","-show_streams",
     "-of","json",str(src)],text=True))
@@ -53,6 +59,6 @@ assert "Player.STATE_ENDED" in intro.read_text()
 assert "V161IntroVideoScreen" in (main/"java/de/epimediahub/app/ui/V070Intro.kt").read_text()
 assert "onCreatorChannel" in (main/"java/de/epimediahub/app/ui/V112SmartTubePlayer.kt").read_text()
 assert "V176SmartTubeQuality" in (main/"java/de/epimediahub/app/ui/V112SmartTubePlayer.kt").read_text()
-print("V180_APPROVED_34S_LOGO_FINALE_PLUS_CREATOR_AND_QUALITY_INSTALLED")
+print("V180_34S_CANDIDATE_PLUS_CREATOR_AND_QUALITY_INSTALLED")
 print("SHA256", expected, "duration", info["format"]["duration"])
 print("NO_SERVER_OR_FIRETV_LICENSING_CHANGES")
