@@ -36,6 +36,12 @@ once(browse,
      "            else -> onExit()\n"
      "        }\n"
      "    }")
+once(browse,
+     "    LaunchedEffect(videoId, browsing, videos.isEmpty(), focusedId?.let { id -> videos.any { it.videoId == id } }) {",
+     "    LaunchedEffect(videoId, browsing, controlsShown, videos.isEmpty(), focusedId?.let { id -> videos.any { it.videoId == id } }) {")
+once(browse,
+     "        if (!browsing) {\n            focusedId = null\n            remote.requestFocus()\n        }",
+     "        if (!browsing) {\n            focusedId = null\n            if (!controlsShown) remote.requestFocus()\n        }")
 head = "    Box(Modifier.fillMaxSize().background(Color.Black)\n        .focusRequester(remote)\n        .onPreviewKeyEvent { event ->"
 start = browse.read_text(encoding="utf-8")
 pos = start.find(head)
@@ -71,10 +77,6 @@ key_new = """        .onPreviewKeyEvent { event ->
                     true
                 }
                 // A second DOWN can still open the existing recommendations shelf.
-                controlsShown && event.key == Key.DirectionDown -> {
-                    if (!repeated) browsing = true
-                    true
-                }
                 // While controls are visible the focused Compose buttons own
                 // Left/Right/OK. Never steal button OK for playback toggling.
                 controlsShown -> false
@@ -90,8 +92,8 @@ once(player,
      "import androidx.compose.ui.platform.LocalContext\n"
      "import androidx.compose.ui.platform.testTag")
 once(player,
-     "    val remoteFocusRequester = remember { FocusRequester() }",
-     "    val remoteFocusRequester = remember { FocusRequester() }\n"
+     "    var controlsVisible by remember(video.videoId) { mutableStateOf(true) }",
+     "    var controlsVisible by remember(video.videoId) { mutableStateOf(true) }\n"
      "    val v181QualityFocus = remember(video.videoId) { FocusRequester() }")
 
 # The v176/v179 quality + creator controls were laid out BEFORE the AndroidView.
@@ -107,7 +109,7 @@ options_block = source[a:b]
 if 'onCreatorChannel' not in options_block or 'showV176Quality' not in options_block:
     raise SystemExit("STOP_V181_QUALITY_CREATOR_NOT_IN_TOP_ROW")
 source = source[:a] + source[b:]
-post_video_anchor = "        if (controlsVisible && errorText.isBlank()) {"
+post_video_anchor = "        if (controlsVisible && !browsing && errorText.isBlank()) {"
 if source.count(post_video_anchor) != 1:
     raise SystemExit("STOP_V181_VIDEO_OVERLAY_ANCHOR_MISSING")
 options_block = options_block.replace(
@@ -152,7 +154,7 @@ once(player,
         delay(100L) // Compose must attach the remote-focus target first.
         runCatching {
             if (controlsVisible) v181QualityFocus.requestFocus()
-            else remoteFocusRequester.requestFocus()
+            # Hidden-mask focus returns to V124 remote input layer.
         }
     }''')
 once(player,
@@ -165,52 +167,8 @@ once(player,
 
 # Outer browse handler owns the first opening key. Once the mask is visible,
 # stop the nested player container from swallowing OK/D-pad focused actions.
-old_handler = '''                    when (event.key) {
-                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause -> {
-                            val active = player
-                            if (active != null) {
-                                if (active.isPlaying) active.pause() else active.play()
-                                controlsVisible = true
-                                true
-                            } else false
-                        }
-                        Key.DirectionLeft -> {
-                            if (!video.live && player != null) {
-                                seekBy(-10_000L)
-                                true
-                            } else false
-                        }
-                        Key.DirectionRight -> {
-                            if (!video.live && player != null) {
-                                seekBy(10_000L)
-                                true
-                            } else false
-                        }
-                        Key.DirectionUp, Key.DirectionDown -> {
-                            controlsVisible = true
-                            true
-                        }
-                        else -> false
-                    }'''
-new_handler = '''                    when {
-                        event.key == Key.MediaPlayPause -> {
-                            val active = player
-                            if (active != null) {
-                                if (active.isPlaying) active.pause() else active.play()
-                            }
-                            controlsVisible = true
-                            true
-                        }
-                        controlsVisible -> false // Let quality/channel focused buttons receive OK/D-pad.
-                        event.key in setOf(Key.DirectionCenter, Key.Enter,
-                            Key.NumPadEnter, Key.DirectionLeft, Key.DirectionRight,
-                            Key.DirectionUp, Key.DirectionDown) -> {
-                            controlsVisible = true
-                            true
-                        }
-                        else -> false
-                    }'''
-once(player, old_handler, new_handler)
+# No nested onPreviewKeyEvent handler exists in V112SmartTubePlayer.
+# V124SmartTubeBrowseLayer owns D-pad/OK and yields when controls show.
 
 source = player.read_text(encoding="utf-8")
 assert source.index("AndroidView(") < source.index('testTag("smarttube-quality-button")')
