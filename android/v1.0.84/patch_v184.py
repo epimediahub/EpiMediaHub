@@ -184,7 +184,7 @@ once(browse,
                 event.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU -> {""")
 
 assert 'v184ReturnPlayback = activePlayback' in shell.read_text()
-assert shell.read_text().count("returnFromCreator()") == 2
+assert shell.read_text().count("returnFromCreator()") == 3
 assert 'V184SmartTubeResume.read' in player.read_text()
 assert 'V184SmartTubeResume.clear' in player.read_text()
 assert 'bind(player, isTv, cinemaVod = true)' in player.read_text()
