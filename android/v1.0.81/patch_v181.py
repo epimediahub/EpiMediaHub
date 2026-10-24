@@ -230,6 +230,9 @@ import shutil
 import subprocess
 approved = Path(__file__).resolve().parent / "EpiMediaHub_EpiScene_Heartbeat_Konzept_34s_v2.mp4"
 checksum = approved.with_suffix(".sha256")
+if os.environ.get("EPIMEDIA_V181_PRIVATE_SOURCE_ONLY") == "1":
+    print("PRIVATE_KOTLIN_COMPILE_ONLY_NEW_APPROVED_INTRO_NOT_INCLUDED_NOT_RELEASABLE")
+    raise SystemExit(0)
 if not approved.is_file() or not checksum.is_file():
     raise SystemExit(
         "STOP_V181_APPROVED_NEW_34S_INTRO_MISSING: "
