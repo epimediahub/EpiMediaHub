@@ -81,7 +81,7 @@ new_identity = '''                            .testTag("smarttube-channel-identi
                                 )
                                 Spacer(Modifier.width(9.dp))
                             }
-                            Column(Modifier.widthIn(max = if (isTv) 185.dp else 140.dp)) {
+                            Column(Modifier.widthIn(max = if (isTv) 150.dp else 130.dp)) {
                                 Text(
                                     v183Creator?.channelName?.takeIf { it.isNotBlank() }
                                         ?: video.author,
@@ -106,6 +106,15 @@ new_identity = '''                            .testTag("smarttube-channel-identi
 
 '''
 source = source[:a] + new_identity + source[b:]
+# ±10s is already in the large central playback controls; avoid pushing
+# the essential creator/channel/comments buttons off the right edge of a TV.
+seek_start = source.find('                if (!video.live) {\n                    TextButton(', source.index('testTag("smarttube-channel-identity")'))
+quality_start = source.find('                TextButton(\n                    onClick = { showV176Quality = true }', seek_start)
+if seek_start < 0 or quality_start < 0 or 'smarttube-bottom-seek' not in source[seek_start:quality_start]:
+    raise SystemExit("STOP_V183_BOTTOM_SEEK_LAYOUT_CHANGED")
+source = source[:seek_start] + source[quality_start:]
+source = source.replace('horizontal = if (isTv) 32.dp else 10.dp',
+                        'horizontal = if (isTv) 12.dp else 10.dp', 1)
 if source.count('testTag("smarttube-channel-identity")') != 1:
     raise SystemExit("STOP_V183_DUPLICATE_CHANNEL_IDENTITY")
 # The creator's name is not always in home/search results; metadata may be.
