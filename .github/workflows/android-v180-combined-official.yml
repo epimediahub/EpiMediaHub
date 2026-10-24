@@ -261,7 +261,7 @@ jobs:
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$src" > "$signature"
             cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$signature" | tr '[:lower:]' '[:upper:]')"
             test "$cert" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
-            cp "$src" "qa-artifacts/EpiMediaHub-Android-v1.0.78-$abi.apk"
+            cp "$src" "qa-artifacts/EpiMediaHub-Android-v1.0.80-$abi.apk"
           done
           (cd qa-artifacts && sha256sum *.apk > SHA256SUMS.txt)
       - name: Verify GalaBox isolated VPN path, hidden player debug, and intact Fire TV video cadence
@@ -385,3 +385,143 @@ jobs:
           path: android/v1.0.80/epimedia_intro_v10.mp4
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Stage signed and media-verified APKs for official publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for abi in arm64-v8a armeabi-v7a universal; do
+            src="qa-artifacts/EpiMediaHub-Android-v1.0.80-$abi.apk"
+            test -s "$src"
+            cp "$src" "dist/EpiMediaHub_Android_v1.0.80-$abi.apk"
+          done
+          cp dist/EpiMediaHub_Android_v1.0.80-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+
+      - name: Verify production licence readiness and updater monotonicity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, urllib.request
+          req=urllib.request.Request('https://api.epimediahub.com/v1/license/capabilities',
+                headers={'User-Agent':'EpiMediaHub-Release/1.0.80','Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=20) as r:
+              policy=json.load(r)
+          assert policy.get('licensing_ready') is True
+          assert policy.get('trial_days')==7
+          assert policy.get('activation_credits')==1
+          print('Production license policy intact')
+          PY
+          mkdir -p /tmp/epimedia-prior
+          gh release download v0.7.0-test -p android-latest.json -D /tmp/epimedia-prior --clobber
+          python3 - <<'PY'
+          import json
+          with open('/tmp/epimedia-prior/android-latest.json') as f:
+              prior=json.load(f)
+          assert type(prior.get('versionCode'))==int
+          assert prior['versionCode']<1080, 'Refuse updater downgrade or version collision'
+          print('Prior update version:',prior['versionCode'])
+          PY
+          if gh release view v1.0.80 >/dev/null 2>&1; then
+            echo '::error::Stable v1.0.80 already exists: refuse overwriting another release'
+            exit 1
+          fi
+
+      - name: Generate stable & rolling release manifests and accurate notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          apks={}
+          for abi in ('arm64-v8a','armeabi-v7a','universal'):
+              fn=f'EpiMediaHub_Android_v1.0.80-{abi}.apk'
+              p=Path('dist')/fn
+              assert p.is_file() and p.stat().st_size>1_000_000
+              apks[abi]={'url':f'https://github.com/epimediahub/EpiMediaHub/releases/download/v0.7.0-test/{fn}',
+                         'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),
+                         'size':p.stat().st_size}
+          note=('34 Sekunden vom Nutzer freigegebenes EpiScene-Kinointro mit Rückblick-/Intro-/Outro-'
+                'Erkennung, Lernmarkern, VPN-Routing, orchestralem Puls und EpiMediaHub-Logo. '
+                'SmartTube mit adaptiver Qualitätswahl und direkter Creator-Kanalnavigation. '
+                'Keine Änderung an Fire-TV-Lizenzen, IPTV-Playlists, VPN-Zuweisungen oder EpiScene-Backend.')
+          manifest={'version':'1.0.80','versionCode':1080,'notes':note,'apks':apks}
+          for name in ('android-latest.json','latest.json'):
+              (Path('dist')/name).write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
+          PY
+          cat > dist/RELEASE_NOTES.txt <<'EOF'
+          EpiMediaHub Android 1.0.80 – 34 Sekunden EpiScene und SmartTube
+          - Nutzerfreigegebenes, exakt auf SHA256 geprüftes 34s Kino-Intro mit Orchester und Herzschlägen
+          - Erklärende Szenen: EpiScene erkennt Rückblicke, Intros und Abspann und nutzt bestätigte Lernmarker
+          - VPN-Routing und Standortwahl im Intro visualisiert
+          - Logo-Finale: EpiMediaHub-Schriftzug und Play-Symbol mit Herzschlag-Puls bis zum Ende
+          - SmartTube: echte adaptive Qualitätswahl (nicht bei fixen MP4s) direkt im Player
+          - SmartTube: Creator-Kanal über Kanalnamen oder Menü öffnen und im Player durchstöbern
+          - Bestehende VPN-Zuweisungen, Fire-TV-Lizenzen, EpiScene-Worker und IPTV-Zugänge bleiben unangetastet
+          - Version 1.0.78 steht weiterhin zum Zurückwechseln bereit
+          EOF
+
+      - name: Publish NEW stable release v1.0.80 with verified APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create v1.0.80 \
+            dist/EpiMediaHub_Android_v1.0.80-arm64-v8a.apk \
+            dist/EpiMediaHub_Android_v1.0.80-armeabi-v7a.apk \
+            dist/EpiMediaHub_Android_v1.0.80-universal.apk \
+            dist/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" \
+            --title "EpiMediaHub Android v1.0.80 – 34 Sekunden EpiScene & SmartTube" \
+            --notes-file dist/RELEASE_NOTES.txt \
+            --latest
+          gh release view v1.0.80 --json assets --jq '.assets[].name' > /tmp/epimedia-stable-assets.txt
+          for abi in arm64-v8a armeabi-v7a universal; do
+            grep -Fx "EpiMediaHub_Android_v1.0.80-$abi.apk" /tmp/epimedia-stable-assets.txt
+          done
+          echo 'STABLE_V1_0_80_PUBLISHED'
+
+      - name: Update the existing in-app rolling channel without losing older signed versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=v0.7.0-test
+          gh release view "$TAG" >/dev/null
+          # Upload versioned assets first: prior customer release remains available.
+          for abi in arm64-v8a armeabi-v7a universal; do
+            timeout 15m gh release upload "$TAG" \
+              "dist/EpiMediaHub_Android_v1.0.80-$abi.apk" --clobber
+          done
+          gh release view "$TAG" --json assets --jq '.assets[].name' > /tmp/epimedia-rolling-assets.txt
+          for abi in arm64-v8a armeabi-v7a universal; do
+            grep -Fx "EpiMediaHub_Android_v1.0.80-$abi.apk" /tmp/epimedia-rolling-assets.txt
+          done
+          # Existing direct-Downloader alias, only after all real binaries exist.
+          timeout 15m gh release upload "$TAG" dist/EpiMediaHub_Android_v0.7.0-test.apk --clobber
+          timeout 15m gh release upload "$TAG" dist/SHA256SUMS.txt --clobber
+          timeout 15m gh release upload "$TAG" dist/android-latest.json dist/latest.json --clobber
+          gh release edit "$TAG" --title "EpiMediaHub Android v1.0.80 – EpiScene, VPN, 34s EpiScene Intro" \
+            --notes-file dist/RELEASE_NOTES.txt --prerelease --draft=false
+          echo 'ROLLING_IN_APP_V1_0_80_PUBLISHED'
+
+      - name: Verify customer-visible releases and complete channel manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view v1.0.80 --json isPrerelease,isDraft,assets \
+            --jq '{prerelease:.isPrerelease,draft:.isDraft,assets:[.assets[].name]}'
+          gh release view v0.7.0-test --json isDraft,assets \
+            --jq '{draft:.isDraft,assets:[.assets[].name]}'
+          mkdir -p /tmp/epimedia-verify
+          gh release download v0.7.0-test -p android-latest.json -D /tmp/epimedia-verify --clobber
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/epimedia-verify/android-latest.json').read_text())
+          assert p['version']=='1.0.80' and p['versionCode']==1080
+          assert all(p['apks'][a]['url'].endswith(f'EpiMediaHub_Android_v1.0.80-{a}.apk')
+              for a in ('arm64-v8a','armeabi-v7a','universal'))
+          print('OFFICIAL_V1_0_80_RELEASE_AND_UPDATER_VERIFIED')
+          PY
