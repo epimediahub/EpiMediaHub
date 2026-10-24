@@ -1,0 +1,200 @@
+name: Publish signed EpiMediaHub v1.0.80 for in-app testing
+on:
+  push:
+    branches: [feature/v180-approved-cinematic-smarttube-20261024]
+    paths:
+      - '.github/workflows/android-v180-owner-updater-release.yml'
+  workflow_dispatch:
+concurrency:
+  group: epimediahub-official-player-publish
+  cancel-in-progress: false
+permissions:
+  contents: write
+  actions: read
+jobs:
+  release-signed-v180:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      QA_RUN_ID: '40086121691'
+      QA_COMMIT: 'c7440e3ec0296d04ca8b16f46996e1abf4d949dc'
+      QA_BRANCH: 'feature/v180-approved-cinematic-smarttube-20261024'
+      QA_ARTIFACT: 'EpiMediaHub-v180-34s-candidate-smarttube-signed-qa'
+      CERT_SHA256: '7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E'
+    steps:
+      - name: Authorised updater publication for owner device testing
+        run: |
+          set -euo pipefail
+          echo 'User explicitly requested v1.0.80 through existing in-app updater to conduct device tests.'
+          echo 'No claims are made about passing physical Fire TV/GalaBox QA.'
+          echo 'No change to licensing, VPN server, IPTV playlists, or EpiScene server.'
+
+      - name: Verify the precise successful signed QA build provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QA_RUN_ID" --jq .conclusion)" = "success"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QA_RUN_ID" --jq .head_sha)" = "$QA_COMMIT"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QA_RUN_ID" --jq .head_branch)" = "$QA_BRANCH"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QA_RUN_ID/artifacts" --jq ".artifacts[] | select(.name == \"$QA_ARTIFACT\") | .expired")" = "false"
+          if gh release view v1.0.80 >/dev/null 2>&1; then
+            echo 'v1.0.80 release already exists; stop instead of clobbering.'
+            exit 1
+          fi
+
+      - name: Download the original three signed APKs without rebuilding
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-artifacts
+          timeout 20m gh run download "$QA_RUN_ID" --repo "$GITHUB_REPOSITORY" -n "$QA_ARTIFACT" -D qa-artifacts
+          test "$(find qa-artifacts -maxdepth 1 -name '*.apk' -type f | wc -l)" -eq 3
+          for abi in arm64-v8a armeabi-v7a universal; do
+            test -s "qa-artifacts/EpiMediaHub-Android-v1.0.80-$abi.apk"
+          done
+          test -s qa-artifacts/SHA256SUMS.txt
+          (cd qa-artifacts && sha256sum -c SHA256SUMS.txt)
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare APK package and signature inspection tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" >/dev/null
+
+      - name: Verify app identity version code and official signing certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          SIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          mkdir -p dist
+          for abi in arm64-v8a armeabi-v7a universal; do
+            apk="qa-artifacts/EpiMediaHub-Android-v1.0.80-$abi.apk"
+            "$AAPT" dump badging "$apk" > "/tmp/epimedia-$abi-badging.txt"
+            grep -F "package: name='de.epimediahub.app'" "/tmp/epimedia-$abi-badging.txt"
+            grep -F "versionCode='1080'" "/tmp/epimedia-$abi-badging.txt"
+            grep -F "versionName='1.0.80'" "/tmp/epimedia-$abi-badging.txt"
+            "$SIGNER" verify --verbose --print-certs "$apk" > "/tmp/epimedia-$abi-signature.txt"
+            got="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "/tmp/epimedia-$abi-signature.txt" | tr '[:lower:]' '[:upper:]')"
+            test "$got" = "$CERT_SHA256"
+            cp "$apk" "dist/EpiMediaHub_Android_v1.0.80-$abi.apk"
+          done
+          cp dist/EpiMediaHub_Android_v1.0.80-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+          echo 'THREE_SIGNED_V180_APKS_VERIFIED'
+
+      - name: Verify existing updater version and production licensing without altering backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p previous
+          gh release download v0.7.0-test -p android-latest.json -D previous --clobber
+          python3 - <<'PY'
+          import json
+          p=json.load(open('previous/android-latest.json'))
+          assert type(p['versionCode']) is int and p['versionCode'] == 1078, 'Unexpected current updater version'
+          print('Current signed updater:', p['version'], p['versionCode'])
+          PY
+          python3 - <<'PY'
+          import urllib.request,json
+          req=urllib.request.Request('https://api.epimediahub.com/v1/license/capabilities',headers={'User-Agent':'EpiMediaHub-Updater/1.0.80','Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=25) as res: p=json.load(res)
+          assert p.get('licensing_ready') is True and p.get('trial_days')==7 and p.get('activation_credits')==1
+          print('License service compatible; no changes made')
+          PY
+
+      - name: Create monotonic updater manifests, checksums and honest test notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          apks={}
+          for abi in ('arm64-v8a','armeabi-v7a','universal'):
+              fn=f'EpiMediaHub_Android_v1.0.80-{abi}.apk'
+              p=Path('dist')/fn
+              assert p.stat().st_size>10_000_000
+              apks[abi]=dict(url=f'https://github.com/epimediahub/EpiMediaHub/releases/download/v0.7.0-test/{fn}',
+                  sha256=hashlib.sha256(p.read_bytes()).hexdigest(), size=p.stat().st_size)
+          notes=('EpiMediaHub Android 1.0.80: 34s EpiScene-Kinointro mit Herzschlaegen, '
+                 'SmartTube Bildqualitaet und Creator-Kanaele, GalaBox/Fire-TV Player-Optimierungen. '
+                 'Vom Eigentümer zur praktischen Geraete-Pruefung ueber den bestehenden In-App-Updater angefordert; '
+                 'physische Geraetetests stehen noch aus.')
+          data=dict(version='1.0.80',versionCode=1080,notes=notes,apks=apks)
+          for name in ('android-latest.json','latest.json'):
+              (Path('dist')/name).write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+          PY
+          cat > dist/RELEASE_NOTES.txt <<'EOF'
+          EpiMediaHub Android 1.0.80 – zur Prüfung über In-App-Updater freigegeben
+
+          - Vollständiger signierter Android-Build (Fire TV und GalaBox Architekturvarianten)
+          - Neues 34 Sekunden EpiScene-Intro mit Herzschlägen, Erklärung und EpiMediaHub-Logo
+          - SmartTube: Qualitätswahl und Creator-Kanal über den integrierten Player
+          - Vorhandene GalaBox-, VPN- und Player-Korrekturen beibehalten
+          - Automatische Kotlin-, Android-Unit-, Signatur- und APK-Medien-Prüfungen bestanden
+          - Physische Funktionsprüfung auf Fire TV und GalaBox noch ausstehend; Eigentümer testet nach Update
+          - Bestehende Lizenzierung, VPN-Zuweisung, IPTV-Playlists und EpiScene-Backend nicht verändert
+          - Bisherige Version 1.0.78 bleibt als Release verfügbar
+          EOF
+
+      - name: Publish v1.0.80 stable signed release
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 22m gh release create v1.0.80 \
+            dist/EpiMediaHub_Android_v1.0.80-arm64-v8a.apk \
+            dist/EpiMediaHub_Android_v1.0.80-armeabi-v7a.apk \
+            dist/EpiMediaHub_Android_v1.0.80-universal.apk \
+            dist/SHA256SUMS.txt \
+            --target "$QA_COMMIT" \
+            --title "EpiMediaHub Android v1.0.80 – owner-requested updater testing" \
+            --notes-file dist/RELEASE_NOTES.txt \
+            --latest
+          for abi in arm64-v8a armeabi-v7a universal; do
+            gh release view v1.0.80 --json assets --jq '.assets[].name' | grep -Fx "EpiMediaHub_Android_v1.0.80-$abi.apk"
+          done
+          echo 'VERSIONED_SIGNED_1_0_80_RELEASE_PUBLISHED'
+
+      - name: Make v1.0.80 available through the existing in-app updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=v0.7.0-test
+          gh release view "$TAG" >/dev/null
+          for abi in arm64-v8a armeabi-v7a universal; do
+            timeout 15m gh release upload "$TAG" "dist/EpiMediaHub_Android_v1.0.80-$abi.apk" --clobber
+          done
+          for abi in arm64-v8a armeabi-v7a universal; do
+            gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fx "EpiMediaHub_Android_v1.0.80-$abi.apk"
+          done
+          timeout 15m gh release upload "$TAG" dist/EpiMediaHub_Android_v0.7.0-test.apk --clobber
+          timeout 15m gh release upload "$TAG" dist/SHA256SUMS.txt --clobber
+          timeout 15m gh release upload "$TAG" dist/android-latest.json dist/latest.json --clobber
+          gh release edit "$TAG" \
+            --title "EpiMediaHub Android v1.0.80 – In-App-Updater" \
+            --notes-file dist/RELEASE_NOTES.txt --prerelease --draft=false
+          echo 'OFFICIAL_IN_APP_UPDATER_1_0_80_PUBLISHED'
+
+      - name: Verify public rolling manifest after publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p published
+          gh release download v0.7.0-test -p android-latest.json -D published --clobber
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          j=json.loads(Path('published/android-latest.json').read_text())
+          assert j['version']=='1.0.80' and j['versionCode']==1080
+          for abi in ('arm64-v8a','armeabi-v7a','universal'):
+              assert j['apks'][abi]['url'].endswith(f'EpiMediaHub_Android_v1.0.80-{abi}.apk')
+          print('OFFICIAL_CUSTOMER_VISIBLE_UPDATER_1_0_80_VERIFIED')
+          PY
