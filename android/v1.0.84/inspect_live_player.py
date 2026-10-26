@@ -13,10 +13,10 @@ ui = root / "app/src/main/java/de/epimediahub/app/ui"
 app = root / "app/src/main/java/de/epimediahub/app"
 
 patterns = {
-    "PlayerScreen.kt": (r"fun PlayerScreen\\b|fun V071VlcLivePlayer\\b|useVlc|manualPlayerChoice|V121VodSurface|V071VlcLivePlayer|ExoPlayer|MediaKind\\.LIVE|android.player|Playertyp|Player ausw|Player wechseln|\.setMediaItem|\.prepare\\(", 8, 14, 325),
-    "V121VodSurface.kt": (r"fun V121VodSurface|fun bind\\(|fun update|class V121|fun schedule\\(|fun match\\(|frameRate|onVideoFrame|onRendered|request =|matchingMode|measuredFps|onVideoSizeChanged|onVideoInputFormatChanged|override fun close\\(", 4, 10, 260),
+    "PlayerScreen.kt": (r"fun PlayerScreen\b|fun V071VlcLivePlayer\b|useVlc|manualPlayerChoice|V121VodSurface|V071VlcLivePlayer|ExoPlayer|MediaKind\.LIVE|android.player|Playertyp|Player ausw|Player wechseln|\.setMediaItem|\.prepare\(", 8, 14, 325),
+    "V121VodSurface.kt": (r"fun V121VodSurface|fun bind\(|fun update|class V121|fun schedule\(|fun match\(|frameRate|onVideoFrame|onRendered|request =|matchingMode|measuredFps|onVideoSizeChanged|onVideoInputFormatChanged|override fun close\(", 4, 10, 260),
     "V170LiveCadencePolicy.kt": (r".", 0, 0, 140),
-    "EpiMediaHubApp.kt": (r"PlayerScreen\\(|V164PlayerHost|Screen.Player", 6, 8, 65),
+    "EpiMediaHubApp.kt": (r"PlayerScreen\(|V164PlayerHost|Screen.Player", 6, 8, 65),
 }
 for filename, (regex, before, after, limit) in patterns.items():
     path = (app if filename == "EpiMediaHubApp.kt" else ui) / filename
@@ -30,7 +30,7 @@ for filename, (regex, before, after, limit) in patterns.items():
             chosen.update(range(max(0, n-before), min(len(lines), n+after+1)))
     if filename == "PlayerScreen.kt":
         chosen.update(range(min(len(lines), 100)))
-    print(f"\\n======== {filename} ({len(lines)} lines, {len(chosen)} selected) ========")
+    print(f"\n======== {filename} ({len(lines)} lines, {len(chosen)} selected) ========")
     last = -2
     for n in sorted(chosen)[:limit]:
         if n > last + 1: print(" ...")
