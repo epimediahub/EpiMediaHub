@@ -296,13 +296,13 @@ jobs:
             info="$RUNNER_TEMP/$abi-badging.txt"
             "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$src" > "$info"
             grep -F "package: name='de.epimediahub.app'" "$info"
-            grep -F "versionCode='1085'" "$info"
-            grep -F "versionName='1.0.85'" "$info"
+            grep -F "versionCode='1086'" "$info"
+            grep -F "versionName='1.0.86'" "$info"
             signature="$RUNNER_TEMP/$abi-signature.txt"
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$src" > "$signature"
             cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$signature" | tr '[:lower:]' '[:upper:]')"
             test "$cert" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
-            cp "$src" "qa-artifacts/EpiMediaHub-Android-v1.0.85-$abi.apk"
+            cp "$src" "qa-artifacts/EpiMediaHub-Android-v1.0.86-$abi.apk"
           done
           (cd qa-artifacts && sha256sum *.apk > SHA256SUMS.txt)
       - name: Verify GalaBox isolated VPN path, hidden player debug, and intact Fire TV video cadence
