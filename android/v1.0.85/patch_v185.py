@@ -62,6 +62,24 @@ once(vm,
         }
 ''')
 
+# Player remote/channel zapping uses switchLiveChannel(), not play().
+# Resolve the single safe 50-fps variant before preparing a stream, and
+# recurse exactly once only when a different unique variant was selected.
+once(vm,
+'''    fun switchLiveChannel(item: MediaEntry, channelList: List<MediaEntry>) {
+        if (item.kind != MediaKind.LIVE || channelList.isEmpty()) return
+''',
+'''    fun switchLiveChannel(item: MediaEntry, channelList: List<MediaEntry>) {
+        if (item.kind != MediaKind.LIVE || channelList.isEmpty()) return
+        val v185Preferred = de.epimediahub.app.ui.V185SportPriority.preferred(
+            item, channelList, _ui.value.active?.id.orEmpty())
+        if (v185Preferred.id != item.id ||
+            v185Preferred.sourceProfileId != item.sourceProfileId) {
+            switchLiveChannel(v185Preferred, channelList)
+            return
+        }
+''')
+
 player = ui / "PlayerScreen.kt"
 once(player,
 '''    val httpFactory = playbackEngine.first
