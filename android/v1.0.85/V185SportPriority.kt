@@ -21,7 +21,10 @@ internal object V185SportPriority {
     )
 
     private val fpsToken = Regex("""(?i)(?<!\w)(?:25|50|60)\s*(?:FPS)(?!\w)""")
-    private val qualityToken = Regex("""(?i)(?<!\w)(?:4K|UHD|FHD|FULL\s*HD|HD|SD|1080P|720P|2160P)(?!\w)""")
+    private val qualityToken = Regex("""(?i)(?<!\\w)(?:4K|UHD|FHD|FULL\\s*HD|HD|SD|1080P|720P|2160P)(?!\\w)""")
+    // Only remove suffixes that denote stream delivery/encoding, never channel IDs,
+    // regions, language codes or numbered channel variants.
+    private val deliveryToken = Regex("""(?i)(?<!\\w)(?:WEB|HEVC|H\\.?265|H\\.?264|AVC|BAHEVC|BHAEVC)(?!\\w)""")
     private val whitespace = Regex("""\s+""")
     private val nonWord = Regex("""[^\p{L}\p{N}]+""")
     private val labelRate = Regex("""(?i)(?<!\d)(25|50|60)\s*FPS(?!\w)""")
@@ -42,11 +45,12 @@ internal object V185SportPriority {
         if (profile.isBlank() || id.isBlank()) 0 else
             store?.getInt(key(profile, id), 0) ?: 0
 
-    fun recordMeasured(context: Context, item: MediaEntry, fps: Int) {
+    fun recordMeasured(context: Context, item: MediaEntry, fps: Int, activeProfileId: String = "") {
+        val profile = item.sourceProfileId.ifBlank { activeProfileId }
         if (item.kind != MediaKind.LIVE || fps !in listOf(25, 50) ||
-            item.sourceProfileId.isBlank() || item.id.isBlank()) return
+            profile.isBlank() || item.id.isBlank()) return
         initialize(context)
-        val storageKey = key(item.sourceProfileId, item.id)
+        val storageKey = key(profile, item.id)
         if (store?.getInt(storageKey, 0) != fps) store?.edit()?.putInt(storageKey, fps)?.apply()
     }
 
@@ -62,7 +66,9 @@ internal object V185SportPriority {
     internal fun canonical(name: String): String =
         whitespace.replace(
             nonWord.replace(
-                qualityToken.replace(fpsToken.replace(name.uppercase(Locale.ROOT), " "), " "), " "
+                deliveryToken.replace(
+                    qualityToken.replace(fpsToken.replace(name.uppercase(Locale.ROOT), " "), " "), " "
+                ), " "
             ).trim(), " "
         ).trim()
 
@@ -91,20 +97,26 @@ internal object V185SportPriority {
         return alternatives.single().index
     }
 
-    fun preferred(current: MediaEntry, channelList: List<MediaEntry>): MediaEntry {
+    fun preferred(
+        current: MediaEntry, channelList: List<MediaEntry>, activeProfileId: String = ""
+    ): MediaEntry {
         if (current.kind != MediaKind.LIVE || channelList.size < 2) return current
+        fun profile(item: MediaEntry): String =
+            item.sourceProfileId.ifBlank { activeProfileId }
         val variants = channelList.map {
-            Variant(it.id, it.name, it.sourceProfileId,
-                rememberedRate(it.sourceProfileId, it.id))
+            val resolved = profile(it)
+            Variant(it.id, it.name, resolved, rememberedRate(resolved, it.id))
         }
         val originalIndex = channelList.indexOfFirst {
-            it.id == current.id && it.sourceProfileId == current.sourceProfileId
+            it.id == current.id && profile(it) == profile(current)
         }
         val chosen = bestIndex(originalIndex, variants)
         return channelList.getOrNull(chosen) ?: current
     }
 
-    fun recommendedAlternative(current: MediaEntry, list: List<MediaEntry>): MediaEntry? =
-        preferred(current, list).takeUnless { it.id == current.id &&
+    fun recommendedAlternative(
+        current: MediaEntry, list: List<MediaEntry>, activeProfileId: String = ""
+    ): MediaEntry? =
+        preferred(current, list, activeProfileId).takeUnless { it.id == current.id &&
             it.sourceProfileId == current.sourceProfileId }
 }
