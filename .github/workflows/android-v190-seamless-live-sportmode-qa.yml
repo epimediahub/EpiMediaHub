@@ -303,7 +303,7 @@ jobs:
             "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$src" > "$info"
             grep -F "package: name='de.epimediahub.app'" "$info"
             grep -F "versionCode='1090'" "$info"
-            grep -F "versionName='1.0.90-qa'" "$info"
+            grep -F "versionName='1.0.90'" "$info"
             signature="$RUNNER_TEMP/$abi-signature.txt"
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$src" > "$signature"
             cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$signature" | tr '[:lower:]' '[:upper:]')"
