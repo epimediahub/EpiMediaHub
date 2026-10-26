@@ -38,4 +38,10 @@ for filename, (regex, before, after, limit) in patterns.items():
         last = n
     if len(chosen) > limit:
         print(f"... {len(chosen)-limit} source lines omitted")
+# Also display bounded late-source sections to inspect the Live-TV surface and retry behavior.
+player_lines = (ui / "PlayerScreen.kt").read_text(encoding="utf-8").splitlines()
+for start, end in ((320, 355), (401, 515), (565, 625), (700, 800)):
+    print("======== Live player lines " + str(start) + "-" + str(end) + " ========")
+    for n in range(start - 1, min(end, len(player_lines))):
+        print(f"{n+1:04d} {player_lines[n]}")
 print("LIVE_PLAYER_SOURCE_INSPECTION_COMPLETE")
