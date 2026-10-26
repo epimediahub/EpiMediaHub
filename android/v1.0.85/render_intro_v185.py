@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 import subprocess
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "android/v1.0.65/epimedia_intro_v7.mp4"
 SYNC = ROOT / "android/v1.0.65/heartbeat_sync.json"
 DEST = ROOT / "android/v1.0.85/epimedia_intro_v185.mp4"
