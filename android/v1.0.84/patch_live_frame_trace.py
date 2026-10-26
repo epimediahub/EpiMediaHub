@@ -106,7 +106,7 @@ once(surface,
                 val releaseAvg = if (traceReleasePairs > 0) traceReleaseSumMs / traceReleasePairs else -1.0
                 val ptsAvg = if (tracePtsPairs > 0) tracePtsSumMs / tracePtsPairs else -1.0
                 Log.i("EpiMediaHubCadence",
-                    "FRAME_INTERVAL type=" + if (cinemaVod) "VOD" else "LIVE" +
+                    "FRAME_INTERVAL type=" + (if (cinemaVod) "VOD" else "LIVE") +
                     " frames=" + traceCallbacks +
                     " releaseSamples=" + traceReleasePairs +
                     " releaseAvgMs=" + releaseAvg +
