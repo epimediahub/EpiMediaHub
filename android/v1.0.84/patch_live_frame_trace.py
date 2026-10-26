@@ -25,7 +25,7 @@ once(player,
     // Engine route only. Never include user playlists, credentials or stream URLs in logs.
     LaunchedEffect(item.resumeKey, useVlc) {
         if (item.kind == MediaKind.LIVE) android.util.Log.i(
-            "EpiMediaHubLive", "LIVE_ENGINE=" + if (useVlc) "VLC" else "MEDIA3_EXOPLAYER")
+            "EpiMediaHubLive", "LIVE_ENGINE=" + (if (useVlc) "VLC" else "MEDIA3_EXOPLAYER"))
     }
     if (useVlc) {''')
 
