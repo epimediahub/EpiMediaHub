@@ -41,13 +41,13 @@ internal object V187SportMode {
         if (selected !in variants.indices) return emptyList()
         val current = variants[selected]
         if (current.id.isBlank() || current.profile.isBlank()) return emptyList()
-        val station = V186SportPriority.canonical(current.name)
+        val station = V188WorldwideSportChannels.canonicalSportIdentity(current.name)
         if (station.length < 3) return emptyList()
         return variants.withIndex()
             .filter { (index, v) ->
                 index != selected && v.id.isNotBlank() &&
                     v.profile == current.profile &&
-                    V186SportPriority.canonical(v.name) == station &&
+                    V188WorldwideSportChannels.canonicalSportIdentity(v.name) == station &&
                     fps(v) != 25
             }
             .sortedWith(
