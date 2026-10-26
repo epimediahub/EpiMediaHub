@@ -30,13 +30,15 @@ def once(path: Path, old: str, new: str):
 
 once(gradle, "versionCode = 1087", "versionCode = 1088")
 once(gradle, 'versionName = "1.0.87"', 'versionName = "1.0.88"')
-for name in ("V188SportCatalog.kt", "V188VerifiedFps.kt", "V188SportMode.kt"):
+for name in ("V188SportCatalog.kt", "V188VerifiedFps.kt", "V188SportMode.kt",
+             "V188SportContext.kt", "V188WorldwideSportChannels.kt"):
     shutil.copy2(here / name, ui / name)
 # Replace only the older, generic AlertDialog; retain the same composable
 # name so existing player uses it without modifying all the call sites.
 shutil.copy2(here / "V188SportModeOffer.kt", ui / "V187SportModeOffer.kt")
 tests.mkdir(parents=True, exist_ok=True)
-for name in ("V188SportCatalogTest.kt", "V188VerifiedFpsTest.kt"):
+for name in ("V188SportCatalogTest.kt", "V188VerifiedFpsTest.kt",
+             "V188SportContextTest.kt", "V188WorldwideSportChannelsTest.kt"):
     shutil.copy2(here / name, tests / name)
 
 # Authenticate the snapshot against the ACTUAL active player. In v187 the
@@ -159,13 +161,44 @@ once(player,
                                     0, V186SportPriority.classify(player.videoFormat?.frameRate ?: 0f))
 ''')
 
+# Automatic popups are ONLY for actual sports programming or known dedicated
+# sports channels (from the curated worldwide catalog). EPG is optional.
+# The already-present manual Sportmodus player button remains available on
+# ANY channel with a verified 50 fps sibling, regardless of category.
+once(player,
+'''                    } else if (candidate == 25 &&
+                        vm.v187SportOfferAvailable(item, episodeList)) {
+                        v187SportOffer = true
+                    }
+''',
+'''                    } else if (candidate == 25 &&
+                        vm.v187SportOfferAvailable(item, episodeList)) {
+                        val currentEpg = de.epimediahub.app.data.V163Epg.current(
+                            u.epg[item.id].orEmpty(), System.currentTimeMillis() / 1000L)
+                        val categoryName = u.categories.firstOrNull {
+                            it.id == item.categoryId
+                        }?.name.orEmpty()
+                        if (V188SportContext.automaticOfferAllowed(
+                                item.name, categoryName,
+                                currentEpg?.title.orEmpty(),
+                                currentEpg?.description.orEmpty(),
+                                candidate, true
+                            )) {
+                            v187SportOffer = true
+                        }
+                    }
+''')
+
 # Old compatibility-name match is unused in v187; make sure the on-screen
 # offer button continues to consult the v188 confirmed-only ViewModel check.
 assert "vm.v187SportOfferAvailable(item, episodeList)" in player.read_text()
 assert "vm.v187SportCandidateObserved(item, candidate)" in player.read_text()
 assert "v187SportCandidateFailed(item, sportHttp)" in player.read_text()
 assert "V188SportMode.verifiedAlternatives(" in vm.read_text()
+assert "V188SportContext.automaticOfferAllowed(" in player.read_text()
+assert "V188WorldwideSportChannels.canonicalSportIdentity" in (ui / "V187SportMode.kt").read_text()
 print("V188_CROSS_CATEGORY_SPORT_MODE_CONFIRMED_50_ONLY")
 print("V188_PTS_VERIFIED_RATE_PERSISTED_PER_PLAYLIST_CATEGORY_CHANNEL")
 print("V188_NO_BACKGROUND_STREAM_PROBES_NO_AUTO_REDIRECT")
 print("V188_MATCHING_EPIMEDIAHUB_DIALOG_NO_PUBLIC_UPDATER_CHANGES")
+print("V188_WORLDWIDE_SPORT_NAMES_IPTV_DB_LIGA_ALIASES_EPG_OPTIONAL")
