@@ -219,11 +219,15 @@ internal object V188WorldwideSportChannels {
      * This is a heuristic station identity, not a licence/rights assertion.
      */
     fun canonicalSportIdentity(raw: String): String {
+        // Country/language tags MUST remain part of the identity. "DE: DAZN 1"
+        // and "IT: DAZN 1" are not interchangeable even in one playlist.
+        val prefix = Regex("""(?i)^\\s*(DE|AT|CH|IT|FR|ES|PT|UK|GB|IE|US|CA|BR|AR|MX|RO|PL|TR|NL|BE|RS|HR|GR|AL|MA|SA|AE|AF|IN|PK|CN|JP|KR|AU|NZ|ZA|EG)\\s*[:|\\-]""")
+            .find(raw)?.groupValues?.get(1)?.uppercase(Locale.ROOT).orEmpty()
         var name = clean(raw)
-        name = name.replace(Regex("""^(?:SKY SPORT BUNDESLIGA|SKY FUSSBALL BUNDESLIGA|SKY BUNDESLIGA|DB BUNDESLIGA|DB LIGA|DE BUNDESLIGA|BULI)\b"""), "BUNDESLIGA")
-        name = name.replace(Regex("""^SKY SPORT CALCIO\b"""), "SKY CALCIO")
-        name = name.replace(Regex("""^BEIN SPORT\b"""), "BEIN SPORTS")
-        name = name.replace(Regex("""^SUPER SPORT\b"""), "SUPERSPORT")
-        return name
+        name = name.replace(Regex("""^(?:SKY SPORT BUNDESLIGA|SKY FUSSBALL BUNDESLIGA|SKY BUNDESLIGA|DB BUNDESLIGA|DB LIGA|DE BUNDESLIGA|BULI)\\b"""), "BUNDESLIGA")
+        name = name.replace(Regex("""^SKY SPORT CALCIO\\b"""), "SKY CALCIO")
+        name = name.replace(Regex("""^BEIN SPORT\\b"""), "BEIN SPORTS")
+        name = name.replace(Regex("""^SUPER SPORT\\b"""), "SUPERSPORT")
+        return if (prefix.isBlank()) name else "$"+"prefix:$"+"name"
     }
 }
