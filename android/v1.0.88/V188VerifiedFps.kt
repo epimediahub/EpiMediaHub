@@ -29,7 +29,16 @@ internal object V188VerifiedFps {
 
     fun rememberedRate(profile: String, category: String, id: String): Int {
         if (profile.isBlank() || id.isBlank()) return 0
-        return store?.getInt(key(profile, category, id), 0) ?: 0
+        val exact = key(profile, category, id)
+        val fallback = key(profile, "", id)
+        val pref = store ?: return 0
+        // Some imported channels have no category field on their playback
+        // entry, even though the catalogue later supplies that category.
+        return when {
+            pref.contains(exact) -> pref.getInt(exact, 0)
+            category.isNotBlank() -> pref.getInt(fallback, 0)
+            else -> 0
+        }
     }
 
     fun recordVerified(
