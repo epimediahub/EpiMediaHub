@@ -21,10 +21,10 @@ internal object V185SportPriority {
     )
 
     private val fpsToken = Regex("""(?i)(?<!\w)(?:25|50|60)\s*(?:FPS)(?!\w)""")
-    private val qualityToken = Regex("""(?i)(?<!\\w)(?:4K|UHD|FHD|FULL\\s*HD|HD|SD|1080P|720P|2160P)(?!\\w)""")
+    private val qualityToken = Regex("""(?i)(?<!\w)(?:4K|UHD|FHD|FULL\s*HD|HD|SD|1080P|720P|2160P)(?!\w)""")
     // Only remove suffixes that denote stream delivery/encoding, never channel IDs,
     // regions, language codes or numbered channel variants.
-    private val deliveryToken = Regex("""(?i)(?<!\\w)(?:WEB|HEVC|H\\.?265|H\\.?264|AVC|BAHEVC|BHAEVC)(?!\\w)""")
+    private val deliveryToken = Regex("""(?i)(?<!\w)(?:WEB|HEVC|H\.?265|H\.?264|AVC|BAHEVC|BHAEVC)(?!\w)""")
     private val whitespace = Regex("""\s+""")
     private val nonWord = Regex("""[^\p{L}\p{N}]+""")
     private val labelRate = Regex("""(?i)(?<!\d)(25|50|60)\s*FPS(?!\w)""")
