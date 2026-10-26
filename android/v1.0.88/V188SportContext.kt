@@ -50,11 +50,18 @@ internal object V188SportContext {
                  sportsEvent.containsMatchIn(currentEpgDescription) &&
                  !notLiveEvent.containsMatchIn(currentEpgDescription)))
                 return Confidence.CONFIRMED
-            return Confidence.NONE
+            // The program title may be generic ("Live", "Event", provider EPG
+            // placeholder). Known dedicated sports networks still count as
+            // probable unless the current programme is explicitly non-sport.
+            return if (V188WorldwideSportChannels.isKnownSport(channelName) ||
+                sportsBrand.containsMatchIn(channelName))
+                Confidence.PROBABLE else Confidence.NONE
         }
         // Without a programme guide, use the well-known dedicated sport
         // channel brand OR a conjunction of sport station and sport category.
-        val knownSportStation = sportsBrand.containsMatchIn(channelName)
+        val knownSportStation =
+            V188WorldwideSportChannels.isKnownSport(channelName) ||
+                sportsBrand.containsMatchIn(channelName)
         val namedSportStation = sportsCategory.containsMatchIn(channelName)
         val sportsGroup = sportsCategory.containsMatchIn(categoryName)
         return if (knownSportStation || (namedSportStation && sportsGroup))
