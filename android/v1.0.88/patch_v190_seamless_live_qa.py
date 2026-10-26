@@ -21,7 +21,7 @@ def once(path, old, new):
     path.write_text(src.replace(old, new, 1), encoding="utf-8")
 
 once(gradle, "versionCode = 1089", "versionCode = 1090")
-once(gradle, 'versionName = "1.0.89-qa"', 'versionName = "1.0.90-qa"')
+once(gradle, 'versionName = "1.0.89-qa"', 'versionName = "1.0.90"')
 # Non-seamless forced mode switching is the suspected crash trigger.
 # This helper is a request, not a forced HDMI mode transition.
 once(surface,
