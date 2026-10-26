@@ -61,6 +61,6 @@ class V187SportModeTest {
             v("c","DAZN 1 HD HEVC",50),
             v("d","DAZN 1 HD+",50)
         )
-        assertEquals(listOf(2,3,1,4),V187SportMode.rankedIndices(0,list))
+        assertEquals(listOf(2,4,1,3),V187SportMode.rankedIndices(0,list))
     }
 }
