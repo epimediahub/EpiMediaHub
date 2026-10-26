@@ -155,7 +155,7 @@ jobs:
           python3 android/v1.0.84/patch_v184.py
           python3 android/v1.0.84/patch_cadence_diagnostics.py
           python3 android/v1.0.84/patch_cadence_vod_diagnostics.py
-          python3 android/v1.0.84/patch_cadence_intervals.py
+          # Frame-interval patch paused: missing callback in reconstructed source. Keep validated snapshots.
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
