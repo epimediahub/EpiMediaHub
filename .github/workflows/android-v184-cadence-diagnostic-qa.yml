@@ -156,6 +156,9 @@ jobs:
           python3 android/v1.0.84/patch_cadence_diagnostics.py
           python3 android/v1.0.84/patch_cadence_vod_diagnostics.py
           # Frame-interval patch paused: missing callback in reconstructed source. Keep validated snapshots.
+      - name: Inspect live player routing and frame-clock source (no playback changes)
+        shell: bash
+        run: python3 android/v1.0.84/inspect_live_player.py
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
