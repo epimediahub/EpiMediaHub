@@ -10,7 +10,7 @@ internal object V188SportContext {
     enum class Confidence { NONE, PROBABLE, CONFIRMED }
 
     private val sportsEvent = Regex(
-        """(?i)(?:\b(?:football|soccer|fussball|fußball|fútbol|futbol|calcio|bundesliga|serie\s+a|"""+
+        """(?i)(?:\b(?:football|soccer|fussball|fußball|fútbol|futbol|calcio|bundesliga|serie\s+[ab]|"""+
         """premier\s+league|champions\s+league|europa\s+league|conference\s+league|"""+
         """coppa\s+italia|fa\s+cup|world\s+cup|weltmeisterschaft|european\s+championship|"""+
         """tennis|atp|wta|wimbledon|roland\s+garros|formula\s*1|formel\s*1|"""+
@@ -21,7 +21,7 @@ internal object V188SportContext {
     // A sports brand airing documentaries, news or entertainment is not an
     // automatic "live sport" match when the current EPG explicitly says so.
     private val notLiveEvent = Regex(
-        """(?i)\b(?:film|movie|cinema|serie|series|documentary|documentario|"""+
+        """(?i)\b(?:film|movie|cinema|serie(?!\s+[ab]\b)|series|documentary|documentario|"""+
         """documentazione|dokumentation|doku|recap|highlights|magazine|talkshow|"""+
         """talk\s+show|news|nachrichten|notizie|tg\s+sport|replay|replica)\b"""
     )
