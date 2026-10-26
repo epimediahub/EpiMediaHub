@@ -62,3 +62,5 @@ snippet='''
 s=s[:brace+1]+snippet+s[brace+1:]
 p.write_text(s,encoding="utf-8")
 print("Frame release cadence histogram instrumentation installed")
+
+# The interval callback implementation is temporarily disabled in CI until a compatible hook is located.
