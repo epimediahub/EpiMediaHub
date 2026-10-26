@@ -85,7 +85,7 @@ internal object V185SportPriority {
         val alternatives = variants.withIndex().filter { (_, other) ->
             other.id.isNotBlank() && other.profile == current.profile &&
                 canonical(other.name) == channel && other.id != current.id &&
-                rate(other) >= 50
+                rate(other) == 50
         }
         if (originalRate >= 50 || alternatives.size != 1) return selected
         return alternatives.single().index
