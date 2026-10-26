@@ -1,0 +1,51 @@
+name: Publish v1.0.55 standalone GalaBox pilot APK
+on:
+  push:
+    branches: [fix/v155-galabox-direct-playback]
+    paths: ['.github/workflows/v155-galabox-direct-download.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: epimediahub/EpiMediaHub
+      QA_RUN: '38133758342'
+      QA_SHA: '157cb4d6bf017c2c3450e44bc541b266989032ee'
+      QA_ARTIFACT: EpiMediaHub-v1.0.55-GalaBox-PRIVATE-signed-qa
+      TAG: v1.0.55-galabox-pilot-20261011
+      APK: EpiMediaHub-GalaBox-1.0.55.apk
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify fixed successful signed test build
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "fix/v155-galabox-direct-playback"
+          gh api "repos/$REPO/actions/runs/$QA_RUN" > qa-run.json
+          jq -e --arg sha "$QA_SHA" '.head_sha==$sha and .status=="completed" and .conclusion=="success"' qa-run.json
+      - name: Download tested APK and verify checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa dist
+          gh run download "$QA_RUN" --repo "$REPO" --name "$QA_ARTIFACT" --dir qa
+          (cd qa && sha256sum -c SHA256SUMS.txt)
+          test -s qa/EpiMediaHub-v1.0.55-GalaBox-Universal-PRIVATE-BETA.apk
+          cp qa/EpiMediaHub-v1.0.55-GalaBox-Universal-PRIVATE-BETA.apk "dist/$APK"
+      - name: Publish separate public pilot prerelease without touching updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "::error::Pilot tag already exists, refusing overwrite"
+            exit 1
+          fi
+          gh release create "$TAG" "dist/$APK" --repo "$REPO" --target "$QA_SHA" --prerelease --latest=false --title "EpiMediaHub v1.0.55 GalaBox pilot APK" --notes "PRIVATE TEST INTENT: This is a publicly accessible standalone pilot URL so TV Downloader can install it without GitHub login. Not customer-tested or approved. Never modifies the normal in-app updater. Test German/Turkish live changes, playlists, and restarts."
+          gh release view "$TAG" --repo "$REPO" --json assets,isPrerelease,tagName > release.json
+          jq -e --arg name "$APK" '.isPrerelease==true and (.assets|any(.name==$name and .size>1000000))' release.json
+          echo "https://github.com/$REPO/releases/download/$TAG/$APK" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,65 @@
+name: Publish v1.0.56 standalone GalaBox fast-zapping pilot APK
+on:
+  push:
+    branches: [fix/v156-galabox-fast-zapping]
+    paths: ['.github/workflows/v156-galabox-direct-download.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: epimediahub/EpiMediaHub
+      QA_RUN: '38135807281'
+      QA_SHA: '15ee7b38011c5e07a6ba8d03e6788aa6a9d567b3'
+      QA_ARTIFACT: EpiMediaHub-v1.0.56-GalaBox-PRIVATE-signed-qa
+      TAG: v1.0.56-galabox-fast-pilot-20261011
+      APK: EpiMediaHub-GalaBox-1.0.56.apk
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for verified successful signed Android QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "fix/v156-galabox-fast-zapping"
+          for i in $(seq 1 100); do
+            gh api "repos/$REPO/actions/runs/$QA_RUN" > qa-run.json
+            jq -e --arg sha "$QA_SHA" '.head_sha==$sha and .name=="EpiMediaHub 1.0.56 GalaBox PRIVATE signed beta QA"' qa-run.json
+            if jq -e '.status=="completed" and .conclusion=="success"' qa-run.json >/dev/null; then
+              echo 'Passed signed build gate'
+              exit 0
+            fi
+            if jq -e '.status=="completed" and .conclusion!="success"' qa-run.json >/dev/null; then
+              echo '::error::Android QA failed, public pilot NOT published'
+              exit 1
+            fi
+            sleep 15
+          done
+          echo '::error::QA timed out, refusing to publish'
+          exit 1
+      - name: Download signed QA APK and verify recorded checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa dist
+          gh run download "$QA_RUN" --repo "$REPO" --name "$QA_ARTIFACT" --dir qa
+          (cd qa && sha256sum -c SHA256SUMS.txt)
+          test -s qa/EpiMediaHub-v1.0.56-GalaBox-Universal-PRIVATE-BETA.apk
+          cp qa/EpiMediaHub-v1.0.56-GalaBox-Universal-PRIVATE-BETA.apk "dist/$APK"
+          sha256sum "dist/$APK"
+      - name: Standalone pilot prerelease only, no updater changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "::error::Pilot tag exists, refusing overwrite"
+            exit 1
+          fi
+          gh release create "$TAG" "dist/$APK" --repo "$REPO" --target "$QA_SHA" --prerelease --latest=false --title "EpiMediaHub 1.0.56 GalaBox fast zapping PILOT" --notes "PRIVATE TEST INTENT: a directly accessible standalone pilot URL for testing with Downloader. Signed universal APK; not tested on GalaBox hardware yet. Changes only non-Amazon LIVE Xtream exact-M3U lookup to one bounded cached index per playlist. Not approved for customers and does not change regular in-app updater. Test TR↔DE switches, 4K↔The Best, twenty or more zaps and app restarts."
+          gh release view "$TAG" --repo "$REPO" --json assets,isPrerelease > release.json
+          jq -e --arg name "$APK" '.isPrerelease==true and (.assets|any(.name==$name and .size>1000000))' release.json
+          echo "https://github.com/$REPO/releases/download/$TAG/$APK" >> "$GITHUB_STEP_SUMMARY"

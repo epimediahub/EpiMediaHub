@@ -1,0 +1,135 @@
+# id|provider team name|sport|legends or history pair|preferred player pair
+man_city|Manchester City|Soccer|Sergio Aguero;David Silva|Erling Haaland;Rodri
+liverpool|Liverpool|Soccer|Steven Gerrard;Kenny Dalglish|Mohamed Salah;Virgil van Dijk
+arsenal|Arsenal|Soccer|Thierry Henry;Dennis Bergkamp|Bukayo Saka;Martin Odegaard
+man_utd|Manchester United|Soccer|Wayne Rooney;Paul Scholes|Bruno Fernandes;Amad Diallo
+chelsea|Chelsea|Soccer|Frank Lampard;Didier Drogba|Cole Palmer;Enzo Fernandez
+inter|Inter Milan|Soccer|Javier Zanetti;Diego Milito|Lautaro Martinez;Nicolo Barella
+milan|AC Milan|Soccer|Paolo Maldini;Kaka|Rafael Leao;Christian Pulisic
+juventus|Juventus|Soccer|Alessandro Del Piero;Gianluigi Buffon|Kenan Yildiz;Manuel Locatelli
+napoli|Napoli|Soccer|Diego Maradona;Marek Hamsik|Scott McTominay;Giovanni Di Lorenzo
+roma|Roma|Soccer|Francesco Totti;Daniele De Rossi|Paulo Dybala;Lorenzo Pellegrini
+real_madrid|Real Madrid|Soccer|Zinedine Zidane;Cristiano Ronaldo|Kylian Mbappe;Vinicius Junior
+barcelona|Barcelona|Soccer|Lionel Messi;Ronaldinho|Lamine Yamal;Pedri
+atletico|Atletico Madrid|Soccer|Fernando Torres;Diego Godin|Antoine Griezmann;Julian Alvarez
+sevilla|Sevilla|Soccer|Frederic Kanoute;Jesus Navas|Nemanja Gudelj;Isaac Romero
+athletic|Athletic Bilbao|Soccer|Aritz Aduriz;Julen Guerrero|Nico Williams;Inaki Williams
+bayern|Bayern Munich|Soccer|Franz Beckenbauer;Philipp Lahm|Harry Kane;Jamal Musiala
+dortmund|Borussia Dortmund|Soccer|Marco Reus;Michael Zorc|Serhou Guirassy;Julian Brandt
+leverkusen|Bayer Leverkusen|Soccer|Ulf Kirsten;Bernd Schneider|Patrik Schick;Robert Andrich
+frankfurt|Eintracht Frankfurt|Soccer|Anthony Yeboah;Uwe Bein|Mario Gotze;Hugo Larsson
+leipzig|RB Leipzig|Soccer|Emil Forsberg;Yussuf Poulsen|David Raum;Willi Orban
+fc_koeln|FC Koln|Soccer|Lukas Podolski;Toni Schumacher|Ragnar Ache;Eric Martel
+psg|Paris SG|Soccer|Zlatan Ibrahimovic;Thiago Silva|Ousmane Dembele;Achraf Hakimi
+marseille|Marseille|Soccer|Jean-Pierre Papin;Didier Deschamps|Mason Greenwood;Pierre-Emile Hojbjerg
+lyon|Lyon|Soccer|Juninho Pernambucano;Lisandro Lopez|Corentin Tolisso;Nicolas Tagliafico
+monaco|Monaco|Soccer|Radamel Falcao;David Trezeguet|Aleksandr Golovin;Denis Zakaria
+lille|Lille|Soccer|Eden Hazard;Rio Mavuba|Olivier Giroud;Benjamin Andre
+ajax|Ajax|Soccer|Johan Cruyff;Marco van Basten|Wout Weghorst;Davy Klaassen
+psv|PSV Eindhoven|Soccer|Ruud van Nistelrooy;Mark van Bommel|Guus Til;Ismael Saibari
+feyenoord|Feyenoord|Soccer|Giovanni van Bronckhorst;Dirk Kuyt|Quinten Timber;Anis Hadj Moussa
+az|AZ Alkmaar|Soccer|Kees Kist;Barry van Galen|Sven Mijnans;Troy Parrott
+twente|FC Twente|Soccer|Blaise Nkufo;Theo Janssen|Ricky van Wolfswinkel;Sam Lammers
+galatasaray|Galatasaray|Soccer|Gheorghe Hagi;Wesley Sneijder|Victor Osimhen;Mauro Icardi
+fenerbahce|Fenerbahce|Soccer|Alex de Souza;Roberto Carlos|Talisca;Fred
+trabzonspor|Trabzonspor|Soccer|Hami Mandirali;Gokdeniz Karadeniz|Paul Onuachu;Ernest Muci
+besiktas|Besiktas|Soccer|Sergen Yalcin;Ricardo Quaresma|Orkun Kokcu;Rafa Silva
+basaksehir|Istanbul Basaksehir|Soccer|Emre Belozoglu;Edin Visca|Krzysztof Piatek;Deniz Turuc
+porto|FC Porto|Soccer|Deco;Ricardo Carvalho|Diogo Costa;Alan Varela
+benfica|Benfica|Soccer|Eusebio;Rui Costa|Vangelis Pavlidis;Nicolas Otamendi
+sporting|Sporting CP|Soccer|Luis Figo;Nani|Pedro Goncalves;Morten Hjulmand
+celtic|Celtic|Soccer|Henrik Larsson;Shunsuke Nakamura|Callum McGregor;Daizen Maeda
+rangers|Rangers|Soccer|Ally McCoist;Brian Laudrup|James Tavernier;Nicolas Raskin
+national_de|Germany|Soccer|Miroslav Klose;Bastian Schweinsteiger|Jamal Musiala;Florian Wirtz
+national_it|Italy|Soccer|Gianluigi Buffon;Alessandro Del Piero|Gianluigi Donnarumma;Nicolo Barella
+national_fr|France|Soccer|Zinedine Zidane;Thierry Henry|Kylian Mbappe;Ousmane Dembele
+national_es|Spain|Soccer|Andres Iniesta;Xavi|Lamine Yamal;Pedri
+national_en|England|Soccer|David Beckham;Wayne Rooney|Harry Kane;Jude Bellingham
+national_pt|Portugal|Soccer|Luis Figo;Eusebio|Cristiano Ronaldo;Bruno Fernandes
+national_nl|Netherlands|Soccer|Johan Cruyff;Marco van Basten|Virgil van Dijk;Frenkie de Jong
+national_be|Belgium|Soccer|Vincent Kompany;Eden Hazard|Kevin De Bruyne;Romelu Lukaku
+national_hr|Croatia|Soccer|Davor Suker;Robert Prosinecki|Luka Modric;Josko Gvardiol
+national_ar|Argentina|Soccer|Diego Maradona;Gabriel Batistuta|Lionel Messi;Julian Alvarez
+national_br|Brazil|Soccer|Ronaldinho;Ronaldo|Vinicius Junior;Raphinha
+national_uy|Uruguay|Soccer|Diego Forlan;Enzo Francescoli|Federico Valverde;Darwin Nunez
+national_mx|Mexico|Soccer|Hugo Sanchez;Rafael Marquez|Edson Alvarez;Santiago Gimenez
+national_us|USA|Soccer|Landon Donovan;Clint Dempsey|Christian Pulisic;Weston McKennie
+national_ma|Morocco|Soccer|Noureddine Naybet;Mustapha Hadji|Achraf Hakimi;Youssef En-Nesyri
+national_tr|Turkey|Soccer|Nihat Kahveci;Emre Belozoglu|Hakan Calhanoglu;Arda Guler
+national_jp|Japan|Soccer|Hidetoshi Nakata;Shunsuke Nakamura|Takefusa Kubo;Kaoru Mitoma
+national_kr|South Korea|Soccer|Park Ji-sung;Cha Bum-kun|Son Heung-min;Kim Min-jae
+national_ch|Switzerland|Soccer|Alexander Frei;Stephane Chapuisat|Granit Xhaka;Manuel Akanji
+national_dk|Denmark|Soccer|Michael Laudrup;Peter Schmeichel|Christian Eriksen;Rasmus Hojlund
+f1_ferrari|Ferrari|Motorsport|Michael Schumacher;Niki Lauda|Charles Leclerc;Lewis Hamilton
+f1_mercedes|Mercedes AMG Petronas|Motorsport|Nico Rosberg;Michael Schumacher|George Russell;Andrea Kimi Antonelli
+f1_red_bull|Red Bull Racing|Motorsport|Sebastian Vettel;Mark Webber|Max Verstappen;Isack Hadjar
+f1_mclaren|McLaren|Motorsport|Ayrton Senna;Alain Prost|Lando Norris;Oscar Piastri
+f1_aston_martin|Aston Martin|Motorsport|Sebastian Vettel;Sergio Perez|Fernando Alonso;Lance Stroll
+f1_alpine|Alpine F1 Team|Motorsport|Fernando Alonso;Jenson Button|Pierre Gasly;Franco Colapinto
+f1_haas|Haas F1 Team|Motorsport|Romain Grosjean;Kevin Magnussen|Esteban Ocon;Oliver Bearman
+f1_racing_bulls|Racing Bulls|Motorsport|Sebastian Vettel;Daniel Ricciardo|Liam Lawson;Arvid Lindblad
+f1_williams|Williams|Motorsport|Nigel Mansell;Damon Hill|Alexander Albon;Carlos Sainz
+f1_audi|Audi|Motorsport|Kimi Raikkonen;Robert Kubica|Nico Hulkenberg;Gabriel Bortoleto
+f1_cadillac|Cadillac|Motorsport|Mario Andretti;Phil Hill|Valtteri Bottas;Sergio Perez
+nba_atlanta_hawks|Atlanta Hawks|Basketball|Dominique Wilkins;Dikembe Mutombo|Trae Young;Jalen Johnson
+nba_boston_celtics|Boston Celtics|Basketball|Larry Bird;Paul Pierce|Jayson Tatum;Jaylen Brown
+nba_brooklyn_nets|Brooklyn Nets|Basketball|Jason Kidd;Vince Carter|Michael Porter Jr.;Nic Claxton
+nba_charlotte_hornets|Charlotte Hornets|Basketball|Alonzo Mourning;Larry Johnson|LaMelo Ball;Brandon Miller
+nba_chicago_bulls|Chicago Bulls|Basketball|Michael Jordan;Scottie Pippen|Josh Giddey;Coby White
+nba_cleveland_cavaliers|Cleveland Cavaliers|Basketball|LeBron James;Mark Price|Donovan Mitchell;Evan Mobley
+nba_dallas_mavericks|Dallas Mavericks|Basketball|Dirk Nowitzki;Jason Terry|Anthony Davis;Kyrie Irving
+nba_denver_nuggets|Denver Nuggets|Basketball|Alex English;Carmelo Anthony|Nikola Jokic;Jamal Murray
+nba_detroit_pistons|Detroit Pistons|Basketball|Isiah Thomas;Ben Wallace|Cade Cunningham;Jalen Duren
+nba_golden_state_warriors|Golden State Warriors|Basketball|Wilt Chamberlain;Chris Mullin|Stephen Curry;Draymond Green
+nba_houston_rockets|Houston Rockets|Basketball|Hakeem Olajuwon;Yao Ming|Kevin Durant;Alperen Sengun
+nba_indiana_pacers|Indiana Pacers|Basketball|Reggie Miller;Jermaine O'Neal|Tyrese Haliburton;Pascal Siakam
+nba_los_angeles_clippers|Los Angeles Clippers|Basketball|Blake Griffin;Bob McAdoo|Kawhi Leonard;James Harden
+nba_los_angeles_lakers|Los Angeles Lakers|Basketball|Kobe Bryant;Magic Johnson|Luka Doncic;LeBron James
+nba_memphis_grizzlies|Memphis Grizzlies|Basketball|Zach Randolph;Marc Gasol|Ja Morant;Jaren Jackson Jr.
+nba_miami_heat|Miami Heat|Basketball|Dwyane Wade;Alonzo Mourning|Bam Adebayo;Tyler Herro
+nba_milwaukee_bucks|Milwaukee Bucks|Basketball|Kareem Abdul-Jabbar;Oscar Robertson|Giannis Antetokounmpo;Myles Turner
+nba_minnesota_timberwolves|Minnesota Timberwolves|Basketball|Kevin Garnett;Kevin Love|Anthony Edwards;Rudy Gobert
+nba_new_orleans_pelicans|New Orleans Pelicans|Basketball|Chris Paul;David West|Zion Williamson;Dejounte Murray
+nba_new_york_knicks|New York Knicks|Basketball|Patrick Ewing;Walt Frazier|Jalen Brunson;Karl-Anthony Towns
+nba_oklahoma_city_thunder|Oklahoma City Thunder|Basketball|Gary Payton;Shawn Kemp|Shai Gilgeous-Alexander;Chet Holmgren
+nba_orlando_magic|Orlando Magic|Basketball|Shaquille O'Neal;Penny Hardaway|Paolo Banchero;Franz Wagner
+nba_philadelphia_76ers|Philadelphia 76ers|Basketball|Allen Iverson;Julius Erving|Joel Embiid;Tyrese Maxey
+nba_phoenix_suns|Phoenix Suns|Basketball|Charles Barkley;Steve Nash|Devin Booker;Dillon Brooks
+nba_portland_trail_blazers|Portland Trail Blazers|Basketball|Clyde Drexler;Bill Walton|Damian Lillard;Scoot Henderson
+nba_sacramento_kings|Sacramento Kings|Basketball|Chris Webber;Peja Stojakovic|Domantas Sabonis;Zach LaVine
+nba_san_antonio_spurs|San Antonio Spurs|Basketball|Tim Duncan;David Robinson|Victor Wembanyama;De'Aaron Fox
+nba_toronto_raptors|Toronto Raptors|Basketball|Vince Carter;Kyle Lowry|Scottie Barnes;Brandon Ingram
+nba_utah_jazz|Utah Jazz|Basketball|Karl Malone;John Stockton|Lauri Markkanen;Walker Kessler
+nba_washington_wizards|Washington Wizards|Basketball|Wes Unseld;Elvin Hayes|Alex Sarr;Bilal Coulibaly
+nfl_arizona_cardinals|Arizona Cardinals|American Football|Larry Fitzgerald;Pat Tillman|Kyler Murray;Trey McBride
+nfl_atlanta_falcons|Atlanta Falcons|American Football|Michael Vick;Julio Jones|Bijan Robinson;Drake London
+nfl_baltimore_ravens|Baltimore Ravens|American Football|Ray Lewis;Ed Reed|Lamar Jackson;Derrick Henry
+nfl_buffalo_bills|Buffalo Bills|American Football|Jim Kelly;Thurman Thomas|Josh Allen;James Cook
+nfl_carolina_panthers|Carolina Panthers|American Football|Cam Newton;Steve Smith Sr.|Bryce Young;Chuba Hubbard
+nfl_chicago_bears|Chicago Bears|American Football|Walter Payton;Brian Urlacher|Caleb Williams;DJ Moore
+nfl_cincinnati_bengals|Cincinnati Bengals|American Football|Anthony Munoz;Chad Johnson|Joe Burrow;Ja'Marr Chase
+nfl_cleveland_browns|Cleveland Browns|American Football|Jim Brown;Joe Thomas|Myles Garrett;David Njoku
+nfl_dallas_cowboys|Dallas Cowboys|American Football|Emmitt Smith;Troy Aikman|Dak Prescott;CeeDee Lamb
+nfl_denver_broncos|Denver Broncos|American Football|John Elway;Terrell Davis|Bo Nix;Patrick Surtain II
+nfl_detroit_lions|Detroit Lions|American Football|Barry Sanders;Calvin Johnson|Jared Goff;Amon-Ra St. Brown
+nfl_green_bay_packers|Green Bay Packers|American Football|Brett Favre;Reggie White|Jordan Love;Josh Jacobs
+nfl_houston_texans|Houston Texans|American Football|Andre Johnson;J.J. Watt|C.J. Stroud;Nico Collins
+nfl_indianapolis_colts|Indianapolis Colts|American Football|Peyton Manning;Marvin Harrison|Jonathan Taylor;Michael Pittman Jr.
+nfl_jacksonville_jaguars|Jacksonville Jaguars|American Football|David Garrard;Maurice Jones-Drew|Trevor Lawrence;Brian Thomas Jr.
+nfl_kansas_city_chiefs|Kansas City Chiefs|American Football|Derrick Thomas;Tony Gonzalez|Patrick Mahomes;Travis Kelce
+nfl_las_vegas_raiders|Las Vegas Raiders|American Football|Bo Jackson;Tim Brown|Brock Bowers;Maxx Crosby
+nfl_los_angeles_chargers|Los Angeles Chargers|American Football|LaDainian Tomlinson;Junior Seau|Justin Herbert;Derwin James Jr.
+nfl_los_angeles_rams|Los Angeles Rams|American Football|Kurt Warner;Eric Dickerson|Matthew Stafford;Puka Nacua
+nfl_miami_dolphins|Miami Dolphins|American Football|Dan Marino;Larry Csonka|Tua Tagovailoa;Tyreek Hill
+nfl_minnesota_vikings|Minnesota Vikings|American Football|Randy Moss;Cris Carter|Justin Jefferson;J.J. McCarthy
+nfl_new_england_patriots|New England Patriots|American Football|Tom Brady;Rob Gronkowski|Drake Maye;Christian Gonzalez
+nfl_new_orleans_saints|New Orleans Saints|American Football|Drew Brees;Marques Colston|Chris Olave;Alvin Kamara
+nfl_new_york_giants|New York Giants|American Football|Lawrence Taylor;Eli Manning|Malik Nabers;Dexter Lawrence
+nfl_new_york_jets|New York Jets|American Football|Joe Namath;Curtis Martin|Garrett Wilson;Quinnen Williams
+nfl_philadelphia_eagles|Philadelphia Eagles|American Football|Brian Dawkins;Reggie White|Jalen Hurts;Saquon Barkley
+nfl_pittsburgh_steelers|Pittsburgh Steelers|American Football|Terry Bradshaw;Troy Polamalu|T.J. Watt;DK Metcalf
+nfl_san_francisco_49ers|San Francisco 49ers|American Football|Joe Montana;Jerry Rice|Brock Purdy;Christian McCaffrey
+nfl_seattle_seahawks|Seattle Seahawks|American Football|Walter Jones;Marshawn Lynch|Jaxon Smith-Njigba;Leonard Williams
+nfl_tampa_bay_buccaneers|Tampa Bay Buccaneers|American Football|Derrick Brooks;Warren Sapp|Baker Mayfield;Mike Evans
+nfl_tennessee_titans|Tennessee Titans|American Football|Steve McNair;Eddie George|Cam Ward;Calvin Ridley
+nfl_washington_commanders|Washington Commanders|American Football|Darrell Green;Art Monk|Jayden Daniels;Terry McLaurin

@@ -1,0 +1,88 @@
+name: Check Android v1.0.12 compatibility
+
+on:
+  push:
+    branches: [android-v1.0.12-dev]
+    paths:
+      - '.github/workflows/android-v1012-check.yml'
+      - 'android/v1.0.12/**'
+      - 'build_tools/install_android_v1012_source.sh'
+      - 'build_tools/generate_intro_sound_v109.py'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* > .ci-android/source.b64
+          base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+      - name: Pin Gradle toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+      - name: Install v1.0.12 source
+        run: bash build_tools/install_android_v1012_source.sh
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Verify playlist and watched-video behaviour
+        shell: bash
+        run: |
+          cd "$PROJECT_ROOT"
+          gradle :app:testDebugUnitTest --stacktrace --no-daemon
+      - name: Build debug APKs
+        shell: bash
+        run: |
+          cd "$PROJECT_ROOT"
+          gradle :app:assembleDebug --stacktrace --no-daemon
+      - name: Verify API 25 compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find "$PROJECT_ROOT/app/build/outputs/apk/debug" -name 'app-armeabi-v7a-debug.apk' | head -n1)"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -E "package:|sdkVersion:|targetSdkVersion:|native-code:"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "sdkVersion:'25'"
+
+      - name: Verify DASH and HLS classes in debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find "$PROJECT_ROOT/app/build/outputs/apk/debug" -name 'app-armeabi-v7a-debug.apk' | head -n1)"
+          test -s "$APK"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" dex packages --defined-only "$APK" > /tmp/media3-debug-packages.txt
+          grep -F 'androidx.media3.exoplayer.dash.DashMediaSource$Factory' /tmp/media3-debug-packages.txt
+          grep -F 'androidx.media3.exoplayer.hls.HlsMediaSource$Factory' /tmp/media3-debug-packages.txt

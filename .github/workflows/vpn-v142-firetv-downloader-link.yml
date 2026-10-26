@@ -1,0 +1,63 @@
+name: Publish EpiMediaHub 1.0.42 Fire TV pilot APK as prerelease
+
+on:
+  push:
+    branches: [feature/vpn-v142-auto-provisioning]
+    paths: ['.github/workflows/vpn-v142-firetv-downloader-link.yml']
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: epimediahub-v142-firetv-prerelease
+  cancel-in-progress: false
+
+jobs:
+  pilot-release:
+    name: Publish previously verified signed QA APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - name: Download successful signed v1.0.42 QA build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run view 37895846131 --repo epimediahub/EpiMediaHub --json conclusion --jq '.conclusion' | grep -qx success
+          mkdir -p "$RUNNER_TEMP/epi-qa"
+          gh run download 37895846131 \
+            --repo epimediahub/EpiMediaHub \
+            --name EpiMediaHub-Official-v1.0.42-private-customer-qa \
+            --dir "$RUNNER_TEMP/epi-qa"
+          cd "$RUNNER_TEMP/epi-qa"
+          sha256sum -c SHA256SUMS.txt
+          test -s EpiMediaHub-Official-v1.0.42-ARMv7-BETA.apk
+          test -s EpiMediaHub-Official-v1.0.42-ARM64-BETA.apk
+          test -s README.txt
+
+      - name: Publish test-only GitHub prerelease for Downloader
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="vpn-v1.0.42-firetv-pilot"
+          DIR="$RUNNER_TEMP/epi-qa"
+          REPO="epimediahub/EpiMediaHub"
+          if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "$REPO" \
+              --target 8d54f773d99690218e7c4028315968800207ac6d \
+              --title "EpiMediaHub 1.0.42 – Fire TV VPN test (prerelease)" \
+              --prerelease \
+              --notes "PUBLIC TEST DOWNLOAD for a limited pilot, NOT a general production release. Existing official package ID and signature; original signed artifact from Actions run 37895846131. VPN automation must be configured in dashboard and Finland agent. User must accept the Android VPN consent prompt; verify installation and fail-closed behavior on a physical Fire TV. Not distributed through the in-app updater."
+          fi
+          gh release upload "$TAG" \
+            "$DIR/EpiMediaHub-Official-v1.0.42-ARMv7-BETA.apk" \
+            "$DIR/EpiMediaHub-Official-v1.0.42-ARM64-BETA.apk" \
+            "$DIR/SHA256SUMS.txt" \
+            --repo "$REPO" --clobber
+          gh release view "$TAG" --repo "$REPO" --json url,assets --jq '.url, (.assets[] | .url)'

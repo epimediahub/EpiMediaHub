@@ -1,0 +1,111 @@
+name: Publish verified Android v1.0.20 after Raspberry installation
+
+on:
+  push:
+    branches: [android-v1.0.20-credits]
+    paths:
+      - '.github/workflows/android-v1020-publish.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: epimediahub-android-v1020-release
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-android-v1020:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require deployed license backend before updating clients
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error
+          base = "https://api.epimediahub.com/v1/license/"
+          req = urllib.request.Request(base + "capabilities", headers={"User-Agent": "EpiMediaHub-Release/1.0.20", "Cache-Control": "no-cache"})
+          try:
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  policy = json.load(response)
+              assert policy.get("licensing_ready") is True
+              assert policy.get("trial_days") == 7
+              assert policy.get("activation_credits") == 1
+              assert policy.get("retail_price_eur_cents") == 1000
+              assert policy.get("manual_reseller_prices") is True
+              probe = urllib.request.Request(base + "status", data=b"{}", headers={"Content-Type": "application/json", "User-Agent": "EpiMediaHub-Release/1.0.20", "Cache-Control": "no-cache"})
+              try:
+                  urllib.request.urlopen(probe, timeout=20)
+                  raise AssertionError("Invalid status request was unexpectedly accepted")
+              except urllib.error.HTTPError as error:
+                  assert error.code == 400, f"License status endpoint returned {error.code}"
+          except Exception as error:
+              raise SystemExit(f"Raspberry license backend is not ready; signed APK artifacts are preserved. Install the verified credit backend first, then rerun this publish job. {type(error).__name__}: {error}")
+          print("Live license backend and pricing policy verified")
+          PY
+      - name: Verify the source of the already signed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PYVERIFY'
+          import json, subprocess
+          prefix = 'repos/epimediahub/EpiMediaHub/actions/runs/37123308946'
+          def fetch(path):
+              return json.loads(subprocess.check_output(['gh', 'api', path], text=True))
+          run = fetch(prefix)
+          assert run['head_sha'] == '2f68da5d282208756cf2f027faa09f0b1ba439c1'
+          assert run['head_branch'] == 'android-v1.0.20-credits'
+          jobs = fetch(prefix + '/jobs')['jobs']
+          assert any(j['name'] == 'build-android-v1020-release' and j['conclusion'] == 'success' for j in jobs)
+          artifacts = fetch(prefix + '/artifacts')['artifacts']
+          signed = [a for a in artifacts if a['name'] == 'EpiMediaHub-Android-v1.0.20-signed-test-release']
+          assert len(signed) == 1 and not signed[0]['expired']
+          assert signed[0]['id'] == 11273364137
+          assert signed[0]['digest'] == 'sha256:f535ff39786b4cbc65d5ce3d4ffe599fb0bb336d41c7ad9a49f78169b55f79c1'
+          print('Verified signed release source and artifact digest')
+          PYVERIFY
+      - uses: actions/download-artifact@v4
+        with:
+          name: EpiMediaHub-Android-v1.0.20-signed-test-release
+          path: dist
+          run-id: 37123308946
+          github-token: ${{ github.token }}
+
+      - name: Verify the preserved APKs and updater manifest
+        run: |
+          python3 - <<'PYVERIFY'
+          import hashlib, json
+          from pathlib import Path
+          manifest = json.loads(Path('dist/android-latest.json').read_text())
+          assert manifest['version'] == '1.0.20' and manifest['versionCode'] == 1020
+          assert json.loads(Path('dist/latest.json').read_text()) == manifest
+          assert set(manifest['apks']) == {'arm64-v8a', 'armeabi-v7a', 'universal'}
+          for abi, entry in manifest['apks'].items():
+              filename = f'EpiMediaHub_Android_v1.0.20-{abi}.apk'
+              assert entry['url'] == 'https://download.epimediahub.com/android/' + filename
+              apk = Path('dist') / filename
+              assert apk.stat().st_size == entry['size']
+              assert hashlib.sha256(apk.read_bytes()).hexdigest() == entry['sha256']
+          assert hashlib.sha256(Path('dist/EpiMediaHub_Android_v0.7.0-test.apk').read_bytes()).hexdigest() == manifest['apks']['universal']['sha256']
+          print('All signed APK sizes, hashes and updater entries verified')
+          PYVERIFY
+      - name: Publish rolling updater prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v0.7.0-test"
+          TITLE="EpiMediaHub Android v1.0.20 Test"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TITLE" --notes-file android/release_notes/v1.0.20.md --prerelease --draft --target "${GITHUB_SHA}"
+          fi
+          for file in dist/*.apk dist/SHA256SUMS.txt; do
+            timeout 15m gh release upload "$TAG" "$file" --clobber
+          done
+          timeout 15m gh release upload "$TAG" dist/android-latest.json dist/latest.json --clobber
+          gh release edit "$TAG" --title "$TITLE" --notes-file android/release_notes/v1.0.20.md --prerelease --draft=false
+

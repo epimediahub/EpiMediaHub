@@ -1,0 +1,98 @@
+name: Publish EpiMediaHub 1.0.43 live-gauge Fire TV pilot
+
+on:
+  push:
+    branches: [feature/vpn-v143-live-gauge]
+    paths:
+      - 'android/v1.0.34-vpn/V140SpeedTest.kt'
+      - 'android/v1.0.34-vpn/V140SpeedTransferTest.kt'
+      - '.github/workflows/android-v143-speed-gauge-qa.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: epimediahub-v143-direct-firetv
+  cancel-in-progress: true
+
+jobs:
+  upload-direct-pilot-apks:
+    name: Publish only after successful signed 1.0.43 Android QA
+    runs-on: ubuntu-22.04
+    timeout-minutes: 65
+    steps:
+      - name: Wait for the matching signed and tested Android build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          REPO="epimediahub/EpiMediaHub"
+          RUN_ID=""
+          for attempt in $(seq 1 105); do
+            JSON=$(gh run list --repo "$REPO" --workflow android-v143-speed-gauge-qa.yml \
+              --branch feature/vpn-v143-live-gauge --limit 15 \
+              --json databaseId,headSha,status,conclusion)
+            RUN_ID=$(echo "$JSON" | jq -r --arg sha "$EXPECTED_SHA" \
+              '[.[] | select(.headSha == $sha)] | first | .databaseId // empty')
+            if [ -n "$RUN_ID" ]; then
+              STATUS=$(echo "$JSON" | jq -r --argjson id "$RUN_ID" \
+                '.[] | select(.databaseId == $id) | .status')
+              CONCLUSION=$(echo "$JSON" | jq -r --argjson id "$RUN_ID" \
+                '.[] | select(.databaseId == $id) | .conclusion // empty')
+              if [ "$STATUS" = completed ]; then
+                if [ "$CONCLUSION" = success ]; then
+                  echo "Verified run: $RUN_ID"
+                  echo "SIGNED_RUN=$RUN_ID" >> "$GITHUB_ENV"
+                  exit 0
+                fi
+                echo "Refusing to publish: QA run $RUN_ID finished $CONCLUSION" >&2
+                exit 1
+              fi
+            fi
+            echo "Waiting for signed Android QA (attempt $attempt/105)"
+            sleep 30
+          done
+          echo "Timed out awaiting signed 1.0.43 APK; nothing published" >&2
+          exit 1
+
+      - name: Download APKs and verify signed QA checksums
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/epi-v143"
+          gh run download "$SIGNED_RUN" --repo epimediahub/EpiMediaHub \
+            --name EpiMediaHub-Official-v1.0.43-live-gauge-private-qa \
+            --dir "$RUNNER_TEMP/epi-v143"
+          cd "$RUNNER_TEMP/epi-v143"
+          sha256sum --check SHA256SUMS.txt
+          test -s EpiMediaHub-Official-v1.0.43-ARMv7-PILOT.apk
+          test -s EpiMediaHub-Official-v1.0.43-ARM64-PILOT.apk
+
+      - name: Publish public direct APK links as clearly labeled pilot prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO="epimediahub/EpiMediaHub"
+          TAG="vpn-v1.0.43-speedtest-pilot"
+          QA="$RUNNER_TEMP/epi-v143"
+          if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$REPO" \
+              --target "$GITHUB_SHA" \
+              --title "EpiMediaHub 1.0.43 – Live-Speedtest Fire TV PILOT" \
+              --prerelease \
+              --notes "Pilot-APK with official app ID and existing signing key. Live Speedometer reads actual download and upload bytes; routing preserves VPN verification. For hardware tests only. Not in the general in-app updater."
+          fi
+          gh release upload "$TAG" \
+            "$QA/EpiMediaHub-Official-v1.0.43-ARMv7-PILOT.apk" \
+            "$QA/EpiMediaHub-Official-v1.0.43-ARM64-PILOT.apk" \
+            "$QA/SHA256SUMS.txt" \
+            --repo "$REPO" --clobber
+          gh release view "$TAG" --repo "$REPO" --json url,assets \
+            --jq '.url, (.assets[] | .url)'

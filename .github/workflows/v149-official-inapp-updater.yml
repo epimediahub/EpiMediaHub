@@ -1,0 +1,135 @@
+name: Publish official EpiMediaHub v1.0.49 in-app update
+
+on:
+  push:
+    branches: [feature/official-v149-quickmenu-weather-intros]
+    paths: ['.github/workflows/v149-official-inapp-updater.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: epimediahub-android-rolling-updater
+  cancel-in-progress: false
+
+jobs:
+  publish-tested-apks:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 65
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: epimediahub/EpiMediaHub
+      TAG: v0.7.0-test
+      QA_RUN: '37959374242'
+      QA_SHA: '88be67f5ec654901a124d983eddfb84a84eb026d'
+      SOURCE_QA_RUN: '37959374466'
+      QA_ARTIFACT: EpiMediaHub-Official-v1.0.49-combined-private-qa
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gate publication on both completed, immutable matching QA results
+        shell: bash
+        run: |
+          set -euo pipefail
+          for run in "$QA_RUN" "$SOURCE_QA_RUN"; do
+            gh api "repos/$REPO/actions/runs/$run" > "verify-$run.json"
+            jq -e --arg sha "$QA_SHA" \
+              '.status == "completed" and .conclusion == "success" and .head_sha == $sha and .head_branch == "feature/official-v149-quickmenu-weather-intros"' \
+              "verify-$run.json" >/dev/null
+          done
+          echo 'Both signed-release and source QA succeeded at pinned app commit.'
+
+      - name: Download only the artifact from verified official APK build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa dist
+          gh run download "$QA_RUN" --repo "$REPO" --name "$QA_ARTIFACT" --dir qa
+          (cd qa && sha256sum -c SHA256SUMS.txt)
+          for pair in \
+            'arm64-v8a:ARM64' 'armeabi-v7a:ARMv7' 'universal:Universal'; do
+            ABI="${pair%%:*}"
+            LABEL="${pair#*:}"
+            SOURCE="qa/EpiMediaHub-Official-v1.0.49-$LABEL-PILOT.apk"
+            TARGET="dist/EpiMediaHub_Android_v1.0.49-$ABI.apk"
+            test -s "$SOURCE"
+            test "$(stat -c %s "$SOURCE")" -gt 10000000
+            cp "$SOURCE" "$TARGET"
+          done
+          cp dist/EpiMediaHub_Android_v1.0.49-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+
+      - name: Refuse downgrades; prepare exact hashes and new updater manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$REPO" >/dev/null
+          mkdir -p previous
+          gh release download "$TAG" --repo "$REPO" --pattern latest.json --dir previous
+          python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          previous=json.loads(Path('previous/latest.json').read_text())
+          existing=int(previous.get('versionCode',0))
+          if existing >= 1049:
+              raise SystemExit(f'Updater already at versionCode {existing}; refusing non-monotonic replacement.')
+          expected = {
+              'arm64-v8a': 'EpiMediaHub_Android_v1.0.49-arm64-v8a.apk',
+              'armeabi-v7a': 'EpiMediaHub_Android_v1.0.49-armeabi-v7a.apk',
+              'universal': 'EpiMediaHub_Android_v1.0.49-universal.apk'
+          }
+          apks={}
+          for abi, filename in expected.items():
+              path=Path('dist')/filename
+              assert path.stat().st_size > 10_000_000
+              apks[abi]={
+                  'url': 'https://download.epimediahub.com/android/'+filename,
+                  'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                  'size': path.stat().st_size
+              }
+          update={
+              'version':'1.0.49',
+              'versionCode':1049,
+              'notes':'v1.0.49: Radio statt Einstellungen-Kachel, beschriftetes Schnellmenü mit Einstellungen/Server/Speedtest/Wetter, mittige Uhr, verbessertes Fernbedienungs-Fokusverhalten, echter VPN-Speedtest, getrennte Anbieter- und Serienintros sowie Wetteraktualisierung über festgelegten Standort.',
+              'apks':apks
+          }
+          for filename in ('latest.json','android-latest.json'):
+              (Path('dist')/filename).write_text(json.dumps(update,ensure_ascii=False,indent=2)+'\n')
+          print('Publication validated; existing code:',existing,'new: 1049')
+          PY
+
+      - name: Upload three verified APK variants before publishing manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for asset in dist/*.apk; do
+            timeout 20m gh release upload "$TAG" "$asset" --repo "$REPO" --clobber
+          done
+          timeout 5m gh release upload "$TAG" dist/SHA256SUMS.txt --repo "$REPO" --clobber
+          gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' > observed-assets.txt
+          for filename in \
+            EpiMediaHub_Android_v1.0.49-arm64-v8a.apk \
+            EpiMediaHub_Android_v1.0.49-armeabi-v7a.apk \
+            EpiMediaHub_Android_v1.0.49-universal.apk; do
+            grep -Fx "$filename" observed-assets.txt
+          done
+
+      - name: Advance public updater only after assets are live in release
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 5m gh release upload "$TAG" dist/android-latest.json --repo "$REPO" --clobber
+          timeout 5m gh release upload "$TAG" dist/latest.json --repo "$REPO" --clobber
+          gh release edit "$TAG" --repo "$REPO" \
+            --title 'EpiMediaHub Android v1.0.49' \
+            --notes 'EpiMediaHub v1.0.49: offizielles, erfolgreich getestetes und signiertes Update. Schnellmenü mit Beschriftungen, Radio-Kachel, zentrierte Uhr, echter VPN-Speedtest, getrennte EpiScene-Intros und aktuelleres standortgebundenes Wetter. Vorherige Registrierung bleibt bei identischer Signatur erhalten.' \
+            --prerelease
+          gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' > published-assets.txt
+          for filename in EpiMediaHub_Android_v1.0.49-arm64-v8a.apk \
+            EpiMediaHub_Android_v1.0.49-armeabi-v7a.apk \
+            EpiMediaHub_Android_v1.0.49-universal.apk latest.json android-latest.json; do
+            grep -Fx "$filename" published-assets.txt
+          done
+          echo 'EpiMediaHub v1.0.49 now published via official rolling updater.'

@@ -1,0 +1,250 @@
+name: EpiMediaHub v1.0.61 intro VPN EPG official signed QA
+on:
+  push:
+    branches: [feature/v161-cinema-vod-epg]
+    paths:
+      - '.github/workflows/android-v161-signed-qa.yml'
+      - '.github/workflows/v161-official-inapp-updater.yml'
+      - 'android/v1.0.61/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  compile-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+    env:
+      EPIMEDIAHUB_OFFICIAL_CANDIDATE: '1'
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 4eb73efd17b28fecbb824875137e43cede07c27f
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .ci-v161-overlay
+      - name: Add v161 candidate files
+        run: cp -a .ci-v161-overlay/android/v1.0.61 android/v1.0.61
+      - name: Reconstruct verified source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* | base64 -d > .ci-android/source.tar.gz
+          test "$(sha256sum .ci-android/source.tar.gz | awk '{print $1}')" = "192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+      - name: Pin Android toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+      - name: Apply v149 through v161 patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash build_tools/install_android_v1033_source.sh
+          python3 android/v1.0.34-vpn/patch_wireguard_spike.py
+          python3 android/v1.0.34-vpn/patch_playlist_routing.py
+          for v in 149 150 151 152 153 154 155 156 157 158 159 160 161; do
+            python3 "android/v1.0.$((10#$v - 100))/patch_v$v.py"
+          done
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Restore Android audio native cache
+        id: audio-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.PROJECT_ROOT }}/ffmpeg-audio/src/main/jni/ffmpeg/android-libs
+            ${{ env.PROJECT_ROOT }}/ffmpeg-6.1.6.tar.xz
+          key: audio-ffmpeg-6.1.6-ndk26b-api25-${{ runner.os }}-${{ hashFiles('build_tools/build_android_audio_v123.sh', 'android/v1.0.23/upstream.json') }}
+      - name: Prepare audio-only Android native dependencies
+        run: bash build_tools/build_android_audio_v123.sh
+      - name: Configure official signing from repository secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          KEYSTORE="$RUNNER_TEMP/epimediahub-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias epimediahub > /dev/null
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_ROOT'])/'app/build.gradle.kts'
+          s=p.read_text()
+          # The actual reconstructed Gradle DSL may omit buildTypes entirely.
+          # Add an explicit release signing configuration to the android extension.
+          # Do not guess indentation or depend on legacy release {} blocks.
+          anchor='android {\n'
+          if s.count(anchor)<1: raise SystemExit('Android DSL block missing')
+          # The project intentionally contains two android {} blocks (release optimization override).
+          # Inject into the first one only; both configure the same AGP extension.
+          if 'signingConfigs {' in s or 'signingConfig = ' in s:
+              raise SystemExit('Unexpected existing signing configuration; refusing to override')
+          signing='''    signingConfigs {
+              create("release") {
+                  storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))
+                  storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                  keyAlias = "epimediahub"
+                  keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+              }
+          }
+          buildTypes {
+              getByName("release") {
+                  signingConfig = signingConfigs.getByName("release")
+              }
+          }
+
+          '''
+          s=s.replace(anchor,anchor+signing,1)
+          p.write_text(s)
+          print('Official release signing bound in android extension (no buildTypes assumptions)')
+          PY
+      - name: Reuse passed compilation and unit tests only for identical app source
+        id: source-proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TESTED_SHA=c9aeb39a42e4c5f20a16019bf5eb7fb37907941f
+          git -C .ci-v161-overlay fetch --depth=1 origin "$TESTED_SHA"
+          if ! git -C .ci-v161-overlay diff --quiet "$TESTED_SHA" HEAD -- android/v1.0.61; then
+            echo 'passed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh api repos/epimediahub/EpiMediaHub/actions/runs/38221560179 > tested-run.json
+          gh api repos/epimediahub/EpiMediaHub/actions/runs/38221560179/jobs > tested-jobs.json
+          python3 - <<'PYPROOF'
+          import json, subprocess
+          from pathlib import Path
+          tested='c9aeb39a42e4c5f20a16019bf5eb7fb37907941f'
+          run=json.loads(Path('tested-run.json').read_text())
+          assert run['head_sha'] == tested and run['event'] == 'push'
+          assert run['head_branch'] == 'feature/v161-cinema-vod-epg'
+          jobs=json.loads(Path('tested-jobs.json').read_text())['jobs']
+          steps=next(job['steps'] for job in jobs if job['name']=='compile-test')
+          for name in ('Check official v1.0.61 Kotlin compilation', 'Run complete Android unit tests'):
+              step=next(step for step in steps if step['name']==name)
+              assert step['status']=='completed' and step['conclusion']=='success', name
+          old=subprocess.check_output(['git','-C','.ci-v161-overlay','show',tested+':.github/workflows/android-v161-signed-qa.yml'],text=True)
+          current=Path('.ci-v161-overlay/.github/workflows/android-v161-signed-qa.yml').read_text()
+          def section(source,name):
+              start=source.index('      - name: '+name+'\n')
+              end=source.find('\n      - ',start+1)
+              return source[start:end if end!=-1 else len(source)]
+          for name in ('Add v161 candidate files','Reconstruct verified source','Pin Android toolchain','Apply v149 through v161 patches','Configure official signing from repository secret'):
+              assert section(old,name)==section(current,name), name
+          assert 'ref: 4eb73efd17b28fecbb824875137e43cede07c27f' in current
+          print('Identical Android source and preparation; prior compilation and full unit tests passed.')
+          PYPROOF
+          echo 'passed=true' >> "$GITHUB_OUTPUT"
+      - name: Check official v1.0.61 Kotlin compilation
+        if: steps.source-proof.outputs.passed != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          gradle :app:compileDebugKotlin --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+      - name: Run complete Android unit tests
+        if: steps.source-proof.outputs.passed != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          gradle :app:testDebugUnitTest --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+      - name: Assemble official signed APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_ROOT"
+          gradle :app:assembleRelease --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+      - name: Verify official package and signing identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-artifacts
+          RELEASE="$PROJECT_ROOT/app/build/outputs/apk/release"
+          for abi in arm64-v8a armeabi-v7a universal; do
+            src="$RELEASE/app-$abi-release.apk"
+            test -s "$src"
+            info="$RUNNER_TEMP/$abi-badging.txt"
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$src" > "$info"
+            grep -F "package: name='de.epimediahub.app'" "$info"
+            grep -F "versionCode='1061'" "$info"
+            grep -F "versionName='1.0.61'" "$info"
+            signature="$RUNNER_TEMP/$abi-signature.txt"
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$src" > "$signature"
+            cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$signature" | tr '[:lower:]' '[:upper:]')"
+            test "$cert" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+            cp "$src" "qa-artifacts/EpiMediaHub-Android-v1.0.61-$abi.apk"
+          done
+          (cd qa-artifacts && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Verify exact approved intro through Android resource IDs in every signed APK
+        shell: bash
+        run: |
+          python3 - <<'PYINTRO'
+          import hashlib, os, re, subprocess, zipfile
+          from pathlib import Path
+          expected = '4b3556a5da85560f2c2668f6a32b6cdafef220b535b16ae6f807684817350a51'
+          project=Path(os.environ['PROJECT_ROOT'])
+          ids=set()
+          for symbols in (project/'app/build/intermediates').rglob('R.txt'):
+              if 'release' in symbols.parts:
+                  ids.update(re.findall(r'(?m)^int raw epimedia_intro_v5 (0x[0-9a-fA-F]+)\s*$',symbols.read_text()))
+          assert len(ids)==1, ('Expected one release resource ID',sorted(ids))
+          resource_id=next(iter(ids)).lower()
+          aapt2=Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0/aapt2'
+          apks=sorted(Path('qa-artifacts').glob('*.apk'))
+          assert len(apks)==3
+          for apk in apks:
+              with zipfile.ZipFile(apk) as archive:
+                  matches=[info.filename for info in archive.infolist()
+                      if info.file_size==7178965 and hashlib.sha256(archive.read(info)).hexdigest()==expected]
+              assert len(matches)==1, (apk.name,'Exact approved V5 media missing or duplicated',matches)
+              resources=subprocess.check_output([str(aapt2),'dump','resources',str(apk)],text=True)
+              blocks=re.findall(r'(?ms)^\s*resource\s+(0x[0-9a-fA-F]+)\b(.*?)(?=^\s*resource\s+0x|\Z)',resources)
+              mappings=[body for rid,body in blocks if rid.lower()==resource_id]
+              assert len(mappings)==1 and matches[0] in mappings[0], (apk.name,resource_id,matches)
+              print(apk.name,'approved 17.5-second V5 verified:',resource_id,'->',matches[0])
+          PYINTRO
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: EpiMediaHub-v161-intro-vpn-epg-official-signed
+          path: qa-artifacts/
+          retention-days: 14
+          if-no-files-found: warn

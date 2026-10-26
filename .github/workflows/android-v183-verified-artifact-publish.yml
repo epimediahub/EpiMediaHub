@@ -1,0 +1,170 @@
+name: EpiMediaHub v1.0.83 verified signed artifact release
+on:
+  push:
+    branches: [feature/v183-smarttube-channel-subs-comments-20261024]
+    paths:
+      - '.github/workflows/android-v183-verified-artifact-publish.yml'
+concurrency:
+  group: epimediahub-v183-approved-34s-full-qa
+  cancel-in-progress: true
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish-verified:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TESTED_HEAD: 789ae3632c515431d24efc20d772fb2e0961019a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 10
+      - name: Confirm exact same app source as tested and signed APK run
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "$TESTED_HEAD^{commit}"
+          git diff --quiet "$TESTED_HEAD" HEAD -- android build_tools server tools raspberry
+          gh api repos/epimediahub/EpiMediaHub/actions/runs/40107868500 > /tmp/run.json
+          gh api repos/epimediahub/EpiMediaHub/actions/runs/40107868500/jobs?per_page=100 > /tmp/jobs.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open('/tmp/run.json'))
+          assert r['head_sha']=='789ae3632c515431d24efc20d772fb2e0961019a'
+          assert r['head_branch']=='feature/v183-smarttube-channel-subs-comments-20261024'
+          jobs=json.load(open('/tmp/jobs.json'))['jobs']
+          steps={s['name']:s['conclusion'] for j in jobs for s in j.get('steps',[])}
+          required=['Apply v164 retained playback and restore v166 EPG',
+              'Check official v1.0.66 Kotlin compilation',
+              'Run complete Android unit tests',
+              'Assemble official signed APKs',
+              'Verify official package and signing identity',
+              'Verify GalaBox isolated VPN path, hidden player debug, and intact Fire TV video cadence']
+          for name in required:
+              assert steps.get(name)=='success',(name,steps.get(name))
+          assert steps.get('Verify v183 bottom-player buttons and removal of top-right badge')=='failure'
+          print('SOURCE_AND_FULL_ANDROID_TESTS_AND_SIGNED_RELEASE_VERIFIED')
+          PY
+      - name: Download the immutable signed and tested APK artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-artifacts
+          timeout 20m gh run download 40107868500 -n EpiMediaHub-v183-NEW_34s_SMARTTUBE_signed_QA -D qa-artifacts
+          (cd qa-artifacts && sha256sum -c SHA256SUMS.txt)
+          for abi in arm64-v8a armeabi-v7a universal; do
+            test -s "qa-artifacts/EpiMediaHub-Android-v1.0.83-$abi.apk"
+          done
+      - name: Verify signed APKs retain user-approved exact video and v183 features
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,zipfile
+          from pathlib import Path
+          master=Path('android/v1.0.81/EpiMediaHub_EpiScene_34s_v2_ORIGINAL_LOGO.mp4')
+          h=hashlib.sha256(master.read_bytes()).hexdigest()
+          assert h=='8c2ab3b4e1d17190e5ac13d973a0376438a061b0cf97dc24aad62faf2a7b0174'
+          for abi in ('arm64-v8a','armeabi-v7a','universal'):
+              apk=Path('qa-artifacts')/f'EpiMediaHub-Android-v1.0.83-{abi}.apk'
+              assert apk.stat().st_size>10_000_000
+              with zipfile.ZipFile(apk) as archive:
+                  matches=[i.filename for i in archive.infolist()
+                      if i.file_size==master.stat().st_size and hashlib.sha256(archive.read(i)).hexdigest()==h]
+              assert len(matches)==1,(abi,matches)
+          patch=Path('android/v1.0.83/patch_v183.py').read_text()
+          social=Path('android/v1.0.83/V183SmartTubeSocial.kt').read_text()
+          assert 'smarttube-comments-button' in patch and 'smarttube-channel-identity' in patch
+          assert 'data.subscriberCount' in social and 'getCommentsObserve(key)' in social
+          print('V183_COMPLETE_IN_APP_CHANNEL_SUBSCRIBERS_COMMENTS_APPROVED_INTRO_CHECKED')
+          PY
+      - name: Verify strict updater monotonic release gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v1.0.83 >/dev/null 2>&1; then
+            echo "::error::Stable 1.0.83 already exists; refusing any overwrite"; exit 1
+          fi
+          mkdir -p previous
+          gh release download v0.7.0-test -p android-latest.json -D previous --clobber
+          python3 - <<'PY'
+          import json
+          d=json.load(open('previous/android-latest.json'))
+          assert d['versionCode']==1082,('Unrecognized previous updater',d['versionCode'])
+          PY
+      - name: Prepare signed APKs, checksums, and official updater manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for abi in arm64-v8a armeabi-v7a universal; do
+            cp "qa-artifacts/EpiMediaHub-Android-v1.0.83-$abi.apk" "dist/EpiMediaHub_Android_v1.0.83-$abi.apk"
+          done
+          (cd dist && sha256sum EpiMediaHub_Android_v1.0.83-*.apk > SHA256SUMS.txt)
+          cp dist/EpiMediaHub_Android_v1.0.83-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+          python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          apks={}
+          for abi in ('arm64-v8a','armeabi-v7a','universal'):
+              name=f'EpiMediaHub_Android_v1.0.83-{abi}.apk'
+              p=Path('dist')/name
+              apks[abi]={'url':'https://github.com/epimediahub/EpiMediaHub/releases/download/v0.7.0-test/'+name,
+                         'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'size':p.stat().st_size}
+          notes=('SmartTube: YouTube-Kanal öffnen, echtes Kanalbild und Abonnentenzahl '
+                 '(sofern verfügbar), Kommentare im Player lesen und nachladen. '
+                 'EpiScene-Intro, VPN, IPTV und Fire-TV-Lizenz bleiben unverändert.')
+          obj={'version':'1.0.83','versionCode':1083,'notes':notes,'apks':apks}
+          for fn in ('android-latest.json','latest.json'):
+              (Path('dist')/fn).write_text(json.dumps(obj,ensure_ascii=False,indent=2)+'\n')
+          PY
+          cat > dist/RELEASE_NOTES.txt <<'EOF'
+          EpiMediaHub Android 1.0.83
+          - Original YouTube-Kanal direkt aus der unteren Playerleiste öffnen
+          - Echtes Kanalbild und Abonnentenzahl (sofern YouTube sie liefert)
+          - Kommentare per Fernbedienung lesen und weitere Seiten laden
+          - Für deaktivierte Kommentare/verborgene Abonnenten keine erfundenen Daten
+          - Erfolgreiche Kotlin-Kompilierung, komplette Unit-Tests, offizielle Signatur
+          - Bewährtes 34-Sekunden-Intro mit Original-Logo unverändert
+          - Physische Tests auf Fire TV und GalaBox noch erforderlich
+          - IPTV, VPN, EpiScene-Backend, Lizenzverwaltung unverändert
+          EOF
+      - name: Publish official EpiMediaHub v1.0.83 signed release
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 25m gh release create v1.0.83 \
+            dist/EpiMediaHub_Android_v1.0.83-arm64-v8a.apk \
+            dist/EpiMediaHub_Android_v1.0.83-armeabi-v7a.apk \
+            dist/EpiMediaHub_Android_v1.0.83-universal.apk \
+            dist/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" \
+            --title "EpiMediaHub v1.0.83 – YouTube-Kanal, Abonnenten und Kommentare" \
+            --notes-file dist/RELEASE_NOTES.txt --latest
+      - name: Publish v1.0.83 through existing in-app updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=v0.7.0-test
+          for abi in arm64-v8a armeabi-v7a universal; do
+            timeout 15m gh release upload "$TAG" "dist/EpiMediaHub_Android_v1.0.83-$abi.apk" --clobber
+          done
+          timeout 15m gh release upload "$TAG" dist/EpiMediaHub_Android_v0.7.0-test.apk --clobber
+          timeout 15m gh release upload "$TAG" dist/android-latest.json dist/latest.json --clobber
+          gh release edit "$TAG" --title "EpiMediaHub Android v1.0.83 – In-App-Updater"
+      - name: Verify public customer updater now serves 1.0.83
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p verify
+          gh release download v0.7.0-test -p android-latest.json -D verify --clobber
+          python3 - <<'PY'
+          import json
+          d=json.load(open('verify/android-latest.json'))
+          assert d['version']=='1.0.83' and d['versionCode']==1083
+          for abi in ('arm64-v8a','armeabi-v7a','universal'):
+              assert d['apks'][abi]['url'].endswith(f'EpiMediaHub_Android_v1.0.83-{abi}.apk')
+          print('V183_PUBLISHED_CUSTOMER_UPDATER_SUCCESS')
+          PY

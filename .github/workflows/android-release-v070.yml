@@ -1,0 +1,292 @@
+name: Build signed EpiMediaHub Android v0.9.9 release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [android-v0.7.0-ui]
+    paths:
+      - '.github/workflows/android-release-v070.yml'
+      - 'android/v0.7.0/**'
+      - 'android/v0.7.1/**'
+      - 'android/v0.7.2/**'
+      - 'android/v0.8.0/**'
+      - 'android/v0.8.1/**'
+      - 'android/v0.8.2/**'
+      - 'android/v0.8.3/**'
+      - 'android/v0.8.4/**'
+      - 'android/v0.8.6/**'
+      - 'android/v0.8.7/**'
+      - 'android/v0.8.8/**'
+      - 'android/v0.8.9/**'
+      - 'android/v0.9.0/**'
+      - 'android/v0.9.1/**'
+      - 'android/v0.9.2/**'
+      - 'android/v0.9.3/**'
+      - 'android/v0.9.4/**'
+      - 'android/v0.9.5/**'
+      - 'android/v0.9.6/**'
+      - 'android/v0.9.7/**'
+      - 'android/v0.9.8/**'
+      - 'android/v0.9.9/**'
+      - 'android/hotfixes/v064_xtream_hotfix15.py'
+      - 'build_tools/install_android_v070_source.sh'
+      - 'build_tools/install_android_v071_source.sh'
+      - 'build_tools/install_android_v072_source.sh'
+      - 'build_tools/install_android_v080_source.sh'
+      - 'build_tools/install_android_v081_source.sh'
+      - 'build_tools/install_android_v082_source.sh'
+      - 'build_tools/install_android_v083_source.sh'
+      - 'build_tools/install_android_v084_source.sh'
+      - 'build_tools/install_android_v086_source.sh'
+      - 'build_tools/install_android_v087_source.sh'
+      - 'build_tools/install_android_v088_source.sh'
+      - 'build_tools/install_android_v089_source.sh'
+      - 'build_tools/install_android_v090_source.sh'
+      - 'build_tools/install_android_v091_source.sh'
+      - 'build_tools/install_android_v092_source.sh'
+      - 'build_tools/install_android_v093_source.sh'
+      - 'build_tools/install_android_v094_source.sh'
+      - 'build_tools/install_android_v095_source.sh'
+      - 'build_tools/install_android_v096_source.sh'
+      - 'build_tools/install_android_v097_source.sh'
+      - 'build_tools/install_android_v098_source.sh'
+      - 'build_tools/install_android_v099_source.sh'
+      - 'build_tools/augment_android_v098_skins.py'
+      - 'build_tools/augment_android_v097_skins.py'
+
+concurrency:
+  group: epimediahub-android-v070-test
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-android-v099:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require permanent signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+
+      - name: Reconstruct project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* > .ci-android/source.b64
+          base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
+          EXPECTED="192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          ACTUAL="$(sha256sum .ci-android/source.tar.gz | awk '{print $1}')"
+          test "$ACTUAL" = "$EXPECTED"
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+
+      - name: Pin Gradle toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+
+      - name: Install v0.9.9 source
+        run: bash build_tools/install_android_v099_source.sh
+
+      - name: Install permanent release signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/epimediahub-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias epimediahub >/dev/null
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_ROOT'])/'app/build.gradle.kts'
+          s=p.read_text()
+          anchor='    buildTypes {\n'
+          signing='''    signingConfigs {
+              create("release") {
+                  storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))
+                  storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                  keyAlias = "epimediahub"
+                  keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+              }
+          }
+
+          '''
+          if anchor not in s: raise SystemExit('buildTypes anchor missing')
+          s=s.replace(anchor, signing+anchor, 1)
+          release='        release {\n'
+          if release not in s: raise SystemExit('release build type missing')
+          s=s.replace(release, release+'            signingConfig = signingConfigs.getByName("release")\n', 1)
+          p.write_text(s)
+          PY
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build signed v0.9.9 APKs
+        shell: bash
+        run: |
+          cd "$PROJECT_ROOT"
+          gradle :app:assembleRelease --stacktrace --no-daemon
+
+      - name: Verify Android 0.9.9 release and signing certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'versionName = "0.9.9"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 909' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'https://download.epimediahub.com/android/latest.json' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+          grep -Fq 'fun officialMarkRes' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/ThemeRepository.kt"
+          grep -Fq 'V099CategoryCard' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V079Themes.kt"
+          grep -Fq 'V097SkinEnvironment(skinWorld, accent)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/Common.kt"
+          grep -Fq '"f1_ferrari"' "$PROJECT_ROOT/app/src/main/res/raw/theme_catalog.json"
+          grep -Fq '"f1_cadillac"' "$PROJECT_ROOT/app/src/main/res/raw/theme_catalog.json"
+          ! grep -Rq 'com.tailscale' "$PROJECT_ROOT/app/src/main"
+          ! grep -Fq 'tailscale-embedded.aar' "$PROJECT_ROOT/app/build.gradle.kts"
+
+          python3 - <<'PYSKINS'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ["PROJECT_ROOT"])
+          catalog = json.loads((root / "app/src/main/res/raw/theme_catalog.json").read_text())
+          themes = catalog["themes"]
+          groups = catalog["groups"]
+          private = [tid for tid, meta in themes.items() if meta.get("family", False)]
+          f1 = [tid for tid in themes if tid.startswith("f1_")]
+          assert len(groups) == 12, f"expected 12 categories, got {len(groups)}"
+          assert len(private) == 83, f"expected 83 private original skins, got {len(private)}"
+          assert len(f1) == 11, f"expected 11 F1 teams, got {len(f1)}"
+          assert all((root / "app/src/main/res/drawable-nodpi" / f"official_{tid}.png").exists() for tid in private)
+          print(f"Verified {len(private)} private skins, {len(groups)} categories and {len(f1)} F1 teams")
+          PYSKINS
+
+          for APK in "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk"
+          do
+            test -s "$APK"
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apk-signature.txt
+            CERT="$(grep -i 'certificate SHA-256 digest:' /tmp/apk-signature.txt | head -n1 | awk -F': ' '{print $2}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+            test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+          done
+
+      - name: Prepare APKs and domain update manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" dist/EpiMediaHub_Android_v0.9.9-arm64-v8a.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" dist/EpiMediaHub_Android_v0.9.9-armeabi-v7a.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk" dist/EpiMediaHub_Android_v0.9.9-universal.apk
+          cp dist/EpiMediaHub_Android_v0.9.9-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+          SHA_ARM64="$(sha256sum dist/EpiMediaHub_Android_v0.9.9-arm64-v8a.apk | awk '{print $1}')"
+          SHA_ARMV7="$(sha256sum dist/EpiMediaHub_Android_v0.9.9-armeabi-v7a.apk | awk '{print $1}')"
+          SHA_UNIVERSAL="$(sha256sum dist/EpiMediaHub_Android_v0.9.9-universal.apk | awk '{print $1}')"
+          SIZE_ARM64="$(stat -c %s dist/EpiMediaHub_Android_v0.9.9-arm64-v8a.apk)"
+          SIZE_ARMV7="$(stat -c %s dist/EpiMediaHub_Android_v0.9.9-armeabi-v7a.apk)"
+          SIZE_UNIVERSAL="$(stat -c %s dist/EpiMediaHub_Android_v0.9.9-universal.apk)"
+          cat > dist/android-latest.json <<EOF
+          {
+            "version": "0.9.9",
+            "versionCode": 909,
+            "notes": "Android 0.9.9 ordnet die privaten Original-Skins nach Liga/Kategorie, nutzt neutrale feste Hintergründe pro Kategorie und ausschließlich Originalwappen bzw. Original-Teamlogos einschließlich der Formel-1-Teams.",
+            "apks": {
+              "arm64-v8a": {
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.9.9-arm64-v8a.apk",
+                "sha256": "$SHA_ARM64",
+                "size": $SIZE_ARM64
+              },
+              "armeabi-v7a": {
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.9.9-armeabi-v7a.apk",
+                "sha256": "$SHA_ARMV7",
+                "size": $SIZE_ARMV7
+              },
+              "universal": {
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v0.9.9-universal.apk",
+                "sha256": "$SHA_UNIVERSAL",
+                "size": $SIZE_UNIVERSAL
+              }
+            }
+          }
+          EOF
+          python3 - <<'PYVERIFY'
+          import hashlib, json, os, re
+          from pathlib import Path
+          build = (Path(os.environ['PROJECT_ROOT']) / 'app/build.gradle.kts').read_text()
+          manifest = json.loads(Path('dist/android-latest.json').read_text())
+          assert manifest['version'] == re.search(r'versionName = "([^"]+)"', build).group(1)
+          assert manifest['versionCode'] == int(re.search(r'versionCode = (\d+)', build).group(1))
+          for apk in manifest['apks'].values():
+              path = Path('dist') / apk['url'].rsplit('/', 1)[-1]
+              assert path.stat().st_size == apk['size']
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == apk['sha256']
+          print('Updater version, APK sizes and SHA-256 verified')
+          PYVERIFY
+          cp dist/android-latest.json dist/latest.json
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-Android-v0.9.9-signed-release
+          path: dist/
+          retention-days: 30
+
+      - name: Publish public GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v0.7.0-test"
+          TITLE="EpiMediaHub Android v0.9.9"
+          NOTES="Android 0.9.9: Private Original-Skins sind jetzt sauber nach Liga/Kategorie organisiert. Jede Kategorie nutzt einen festen neutralen Hintergrund; Teams und Marken wechseln nur über Originalwappen bzw. Original-Teamlogos und dezente Menüakzente. Formel 1 enthält die Original-Teamlogos einschließlich Audi und Cadillac. Der Katalog enthält 83 Original-Skins in 12 Kategorien."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
+          else
+            gh release create "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease --target "${GITHUB_SHA}"
+          fi
+          # Publish metadata only after all APKs are downloadable by the Pi sync.
+          for file in dist/*.apk dist/SHA256SUMS.txt; do
+            timeout 12m gh release upload "$TAG" "$file" --clobber
+          done
+          timeout 12m gh release upload "$TAG" dist/android-latest.json dist/latest.json --clobber
