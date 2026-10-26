@@ -159,6 +159,9 @@ jobs:
       - name: Inspect live player routing and frame-clock source (no playback changes)
         shell: bash
         run: python3 android/v1.0.84/inspect_live_player.py
+      - name: Add isolated release-time and PTS jitter trace (no player behavior change)
+        shell: bash
+        run: python3 android/v1.0.84/patch_live_frame_trace.py
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
