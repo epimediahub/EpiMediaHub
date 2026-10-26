@@ -54,7 +54,7 @@ once(vm,
         // Conservatively prefer ONE 50-fps variant only when the same profile
         // has a uniquely matching channel. Unknown/ambiguous stays unchanged.
         if (item.kind == MediaKind.LIVE) {
-            val preferred = de.epimediahub.app.ui.V185SportPriority.preferred(item, episodeList)
+            val preferred = de.epimediahub.app.ui.V185SportPriority.preferred(item, episodeList, _ui.value.active?.id.orEmpty())
             if (preferred.id != item.id || preferred.sourceProfileId != item.sourceProfileId) {
                 play(preferred, episodeList)
                 return
@@ -87,7 +87,7 @@ once(player,
                 }
                 if (consecutive >= 3 && v185MeasuredFps != candidate) {
                     v185MeasuredFps = candidate
-                    V185SportPriority.recordMeasured(context, item, candidate)
+                    V185SportPriority.recordMeasured(context, item, candidate, u.active?.id.orEmpty())
                 }
                 delay(2_000L)
             }
@@ -99,11 +99,11 @@ once_main(player,
 '''    val nowProgramme = V163EpgBanner(vm, item, u.epg[item.id].orEmpty())
     LaunchedEffect(nowProgramme) {''',
 '''    val nowProgramme = V163EpgBanner(vm, item, u.epg[item.id].orEmpty())
-    val v185Alternative = remember(item.resumeKey, episodeList) {
-        if (item.kind == MediaKind.LIVE)
-            V185SportPriority.recommendedAlternative(item, episodeList)
-        else null
-    }
+    // Re-evaluate when the playing FPS becomes known; a cached remember would
+    // keep the alternative button invisible even after normal playback taught us.
+    val v185Alternative = if (item.kind == MediaKind.LIVE)
+        V185SportPriority.recommendedAlternative(item, episodeList, u.active?.id.orEmpty())
+    else null
     LaunchedEffect(nowProgramme) {''')
 # A separate 50 FPS button is shown ONLY when a known or named unique
 # alternative exists in the already loaded channel list.
