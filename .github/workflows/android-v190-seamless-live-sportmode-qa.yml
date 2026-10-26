@@ -280,6 +280,10 @@ jobs:
                grep -Eq '[0-9]+ tests completed, 1 failed' "$first_log"; then
             echo '::warning::Only V140SpeedTransferTest failed (known local test-server race); repeating the COMPLETE test suite exactly once.'
             gradle :app:testDebugUnitTest --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+          elif grep -Eq 'AppNotIdleException|The component is not displayed!' "$first_log" && \
+               ! grep -Eq '(^| )e: .*\.kt:|Unresolved reference|Compilation error' "$first_log"; then
+            echo '::warning::Compose UI tests did not reach idle. Retrying full suite once; ALL tests must pass.'
+            gradle :app:testDebugUnitTest --rerun-tasks --no-daemon --stacktrace -Dorg.gradle.workers.max=1
           else
             echo '::error::Android unit tests failed; no publishing and no unrelated failures concealed.'
             exit 1
