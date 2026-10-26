@@ -183,7 +183,7 @@ internal object V188WorldwideSportChannels {
     private val nonAlnum = Regex("""[^A-Z0-9]+""")
     private val spaces = Regex("""\s+""")
     private val quality = Regex(
-        """\b(?:8K|4K|UHD|FHD|FULL HD|HD PLUS|HD|SD|HDR10|HDR|HEVC|H 265|H265|H 264|H264|AVC|WEB|BAHEVC|BHAEVC|1080P|2160P|720P|25\\s*FPS|50\\s*FPS|60\\s*FPS|MULTI AUDIO|BACKUP|SOURCE [0-9]+)\b"""
+        """\b(?:8K|4K|UHD|FHD|FULL HD|HD PLUS|HD|SD|HDR10|HDR|HEVC|H 265|H265|H 264|H264|AVC|WEB|BAHEVC|BHAEVC|1080P|2160P|720P|25\s*FPS|50\s*FPS|60\s*FPS|MULTI AUDIO|BACKUP|SOURCE [0-9]+)\b"""
     )
     private val country = Regex("""^(?:DE|AT|CH|IT|FR|ES|PT|UK|GB|IE|US|CA|BR|AR|MX|RO|PL|TR|NL|BE|RS|HR|GR|AL|MA|SA|AE|AF|IN|PK|CN|JP|KR|AU|NZ|ZA|EG|MY|PH|TH|TZ|CO|NG|KE|GH|MENA|LATAM|AFRICA|ASIA|INT|EU|VIP)\s+(?:\d+\s+)?""")
 
@@ -202,7 +202,7 @@ internal object V188WorldwideSportChannels {
         if (name.isBlank()) return null
         // Broadcast brand families are never sufficient for special film,
         // documentary or children's spin-offs of an otherwise sports brand.
-        if (Regex("""^(?:DAZN|ESPN|FOX SPORTS|SKY SPORTS?|BEIN SPORTS?|SPORT TV)\\s+(?:MOVIES|CINEMA|KIDS|SERIES|DOCS?|DOCUMENTARY|DRAMA)\\b""")
+        if (Regex("""^(?:DAZN|ESPN|FOX SPORTS|SKY SPORTS?|BEIN SPORTS?|SPORT TV)\s+(?:MOVIES|CINEMA|KIDS|SERIES|DOCS?|DOCUMENTARY|DRAMA)\b""")
                 .containsMatchIn(name)) return null
         // Station-prefix only; e.g. "STAR MOVIES" does not match Star Sports
         // and "SKY CINEMA" does not match Sky Sport.
@@ -225,13 +225,13 @@ internal object V188WorldwideSportChannels {
     fun canonicalSportIdentity(raw: String): String {
         // Country/language tags MUST remain part of the identity. "DE: DAZN 1"
         // and "IT: DAZN 1" are not interchangeable even in one playlist.
-        val prefix = Regex("""(?i)^\\s*(DE|AT|CH|IT|FR|ES|PT|UK|GB|IE|US|CA|BR|AR|MX|RO|PL|TR|NL|BE|RS|HR|GR|AL|MA|SA|AE|AF|IN|PK|CN|JP|KR|AU|NZ|ZA|EG|MY|PH|TH|TZ|CO|NG|KE|GH|MENA|LATAM|AFRICA|ASIA)\\s*[:|\\-]""")
+        val prefix = Regex("""(?i)^\s*(DE|AT|CH|IT|FR|ES|PT|UK|GB|IE|US|CA|BR|AR|MX|RO|PL|TR|NL|BE|RS|HR|GR|AL|MA|SA|AE|AF|IN|PK|CN|JP|KR|AU|NZ|ZA|EG|MY|PH|TH|TZ|CO|NG|KE|GH|MENA|LATAM|AFRICA|ASIA)\s*[:|\-]""")
             .find(raw)?.groupValues?.get(1)?.uppercase(Locale.ROOT).orEmpty()
         var name = clean(raw)
-        name = name.replace(Regex("""^(?:SKY SPORT BUNDESLIGA|SKY FUSSBALL BUNDESLIGA|SKY BUNDESLIGA|DB BUNDESLIGA|DB LIGA|DE BUNDESLIGA|BULI)\\b"""), "BUNDESLIGA")
-        name = name.replace(Regex("""^SKY SPORT CALCIO\\b"""), "SKY CALCIO")
-        name = name.replace(Regex("""^BEIN SPORT\\b"""), "BEIN SPORTS")
-        name = name.replace(Regex("""^SUPER SPORT\\b"""), "SUPERSPORT")
-        return if (prefix.isBlank()) name else "$"+"prefix:$"+"name"
+        name = name.replace(Regex("""^(?:SKY SPORT BUNDESLIGA|SKY FUSSBALL BUNDESLIGA|SKY BUNDESLIGA|DB BUNDESLIGA|DB LIGA|DE BUNDESLIGA|BULI)\b"""), "BUNDESLIGA")
+        name = name.replace(Regex("""^SKY SPORT CALCIO\b"""), "SKY CALCIO")
+        name = name.replace(Regex("""^BEIN SPORT\b"""), "BEIN SPORTS")
+        name = name.replace(Regex("""^SUPER SPORT\b"""), "SUPERSPORT")
+        return if (prefix.isBlank()) name else prefix + ":" + name
     }
 }
