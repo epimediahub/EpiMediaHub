@@ -1,4 +1,4 @@
-name: EpiMediaHub v184 cadence diagnostic signed QA (no publish)
+name: EpiMediaHub v184 crash-safe live cadence QA (no publish)
 on:
   push:
     branches: [fix/epiframe-cadence-diagnostics-v184]
@@ -155,6 +155,7 @@ jobs:
           python3 android/v1.0.84/patch_v184.py
           python3 android/v1.0.84/patch_cadence_diagnostics.py
           python3 android/v1.0.84/patch_cadence_vod_diagnostics.py
+          python3 android/v1.0.84/patch_disable_live_mode_switch_for_qa.py
           # Frame-interval patch paused: missing callback in reconstructed source. Keep validated snapshots.
       - name: Inspect live player routing and frame-clock source (no playback changes)
         shell: bash
