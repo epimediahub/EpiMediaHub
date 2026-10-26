@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Add precise rendered-frame interval histogram to the Media3 cadence diagnostics.
 
-No player timing, surface frame rate, or customer updater changes.
+No player timing, surface frame rate, or customer updater changes.\nThis patch is restricted to the isolated signed QA workflow.
 """
 import os
 from pathlib import Path
