@@ -137,7 +137,6 @@ internal object V186SportPriority {
         if (current.kind != MediaKind.LIVE || channelList.size < 2) return current
         fun profile(item: MediaEntry): String =
             item.sourceProfileId.ifBlank { activeProfileId }
-        initializeIfAlreadyUsed()
         val variants = channelList.map {
             val resolved = profile(it)
             Variant(it.id, it.name, resolved, rememberedRate(resolved, it.id))
@@ -148,9 +147,6 @@ internal object V186SportPriority {
         val chosen = bestIndex(original, variants)
         return channelList.getOrNull(chosen) ?: current
     }
-
-    // initialize() runs at player startup; no Context reference is held here.
-    private fun initializeIfAlreadyUsed() = Unit
 
     fun recommendedAlternative(current: MediaEntry, list: List<MediaEntry>, activeProfileId: String = ""): MediaEntry? =
         preferred(current, list, activeProfileId).takeUnless {
