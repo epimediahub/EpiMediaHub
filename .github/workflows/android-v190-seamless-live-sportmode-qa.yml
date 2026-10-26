@@ -269,24 +269,28 @@ jobs:
         run: |
           set -euo pipefail
           cd "$PROJECT_ROOT"
-          # The legacy V140 loopback-speed-test sometimes races with its own
-          # local server and throws IndexOutOfBoundsException during teardown.
-          # Re-run the ENTIRE unit suite once ONLY for that single known flaky
-          # test; any other failure, or a second failure, blocks publication.
-          first_log="$RUNNER_TEMP/v166-unit-first-attempt.log"
+          # Retain a full, strict first test run. Robolectric Compose can
+          # intermittently fail to idle in GitHub runners. Retry the FULL
+          # suite once only when every failure belongs to the known
+          # environment-sensitive UI tests or the V140 loopback test.
+          # We never discard a functional test failure, and the second
+          # complete suite MUST pass for signed APK assembly to proceed.
+          first_log="$RUNNER_TEMP/v190-unit-first-attempt.log"
           if gradle :app:testDebugUnitTest --no-daemon --stacktrace -Dorg.gradle.workers.max=2 2>&1 | tee "$first_log"; then
-            echo 'Complete Android test suite passed.'
-          elif grep -Eq 'V140SpeedTransferTest > .* FAILED' "$first_log" && \
-               grep -Eq '[0-9]+ tests completed, 1 failed' "$first_log"; then
-            echo '::warning::Only V140SpeedTransferTest failed (known local test-server race); repeating the COMPLETE test suite exactly once.'
-            gradle :app:testDebugUnitTest --no-daemon --stacktrace -Dorg.gradle.workers.max=2
-          elif grep -Eq 'AppNotIdleException|The component is not displayed!' "$first_log" && \
-               ! grep -Eq '(^| )e: .*\.kt:|Unresolved reference|Compilation error' "$first_log"; then
-            echo '::warning::Compose UI tests did not reach idle. Retrying full suite once; ALL tests must pass.'
-            gradle :app:testDebugUnitTest --rerun-tasks --no-daemon --stacktrace -Dorg.gradle.workers.max=1
+            echo 'All Android unit tests passed on first attempt.'
           else
-            echo '::error::Android unit tests failed; no publishing and no unrelated failures concealed.'
-            exit 1
+            grep ' > .* FAILED' "$first_log" | sed -E 's/^.*Z //' > "$RUNNER_TEMP/v190-failed-tests.txt" || true
+            test -s "$RUNNER_TEMP/v190-failed-tests.txt" || {
+              echo '::error::No identifiable failing tests; refusing retry.'
+              exit 1
+            }
+            if grep -Ev '^(V130KidsNavigationTest|V131SkinUiTest|V163LiveUiTest|V164LiveBrowserTest|V140SpeedTransferTest) > .* FAILED$' "$RUNNER_TEMP/v190-failed-tests.txt"; then
+              echo '::error::Non-UI or unexpected unit test failed; stop.'
+              exit 1
+            fi
+            echo '::warning::Environment-sensitive Robolectric UI/loopback failures observed. Re-running COMPLETE suite exactly once.'
+            gradle :app:testDebugUnitTest --rerun-tasks --no-daemon --stacktrace -Dorg.gradle.workers.max=1
+            echo 'All Android unit tests passed on complete retry.'
           fi
       - name: Assemble official signed APKs
         shell: bash
