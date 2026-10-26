@@ -36,7 +36,7 @@ internal object V187SportMode {
     private fun fps(v: Candidate) =
         v.measuredFps.takeIf { it == 25 || it == 50 } ?: V186SportPriority.advertisedFps(v.name)
 
-    /** Indexes ranked by verified-50 > unverified filename-50 > resolution. */
+    /** Known 50 first, then unknown variants to inspect sequentially; skip measured 25. */
     fun rankedIndices(selected: Int, variants: List<Candidate>): List<Int> {
         if (selected !in variants.indices) return emptyList()
         val current = variants[selected]
@@ -48,11 +48,16 @@ internal object V187SportMode {
                 index != selected && v.id.isNotBlank() &&
                     v.profile == current.profile &&
                     V186SportPriority.canonical(v.name) == station &&
-                    fps(v) == 50
+                    fps(v) != 25
             }
             .sortedWith(
-                compareByDescending<IndexedValue<Candidate>> { if (it.value.measuredFps == 50) 1 else 0 }
-                    .thenByDescending { quality(it.value.name) }
+                compareByDescending<IndexedValue<Candidate>> {
+                    when {
+                        it.value.measuredFps == 50 -> 3
+                        fps(it.value) == 50 -> 2
+                        else -> 1
+                    }
+                }.thenByDescending { quality(it.value.name) }
                     .thenBy { it.index }
             )
             .map { it.index }
