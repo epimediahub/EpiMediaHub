@@ -81,7 +81,8 @@ once(vm,
         val original: MediaEntry,
         val channelList: List<MediaEntry>,
         val candidates: List<MediaEntry>,
-        val index: Int
+        val index: Int,
+        val confirmed50: Boolean = false
     )
     private var v187SportAttempt: V187SportAttempt? = null
 
@@ -92,6 +93,9 @@ once(vm,
             target.sourceProfileId.ifBlank { _ui.value.active?.id.orEmpty() } ==
                 item.sourceProfileId.ifBlank { _ui.value.active?.id.orEmpty() }
     }
+
+    fun v187SportCandidatePending(item: MediaEntry): Boolean =
+        v187SportIsCandidate(item) && v187SportAttempt?.confirmed50 != true
 
     fun v187SportOfferAvailable(item: MediaEntry, provided: List<MediaEntry>): Boolean {
         if (item.kind != MediaKind.LIVE || v187SportAttempt != null) return false
@@ -130,7 +134,12 @@ once(vm,
     fun v187SportCandidateObserved(item: MediaEntry, fps: Int) {
         if (!v187SportIsCandidate(item)) return
         when (fps) {
-            50 -> v187SportAttempt = null // Keep current successful 50-fps feed.
+            50 -> {
+                // Retain the active route: if the currently working 50fps
+                // stream fails later, continue with remaining alternatives.
+                val active = v187SportAttempt ?: return
+                if (!active.confirmed50) v187SportAttempt = active.copy(confirmed50 = true)
+            }
             25 -> v187SportCandidateFailed(item) // Try another alternative.
         }
     }
@@ -147,7 +156,7 @@ once(vm,
                 previous.index, previous.candidates.size
             )
         if (next != null) {
-            v187SportAttempt = previous.copy(index = next)
+            v187SportAttempt = previous.copy(index = next, confirmed50 = false)
             switchLiveChannel(previous.candidates[next], previous.channelList)
         } else {
             v187SportAttempt = null
@@ -208,7 +217,8 @@ once(player,
     LaunchedEffect(player, item.resumeKey) {
         if (item.kind == MediaKind.LIVE && vm.v187SportIsCandidate(item)) {
             delay(18_000L)
-            vm.v187SportCandidateFailed(item)
+            if (vm.v187SportCandidatePending(item))
+                vm.v187SportCandidateFailed(item)
         }
     }
     DisposableEffect(capture) { onDispose { capture?.close() } }
