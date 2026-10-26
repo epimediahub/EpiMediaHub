@@ -25,6 +25,18 @@ def once(file: Path, before: str, after: str) -> None:
                          " count=" + str(original.count(before)) + " anchor=" + repr(before[:90]))
     file.write_text(original.replace(before, after, 1), encoding="utf-8")
 
+def once_main(file: Path, before: str, after: str) -> None:
+    """Match only the standard ExoPlayer root, not the separate VLC composable."""
+    source = file.read_text(encoding="utf-8")
+    anchor = "fun PlayerScreen("
+    if source.count(anchor) != 1:
+        raise SystemExit("STOP_V185_PLAYER_ROOT_NOT_UNIQUE")
+    split = source.index(anchor)
+    prefix, main = source[:split], source[split:]
+    if main.count(before) != 1:
+        raise SystemExit("STOP_V185_PLAYER_SOURCE_DRIFT " + str(main.count(before)) + " " + repr(before[:90]))
+    file.write_text(prefix + main.replace(before, after, 1), encoding="utf-8")
+
 version = root / "app/build.gradle.kts"
 once(version, "versionCode = 1084", "versionCode = 1085")
 once(version, 'versionName = "1.0.84"', 'versionName = "1.0.85"')
@@ -83,7 +95,7 @@ once(player,
     }
     DisposableEffect(capture)''')
 
-once(player,
+once_main(player,
 '''    val nowProgramme = V163EpgBanner(vm, item, u.epg[item.id].orEmpty())
     LaunchedEffect(nowProgramme) {''',
 '''    val nowProgramme = V163EpgBanner(vm, item, u.epg[item.id].orEmpty())
@@ -117,7 +129,7 @@ once(player,
                         useVlc = true
                     },''')
 
-once(player,
+once_main(player,
 '''                            if (nowProgramme.isNotBlank()) nowProgramme else "Jetzt live",
                             color = Color.White.copy(alpha = .75f),
                             fontSize = 14.sp,
