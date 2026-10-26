@@ -202,7 +202,7 @@ internal object V188WorldwideSportChannels {
         if (name.isBlank()) return null
         // Broadcast brand families are never sufficient for special film,
         // documentary or children's spin-offs of an otherwise sports brand.
-        if (Regex("""^(?:DAZN|ESPN|FOX SPORTS|SKY SPORTS?|BEIN SPORTS?|SPORT TV)\s+(?:MOVIES|CINEMA|KIDS|SERIES|DOCS?|DOCUMENTARY|DRAMA)\b""")
+        if (Regex("""^(?:DAZN|ESPN|FOX SPORTS|SKY SPORTS?|BEIN(?: SPORTS?)?|SPORT TV)\s+(?:MOVIES|CINEMA|KIDS|SERIES|DOCS?|DOCUMENTARY|DRAMA|GOURMET|ENTERTAINMENT)\b""")
                 .containsMatchIn(name)) return null
         // Station-prefix only; e.g. "STAR MOVIES" does not match Star Sports
         // and "SKY CINEMA" does not match Sky Sport.
