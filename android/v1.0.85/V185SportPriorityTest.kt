@@ -47,6 +47,36 @@ class V185SportPriorityTest {
             v("2", "DAZN 1 50FPS", profile = ""))))
     }
 
+    @Test fun daznSixTypicalQualityVariantsCollapseToOneChannel() {
+        val variants = listOf(
+            v("hdplus", "DAZN 1 HD+", measured = 25),
+            v("4k", "DAZN 1 4K", measured = 25),
+            v("fhd", "DAZN 1 Full HD", measured = 50),
+            v("hd", "DAZN 1 HD", measured = 25),
+            v("web", "DAZN 1 HD WEB", measured = 25),
+            v("hevc", "DAZN 1 BHAEVC", measured = 25)
+        )
+        assertEquals(2, V185SportPriority.bestIndex(1, variants))
+        assertEquals(2, V185SportPriority.bestIndex(4, variants))
+        assertEquals(2, V185SportPriority.bestIndex(5, variants))
+        assertEquals("DAZN 1", V185SportPriority.canonical("DAZN 1 HD+"))
+        assertEquals("DAZN 1", V185SportPriority.canonical("DAZN 1 HD WEB"))
+        assertEquals("DAZN 1", V185SportPriority.canonical("DAZN 1 BHAEVC"))
+    }
+
+    @Test fun noBlindFhdSelectionBeforePlaybackMeasurement() {
+        // A filename alone does NOT establish that FHD has 50 distinct fps.
+        val options = listOf(v("4k", "DAZN 1 4K", measured = 25),
+            v("fhd", "DAZN 1 FHD"))
+        assertEquals(0, V185SportPriority.bestIndex(0, options))
+    }
+
+    @Test fun similarLookingDifferentNumberedChannelsNeverMix() {
+        assertEquals(0, V185SportPriority.bestIndex(0, listOf(
+            v("1", "DAZN 1 HD", measured = 25),
+            v("2", "DAZN 2 FHD", measured = 50))))
+    }
+
     @Test fun classifiesOnlyReliableObservedFrames() {
         assertEquals(25, V185SportPriority.classify(25.0f))
         assertEquals(50, V185SportPriority.classify(49.99f))
