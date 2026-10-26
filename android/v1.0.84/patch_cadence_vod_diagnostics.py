@@ -51,21 +51,9 @@ old = """    private fun clearHint() {
 new = """    private fun clearHint() {
 """
 assert code.count(old) == 1
-# Insert removal in close() for the controller (not the video view).
-close_anchor = """        handler.removeCallbacks(apply)
-"""
-if code.count(close_anchor) == 1:
-    code = code.replace(close_anchor, """        handler.removeCallbacks(cadenceLog)
-        handler.removeCallbacks(apply)
-""", 1)
-else:
-    # Locate controller close() by its own exact definition; never change other view lifecycle.
-    marker = "    override fun surfaceCreated(holder: SurfaceHolder)"
-    assert marker in code
-    # The controller's close() follows the surface callbacks; use the close method in that section.
-    idx = code.find("    fun close()", code.index(marker))
-    assert idx >= 0, "Controller close method not found"
-    brace = code.index("{", idx)
-    code = code[:brace+1] + "\n        handler.removeCallbacks(cadenceLog)" + code[brace+1:]
+# The controller close() already removes all handler callbacks via
+# handler.removeCallbacksAndMessages(null). Do not remove the periodic
+# diagnostic from schedule(): doing so would silence it on every format update.
+assert "handler.removeCallbacksAndMessages(null)" in code
 source.write_text(code, encoding="utf-8")
 print("Cadence snapshots enabled for Media3 live and VOD every 10s")
