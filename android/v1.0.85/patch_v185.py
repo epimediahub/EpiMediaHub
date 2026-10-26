@@ -185,3 +185,14 @@ print("V185_SPORT_PRIORITY_AND_SHORT_SYNCED_INTRO_INSTALLED")
 print("V185_INTRO_DURATION 17.5s ORIGINAL_PICTURE_COPY_AUDIO_HASH",
       hashlib.sha256(dest.read_bytes()).hexdigest())
 print("NO_PUBLIC_UPDATER_CHANGE_NO_EXTRA_IPTV_CONNECTIONS")
+
+
+# Read-only QA trace: prove whether channel zapping uses play() or a separate
+# navigation route. Never log playlist metadata, stream URLs or credentials.
+source_lines = vm.read_text(encoding="utf-8").splitlines()
+for source_name in ("fun switchLiveChannel(", "fun play(", "fun openLiveChannels("):
+    hits = [index for index, line in enumerate(source_lines) if source_name in line]
+    print("V185_ROUTE_AUDIT", source_name, "hits", len(hits))
+    for start in hits[:1]:
+        for index in range(start, min(start + 34, len(source_lines))):
+            print("V185_ROUTE", str(index + 1), source_lines[index])
