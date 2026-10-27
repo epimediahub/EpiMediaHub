@@ -126,35 +126,9 @@ once(browser,
         }.orEmpty()
     }''')
 
-# The prior key-based FocusRequester recreated and requested focus on EACH
-# category change, stealing remote input back from the channel pane.
-once(browser,
-'''    val selectedFocus = remember(selectedId, categories.size) { FocusRequester() }
-
-    LaunchedEffect(selectedId, categories.size) {
-        if (categories.isNotEmpty()) {
-            railState.scrollToItem(selectedIndex)
-            delay(90)
-            runCatching { selectedFocus.requestFocus() }
-        }
-    }''',
-'''    val selectedFocus = remember { FocusRequester() }
-
-    LaunchedEffect(selectedId, categories.size) {
-        if (categories.isNotEmpty()) {
-            val first = railState.firstVisibleItemIndex
-            val last = railState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
-                ?: (first + 6)
-            if (selectedIndex !in first..last) railState.scrollToItem(selectedIndex)
-        }
-    }
-    LaunchedEffect(categories.isNotEmpty()) {
-        if (categories.isNotEmpty()) {
-            delay(90)
-            runCatching { selectedFocus.requestFocus() }
-        }
-    }''')
-
+# v113 already fixed category-vs-channel FocusRequester ownership and restores
+# prior focus from menu memory. Preserve it; never re-introduce a competing
+# per-selection requestFocus() or list reset.
 code=vm.read_text(encoding="utf-8")
 assert "v191SportIndex?.groupFor(item)" in code
 assert "v191ScheduleSportIndex(" in code
@@ -163,5 +137,5 @@ assert 'V188VerifiedFps.verifiedCandidate(' in (ui/"PlayerScreen.kt").read_text(
 assert 'V188SportContext.automaticOfferAllowed(' in (ui/"PlayerScreen.kt").read_text()
 assert 'displayLease.match(fps, view, allow1080p = false, liveTv = true)' not in surface.read_text()
 print("V191_VERIFIED_SPORTMODE_RETAINED_NO_LIVE_HDMI_SWITCH")
-print("V191_CATEGORY_FOCUS_NOT_STOLEN_AND_NO_RELOAD_ON_WARM_OK")
+print("V191_V113_FOCUS_POLICY_PRESERVED_NO_RELOAD_ON_WARM_OK")
 print("V191_HEADER_ROWS_HIDDEN_AND_SPORT_LOOKUP_OFF_MAIN_THREAD")
