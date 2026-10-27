@@ -89,6 +89,9 @@ class Diagnostics(unittest.TestCase):
                 result=d.evidence_breakdown(db)
             self.assertEqual(result['machine_status']['pending'],1)
             self.assertEqual(result['first_evidence_categories']['MISSING_SCENE_CONSENSUS'],1)
+            self.assertEqual(result['distinct_pending_records'],1)
+            self.assertEqual(result['distinct_pending_assets'],1)
+            self.assertEqual(result['distinct_pending_by_analysis_playlist']['8'],{'records':1,'assets':1})
 
     def test_failed_release_toggle_detected_in_single_report(self):
         with tempfile.TemporaryDirectory() as td:

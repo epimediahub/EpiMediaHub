@@ -137,9 +137,18 @@ def evidence_breakdown(db):
           AND r.segment_type IN ('intro','recap','outro')
           AND r.status IN ('pending','approved','rejected')""")]
     status=Counter(); block=Counter(); kinds=Counter(); low=Counter()
+    pending_record_ids=set(); pending_asset_keys=set(); by_playlist=defaultdict(lambda: {'records':set(),'assets':set()})
     for r in data:
         status[r['status']]+=1
         if r['status']!='pending':continue
+        pending_record_ids.add(r['id'])
+        if r['asset_key'] is not None:
+            pending_asset_keys.add(r['asset_key'])
+        if r['playlist_id'] in ACTIVE:
+            group=by_playlist[str(r['playlist_id'])]
+            group['records'].add(r['id'])
+            if r['asset_key'] is not None:
+                group['assets'].add(r['asset_key'])
         evidence=parse(r['evidence_json'])
         decision=evidence.get('decision')
         decision=decision if isinstance(decision,dict) else {}
@@ -162,6 +171,10 @@ def evidence_breakdown(db):
             low[str(decision.get('status') or 'NO_STATUS')]+=1
     return dict(machine_status=dict(status),pending_by_kind=dict(kinds),
                 first_evidence_categories=dict(block),visual_decision_status=dict(low),
+                distinct_pending_records=len(pending_record_ids),
+                distinct_pending_assets=len(pending_asset_keys),
+                distinct_pending_by_analysis_playlist={key:{'records':len(value['records']),
+                    'assets':len(value['assets'])} for key,value in sorted(by_playlist.items())},
                 note='Evidence categories are descriptive, not complete release-gate simulations; no records autoapproved.')
 
 
