@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed source patch: reuse one provider connection per capture.
+"""Fail-closed source patch: reuse provider connections for at most two uncached chunks.
 
 Outputs a patched file, never changes a running worker or database.
 Requires an exact known source shape; refuses unfamiliar source revisions.
@@ -12,11 +12,12 @@ START = "    frames, cursor = [], start\n    measured = verified\n    while curs
 END = "    with db() as con:\n        return _save(con, asset, kind, start, length, frames)\n"
 REPLACEMENT = """    frames, cursor = [], start
     measured = verified
-    # Keep one provider session per capture; each successful chunk is saved.
+    # Reuse one relay for at most two uncached chunks; cached chunks cost no bandwidth.
     from contextlib import ExitStack
     with ExitStack() as sources:
         source = None
         protected_read = None
+        session_chunks = 0
         while cursor < end:
             if busy():
                 raise ValueError('analysis_deferred')
@@ -28,6 +29,11 @@ REPLACEMENT = """    frames, cursor = [], start
             if row:
                 chunk = _window(row, asset).frames
             else:
+                if session_chunks >= 2:
+                    sources.close()
+                    source = None
+                    protected_read = None
+                    session_chunks = 0
                 if source is None:
                     from skip_analysis_worker import busy_check
                     with db() as con:
@@ -49,6 +55,7 @@ REPLACEMENT = """    frames, cursor = [], start
                         raise ValueError('visual_runtime_changed')
                     measured = True
                 chunk = visual_fingerprint(source, cursor, part, STEP_MS, protected_read)
+                session_chunks += 1
                 with db() as con:
                     _save(con, asset, kind, cursor, part, chunk)
             frames.extend(chunk)
