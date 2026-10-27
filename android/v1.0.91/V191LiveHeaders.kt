@@ -1,13 +1,15 @@
 package de.epimediahub.app.ui
 
-/** IPTV provider separator rows are catalogue headings, not watchable channels.
- * Only discard conspicuously wrapped markers; real stations remain untouched.
- */
+/** Only decorative, fully bracketed provider headings, not watchable channels. */
 internal object V191LiveHeaders {
-    private val divider = Regex("""^[-=_*]{3,}\\s*\\S(?:.*\\S)?\\s*[-=_*]{3,}$""")
+    private fun marker(char: Char): Boolean = char == '-' || char == '=' ||
+        char == '_' || char == '*'
 
     fun isNonPlayableName(name: String): Boolean {
         val value = name.trim()
-        return value.length >= 9 && divider.matches(value)
+        val leading = value.takeWhile(::marker).length
+        val trailing = value.takeLastWhile(::marker).length
+        return leading >= 3 && trailing >= 3 &&
+            value.length - leading - trailing >= 3
     }
 }
