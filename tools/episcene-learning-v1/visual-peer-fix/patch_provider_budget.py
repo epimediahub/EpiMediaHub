@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Create a reviewed 256 MiB relay-budget candidate without touching production."""
+"""Create a reviewed 512 MiB relay-budget candidate without touching production."""
 import argparse
 import ast
 from pathlib import Path
 
 OLD = "MAX_INPUT_BYTES = 128 * 1024 * 1024"
-NEW = "MAX_INPUT_BYTES = 256 * 1024 * 1024"
+NEW = "MAX_INPUT_BYTES = 512 * 1024 * 1024"
 
 
 def patch(text):
@@ -24,7 +24,7 @@ def main():
     if args.source.resolve() == args.output.resolve():
         parser.error("Output must differ from source")
     args.output.write_text(patch(args.source.read_text()))
-    print("256_MIB_CANDIDATE_CREATED; NOT_DEPLOYED")
+    print("512_MIB_CANDIDATE_CREATED; NOT_DEPLOYED")
 
 
 if __name__ == "__main__":
