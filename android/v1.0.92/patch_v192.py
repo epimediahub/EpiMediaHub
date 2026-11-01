@@ -72,7 +72,7 @@ once(surface,
 source = surface.read_text(encoding="utf-8")
 view_start = source.index("internal class V121VideoView(")
 close_start = source.index("    fun close() {", view_start)
-close_end = source.index("\\n    }", close_start)
+close_end = source.index(chr(10) + "    }", close_start)
 close_body = source[close_start:close_end]
 anchor = "        displayLease.restore()"
 if close_body.count(anchor) != 1 or "frameRate?.close()" not in close_body:
