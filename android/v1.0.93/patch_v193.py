@@ -82,8 +82,7 @@ once(vm,
 '''    fun v193SportOfferTier(
         item: MediaEntry, provided: List<MediaEntry>
     ): de.epimediahub.app.ui.V193SportOptions.Tier {
-        if (item.kind != MediaKind.LIVE) return
-            de.epimediahub.app.ui.V193SportOptions.Tier.NONE
+        if (item.kind != MediaKind.LIVE) return de.epimediahub.app.ui.V193SportOptions.Tier.NONE
         val profile = item.sourceProfileId.ifBlank { _ui.value.active?.id.orEmpty() }
         de.epimediahub.app.ui.V188VerifiedFps.initialize(getApplication<Application>())
         return de.epimediahub.app.ui.V193SportOptions.tier(
@@ -175,6 +174,13 @@ once(dialog,
 '''                        Text("Ja · 50 fps nutzen")''',
 '''                        Text(if (verified) "Ja · 50 fps nutzen"
                              else "Ja · Varianten testen")''')
+
+# IPTV providers sometimes call Bundesliga "DB LIGA". Keep EPG-driven
+# documentary/news suppression, but recognize this specific sports-station
+# alias even without EPG metadata.
+sports_context = ui / "V188SportContext.kt"
+once(sports_context, r'dazn|eurosport|sportitalia|sport1|',
+    r'dazn|db\\s*liga|eurosport|sportitalia|sport1|')
 
 # Do not touch the tested v192 HDMI code. Fail closed if the bridge vanished.
 assert 'V192LiveModeHold.request(view.context.activity(), view, fps)' in (
