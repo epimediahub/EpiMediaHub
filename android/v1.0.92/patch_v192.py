@@ -67,19 +67,22 @@ once(surface,
         boundPlayer = next
         television = isTv
         cinema = cinemaVod''')
-once(surface,
-    '''    fun close() {
-        frameRate?.close()
-        frameRate = null
-        displayLease.restore()''',
-    '''    fun close() {
-        frameRate?.close()
-        frameRate = null
-        if (v192LiveAttached) {
+# Scope this insertion to V121VideoView.close(), without assuming there are
+# no other lifecycle statements between frameRate reset and display restore.
+source = surface.read_text(encoding="utf-8")
+view_start = source.index("internal class V121VideoView(")
+close_start = source.index("    fun close() {", view_start)
+close_end = source.index("\\n    }", close_start)
+close_body = source[close_start:close_end]
+anchor = "        displayLease.restore()"
+if close_body.count(anchor) != 1 or "frameRate?.close()" not in close_body:
+    raise SystemExit("STOP_V192_UNEXPECTED_VIDEO_VIEW_CLOSE")
+close_body = close_body.replace(anchor, '''        if (v192LiveAttached) {
             V192LiveModeHold.detach(context.activity())
             v192LiveAttached = false
         }
-        displayLease.restore()''')
+        displayLease.restore()''', 1)
+surface.write_text(source[:close_start] + close_body + source[close_end:], encoding="utf-8")
 
 # No unconditional HDMI request inside the format callback. Schedule one
 # stable mode after 3s, cancel on zap, keep prior mode for >=7s across views,
