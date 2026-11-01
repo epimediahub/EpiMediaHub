@@ -11,7 +11,7 @@ import de.epimediahub.app.model.MediaKind
  * ONE AT A TIME; the retained v187 state machine verifies observed PTS,
  * advances on 25-fps/error/timeout and restores the original on exhaustion.
  */
-internal object V193SportOptions {
+object V193SportOptions {
     enum class Tier { NONE, UNVERIFIED, VERIFIED_50 }
 
     private data class Rated(val item: MediaEntry, val rate: Int)
