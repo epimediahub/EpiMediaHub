@@ -17,9 +17,9 @@ internal object V192LiveCadencePolicy {
     fun target(current: V121DisplayMode, modes: List<V121DisplayMode>, fps: Float): V121DisplayMode? {
         val expectedHz = when {
             abs(fps - 25f) < .13f || abs(fps - 50f) < .13f -> 50f
+            abs(fps - 30000f / 1001f) < .01f ||
+                abs(fps - 60000f / 1001f) < .01f -> 60000f / 1001f
             abs(fps - 30f) < .13f || abs(fps - 60f) < .13f -> 60f
-            abs(fps - 30000f / 1001f) < .13f ||
-                abs(fps - 60000f / 1001f) < .13f -> 60000f / 1001f
             else -> return null
         }
         val matched = V170LiveCadencePolicy.matchingMode(current, modes, fps) ?: return null
