@@ -180,7 +180,7 @@ once(dialog,
 # alias even without EPG metadata.
 sports_context = ui / "V188SportContext.kt"
 once(sports_context, r'dazn|eurosport|sportitalia|sport1|',
-    r'dazn|db\\s*liga|eurosport|sportitalia|sport1|')
+    r'dazn|db\s*liga|eurosport|sportitalia|sport1|')
 
 # Do not touch the tested v192 HDMI code. Fail closed if the bridge vanished.
 assert 'V192LiveModeHold.request(view.context.activity(), view, fps)' in (
