@@ -19,12 +19,13 @@ import subprocess
 PROVISIONING = Path("/opt/epimediahub/provisioning")
 REMOTE = Path("/opt/epimediahub/analysis")
 ALLOWED = (PROVISIONING, REMOTE, Path("/opt/episcene-learning"))
-CORE = frozenset(("analysis_worker", "scheduler", "scene", "release"))
+CORE = frozenset(("analysis_worker", "scheduler", "scene", "release", "safe_release"))
 RECOMMENDED = {
     "analysis_worker": PROVISIONING / "skip_analysis_worker.py",
     "scheduler": PROVISIONING / "skip_schedule.py",
     "scene": PROVISIONING / "skip_scene.py",
     "release": PROVISIONING / "skip_release.py",
+    "safe_release": Path("/opt/episcene-learning/safe_release_rollout_v2.py"),
     "automation": PROVISIONING / "skip_automation.py",
     "reliability": PROVISIONING / "skip_scene_reliability.py",
     "remote_worker": REMOTE / "skip_remote_worker.py",
