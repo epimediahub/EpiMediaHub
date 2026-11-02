@@ -18,4 +18,5 @@ jobs:
         working-directory: tools/episcene-learning-v1/diagnostics
         run: |
           python3 -m py_compile visual_cause_summary.py one_report.py runtime_deadlines.py release_gap_readonly.py failure_visual_audit.py failure_template_triage.py http405_age_readonly.py private_failure_reason.py riverdale_series_id_readonly.py riverdale_current_catalog_readonly.py new_4k_catalogue_preflight.py test_new_4k_catalogue_preflight.py
+          bash -n visual_cause_bootstrap.sh
           python3 -m unittest -v test_visual_cause_summary.py test_one_report.py test_runtime_deadlines.py test_failure_visual_audit.py test_release_gap_readonly.py test_failure_template_triage.py test_http405_age_readonly.py test_private_failure_reason.py test_riverdale_series_id_readonly.py test_riverdale_current_catalog_readonly.py test_new_4k_catalogue_preflight.py
