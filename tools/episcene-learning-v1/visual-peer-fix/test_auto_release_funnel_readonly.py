@@ -92,9 +92,9 @@ class ReadOnlyFunnelTests(unittest.TestCase):
 
     def test_never_approves_a_record_or_leaks_identifiers(self):
         con=fixture()
-        before=con.execute("SELECT id,status FROM skip_records ORDER BY id").fetchall()
+        before=[tuple(x) for x in con.execute("SELECT id,status FROM skip_records ORDER BY id")]
         data=report.analyze(con)
-        after=con.execute("SELECT id,status FROM skip_records ORDER BY id").fetchall()
+        after=[tuple(x) for x in con.execute("SELECT id,status FROM skip_records ORDER BY id")]
         self.assertEqual(before,after)
         self.assertFalse(data["production_db_modified"])
         self.assertEqual(data["marker_approvals_triggered"],0)
