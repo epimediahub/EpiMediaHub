@@ -53,6 +53,21 @@ class WorkerVersionGateTests(unittest.TestCase):
         self.assertFalse(value["compatible_for_considered_rollout"])
         self.assertEqual(value["components"]["scene"]["status"], "DRIFT")
 
+    def test_auto_release_controller_is_mandatory_and_drift_blocks_rollout(self):
+        self.assertIn("safe_release", gate.CORE)
+        self.assertIn("safe_release", gate.RECOMMENDED)
+        with patch.object(gate, "ALLOWED", (self.root,)):
+            missing = dict(self.manifest)
+            missing["components"] = dict(self.components)
+            del missing["components"]["safe_release"]
+            with self.assertRaises(ValueError):
+                gate.verify(missing, executor=lambda *a, **k: FakeProcess())
+            (self.root / "safe_release.py").write_text("def run():\\n    return 'changed'\\n")
+            result = gate.verify(self.manifest,
+                                 executor=lambda *a, **k: FakeProcess())
+        self.assertFalse(result["compatible_for_considered_rollout"])
+        self.assertEqual(result["components"]["safe_release"]["status"], "DRIFT")
+
     def test_inactive_service_blocks_rollout(self):
         with patch.object(gate, "ALLOWED", (self.root,)):
             value = gate.verify(self.manifest, executor=lambda *a, **k: FakeProcess("inactive"))
