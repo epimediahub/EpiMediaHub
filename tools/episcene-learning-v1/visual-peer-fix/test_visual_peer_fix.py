@@ -252,5 +252,52 @@ class PeerSeedTests(unittest.TestCase):
                 "SELECT status FROM skip_records WHERE id=201").fetchone()[0],'pending')
 
 
+    def test_missing_outro_window_preferred_over_cached_intro(self):
+        db=fixture()
+        db.executescript("""
+          CREATE TABLE skip_scene_windows(
+              id INTEGER PRIMARY KEY,asset_key TEXT,kind TEXT,duration_ms INTEGER);
+          INSERT INTO skip_scene_windows VALUES(1,'episode-1','intro',3600000);
+          INSERT INTO skip_records VALUES(
+              311,'episode-1','mobland',1,1,3600000,
+              'audio_repetition','intro','pending',0,'episode');
+          INSERT INTO skip_auto_evidence VALUES(
+              311,'{"episcene_required":true}',0);
+        """)
+        with db:
+            candidates=self.module.collect(db)
+            record=next(x for x in candidates if x['asset_key']=='episode-1')
+            self.assertEqual(record['kind'],'outro')
+            self.assertTrue(record['missing_visual_window'])
+            # Existing image windows never become a fabricated verified marker.
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM skip_records WHERE status='approved'"
+            ).fetchone()[0],0)
+
+    def test_missing_window_priority_survives_same_season_and_cached_kind(self):
+        db=fixture()
+        db.executescript("""
+          CREATE TABLE skip_scene_windows(
+            id INTEGER PRIMARY KEY,asset_key TEXT,kind TEXT,duration_ms INTEGER);
+          INSERT INTO skip_scene_windows VALUES(1,'episode-1','outro',3600000);
+          INSERT INTO skip_scene_windows VALUES(2,'episode-2','outro',3600000);
+          INSERT INTO skip_scene_windows VALUES(3,'episode-3','outro',3600000);
+        """)
+        with db:
+            candidates=self.module.collect(db)
+            selected=self.module.plan(db,candidates,max_jobs=2,models=set())
+            self.assertEqual(selected[0]['episode'],4)
+            self.assertTrue(selected[0]['missing_visual_window'])
+            self.assertFalse(selected[1]['missing_visual_window'])
+
+    def test_unrecognized_live_cache_schema_stops_retries(self):
+        db=fixture()
+        db.executescript("CREATE TABLE skip_scene_windows(id INTEGER);")
+        with db:
+            self.assertEqual(self.module.collect(db),[])
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM skip_jobs "
+                                        "WHERE status='queued'").fetchone()[0],0)
+
+
 if __name__=='__main__':
     unittest.main(verbosity=2)
