@@ -200,5 +200,57 @@ class PeerSeedTests(unittest.TestCase):
         with db:self.assertEqual(self.module.collect(db),[])
 
 
+    def test_fair_retries_serve_two_series_on_same_provider(self):
+        db=fixture()
+        for i in (5,6,7,8):
+            key='lupin-'+str(i)
+            db.execute('INSERT INTO skip_assets VALUES(?,?,?,?,?,?,?)',
+                       (key,'lupin',8,1,i-4,3600000,'episode'))
+            db.execute('INSERT INTO skip_jobs VALUES(?,?,?,3,?,?)',
+                       (100+i,key,'review','2026-10-14T19:00:00Z',''))
+            db.execute('INSERT INTO skip_records VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                       (200+i,key,'lupin',1,i-4,3600000,
+                        'audio_repetition','outro','pending',0,'episode'))
+            db.execute('INSERT INTO skip_auto_evidence VALUES(?,?,0)',
+                       (200+i,json.dumps({'episcene_required':True})))
+            db.execute('INSERT INTO skip_language_priority VALUES(?,0)',(key,))
+        with db:
+            selected=self.module.plan(db,self.module.collect(db),max_jobs=6,models=set())
+            self.assertEqual(len(selected),3)  # 3 per playlist per hourly pass
+            by_series={name:sum(x['source_key']==name for x in selected)
+                       for name in ('mobland','lupin')}
+            self.assertGreaterEqual(by_series['mobland'],1)
+            self.assertGreaterEqual(by_series['lupin'],1)
+            self.assertLessEqual(max(by_series.values()),2)
+            # Planning never creates a customer-facing approved marker.
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM skip_records WHERE status='approved'").fetchone()[0],0)
+
+    def test_daily_family_limit_prevents_one_season_from_monopolizing_retries(self):
+        from datetime import datetime,timezone
+        db=fixture()
+        stamp=datetime.now(timezone.utc).isoformat()
+        for i in (5,6,7,8):
+            key='historic-'+str(i)
+            db.execute('INSERT INTO skip_assets VALUES(?,?,?,?,?,?,?)',
+                       (key,'mobland',8,1,i,3600000,'episode'))
+            db.execute('INSERT INTO episcene_safe_release_retries VALUES(?,?,1,?)',
+                       (key,stamp,'review'))
+        with db:
+            self.assertEqual(self.module.plan(
+                db,self.module.collect(db),max_jobs=6,models=set()),[])
+
+    def test_auto_confirmed_evidence_is_not_refetched(self):
+        db=fixture()
+        db.execute('UPDATE skip_auto_evidence SET evidence_json=? WHERE record_id=?',
+                   (json.dumps({'episcene_required':True,
+                        'decision':{'status':'AUTO_CONFIRMED'}}),201))
+        with db:
+            candidates=self.module.collect(db)
+            self.assertEqual({r['episode'] for r in candidates},{2,3,4})
+            self.assertEqual(db.execute(
+                "SELECT status FROM skip_records WHERE id=201").fetchone()[0],'pending')
+
+
 if __name__=='__main__':
     unittest.main(verbosity=2)
