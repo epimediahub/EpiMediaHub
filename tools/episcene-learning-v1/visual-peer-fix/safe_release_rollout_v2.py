@@ -120,16 +120,48 @@ def collect(con):
         d['evidence']=e
         if not protected(con,d):
             by_asset[d['asset_key']].append(d)
-    # If two kinds share a file, analyze one at a time; never choose
-    # a convenient machine alternative among disagreeing proposals.
+    # The read-only live audit found most pending markers lack a saved visual
+    # window. A file can have an already captured intro AND a missing outro;
+    # picking the first alphabetically wastes the sole bounded asset retry.
+    # Use the existing independent cache by exact asset, kind and runtime,
+    # never by title/source metadata, and never infer matching video editions.
+    has_windows=bool(con.execute("""SELECT 1 FROM sqlite_master
+        WHERE type='table' AND name='skip_scene_windows'""").fetchone())
+    windows=set()
+    if has_windows:
+        required={'asset_key','kind','duration_ms'}
+        cols={row[1] for row in con.execute('PRAGMA table_info(skip_scene_windows)')}
+        if not required<=cols:
+            # Unexpected live visual-cache contract: do not schedule retries.
+            return []
+        keys=list(by_asset)
+        for start in range(0,len(keys),300):
+            batch=keys[start:start+300]
+            query="""SELECT DISTINCT asset_key,kind,duration_ms FROM skip_scene_windows
+                WHERE asset_key IN ("""+','.join('?' for _ in batch)+')'
+            for asset,kind,duration in con.execute(query,batch):
+                windows.add((asset,kind,duration))
+    # A matching duration only establishes cache presence; it does not prove
+    # visual consensus or evidence eligibility. The original release gate stays
+    # authoritative.
     chosen=[]
     for entries in by_asset.values():
         kind_counts=Counter(x['kind'] for x in entries)
+        choices=[]
         for kind in sorted(kind_counts):
             group=[x for x in entries if x['kind']==kind]
             if len(group)!=1:continue
-            chosen.append(group[0])
-            break
+            record=group[0]
+            matching=any(a==record['asset_key'] and k==kind and
+                         abs((d or 0)-record['duration_ms'])<=2000
+                         for a,k,d in windows)
+            record['missing_visual_window']=not matching if has_windows else False
+            choices.append(record)
+        if choices:
+            # Prefer filling missing intro/recap/outro evidence before
+            # consuming a retry for another kind with existing image windows.
+            chosen.append(min(choices,key=lambda r:(
+                not r['missing_visual_window'],r['language_priority'],r['kind'])))
     return chosen
 
 
@@ -178,8 +210,9 @@ def plan(con, candidates, max_jobs=MAX_NEW_PER_RUN, *, models=None):
                 epis[r['episode']]=r
         if len(set(epis)|seeded[key])<3 and key not in references:
             continue
-        roster=sorted(epis.values(),key=lambda x:(x['language_priority'],x['episode'],x['job_id']))
-        priority=(not bool(seeded[key]),key not in models,key not in references,
+        roster=sorted(epis.values(),key=lambda x:(not x['missing_visual_window'],x['language_priority'],x['episode'],x['job_id']))
+        priority=(not any(r['missing_visual_window'] for r in roster),
+                  not bool(seeded[key]),key not in models,key not in references,
                   -len(set(epis)|seeded[key]),min(r['language_priority'] for r in roster),
                   key[0],roster[0]['job_id'])
         queue.append((priority,key,roster))
