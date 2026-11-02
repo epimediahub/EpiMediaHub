@@ -62,7 +62,7 @@ class WorkerVersionGateTests(unittest.TestCase):
             del missing["components"]["safe_release"]
             with self.assertRaises(ValueError):
                 gate.verify(missing, executor=lambda *a, **k: FakeProcess())
-            (self.root / "safe_release.py").write_text("def run():\\n    return 'changed'\\n")
+            (self.root / "safe_release.py").write_text("def run():\n    return 'changed'\n")
             result = gate.verify(self.manifest,
                                  executor=lambda *a, **k: FakeProcess())
         self.assertFalse(result["compatible_for_considered_rollout"])
