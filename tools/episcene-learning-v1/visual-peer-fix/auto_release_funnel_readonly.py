@@ -10,7 +10,7 @@ events in the daily logs.
 from __future__ import annotations
 
 import argparse
-from collections import Counter
+from collections import Counter, defaultdict
 import json
 from pathlib import Path
 import sqlite3
@@ -97,12 +97,12 @@ def analyze(con):
     grouped = {}
     for row in rows:
         grouped.setdefault(row["id"], []).append(row)
-    blocks = set()
+    blocks = defaultdict(list)
     for row in con.execute("""
         SELECT asset_key,kind,duration_ms FROM skip_auto_blocks
         WHERE kind IN ('intro','recap','outro')
     """):
-        blocks.add((row[0], row[1], row[2]))
+        blocks[(row[0], row[1])].append(row[2])
     output = {}
     for pid in LANES:
         filtered = [records for records in grouped.values()
@@ -121,9 +121,9 @@ def analyze(con):
                 decision = evidence.get("decision")
                 decision = decision if isinstance(decision, dict) else {}
                 blocked = any(
-                    key==row["asset_key"] and kind==row["segment_type"] and
                     abs((duration or 0)-(row["duration_ms"] or 0))<=2000
-                    for key, kind, duration in blocks
+                    for duration in blocks.get(
+                        (row["asset_key"], row["segment_type"]), ())
                 )
                 if blocked:
                     reason = "EXPLICIT_BLOCK"
