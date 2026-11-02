@@ -20,6 +20,7 @@ jobs:
           bash -n audit_bootstrap.sh
           bash -n release_compat_bootstrap.sh
           bash -n release_merge_audit_bootstrap.sh
+          bash -n install_quota_canary.sh
       - name: Verify approved worker-version manifest gates (offline)
         working-directory: tools/episcene-learning-v1/compute-lanes
         run: |
