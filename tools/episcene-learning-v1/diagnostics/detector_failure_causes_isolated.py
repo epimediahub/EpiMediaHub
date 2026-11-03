@@ -152,7 +152,7 @@ def trace_detector_return(fn, *args):
             except Exception as exc:
                 details = ['diagnostic_problem_'+type(exc).__name__]
             returns.append((frame.f_lineno, details))
-        return tracer
+        return tracer if frame.f_code is code else None
     previous = sys.gettrace()
     sys.settrace(tracer)
     try:
@@ -218,6 +218,10 @@ def replay():
                        'reviewed_release_ready','detector_release_ready'):
                 if not callable(getattr(R,fn,None)):
                     raise RuntimeError('Expected release gate absent: '+fn)
+            import linecache
+            for lineno in (289,316):
+                if linecache.getline(R.__file__, lineno).strip() != 'return False':
+                    raise RuntimeError('Detector code shifted: return line '+str(lineno))
             allrows=target.execute(SQL).fetchall()
             selected=[]
             for row in allrows:
