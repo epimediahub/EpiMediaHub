@@ -18,6 +18,7 @@ import tempfile
 sys.dont_write_bytecode = True
 DB = Path('/var/lib/epimediahub/provisioning.db')
 APP = Path('/opt/epimediahub/provisioning')
+VENV_PYTHON = APP / '.venv/bin/python'
 SQL = """SELECT r.*,COALESCE(e.human_review,0) human_review,
        e.evidence_json,a.playlist_id
 FROM skip_records r JOIN skip_assets a ON a.asset_key=r.asset_key
@@ -34,6 +35,8 @@ def isolated_launch():
         raise SystemExit('ABBRUCH: systemd-run fehlt; keine unsandboxierten Importe.')
     if not DB.is_file() or DB.is_symlink():
         raise SystemExit('ABBRUCH: Originaldatenbank fehlt oder ist ein Symlink.')
+    if not VENV_PYTHON.is_file() or not os.access(VENV_PYTHON, os.X_OK):
+        raise SystemExit('ABBRUCH: EpiScene Python-Venv nicht gefunden: '+str(VENV_PYTHON))
     props = [
         'PrivateNetwork=yes', 'ProtectSystem=strict', 'ReadWritePaths=/tmp',
         'ProtectHome=yes', 'NoNewPrivileges=yes', 'CapabilityBoundingSet=',
@@ -63,7 +66,7 @@ def isolated_launch():
         cmd.extend([
             '--setenv=EPISCENE_REPLAY_SANDBOX=YES',
             '--setenv=EPISCENE_REPLAY_SNAPSHOT=' + str(snapshot),
-            sys.executable, '-I', '-B', str(Path(__file__).resolve())
+            str(VENV_PYTHON), '-I', '-B', str(Path(__file__).resolve())
         ])
         print('Datenbank-Snapshot erstellt; starte isolierten Freigabe-Test ...', flush=True)
         rc = subprocess.run(cmd, check=False).returncode
