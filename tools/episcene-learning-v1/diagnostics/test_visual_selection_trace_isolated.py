@@ -36,17 +36,17 @@ def classify(c):
 class SelectorReadOnlyTests(unittest.TestCase):
     def test_sqlite_row_returns_no_peers(self):
         c=db()
-        self.assertEqual(classify(c),'SELECTOR_RETURNED_NO_PEERS')
+        self.assertEqual(classify(c),'SELECTOR_WITHOUT_SELF_NO_PEERS')
         c.close()
 
     def test_real_row_shape_with_two_distinct_peers(self):
         c=db();insert_windows(c,'peer2','peer3')
-        self.assertEqual(classify(c),'SELECTOR_RETURNED_TWO_PEERS')
+        self.assertEqual(classify(c),'SELECTOR_WITHOUT_SELF_TWO_PEERS')
         c.close()
 
     def test_duplicate_episode_not_counted_twice(self):
         c=db();insert_windows(c,'peer3','peer3_dup')
-        self.assertEqual(classify(c),'SELECTOR_RETURNED_ONE_PEER')
+        self.assertEqual(classify(c),'SELECTOR_WITHOUT_SELF_ONE_PEER')
         c.close()
 
     def test_parent_asset_missing_is_reported(self):
@@ -64,13 +64,28 @@ class SelectorReadOnlyTests(unittest.TestCase):
 
     def test_own_episode_is_not_comparison_peer(self):
         c=db();insert_windows(c,'own')
-        self.assertEqual(classify(c),'SELECTOR_INCLUDED_OWN_EPISODE')
+        self.assertEqual(classify(c),'SELECTOR_WITH_SELF_NO_PEERS')
+        c.close()
+
+    def test_own_row_does_not_hide_independent_peers_after_it(self):
+        c=db();insert_windows(c,'own','peer2','peer3')
+        self.assertEqual(classify(c),'SELECTOR_WITH_SELF_TWO_PEERS')
+        c.close()
+
+    def test_duplicate_windows_do_not_increase_independent_episodes(self):
+        c=db();insert_windows(c,'own','peer2','peer2','peer3')
+        self.assertEqual(classify(c),'SELECTOR_WITH_SELF_TWO_PEERS')
+        c.close()
+
+    def test_own_is_not_the_only_reason_no_match(self):
+        c=db();insert_windows(c,'own','peer2')
+        self.assertEqual(classify(c),'SELECTOR_WITH_SELF_ONE_PEER')
         c.close()
 
     def test_query_only_snapshot_read(self):
         c=db();insert_windows(c,'peer2')
         c.execute('PRAGMA query_only=ON')
-        self.assertEqual(classify(c),'SELECTOR_RETURNED_ONE_PEER')
+        self.assertEqual(classify(c),'SELECTOR_WITHOUT_SELF_ONE_PEER')
         c.close()
 
 if __name__=='__main__':
