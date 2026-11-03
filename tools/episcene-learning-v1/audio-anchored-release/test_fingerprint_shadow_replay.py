@@ -5,7 +5,7 @@ import unittest
 from collections import Counter
 from fingerprint_shadow_replay import (
     cached, human_approved, audio_confirmed, valid_asset, is_protected,
-    playlist_summary_lines, fingerprint_error_code,
+    playlist_summary_lines, fingerprint_error_code, fingerprint_storage_shape,
 )
 
 
@@ -85,6 +85,23 @@ class FingerprintFormatTests(unittest.TestCase):
         self.assertEqual(fingerprint_error_code(ValueError('PRIVATE-ASSET-KEY')),
                          'OTHER')
 
+    def test_audio_cache_json_storage_types_are_anonymous(self):
+        cases = (
+            (None, 'NULL'),
+            (b'not-json', 'NON_TEXT'),
+            ('no-json', 'INVALID_JSON'),
+            ('[]', 'EMPTY_LIST'),
+            ('{}', 'JSON_OBJECT'),
+            ('"encoded"', 'JSON_STRING'),
+            ('[1,2,3]', 'INTEGER_LIST'),
+            ('["1","2"]', 'STRING_LIST'),
+            ('[1,"2"]', 'MIXED_LIST'),
+        )
+        for raw, status in cases:
+            self.assertEqual(fingerprint_storage_shape(raw), status)
+        self.assertEqual(fingerprint_storage_shape('['+'1,'*5000+'1]'),
+                         'OVERSIZED_TEXT')
+
     def test_invalid_fingerprint_cache_counted_without_content(self):
         con = temporary_db()
         with con:
@@ -95,6 +112,7 @@ class FingerprintFormatTests(unittest.TestCase):
             self.assertIsNone(cached(con, fake_row(), counts))
             self.assertEqual(counts['UNSUPPORTED_OR_INVALID_FINGERPRINT_PAYLOAD'], 1)
             self.assertEqual(counts['FINGERPRINT_FORMAT_NOT_ARRAY_OR_WORD_COUNT'], 1)
+            self.assertEqual(counts['FINGERPRINT_STORAGE_JSON_OBJECT'], 1)
         con.close()
 
 
