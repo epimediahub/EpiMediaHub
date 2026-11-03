@@ -199,6 +199,13 @@ def audio_cache_key(record):
     return (record['playlist_id'], record['asset_key'], record['segment_type'])
 
 
+def unrelated_control_cohort(target, cohort_key):
+    """A negative control must be another series in the same playlist/kind."""
+    return (target['playlist_id'] == cohort_key[0]
+            and target['source_key'] != cohort_key[1]
+            and target['segment_type'] == cohort_key[3])
+
+
 def cached(con, record, counts):
     """Only use current-duration saved cache windows; no provider fetches."""
     w=con.execute("""
@@ -392,10 +399,9 @@ def audit():
                     for other_key,other_members in cohorts.items():
                         if controls>=MAX_CROSS_SERIES_CONTROLS:
                             break
-                        if (other_key[0]!=playlist
-                                or other_key[1]==target['source_key']
-                                or other_key[3]!=target['segment_type']
-                                or other_key[1] in tested_series):
+                        if not unrelated_control_cohort(target,other_key):
+                            continue
+                        if other_key[1] in tested_series:
                             continue
                         other=next((x for x in other_members
                                     if audio_confirmed(x)
