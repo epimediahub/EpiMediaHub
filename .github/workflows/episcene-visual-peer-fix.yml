@@ -13,6 +13,16 @@ jobs:
       - name: Verify visual SQL scoping and protected peer requeue
         working-directory: tools/episcene-learning-v1/visual-peer-fix
         run: |
-          python3 -m py_compile scene_fix.py safe_release_rollout_v2.py reload_when_idle.py
-          python3 -m unittest -v test_visual_peer_fix.py
+          python3 -m py_compile scene_fix.py safe_release_rollout_v2.py reload_when_idle.py auto_release_funnel_readonly.py server_release_compatibility.py safe_release_merge_audit.py patch_live_quota_only.py
+          python3 -m unittest -v test_visual_peer_fix.py test_auto_release_funnel_readonly.py test_server_release_compatibility.py test_safe_release_merge_audit.py test_patch_live_quota_only.py
           if test -f install_visual_peer_fix.sh; then bash -n install_visual_peer_fix.sh; fi
+          bash -n preflight_one_step.sh
+          bash -n audit_bootstrap.sh
+          bash -n release_compat_bootstrap.sh
+          bash -n release_merge_audit_bootstrap.sh
+          bash -n install_quota_canary.sh
+      - name: Verify approved worker-version manifest gates (offline)
+        working-directory: tools/episcene-learning-v1/compute-lanes
+        run: |
+          python3 -m py_compile worker_version_gate.py
+          python3 -m unittest -v test_worker_version_gate.py

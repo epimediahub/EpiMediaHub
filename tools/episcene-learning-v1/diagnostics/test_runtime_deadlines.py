@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 from pathlib import Path
+from datetime import datetime, timezone
 import sqlite3
 import tempfile
 import unittest
@@ -28,6 +29,9 @@ class RuntimeTriageTest(unittest.TestCase):
                 INSERT INTO skip_auto_evidence VALUES
                       (1,'{"method":"episcene_consensus","decision":{"status":"REVIEW"}}');
             """)
+            # 24-hour test data must be relative to test execution, not October 2026.
+            db.execute("UPDATE skip_jobs SET updated_at=?",
+                       (datetime.now(timezone.utc).isoformat(),))
         return path
 
     def test_counts_and_no_mutation_or_identifiers(self):

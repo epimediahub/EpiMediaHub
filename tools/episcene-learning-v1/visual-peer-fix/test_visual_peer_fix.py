@@ -200,5 +200,104 @@ class PeerSeedTests(unittest.TestCase):
         with db:self.assertEqual(self.module.collect(db),[])
 
 
+    def test_fair_retries_serve_two_series_on_same_provider(self):
+        db=fixture()
+        for i in (5,6,7,8):
+            key='lupin-'+str(i)
+            db.execute('INSERT INTO skip_assets VALUES(?,?,?,?,?,?,?)',
+                       (key,'lupin',8,1,i-4,3600000,'episode'))
+            db.execute('INSERT INTO skip_jobs VALUES(?,?,?,3,?,?)',
+                       (100+i,key,'review','2026-10-14T19:00:00Z',''))
+            db.execute('INSERT INTO skip_records VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                       (200+i,key,'lupin',1,i-4,3600000,
+                        'audio_repetition','outro','pending',0,'episode'))
+            db.execute('INSERT INTO skip_auto_evidence VALUES(?,?,0)',
+                       (200+i,json.dumps({'episcene_required':True})))
+            db.execute('INSERT INTO skip_language_priority VALUES(?,0)',(key,))
+        with db:
+            selected=self.module.plan(db,self.module.collect(db),max_jobs=6,models=set())
+            self.assertEqual(len(selected),3)  # 3 per playlist per hourly pass
+            by_series={name:sum(x['source_key']==name for x in selected)
+                       for name in ('mobland','lupin')}
+            self.assertGreaterEqual(by_series['mobland'],1)
+            self.assertGreaterEqual(by_series['lupin'],1)
+            self.assertLessEqual(max(by_series.values()),2)
+            # Planning never creates a customer-facing approved marker.
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM skip_records WHERE status='approved'").fetchone()[0],0)
+
+    def test_daily_family_limit_prevents_one_season_from_monopolizing_retries(self):
+        from datetime import datetime,timezone
+        db=fixture()
+        stamp=datetime.now(timezone.utc).isoformat()
+        for i in (5,6,7,8):
+            key='historic-'+str(i)
+            db.execute('INSERT INTO skip_assets VALUES(?,?,?,?,?,?,?)',
+                       (key,'mobland',8,1,i,3600000,'episode'))
+            db.execute('INSERT INTO episcene_safe_release_retries VALUES(?,?,1,?)',
+                       (key,stamp,'review'))
+        with db:
+            self.assertEqual(self.module.plan(
+                db,self.module.collect(db),max_jobs=6,models=set()),[])
+
+    def test_auto_confirmed_evidence_is_not_refetched(self):
+        db=fixture()
+        db.execute('UPDATE skip_auto_evidence SET evidence_json=? WHERE record_id=?',
+                   (json.dumps({'episcene_required':True,
+                        'decision':{'status':'AUTO_CONFIRMED'}}),201))
+        with db:
+            candidates=self.module.collect(db)
+            self.assertEqual({r['episode'] for r in candidates},{2,3,4})
+            self.assertEqual(db.execute(
+                "SELECT status FROM skip_records WHERE id=201").fetchone()[0],'pending')
+
+
+    def test_missing_outro_window_preferred_over_cached_intro(self):
+        db=fixture()
+        db.executescript("""
+          CREATE TABLE skip_scene_windows(
+              id INTEGER PRIMARY KEY,asset_key TEXT,kind TEXT,duration_ms INTEGER);
+          INSERT INTO skip_scene_windows VALUES(1,'episode-1','intro',3600000);
+          INSERT INTO skip_records VALUES(
+              311,'episode-1','mobland',1,1,3600000,
+              'audio_repetition','intro','pending',0,'episode');
+          INSERT INTO skip_auto_evidence VALUES(
+              311,'{"episcene_required":true}',0);
+        """)
+        with db:
+            candidates=self.module.collect(db)
+            record=next(x for x in candidates if x['asset_key']=='episode-1')
+            self.assertEqual(record['kind'],'outro')
+            self.assertTrue(record['missing_visual_window'])
+            # Existing image windows never become a fabricated verified marker.
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM skip_records WHERE status='approved'"
+            ).fetchone()[0],0)
+
+    def test_missing_window_priority_survives_same_season_and_cached_kind(self):
+        db=fixture()
+        db.executescript("""
+          CREATE TABLE skip_scene_windows(
+            id INTEGER PRIMARY KEY,asset_key TEXT,kind TEXT,duration_ms INTEGER);
+          INSERT INTO skip_scene_windows VALUES(1,'episode-1','outro',3600000);
+          INSERT INTO skip_scene_windows VALUES(2,'episode-2','outro',3600000);
+          INSERT INTO skip_scene_windows VALUES(3,'episode-3','outro',3600000);
+        """)
+        with db:
+            candidates=self.module.collect(db)
+            selected=self.module.plan(db,candidates,max_jobs=2,models=set())
+            self.assertEqual(selected[0]['episode'],4)
+            self.assertTrue(selected[0]['missing_visual_window'])
+            self.assertFalse(selected[1]['missing_visual_window'])
+
+    def test_unrecognized_live_cache_schema_stops_retries(self):
+        db=fixture()
+        db.executescript("CREATE TABLE skip_scene_windows(id INTEGER);")
+        with db:
+            self.assertEqual(self.module.collect(db),[])
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM skip_jobs "
+                                        "WHERE status='queued'").fetchone()[0],0)
+
+
 if __name__=='__main__':
     unittest.main(verbosity=2)
