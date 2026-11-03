@@ -51,10 +51,17 @@ ORDER BY a.playlist_id, r.segment_type, r.id DESC
 def launch_isolated():
     if not shutil.which("systemd-run"):
         raise SystemExit("ABBRUCH: systemd-run fehlt. Kein unisolierter Ersatz.")
-    for path in (DB, PYTHON, APP / "skip_scene.py", APP / "skip_release.py",
+    for path in (DB, APP / "skip_scene.py", APP / "skip_release.py",
                  COMPUTE / "skip_visual.py"):
         if not path.is_file() or path.is_symlink():
             raise SystemExit("ABBRUCH: Datei fehlt oder Symlink: " + str(path))
+    # venv/bin/python is normally a symlink into /usr/bin/python3.
+    # Validate that it resolves to an executable and that the venv exists,
+    # rather than rejecting a legitimate interpreter symlink.
+    if not PYTHON.is_file() or not os.access(PYTHON, os.X_OK):
+        raise SystemExit("ABBRUCH: Python der Provisioning-Venv fehlt.")
+    if not (APP / ".venv/pyvenv.cfg").is_file():
+        raise SystemExit("ABBRUCH: Provisioning-Venv-Konfiguration fehlt.")
     with tempfile.TemporaryDirectory(prefix="episcene_visual_ab_", dir="/tmp") as directory:
         snapshot = Path(directory) / "snapshot.db"
         src = sqlite3.connect(DB.resolve().as_uri() + "?mode=ro", uri=True, timeout=60)
