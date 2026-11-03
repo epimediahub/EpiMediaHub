@@ -1,0 +1,24 @@
+name: EpiScene visual selector diagnostics
+on:
+  push:
+    paths:
+      - "tools/episcene-learning-v1/diagnostics/visual_selection_trace_isolated.py"
+      - "tools/episcene-learning-v1/diagnostics/test_visual_selection_trace_isolated.py"
+      - ".github/workflows/episcene-visual-selection-trace.yml"
+  pull_request:
+    paths:
+      - "tools/episcene-learning-v1/diagnostics/visual_selection_trace_isolated.py"
+      - "tools/episcene-learning-v1/diagnostics/test_visual_selection_trace_isolated.py"
+      - ".github/workflows/episcene-visual-selection-trace.yml"
+  workflow_dispatch:
+jobs:
+  selector-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run real-shape SQLite selector tests
+        working-directory: tools/episcene-learning-v1/diagnostics
+        run: |
+          python3 -m py_compile visual_selection_trace_isolated.py test_visual_selection_trace_isolated.py
+          python3 -m unittest -v test_visual_selection_trace_isolated.py
