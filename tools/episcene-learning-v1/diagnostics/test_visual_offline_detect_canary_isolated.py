@@ -3,7 +3,11 @@
 All datasets are synthetic; no provider requests, real assets, marker writes.
 """
 import sqlite3
+import sys
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest import mock
 import visual_offline_detect_canary_isolated as probe
 
 def fixture():
@@ -92,6 +96,48 @@ class OfflineVisualTests(unittest.TestCase):
                          'OWN_WINDOW_MISSING')
         self.assertEqual(v.calls,[])
         c.close()
+
+
+class ExplicitVisualImportTests(unittest.TestCase):
+    MODULE_ALIAS='episcene_offline_visual_probe_private'
+
+    def tearDown(self):
+        sys.modules.pop(self.MODULE_ALIAS,None)
+
+    def test_explicit_import_ignores_previously_cached_skip_visual(self):
+        with TemporaryDirectory() as folder:
+            source=Path(folder)/'skip_visual.py'
+            source.write_text(
+                "POLICY='episcene_visual_v1'\ndef detect(*args,**kwargs):\n    return {'status':'NO_MATCH'}\n"
+            )
+            fake=object()
+            with mock.patch.dict(sys.modules,{'skip_visual':fake}):
+                actual=probe.load_compute_visual(Path(folder))
+                self.assertEqual(actual.__file__,str(source))
+                self.assertEqual(actual.POLICY,'episcene_visual_v1')
+                self.assertIs(sys.modules['skip_visual'],fake)
+                self.assertIsNot(actual,fake)
+
+    def test_unknown_local_policy_is_rejected_and_alias_cleared(self):
+        with TemporaryDirectory() as folder:
+            source=Path(folder)/'skip_visual.py'
+            source.write_text(
+                "POLICY='old_visual_policy'\ndef detect(*args,**kwargs):\n    return {}\n"
+            )
+            with self.assertRaisesRegex(RuntimeError,'Unexpected local visual policy'):
+                probe.load_compute_visual(Path(folder))
+            self.assertNotIn(self.MODULE_ALIAS,sys.modules)
+
+    def test_symlinked_visual_module_is_rejected(self):
+        with TemporaryDirectory() as folder:
+            root=Path(folder)
+            real=root/'actual.py'
+            real.write_text("POLICY='episcene_visual_v1'\ndef detect(*a,**k): return {}\n")
+            (root/'skip_visual.py').symlink_to(real)
+            with self.assertRaisesRegex(RuntimeError,'symlink'):
+                probe.load_compute_visual(root)
+            self.assertNotIn(self.MODULE_ALIAS,sys.modules)
+
 
 if __name__=='__main__':
     unittest.main()
