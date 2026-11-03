@@ -69,22 +69,23 @@ def source_enabled(con,pid):
         return False
     if 'paused' in p.keys() and p['paused'] == 1:
         return False
-    for table in ('skip_analysis_sources','skip_auto_settings','skip_release_settings'):
+    for table in ('skip_analysis_sources','skip_auto_settings'):
         r=con.execute('SELECT enabled FROM '+table+' WHERE playlist_id=?',(pid,)).fetchone()
         if r is None or r['enabled'] != 1:
             return False
+    # Production release settings default to enabled when no override exists.
+    release=con.execute('SELECT enabled FROM skip_release_settings WHERE playlist_id=?',
+                        (pid,)).fetchone()
+    if release is not None and release['enabled'] != 1:
+        return False
     return True
 
 def source_busy(con,pid,now):
     if con.execute('SELECT 1 FROM skip_presence WHERE playlist_id=? AND expires_at>? LIMIT 1',
                    (pid,now)).fetchone():
         return 'playback_active'
-    # A currently running job can continue; no simultaneous provider request
-    # is started by the canary, but avoid adding to an already active pipeline.
-    if con.execute("""SELECT 1 FROM skip_jobs j JOIN skip_assets a ON a.asset_key=j.asset_key
-                      WHERE a.playlist_id=? AND j.status='running' LIMIT 1""",
-                   (pid,)).fetchone():
-        return 'analysis_running'
+    # Existing scheduler/worker guards remain responsible for serial
+    # provider access; adding a queued DB row never starts a stream itself.
     return None
 
 def candidates(con,now):
