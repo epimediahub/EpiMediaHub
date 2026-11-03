@@ -77,7 +77,7 @@ def code_selector():
                 if isinstance(x,ast.Attribute) and x.attr not in ('execute','fetchone','fetchall','join','time'):
                     fail('Unexpected method in scheduler source')
             if isinstance(node,ast.Constant) and isinstance(node.value,str):
-                if re.search(r'\b(INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|ATTACH|DETACH|VACUUM|PRAGMA)\b',
+                if re.search(r'\b(INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|CREATE|ATTACH|DETACH|VACUUM|PRAGMA|REINDEX)\b',
                              node.value,re.I):
                     fail('Unexpected SQL modification in scheduler code')
     mod=ast.Module(body=[names['requests'],names['select_job']],type_ignores=[])
@@ -120,7 +120,8 @@ def validate_selected(db,requests,select_job,asset):
         fail('Scheduler does not recognize any stage-2 request')
     # A peer request for the same series may be present but cannot be allowed
     # to override manual/reference requests or higher-ranked priority groups.
-    if requested[0]['reason']!=REASON:
+    relevant=[r for r in requested if r['playlist_id']==PID]
+    if not relevant or relevant[0]['reason']!=REASON:
         fail('An existing higher-priority schedule request must not be displaced')
     selected,where=select_job(db,PID,stage=2,parallel=True)
     if selected is None or selected['asset_key']!=asset:
