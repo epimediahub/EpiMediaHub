@@ -380,6 +380,47 @@ def trace_local_visual(visual, own_window, partners, kind, counters):
         sys.settrace(original)
 
 
+
+def capture_span_profile(con,row):
+    """Read cached scene window metadata; no frame hashes or identifiers exported.
+
+    Classifies coverage relative to the pending audio marker only.
+    Full coverage is a *necessary* condition to re-use these exact bounds,
+    never proof that a visual match exists.
+    """
+    cols={v[1] for v in con.execute('PRAGMA table_info(skip_scene_windows)')}
+    fields={'asset_key','kind','duration_ms','offset_ms','length_ms','step_ms','created_at'}
+    if not fields.issubset(cols):
+        return 'CACHE_SPAN_SCHEMA_UNAVAILABLE'
+    record=con.execute("""SELECT w.offset_ms,w.length_ms,w.step_ms
+        FROM skip_scene_windows w WHERE w.asset_key=? AND w.kind=?
+        AND w.duration_ms=?
+        ORDER BY w.created_at DESC LIMIT 1""",
+        (row['asset_key'],row['segment_type'],row['duration_ms'])).fetchone()
+    if not record:
+        return 'OWN_VISUAL_WINDOW_MISSING'
+    offset,length,step=(record['offset_ms'],record['length_ms'],record['step_ms'])
+    if any(type(x) is not int for x in (offset,length,step)):
+        return 'CACHE_WINDOW_INVALID_NUMERIC_METADATA'
+    if length<=0 or step<=0:
+        return 'CACHE_WINDOW_INVALID_NUMERIC_METADATA'
+    if length<15000:
+        return 'CACHE_WINDOW_SHORTER_THAN_15S'
+    start,end=row['start_ms'],row['end_ms']
+    if type(start) is not int or type(end) is not int or end<=start:
+        return 'MARKER_INVALID_BOUNDS'
+    win_end=offset+length
+    if offset<=start and win_end>=end:
+        return 'OWN_WINDOW_COVERS_ENTIRE_AUDIO_MARKER'
+    if win_end<=start or offset>=end:
+        return 'OWN_WINDOW_DISJOINT_FROM_AUDIO_MARKER'
+    if offset>start and win_end<end:
+        return 'OWN_WINDOW_TRUNCATES_BOTH_AUDIO_BOUNDS'
+    if offset>start:
+        return 'OWN_WINDOW_STARTS_AFTER_AUDIO_MARKER'
+    return 'OWN_WINDOW_ENDS_BEFORE_AUDIO_MARKER'
+
+
 def offline_detect_from_cache(con,Scene,visual,row,trace_counts=None):
     """Call pure local visual detector over saved cache data; no media requests."""
     asset=con.execute('SELECT * FROM skip_assets WHERE asset_key=?',
@@ -501,6 +542,8 @@ def replay():
             offline_detect_reasons=collections.Counter()
             offline_detect_samples=collections.Counter()
             offline_trace_reasons=collections.Counter()
+            cached_span_reasons=collections.Counter()
+            no_scene_span_reasons=collections.Counter()
             has_visual_versions=bool(target.execute("""SELECT 1 FROM sqlite_master
                  WHERE type='table' AND name='skip_scene_window_versions'""").fetchone())
             for row in allrows:
@@ -532,12 +575,15 @@ def replay():
                     visual_consensus_links[(p,link)]+=1
                     visual_consensus_status[(p,link,detail)]+=1
                     peer_state,gap,decision,reason=more_visual_evidence(target,row)
+                    span_reason=capture_span_profile(target,row)
+                    cached_span_reasons[(p,span_reason)]+=1
                     try:
                         selected_reason=selected_peer_profile(target,Scene,row)
                     except (ValueError,TypeError,KeyError,sqlite3.Error,IndexError) as err:
                         selected_reason='SELECTOR_ERROR_'+type(err).__name__
                     selector_reasons[(p,selected_reason)]+=1
                     if link=='NO_SAME_ASSET_SCENE_CONSENSUS':
+                        no_scene_span_reasons[(p,span_reason)]+=1
                         no_scene_selector_reasons[(p,selected_reason)]+=1
                         if offline_detect_samples[p]<MAX_LOCAL_DETECT_PER_SOURCE:
                             offline_detect_samples[p]+=1
@@ -609,6 +655,12 @@ def replay():
                 print('  ACTUAL SELECTOR WHEN NO SCENE PROPOSAL EXISTS:')
                 for (pid,reason),n in sorted(no_scene_selector_reasons.items()):
                     if pid==p:print('    '+reason+':',n)
+                print('  OWN VISUAL WINDOW VS AUDIO MARKER (METADATA ONLY):')
+                for (pid,why),n in sorted(cached_span_reasons.items()):
+                    if pid==p:print('    '+why+':',n)
+                print('  OWN VISUAL WINDOW WHEN NO CONSENSUS PROPOSAL EXISTS:')
+                for (pid,why),n in sorted(no_scene_span_reasons.items()):
+                    if pid==p:print('    '+why+':',n)
                 print('  ISOLATED LOCAL VISUAL_DETECT, EXISTING CACHE ONLY:')
                 print('    sampled:',offline_detect_samples[p])
                 for (pid,reason),n in sorted(offline_detect_reasons.items()):
@@ -634,6 +686,7 @@ def replay():
             print('Same-asset proposals are not automatically accepted by the strict original record gate.')
             print('These visual-only candidates are NOT approved visual consensus.')
             print('Real cache selector rows resolved to parent assets; own rows are skipped for peer count.')
+            print('Window coverage is relative to audio boundaries; visual consensus may still differ.')
             print('Trace counts are executed rejection branches, not exclusive causes per marker.')
             print('Only up to 3 no-consensus cases per source run pure local visual_detect.')
             print('Results can differ from remote health/version; never publish offline findings.')
