@@ -18,5 +18,5 @@ jobs:
       - name: Run pinned audio-window retention tests
         working-directory: tools/episcene-learning-v1/cache-retention
         run: |
-          python3 -m py_compile audio_cache_patch.py test_audio_cache_patch.py
+          python3 -m py_compile audio_cache_patch.py test_audio_cache_patch.py install_audio_cache_retention.py
           python3 -m unittest -v test_audio_cache_patch.py
