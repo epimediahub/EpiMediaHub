@@ -212,6 +212,23 @@ def is_protected(con, row):
     return False
 
 
+def playlist_summary_lines(counts, playlist_id):
+    """Report only (playlist_id, reason) counters, never global string keys.
+
+    The cache diagnostics intentionally share a Counter with tuple-keyed
+    per-playlist results. Sorting mixed str/tuple keys raises TypeError.
+    This formatter keeps the two namespaces separate.
+    """
+    entries = [
+        (reason, count)
+        for key, count in counts.items()
+        if isinstance(key, tuple) and len(key) == 2
+        for pid, reason in (key,)
+        if pid == playlist_id and isinstance(reason, str)
+    ]
+    return [f'  {reason}: {count}' for reason, count in sorted(entries)]
+
+
 def audit():
     raw=os.environ.get('EPISCENE_FP_SNAPSHOT','')
     snapshot=Path(raw)
@@ -312,8 +329,8 @@ def audit():
                 print('\n'+name)
                 print('  sampled visual-only intro:',sampled[(pid,'intro')])
                 print('  sampled visual-only outro:',sampled[(pid,'outro')])
-                for (p,reason),n in sorted(counts.items()):
-                    if p==pid:print(f'  {reason}: {n}')
+                for line in playlist_summary_lines(counts, pid):
+                    print(line)
             for key in ('MISSING_CACHED_AUDIO_WINDOW','INVALID_CACHED_AUDIO_WINDOW',
                         'UNSUPPORTED_OR_INVALID_FINGERPRINT_PAYLOAD'):
                 if counts[key]:print('  '+key+':',counts[key])
