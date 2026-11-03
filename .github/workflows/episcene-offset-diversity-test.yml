@@ -1,0 +1,35 @@
+name: EpiScene offset diversity patch tests
+
+on:
+  pull_request:
+    paths:
+      - "tools/episcene-learning-v1/visual-peer-fix/offset_diversity_patch.py"
+      - "tools/episcene-learning-v1/visual-peer-fix/test_offset_diversity_patch.py"
+      - "tools/episcene-learning-v1/diagnostics/visual_offset_diversity_ab_isolated.py"
+      - ".github/workflows/episcene-offset-diversity-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safe-offset-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check syntax of patch and isolated A/B runner
+        run: |
+          python -m py_compile \
+            tools/episcene-learning-v1/visual-peer-fix/offset_diversity_patch.py \
+            tools/episcene-learning-v1/diagnostics/visual_offset_diversity_ab_isolated.py \
+            tools/episcene-learning-v1/visual-peer-fix/test_offset_diversity_patch.py
+      - name: Test safety and diverse offset selection
+        run: |
+          python -m unittest discover \
+            -s tools/episcene-learning-v1/visual-peer-fix \
+            -p test_offset_diversity_patch.py -v
