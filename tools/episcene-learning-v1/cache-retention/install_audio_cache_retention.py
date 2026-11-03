@@ -220,6 +220,10 @@ def apply(module,original,updated,local_versions,remote_versions,changed):
                 (folder/'compute.before.py').chmod(0o600)
             backup_db(folder/'provisioning.snapshot.sqlite3')
             print('BACKUP_OK: source copies and SQLite snapshot saved',flush=True)
+            # Viewers can appear while the consistent backup is being created.
+            # Never restart web/compute if a new playback lease appeared.
+            if active(ANALYSIS) or presence_count():
+                raise RuntimeError('SAFE_DEFERRED: new playback or analysis during backup')
             # Files are atomically installed while analysis is paused and
             # the source worker lock is held.
             installed=False
@@ -279,6 +283,10 @@ def main():
         original=SOURCE.read_bytes()
         updated,changed=module.patch(original.decode('utf-8'))
         updated=updated.encode('utf-8')
+        remote_copy_matches=None
+        if REMOTE.exists():
+            ensure_file(REMOTE)
+            remote_copy_matches=(REMOTE.read_bytes()==original)
         local,remote=versions()
         if local!=remote:
             differing=sorted(k for k in local.keys() | remote.keys()
@@ -288,6 +296,7 @@ def main():
         print('PATCH_STATUS: '+('READY' if changed else 'ALREADY_INSTALLED'),flush=True)
         print('WORKER_VERSION_MATCH_BEFORE: true',flush=True)
         print('REMOTE_COPY_PRESENT: '+str(REMOTE.exists()).lower(),flush=True)
+        print('REMOTE_COPY_MATCHES_CONTROLLER_BEFORE: '+str(remote_copy_matches).lower(),flush=True)
         print('DB_SIZE_GIB: '+str(round(DB.stat().st_size/1024**3,2)),flush=True)
         if args.check:
             print('CHECK_ONLY: no files, database, workers, or marker approvals changed')
