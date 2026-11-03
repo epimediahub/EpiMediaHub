@@ -45,11 +45,36 @@ class RecoveryRequestTests(unittest.TestCase):
             target.canary(c)
         c.close()
 
-    def test_no_overwrite_of_existing_manual_learning_request(self):
+    def test_expired_manual_learning_row_is_retired_only_in_transaction(self):
         c=db()
         c.execute("""INSERT INTO skip_schedule_requests VALUES(8,'series',1,4,'','manual_learning',1,1000)""")
-        with self.assertRaisesRegex(RuntimeError,'exists'):
+        row=target.canary(c)
+        self.assertEqual(target.clear_expired_manual_request(c,row,2000),1)
+        self.assertEqual(c.execute("SELECT COUNT(*) FROM skip_schedule_requests").fetchone()[0],0)
+        target.insert_request(c,row,2000)
+        self.assertEqual(c.execute("SELECT reason FROM skip_schedule_requests").fetchone()[0],
+                         target.REASON)
+        c.rollback()
+        self.assertEqual(c.execute("SELECT reason FROM skip_schedule_requests").fetchone()[0],
+                         'manual_learning')
+        c.close()
+
+    def test_active_manual_learning_row_remains_untouched(self):
+        c=db()
+        c.execute("""INSERT INTO skip_schedule_requests VALUES(8,'series',1,4,'','manual_learning',1,9999999999)""")
+        with self.assertRaisesRegex(RuntimeError,'request exists'):
             target.canary(c)
+        self.assertEqual(c.execute("SELECT reason FROM skip_schedule_requests").fetchone()[0],
+                         'manual_learning')
+        c.close()
+
+    def test_expired_reference_request_is_not_retired(self):
+        c=db()
+        c.execute("""INSERT INTO skip_schedule_requests VALUES(8,'series',1,4,'key','reference',1,1000)""")
+        with self.assertRaisesRegex(RuntimeError,'request exists'):
+            target.canary(c)
+        self.assertEqual(c.execute("SELECT reason FROM skip_schedule_requests").fetchone()[0],
+                         'reference')
         c.close()
 
     def test_refuse_missing_scheduler_constraints(self):
