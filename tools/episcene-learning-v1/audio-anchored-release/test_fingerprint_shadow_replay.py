@@ -5,7 +5,7 @@ import unittest
 from collections import Counter
 from fingerprint_shadow_replay import (
     cached, human_approved, audio_confirmed, valid_asset, is_protected,
-    playlist_summary_lines,
+    playlist_summary_lines, fingerprint_error_code,
 )
 
 
@@ -68,6 +68,34 @@ class SummaryTests(unittest.TestCase):
         })
         self.assertEqual(playlist_summary_lines(counts, 8),
                          ['  SHADOW_MULTIPLE_AUDIO_MATCHES_NOT_RELEASED: 2'])
+
+
+class FingerprintFormatTests(unittest.TestCase):
+    def test_decode_errors_yield_only_allowlisted_categories(self):
+        cases = {
+            'bad fingerprint sampling step': 'STEP_UNSUPPORTED',
+            'bad fingerprint offset': 'OFFSET_INVALID',
+            'fingerprint payload too large / invalid': 'ENCODING_OR_SIZE_UNSUPPORTED',
+            'invalid fingerprint json': 'NOT_VALID_JSON',
+            'invalid fingerprint shape': 'NOT_ARRAY_OR_WORD_COUNT',
+            'invalid fingerprint word': 'WORD_TYPE_OR_RANGE',
+        }
+        for reason, expected in cases.items():
+            self.assertEqual(fingerprint_error_code(ValueError(reason)), expected)
+        self.assertEqual(fingerprint_error_code(ValueError('PRIVATE-ASSET-KEY')),
+                         'OTHER')
+
+    def test_invalid_fingerprint_cache_counted_without_content(self):
+        con = temporary_db()
+        with con:
+            con.execute("INSERT INTO skip_auto_windows VALUES (?,?,?,?,?,?,?,?)",
+                        ('asset-1','intro',json.dumps({'fingerprint':'private'}),
+                         20000,25000,500,2400000,'2026-01-01'))
+            counts = Counter()
+            self.assertIsNone(cached(con, fake_row(), counts))
+            self.assertEqual(counts['UNSUPPORTED_OR_INVALID_FINGERPRINT_PAYLOAD'], 1)
+            self.assertEqual(counts['FINGERPRINT_FORMAT_NOT_ARRAY_OR_WORD_COUNT'], 1)
+        con.close()
 
 
 class CacheTests(unittest.TestCase):
