@@ -129,8 +129,11 @@ def patch_visual(source: str) -> tuple[str, bool]:
     stmt = offsets[0]
     # This variant must not be re-applied or silently override another patch.
     if not (isinstance(stmt.value, ast.Subscript)
-            and isinstance(stmt.value.slice, ast.Constant)
-            and stmt.value.slice.value == 12
+            and isinstance(stmt.value.slice, ast.Slice)
+            and stmt.value.slice.lower is None
+            and stmt.value.slice.step is None
+            and isinstance(stmt.value.slice.upper, ast.Constant)
+            and stmt.value.slice.upper.value == 12
             and _node_signature(stmt.value.value) == _node_signature(EXPECTED)):
         raise ValueError("Offset ranking changed: refusing unknown detector code")
     lines = source.splitlines(keepends=True)
