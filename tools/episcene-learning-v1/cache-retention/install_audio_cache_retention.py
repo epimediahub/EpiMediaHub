@@ -174,7 +174,41 @@ def copy_atomic(destination, content):
             os.unlink(name)
 
 
-def apply(module,original,updated,local_versions,remote_versions,changed,allow_playback_interruption=False):
+def wait_for_analysis_idle(guard, *, drain_analysis=False):
+    """Called only after pausing the analysis timer; never stop active jobs."""
+    def try_lock():
+        try:
+            fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except BlockingIOError:
+            return False
+
+    if not drain_analysis:
+        if not try_lock():
+            raise RuntimeError('SAFE_DEFERRED: running analysis batch')
+        if active(ANALYSIS):
+            raise RuntimeError('SAFE_DEFERRED: analysis batch still active')
+        return
+
+    # A running batch holds the advisory lock. Wait without holding it,
+    # so the batch can complete and commit as usual. The timer is stopped
+    # by apply() before we reach this point, preventing new scheduled jobs.
+    printed=False
+    for _ in range(480):
+        got_lock=try_lock()
+        if got_lock:
+            if not active(ANALYSIS):
+                print('ANALYSIS_DRAIN_OK: worker lock acquired and no batch active',flush=True)
+                return
+            fcntl.flock(guard, fcntl.LOCK_UN)
+        if not printed:
+            print('ANALYSIS_DRAIN_WAIT: current batch finishes normally; no jobs killed',flush=True)
+            printed=True
+        time.sleep(5)
+    raise RuntimeError('SAFE_DEFERRED: no idle window; timer will be restored')
+
+
+def apply(module,original,updated,local_versions,remote_versions,changed,allow_playback_interruption=False,drain_analysis=False):
     if not changed:
         print('ALREADY_FIXED: no changes or service restart required')
         return
@@ -191,12 +225,7 @@ def apply(module,original,updated,local_versions,remote_versions,changed,allow_p
         run('systemctl','stop',TIMER)
     try:
         with LOCK.open('a+b') as guard:
-            try:
-                fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                raise RuntimeError('SAFE_DEFERRED: running analysis batch')
-            if active(ANALYSIS):
-                raise RuntimeError('SAFE_DEFERRED: analysis batch still active')
+            wait_for_analysis_idle(guard, drain_analysis=drain_analysis)
             if presence_count() and not allow_playback_interruption:
                 raise RuntimeError('SAFE_DEFERRED: playback began after preflight')
             ensure_file(SOURCE)
@@ -290,11 +319,15 @@ def main():
     ap.add_argument('--apply',action='store_true')
     ap.add_argument('--allow-playback-interruption',action='store_true',
                     help='Explicitly permit worker/web restart with active playback leases')
+    ap.add_argument('--drain-analysis',action='store_true',
+                    help='Pause new scheduled analysis jobs and let the current batch finish')
     args=ap.parse_args()
     if args.check and args.apply:
         ap.error('Use either --check or --apply')
     if args.allow_playback_interruption and not args.apply:
         ap.error('--allow-playback-interruption requires --apply')
+    if args.drain_analysis and not args.apply:
+        ap.error('--drain-analysis requires --apply')
     if not args.check and not args.apply:
         args.check=True
     eligible_environment()
@@ -323,7 +356,7 @@ def main():
         if args.check:
             print('CHECK_ONLY: no files, database, workers, or marker approvals changed')
         else:
-            apply(module,original,updated,local,remote,changed,args.allow_playback_interruption)
+            apply(module,original,updated,local,remote,changed,args.allow_playback_interruption,args.drain_analysis)
 
 
 if __name__=='__main__':
