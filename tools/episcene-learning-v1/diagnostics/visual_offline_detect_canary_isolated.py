@@ -6,6 +6,7 @@ Fails closed if OS sandbox cannot start. No production-module imports outside sa
 """
 import collections
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -283,6 +284,39 @@ def selected_peer_profile(con, scene, row):
     return prefix+'FOUR_PLUS_PEERS'
 
 
+def load_compute_visual(source_root):
+    """Load the exact analysis-worker module without Python's name cache.
+
+    Provisioning imports may already have cached a different skip_visual
+    in sys.modules. A path insertion alone cannot override that cache.
+    Only a verified local module is allowed, and only inside the OS sandbox.
+    """
+    file=source_root / 'skip_visual.py'
+    if (not source_root.is_dir() or source_root.is_symlink()
+            or not file.is_file() or file.is_symlink()):
+        raise RuntimeError('Local analysis visual module unavailable or symlink')
+    name='episcene_offline_visual_probe_private'
+    if name in sys.modules:
+        raise RuntimeError('Offline probe module alias already loaded')
+    spec=importlib.util.spec_from_file_location(name,str(file))
+    if spec is None or spec.loader is None:
+        raise RuntimeError('Cannot create local visual module loader')
+    mod=importlib.util.module_from_spec(spec)
+    sys.modules[name]=mod
+    try:
+        spec.loader.exec_module(mod)
+        if Path(mod.__file__).resolve()!=file.resolve():
+            raise RuntimeError('Unexpected visual module location')
+        if getattr(mod,'POLICY',None)!='episcene_visual_v1':
+            raise RuntimeError('Unexpected local visual policy')
+        if not callable(getattr(mod,'detect',None)):
+            raise RuntimeError('Local visual detect function missing')
+    except BaseException:
+        sys.modules.pop(name,None)
+        raise
+    return mod
+
+
 def offline_detect_from_cache(con,Scene,visual,row):
     """Call pure local visual detector over saved cache data; no media requests."""
     asset=con.execute('SELECT * FROM skip_assets WHERE asset_key=?',
@@ -360,14 +394,9 @@ def replay():
             import skip_scene as Scene
             if not COMPUTE.is_dir() or COMPUTE.is_symlink():
                 raise RuntimeError('Private local compute source unavailable')
-            sys.path.insert(0,str(COMPUTE.resolve()))
-            import skip_visual as Visual
-            if Path(Visual.__file__).resolve()!=COMPUTE.resolve()/'skip_visual.py':
-                raise RuntimeError('Unexpected visual module location')
-            if getattr(Visual,'POLICY',None)!='episcene_visual_v1':
-                raise RuntimeError('Unexpected local visual policy')
-            if not callable(getattr(Visual,'detect',None)):
-                raise RuntimeError('Local visual detect function missing')
+            # Analysed module is isolated from pre-imported provisioning
+            # skip_visual. Preserve module path checks without weakening them.
+            Visual=load_compute_visual(COMPUTE)
             if Path(Scene.__file__).resolve().parent != APP.resolve():
                 raise RuntimeError('Unexpected skip_scene module location')
             if not callable(getattr(Scene,'_cached_rows',None)):
