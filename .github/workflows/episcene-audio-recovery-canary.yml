@@ -1,0 +1,24 @@
+name: EpiScene audio recovery canary tests
+on:
+  push:
+    paths:
+      - "tools/episcene-learning-v1/diagnostics/audio_recovery_canary.py"
+      - "tools/episcene-learning-v1/diagnostics/test_audio_recovery_canary.py"
+      - ".github/workflows/episcene-audio-recovery-canary.yml"
+  pull_request:
+    paths:
+      - "tools/episcene-learning-v1/diagnostics/audio_recovery_canary.py"
+      - "tools/episcene-learning-v1/diagnostics/test_audio_recovery_canary.py"
+      - ".github/workflows/episcene-audio-recovery-canary.yml"
+  workflow_dispatch:
+jobs:
+  canary-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and exercise small SQLite recovery canary
+        working-directory: tools/episcene-learning-v1/diagnostics
+        run: |
+          python3 -m py_compile audio_recovery_canary.py test_audio_recovery_canary.py
+          python3 -m unittest -v test_audio_recovery_canary.py
