@@ -174,12 +174,16 @@ def copy_atomic(destination, content):
             os.unlink(name)
 
 
-def apply(module,original,updated,local_versions,remote_versions,changed):
+def apply(module,original,updated,local_versions,remote_versions,changed,allow_playback_interruption=False):
     if not changed:
         print('ALREADY_FIXED: no changes or service restart required')
         return
-    if presence_count():
+    initial_viewers=presence_count()
+    if initial_viewers and not allow_playback_interruption:
         raise RuntimeError('SAFE_DEFERRED: active playback; do not restart services')
+    if initial_viewers and allow_playback_interruption:
+        print('USER_AUTHORIZED_PLAYBACK_INTERRUPTION: active_leases='+str(initial_viewers),flush=True)
+        print('Service restart may interrupt active sessions; external provider streams may continue.',flush=True)
     if not LOCK.is_file():
         raise RuntimeError('Missing analysis worker lock')
     initial_timer=active(TIMER)
@@ -191,8 +195,10 @@ def apply(module,original,updated,local_versions,remote_versions,changed):
                 fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 raise RuntimeError('SAFE_DEFERRED: running analysis batch')
-            if active(ANALYSIS) or presence_count():
-                raise RuntimeError('SAFE_DEFERRED: analysis or playback active')
+            if active(ANALYSIS):
+                raise RuntimeError('SAFE_DEFERRED: analysis batch still active')
+            if presence_count() and not allow_playback_interruption:
+                raise RuntimeError('SAFE_DEFERRED: playback began after preflight')
             ensure_file(SOURCE)
             if SOURCE.read_bytes()!=original:
                 raise RuntimeError('Source changed after preflight')
@@ -223,8 +229,10 @@ def apply(module,original,updated,local_versions,remote_versions,changed):
             print('BACKUP_OK: source copies and SQLite snapshot saved',flush=True)
             # Viewers can appear while the consistent backup is being created.
             # Never restart web/compute if a new playback lease appeared.
-            if active(ANALYSIS) or presence_count():
-                raise RuntimeError('SAFE_DEFERRED: new playback or analysis during backup')
+            if active(ANALYSIS):
+                raise RuntimeError('SAFE_DEFERRED: analysis started during backup')
+            if presence_count() and not allow_playback_interruption:
+                raise RuntimeError('SAFE_DEFERRED: playback started during backup')
             # Files are atomically installed while analysis is paused and
             # the source worker lock is held.
             installed=False
@@ -280,9 +288,13 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument('--check',action='store_true')
     ap.add_argument('--apply',action='store_true')
+    ap.add_argument('--allow-playback-interruption',action='store_true',
+                    help='Explicitly permit worker/web restart with active playback leases')
     args=ap.parse_args()
     if args.check and args.apply:
         ap.error('Use either --check or --apply')
+    if args.allow_playback_interruption and not args.apply:
+        ap.error('--allow-playback-interruption requires --apply')
     if not args.check and not args.apply:
         args.check=True
     eligible_environment()
@@ -311,7 +323,7 @@ def main():
         if args.check:
             print('CHECK_ONLY: no files, database, workers, or marker approvals changed')
         else:
-            apply(module,original,updated,local,remote,changed)
+            apply(module,original,updated,local,remote,changed,args.allow_playback_interruption)
 
 
 if __name__=='__main__':
