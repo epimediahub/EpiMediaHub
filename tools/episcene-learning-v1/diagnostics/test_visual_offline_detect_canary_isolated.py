@@ -160,5 +160,50 @@ class VisualTraceSafetyTests(unittest.TestCase):
             probe.trace_local_visual(FakeLocalVisual,(1,1),[(2,2)],'intro',{})
 
 
+
+class WindowCaptureCoverageTests(unittest.TestCase):
+    def _conn(self,offset,length):
+        c=sqlite3.connect(':memory:')
+        c.row_factory=sqlite3.Row
+        c.execute("CREATE TABLE skip_assets (asset_key TEXT,duration_ms INTEGER)")
+        c.execute("INSERT INTO skip_assets VALUES('x',3600000)")
+        c.execute("""CREATE TABLE skip_scene_windows(
+            asset_key TEXT,kind TEXT,duration_ms INTEGER,
+            offset_ms INTEGER,length_ms INTEGER,step_ms INTEGER,created_at INTEGER)""")
+        c.execute("INSERT INTO skip_scene_windows VALUES('x','intro',3600000,?,?,500,1)",
+                  (offset,length))
+        c.commit()
+        return c
+
+    def test_full_audio_marker_coverage(self):
+        c=self._conn(0,100000)
+        self.assertEqual(probe.capture_span_profile(c,{'asset_key':'x','segment_type':'intro',
+                         'start_ms':25000,'end_ms':60000}),
+                         'OWN_WINDOW_COVERS_ENTIRE_AUDIO_MARKER')
+        c.close()
+
+    def test_partial_audio_marker_coverage(self):
+        c=self._conn(0,35000)
+        self.assertEqual(probe.capture_span_profile(c,{'asset_key':'x','segment_type':'intro',
+                         'start_ms':25000,'end_ms':60000}),
+                         'OWN_WINDOW_ENDS_BEFORE_AUDIO_MARKER')
+        c.close()
+
+    def test_window_shorter_than_fifteen_seconds(self):
+        c=self._conn(0,10000)
+        self.assertEqual(probe.capture_span_profile(c,{'asset_key':'x','segment_type':'intro',
+                         'start_ms':1000,'end_ms':8000}),
+                         'CACHE_WINDOW_SHORTER_THAN_15S')
+        c.close()
+
+    def test_missing_window_is_reported_without_write(self):
+        c=self._conn(0,100000)
+        c.execute("DELETE FROM skip_scene_windows")
+        c.execute("PRAGMA query_only=ON")
+        self.assertEqual(probe.capture_span_profile(c,{'asset_key':'x','segment_type':'intro',
+                         'start_ms':5000,'end_ms':55000}),
+                         'OWN_VISUAL_WINDOW_MISSING')
+        c.close()
+
 if __name__=='__main__':
     unittest.main()
