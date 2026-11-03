@@ -4,7 +4,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
-from audio_cache_format_probe import run, structure, bucket_size, SAMPLES_PER_GROUP
+from audio_cache_format_probe import run, structure, bucket_size, SAMPLES_PER_GROUP, numeric_metadata, meta_type, step_summary
 
 class ProbeTests(unittest.TestCase):
     def test_format_categories(self):
@@ -24,6 +24,17 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(structure('"raw"'),("STRING",3))
         self.assertEqual(structure('"x"'*400000),("TOO_LARGE_TO_PARSE",0))
         self.assertEqual(bucket_size(8640),"8640-49999")
+
+    def test_step_types_and_numeric_bounds_are_nonidentifying(self):
+        self.assertEqual(meta_type(100.0),'REAL')
+        self.assertEqual(meta_type(None),'NULL')
+        self.assertEqual(meta_type('100.5'),'TEXT_NUMERIC')
+        self.assertEqual(meta_type('secret'),'TEXT_NONNUMERIC')
+        self.assertIsNone(numeric_metadata('private-asset-key'))
+        self.assertIsNone(numeric_metadata(float('nan')))
+        summary=step_summary({'REAL':2,'NULL':1},[123.8,123.9],[124.0,124.1])
+        self.assertEqual(summary['numeric_step_ms']['min'],123.8)
+        self.assertEqual(summary['types'],{'NULL':1,'REAL':2})
 
     def test_read_only_aggregate_metadata(self):
         with tempfile.TemporaryDirectory() as dir_:
