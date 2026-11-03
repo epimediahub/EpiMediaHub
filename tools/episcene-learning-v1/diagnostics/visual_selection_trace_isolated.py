@@ -239,10 +239,14 @@ def selected_peer_profile(con, scene, row):
     if asset is None:
         return 'ASSET_MISSING'
     selection=scene._cached_rows(con,asset,row['segment_type'])
-    if not isinstance(selection,(list,tuple)):
+    if selection is None:
+        return 'SELECTOR_RESULT_UNKNOWN'
+    try:
+        entries=iter(selection)
+    except TypeError:
         return 'SELECTOR_RESULT_UNKNOWN'
     distinct=set()
-    for entry in selection:
+    for entry in entries:
         if not hasattr(entry,'keys') or 'asset_key' not in entry.keys():
             return 'SELECTOR_UNEXPECTED_CACHE_ROW'
         cache_key=entry['asset_key']
