@@ -28,7 +28,7 @@ APP=Path('/opt/epimediahub/provisioning')
 DB=Path('/var/lib/epimediahub/provisioning.db')
 PYTHON=APP/'.venv/bin/python'
 MAX_ROWS=15000
-MAX_TARGETS_PER_PLAYLIST=12
+MAX_TARGETS_PER_PLAYLIST_AND_KIND=8
 MAX_PEERS_PER_TARGET=8
 
 SQL = """
@@ -248,7 +248,7 @@ def audit():
             for key,members in cohorts.items():
                 playlist=key[0]
                 for target in members:
-                    if sampled[playlist]>=MAX_TARGETS_PER_PLAYLIST:
+                    if sampled[(playlist, target['segment_type'])]>=MAX_TARGETS_PER_PLAYLIST_AND_KIND:
                         break
                     if not audio_confirmed(target) or target['status']!='pending':
                         continue
@@ -257,7 +257,7 @@ def audit():
                         continue
                     if not original_visual_only(con,release,target):
                         continue
-                    sampled[playlist]+=1
+                    sampled[(playlist,target['segment_type'])]+=1
                     counts[(playlist,'VISUAL_ONLY_SAMPLED')]+=1
                     ev=as_json(target['evidence_json'])
                     if ev.get('audio_visual_disagreement') is True:
@@ -310,7 +310,8 @@ def audit():
             print('No media requests, no approvals, no server/worker changes.')
             for pid,name in ((8,'4K ANALYSE'),(10,'THE BEST')):
                 print('\n'+name)
-                print('  sampled visual-only:',sampled[pid])
+                print('  sampled visual-only intro:',sampled[(pid,'intro')])
+                print('  sampled visual-only outro:',sampled[(pid,'outro')])
                 for (p,reason),n in sorted(counts.items()):
                     if p==pid:print(f'  {reason}: {n}')
             for key in ('MISSING_CACHED_AUDIO_WINDOW','INVALID_CACHED_AUDIO_WINDOW',
