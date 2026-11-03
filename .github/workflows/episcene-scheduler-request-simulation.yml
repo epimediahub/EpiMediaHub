@@ -1,0 +1,24 @@
+name: EpiScene scheduler request simulation
+on:
+  push:
+    paths:
+      - "tools/episcene-learning-v1/diagnostics/scheduler_request_simulation.py"
+      - "tools/episcene-learning-v1/diagnostics/test_scheduler_request_simulation.py"
+      - ".github/workflows/episcene-scheduler-request-simulation.yml"
+  pull_request:
+    paths:
+      - "tools/episcene-learning-v1/diagnostics/scheduler_request_simulation.py"
+      - "tools/episcene-learning-v1/diagnostics/test_scheduler_request_simulation.py"
+      - ".github/workflows/episcene-scheduler-request-simulation.yml"
+  workflow_dispatch:
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test source guards and request selection
+        working-directory: tools/episcene-learning-v1/diagnostics
+        run: |
+          python3 -m py_compile scheduler_request_simulation.py test_scheduler_request_simulation.py
+          python3 -m unittest -v test_scheduler_request_simulation.py
