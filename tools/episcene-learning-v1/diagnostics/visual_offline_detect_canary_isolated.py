@@ -317,7 +317,70 @@ def load_compute_visual(source_root):
     return mod
 
 
-def offline_detect_from_cache(con,Scene,visual,row):
+
+_VISUAL_EXIT_LINES = {
+    192:'PAIR_SAME_EPISODE_OR_STEP',
+    204:'PAIR_NO_HASH_VOTES',
+    226:'PAIR_INSUFFICIENT_LENGTH_OR_RATIO',
+    229:'PAIR_LOW_FRAME_DIVERSITY',
+    232:'PAIR_NOT_STRUCTURALLY_DISTINCT',
+    245:'PAIR_OUTSIDE_TRUSTED_BOUNDARIES',
+    254:'PAIR_INVALID_SECTION_BOUNDS',
+    256:'PAIR_INTRO_START_TOO_LATE',
+    258:'PAIR_OUTRO_START_TOO_EARLY',
+}
+_DETECT_EXIT_LINES = {
+    294:'DETECT_NO_PAIR_CANDIDATES',
+    311:'DETECT_CONSENSUS_TOO_SHORT',
+}
+
+def trace_local_visual(visual, own_window, partners, kind, counters):
+    """Read-only aggregate of actual compute-code rejection branches.
+
+    sys.settrace observes line execution without modifying the detector.
+    The line mappings are tied to verified known code; if the source differs,
+    refuse to attribute reasons to misleading lines.
+    """
+    if not hasattr(visual,'_pair_candidates') or not callable(visual._pair_candidates):
+        raise RuntimeError('Visual pair candidate function unavailable')
+    origin=Path(visual.__file__).resolve()
+    source=origin.read_text(encoding='utf-8').splitlines()
+    expected={192:'return []',204:'return []',
+              226:'continue',229:'continue',232:'continue',
+              245:'continue',254:'continue',256:'continue',258:'continue',
+              294:'return result',311:'return result'}
+    if not all(len(source)>=line and source[line-1].strip()==token
+               for line,token in expected.items()):
+        raise RuntimeError('Visual algorithm changed: refusing stale line mapping')
+    pair_code=visual._pair_candidates.__code__
+    detect_code=visual.detect.__code__
+    if Path(pair_code.co_filename).resolve()!=origin or Path(detect_code.co_filename).resolve()!=origin:
+        raise RuntimeError('Visual trace code path mismatch')
+    def inside(frame,event,arg):
+        if event=='line':
+            fn=frame.f_code
+            table=_VISUAL_EXIT_LINES if fn is pair_code else _DETECT_EXIT_LINES
+            tag=table.get(frame.f_lineno)
+            if tag:counters[tag]+=1
+        elif event=='return' and frame.f_code is pair_code:
+            counters['PAIR_CALLS']+=1
+            if isinstance(arg,list) and len(arg)>0:counters['PAIR_CANDIDATES_PRESENT']+=1
+            elif isinstance(arg,list):counters['PAIR_NO_CANDIDATES']+=1
+            else:counters['PAIR_RETURN_UNEXPECTED']+=1
+        return inside
+    def outside(frame,event,arg):
+        if event=='call' and frame.f_code in (pair_code,detect_code):
+            return inside
+        return None
+    original=sys.gettrace()
+    try:
+        sys.settrace(outside)
+        return visual.detect(own_window,partners,kind,busy=lambda:False,cache=None)
+    finally:
+        sys.settrace(original)
+
+
+def offline_detect_from_cache(con,Scene,visual,row,trace_counts=None):
     """Call pure local visual detector over saved cache data; no media requests."""
     asset=con.execute('SELECT * FROM skip_assets WHERE asset_key=?',
                       (row['asset_key'],)).fetchone()
@@ -348,7 +411,10 @@ def offline_detect_from_cache(con,Scene,visual,row):
         if len(partners)==4:break
     if not partners:return 'NO_PEERS'
     own_window=Scene._window(own,asset)
-    output=visual.detect(own_window,partners,kind,busy=lambda:False,cache=None)
+    if trace_counts is None:
+        output=visual.detect(own_window,partners,kind,busy=lambda:False,cache=None)
+    else:
+        output=trace_local_visual(visual,own_window,partners,kind,trace_counts)
     if not isinstance(output,dict):return 'INVALID_RESULT'
     state=output.get('status')
     if state not in ('NO_MATCH','REVIEW','AUTO_CONFIRMED'):
@@ -434,6 +500,7 @@ def replay():
             no_scene_selector_reasons=collections.Counter()
             offline_detect_reasons=collections.Counter()
             offline_detect_samples=collections.Counter()
+            offline_trace_reasons=collections.Counter()
             has_visual_versions=bool(target.execute("""SELECT 1 FROM sqlite_master
                  WHERE type='table' AND name='skip_scene_window_versions'""").fetchone())
             for row in allrows:
@@ -480,8 +547,12 @@ def replay():
                             target.execute('SAVEPOINT isolated_visual_detect')
                             try:
                                 try:
-                                    outcome=offline_detect_from_cache(target,Scene,Visual,row)
-                                except (ValueError,TypeError,KeyError,IndexError,sqlite3.Error) as ex:
+                                    trial_counts=collections.Counter()
+                                    outcome=offline_detect_from_cache(
+                                        target,Scene,Visual,row,trace_counts=trial_counts)
+                                    for key,count in trial_counts.items():
+                                        offline_trace_reasons[(p,key)]+=count
+                                except (ValueError,TypeError,KeyError,IndexError,sqlite3.Error,RuntimeError) as ex:
                                     outcome='LOCAL_TEST_ERROR_'+type(ex).__name__
                             finally:
                                 target.execute('ROLLBACK TO isolated_visual_detect')
@@ -542,6 +613,9 @@ def replay():
                 print('    sampled:',offline_detect_samples[p])
                 for (pid,reason),n in sorted(offline_detect_reasons.items()):
                     if pid==p:print('    '+reason+':',n)
+                print('  ISOLATED LOCAL VISUAL REJECTION REASONS (LINE TRACE):')
+                for (pid,reason),n in sorted(offline_trace_reasons.items()):
+                    if pid==p:print('    '+reason+':',n)
                 print('  PEER VISUAL WINDOW REVISION VALIDITY:')
                 for (pid,state),n in sorted(root_peer_revisions.items()):
                     if pid==p:print('    '+state+':',n)
@@ -560,6 +634,7 @@ def replay():
             print('Same-asset proposals are not automatically accepted by the strict original record gate.')
             print('These visual-only candidates are NOT approved visual consensus.')
             print('Real cache selector rows resolved to parent assets; own rows are skipped for peer count.')
+            print('Trace counts are executed rejection branches, not exclusive causes per marker.')
             print('Only up to 3 no-consensus cases per source run pure local visual_detect.')
             print('Results can differ from remote health/version; never publish offline findings.')
             print('No media fetching, remote calls, or approval from this diagnostic.')
