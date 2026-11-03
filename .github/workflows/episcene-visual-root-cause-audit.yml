@@ -1,0 +1,24 @@
+name: EpiScene visual consensus root cause audit tests
+on:
+  push:
+    paths:
+      - "tools/episcene-learning-v1/diagnostics/visual_consensus_root_cause_isolated.py"
+      - "tools/episcene-learning-v1/diagnostics/test_visual_consensus_root_cause_isolated.py"
+      - ".github/workflows/episcene-visual-root-cause-audit.yml"
+  pull_request:
+    paths:
+      - "tools/episcene-learning-v1/diagnostics/visual_consensus_root_cause_isolated.py"
+      - "tools/episcene-learning-v1/diagnostics/test_visual_consensus_root_cause_isolated.py"
+      - ".github/workflows/episcene-visual-root-cause-audit.yml"
+  workflow_dispatch:
+jobs:
+  visual-root-cause-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run offline read-only visual metadata tests
+        working-directory: tools/episcene-learning-v1/diagnostics
+        run: |
+          python3 -m py_compile visual_consensus_root_cause_isolated.py test_visual_consensus_root_cause_isolated.py
+          python3 -m unittest -v test_visual_consensus_root_cause_isolated.py
