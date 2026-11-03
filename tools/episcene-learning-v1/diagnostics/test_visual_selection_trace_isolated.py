@@ -1,4 +1,8 @@
-"""Offline unit checks for isolated read-only EpiScene peer selector trace."""
+"""Offline regression checks for EpiScene real cache-row selector format.
+
+Matches production analyze(): _cached_rows yields sqlite3.Row with asset_key;
+analyze() later resolves each cache row's parent from skip_assets.
+"""
 import sqlite3
 import unittest
 import visual_selection_trace_isolated as trace
@@ -7,40 +11,66 @@ def db():
     c=sqlite3.connect(':memory:')
     c.row_factory=sqlite3.Row
     c.execute("""CREATE TABLE skip_assets(
-       asset_key TEXT,source_key TEXT,season INTEGER,episode INTEGER)""")
-    c.execute("INSERT INTO skip_assets VALUES('own','family',1,1)")
+       asset_key TEXT PRIMARY KEY,source_key TEXT,season INTEGER,episode INTEGER)""")
+    c.execute("CREATE TABLE fake_windows(asset_key TEXT, kind TEXT)")
+    c.executemany("INSERT INTO skip_assets VALUES(?,?,?,?)",[
+        ('own','family',1,1),('peer2','family',1,2),
+        ('peer3','family',1,3),('peer3_dup','family',1,3),
+        ('other','different_family',1,4),('wrongseason','family',2,5)
+    ])
     c.commit()
     return c
 
 class FakeScene:
-    def __init__(self,entries):self.entries=entries
     def _cached_rows(self,con,asset,kind):
-        return [(object(),peer) for peer in self.entries]
+        return con.execute("SELECT asset_key,kind FROM fake_windows WHERE kind=?",
+                           (kind,)).fetchall()
+
+def insert_windows(c,*keys):
+    c.executemany("INSERT INTO fake_windows VALUES (?,'intro')",[(key,) for key in keys])
+    c.commit()
+
+def classify(c):
+    return trace.selected_peer_profile(c,FakeScene(),{'asset_key':'own','segment_type':'intro'})
 
 class SelectorReadOnlyTests(unittest.TestCase):
-    def test_no_peers(self):
+    def test_sqlite_row_returns_no_peers(self):
         c=db()
-        self.assertEqual(trace.selected_peer_profile(c,FakeScene([]),{'asset_key':'own','segment_type':'intro'}),
-                         'SELECTOR_RETURNED_NO_PEERS')
+        self.assertEqual(classify(c),'SELECTOR_RETURNED_NO_PEERS')
         c.close()
-    def test_multiple_distinct_peers(self):
-        c=db()
-        self.assertEqual(trace.selected_peer_profile(c,FakeScene([
-            {'source_key':'family','season':1,'episode':2},
-            {'source_key':'family','season':1,'episode':3}
-        ]),{'asset_key':'own','segment_type':'intro'}),'SELECTOR_RETURNED_TWO_PEERS')
+
+    def test_real_row_shape_with_two_distinct_peers(self):
+        c=db();insert_windows(c,'peer2','peer3')
+        self.assertEqual(classify(c),'SELECTOR_RETURNED_TWO_PEERS')
         c.close()
-    def test_no_cross_series_leak(self):
-        c=db()
-        self.assertEqual(trace.selected_peer_profile(c,FakeScene([
-            {'source_key':'other','season':1,'episode':2}
-        ]),{'asset_key':'own','segment_type':'intro'}),'SELECTOR_CROSS_SERIES_OR_SEASON')
+
+    def test_duplicate_episode_not_counted_twice(self):
+        c=db();insert_windows(c,'peer3','peer3_dup')
+        self.assertEqual(classify(c),'SELECTOR_RETURNED_ONE_PEER')
         c.close()
-    def test_no_production_write(self):
-        c=db()
+
+    def test_parent_asset_missing_is_reported(self):
+        c=db();insert_windows(c,'gone')
+        self.assertEqual(classify(c),'SELECTOR_PARENT_ASSET_MISSING')
+        c.close()
+
+    def test_cross_series_and_season_are_not_counted(self):
+        c=db();insert_windows(c,'other')
+        self.assertEqual(classify(c),'SELECTOR_CROSS_SERIES_OR_SEASON')
+        c.execute("DELETE FROM fake_windows")
+        insert_windows(c,'wrongseason')
+        self.assertEqual(classify(c),'SELECTOR_CROSS_SERIES_OR_SEASON')
+        c.close()
+
+    def test_own_episode_is_not_comparison_peer(self):
+        c=db();insert_windows(c,'own')
+        self.assertEqual(classify(c),'SELECTOR_INCLUDED_OWN_EPISODE')
+        c.close()
+
+    def test_query_only_snapshot_read(self):
+        c=db();insert_windows(c,'peer2')
         c.execute('PRAGMA query_only=ON')
-        self.assertEqual(trace.selected_peer_profile(c,FakeScene([]),{'asset_key':'own','segment_type':'outro'}),
-                         'SELECTOR_RETURNED_NO_PEERS')
+        self.assertEqual(classify(c),'SELECTOR_RETURNED_ONE_PEER')
         c.close()
 
 if __name__=='__main__':
