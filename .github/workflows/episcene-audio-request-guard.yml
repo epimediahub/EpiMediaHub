@@ -1,0 +1,24 @@
+name: EpiScene audio canary request safety
+on:
+  push:
+    paths:
+      - "tools/episcene-learning-v1/diagnostics/request_audio_canary_safe.py"
+      - "tools/episcene-learning-v1/diagnostics/test_request_audio_canary_safe.py"
+      - ".github/workflows/episcene-audio-request-guard.yml"
+  pull_request:
+    paths:
+      - "tools/episcene-learning-v1/diagnostics/request_audio_canary_safe.py"
+      - "tools/episcene-learning-v1/diagnostics/test_request_audio_canary_safe.py"
+      - ".github/workflows/episcene-audio-request-guard.yml"
+  workflow_dispatch:
+jobs:
+  request-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run guarded scheduler request tests
+        working-directory: tools/episcene-learning-v1/diagnostics
+        run: |
+          python3 -m py_compile request_audio_canary_safe.py test_request_audio_canary_safe.py
+          python3 -m unittest -v test_request_audio_canary_safe.py
