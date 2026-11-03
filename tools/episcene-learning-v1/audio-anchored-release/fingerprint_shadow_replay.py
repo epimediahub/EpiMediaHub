@@ -150,6 +150,20 @@ def schema(con):
             raise RuntimeError('Schema fehlt oder abweichend: '+table)
 
 
+# Error messages are fixed, controlled strings from fingerprint_cohort.decode.
+# Classify only their *type*; never print raw words, source IDs or exceptions.
+def fingerprint_error_code(error):
+    reasons = {
+        'bad fingerprint sampling step': 'STEP_UNSUPPORTED',
+        'bad fingerprint offset': 'OFFSET_INVALID',
+        'fingerprint payload too large / invalid': 'ENCODING_OR_SIZE_UNSUPPORTED',
+        'invalid fingerprint json': 'NOT_VALID_JSON',
+        'invalid fingerprint shape': 'NOT_ARRAY_OR_WORD_COUNT',
+        'invalid fingerprint word': 'WORD_TYPE_OR_RANGE',
+    }
+    return reasons.get(str(error), 'OTHER')
+
+
 def cached(con, record, counts):
     """Only use current-duration saved cache windows; no provider fetches."""
     w=con.execute("""
@@ -169,8 +183,9 @@ def cached(con, record, counts):
         return None
     try:
         return decode(w['words_json'],step_ms=w['step_ms'],offset_ms=w['offset_ms'])
-    except ValueError:
+    except ValueError as exc:
         counts['UNSUPPORTED_OR_INVALID_FINGERPRINT_PAYLOAD']+=1
+        counts['FINGERPRINT_FORMAT_'+fingerprint_error_code(exc)]+=1
         return None
 
 
@@ -331,9 +346,11 @@ def audit():
                 print('  sampled visual-only outro:',sampled[(pid,'outro')])
                 for line in playlist_summary_lines(counts, pid):
                     print(line)
-            for key in ('MISSING_CACHED_AUDIO_WINDOW','INVALID_CACHED_AUDIO_WINDOW',
-                        'UNSUPPORTED_OR_INVALID_FINGERPRINT_PAYLOAD'):
-                if counts[key]:print('  '+key+':',counts[key])
+            for key in sorted(k for k in counts if isinstance(k,str)):
+                if key in ('MISSING_CACHED_AUDIO_WINDOW',
+                           'INVALID_CACHED_AUDIO_WINDOW',
+                           'UNSUPPORTED_OR_INVALID_FINGERPRINT_PAYLOAD') or key.startswith('FINGERPRINT_FORMAT_'):
+                    print('  '+key+':',counts[key])
             print('\nSHADOW_FINGERPRINT_PLUS_MANUAL_NOT_RELEASED is NOT a release approval.')
             print('Do not install any release/worker patch based solely on this diagnostic.')
         finally:con.close()
