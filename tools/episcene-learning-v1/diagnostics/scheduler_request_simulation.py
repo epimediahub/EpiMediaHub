@@ -13,6 +13,8 @@ import hashlib
 import inspect
 import re
 import sqlite3
+import shutil
+import tempfile
 
 APP=Path('/opt/epimediahub/provisioning/skip_schedule.py')
 DB=Path('/var/lib/epimediahub/provisioning.db')
@@ -69,58 +71,70 @@ def main():
     fn,sha,tree=load_selector()
     if not DB.is_file() or DB.is_symlink():
         raise RuntimeError('Production DB missing or symlink')
-    c=sqlite3.connect(DB.resolve().as_uri()+'?mode=ro',uri=True,timeout=25)
-    try:
-        c.row_factory=sqlite3.Row
-        c.execute('PRAGMA query_only=ON')
-        c.execute('BEGIN')
-        for t in (LEDGER,'skip_assets','skip_jobs','skip_schedule_focus','skip_parallel_focus',
-                  'skip_language_priority','skip_catalogue_priority'):
-            if not table_exists(c,t):
-                raise RuntimeError('Required scheduler table absent: '+t)
-        print('EPISCENE SCHEDULER REQUEST SIMULATION / NUR LESEN')
-        print('Live scheduler SHA256:',sha)
-        print('Uses real select_job source and SQLite queries, but simulated requests only.')
-        print('Does NOT evaluate production requests, provider access, or actual worker selection.')
-        base=simulation_fn(fn,lambda _con,_stage: [])
-        for pid,name in ((8,'4K ANALYSE'),(10,'THE BEST')):
-            print('\\n'+name)
-            row=c.execute("""SELECT l.asset_key,a.source_key,a.season,j.status,j.attempts
-                       FROM episcene_audio_cache_canary_v1 l
-                       JOIN skip_assets a ON a.asset_key=l.asset_key
-                       LEFT JOIN skip_jobs j ON j.asset_key=l.asset_key
-                       WHERE l.playlist_id=? ORDER BY l.queued_at DESC LIMIT 1""",(pid,)).fetchone()
-            if row is None:
-                print('  status: no canary ledger')
-                continue
-            print('  canary_queued:',row['status']=='queued')
-            if row['status']!='queued' or row['attempts'] is None or row['attempts']>=3:
-                print('  status: ineligible for request simulation; no changes')
-                continue
-            # Simulate the existing high-priority request path, WITHOUT
-            # writing to the production request table.
-            request={'playlist_id':pid,'source_key':row['source_key'],
-                     'season':row['season'],'reference_asset':row['asset_key'],
-                     'reason':'audio_cache_recovery'}
-            override=simulation_fn(fn,lambda _con,_stage:[request])
-            try:
-                baseline,_=base(c,pid,stage=2,parallel=True)
-                preferred,_=override(c,pid,stage=2,parallel=True)
-            except sqlite3.Error as e:
-                raise RuntimeError('Scheduler query failed in read-only simulation: '+str(e))
-            print('  focus_free_initial_selection_is_canary:',
-                  baseline is not None and baseline['asset_key']==row['asset_key'])
-            print('  synthetic_request_selects_exact_canary:',
-                  preferred is not None and preferred['asset_key']==row['asset_key'])
-            print('  request_selects_some_job:',preferred is not None)
-        matching=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='request_series']
-        print('\\nrequest_series_function_present:',len(matching)==1)
-        if len(matching)==1:
-            print('request_series_argument_names:',
-                  ','.join(a.arg for a in matching[0].args.args))
-        print('READ_ONLY: NO REQUEST CREATED; NO JOB CHANGED; NO WORKER RESTARTED')
-    finally:
-        c.close()
+    if shutil.disk_usage('/tmp').free < DB.stat().st_size * 2:
+        raise RuntimeError('Not enough space for read-only simulation snapshot')
+    with tempfile.TemporaryDirectory(prefix='episcene-scheduler-simulation-',dir='/tmp') as folder:
+        snapshot=Path(folder)/'snapshot.db'
+        original=sqlite3.connect(DB.resolve().as_uri()+'?mode=ro',uri=True,timeout=40)
+        copy=sqlite3.connect(str(snapshot),timeout=40)
+        try:
+            original.execute('PRAGMA query_only=ON')
+            original.backup(copy,pages=2048,sleep=0.05)
+        finally:
+            original.close()
+            copy.close()
+        c=sqlite3.connect(snapshot.resolve().as_uri()+'?mode=ro',uri=True,timeout=25)
+        try:
+            c.row_factory=sqlite3.Row
+            c.execute('PRAGMA query_only=ON')
+            c.execute('BEGIN')
+            for t in (LEDGER,'skip_assets','skip_jobs','skip_schedule_focus','skip_parallel_focus',
+                      'skip_language_priority','skip_catalogue_priority'):
+                if not table_exists(c,t):
+                    raise RuntimeError('Required scheduler table absent: '+t)
+            print('EPISCENE SCHEDULER REQUEST SIMULATION / NUR LESEN')
+            print('Live scheduler SHA256:',sha)
+            print('Uses real select_job source and SQLite queries, but simulated requests only.')
+            print('Does NOT evaluate production requests, provider access, or actual worker selection.')
+            base=simulation_fn(fn,lambda _con,_stage: [])
+            for pid,name in ((8,'4K ANALYSE'),(10,'THE BEST')):
+                print('\\n'+name)
+                row=c.execute("""SELECT l.asset_key,a.source_key,a.season,j.status,j.attempts
+                           FROM episcene_audio_cache_canary_v1 l
+                           JOIN skip_assets a ON a.asset_key=l.asset_key
+                           LEFT JOIN skip_jobs j ON j.asset_key=l.asset_key
+                           WHERE l.playlist_id=? ORDER BY l.queued_at DESC LIMIT 1""",(pid,)).fetchone()
+                if row is None:
+                    print('  status: no canary ledger')
+                    continue
+                print('  canary_queued:',row['status']=='queued')
+                if row['status']!='queued' or row['attempts'] is None or row['attempts']>=3:
+                    print('  status: ineligible for request simulation; no changes')
+                    continue
+                # Simulate the existing high-priority request path, WITHOUT
+                # writing to the production request table.
+                request={'playlist_id':pid,'source_key':row['source_key'],
+                         'season':row['season'],'reference_asset':row['asset_key'],
+                         'reason':'audio_cache_recovery'}
+                override=simulation_fn(fn,lambda _con,_stage:[request])
+                try:
+                    baseline,_=base(c,pid,stage=2,parallel=True)
+                    preferred,_=override(c,pid,stage=2,parallel=True)
+                except sqlite3.Error as e:
+                    raise RuntimeError('Scheduler query failed in read-only simulation: '+str(e))
+                print('  focus_free_initial_selection_is_canary:',
+                      baseline is not None and baseline['asset_key']==row['asset_key'])
+                print('  synthetic_request_selects_exact_canary:',
+                      preferred is not None and preferred['asset_key']==row['asset_key'])
+                print('  request_selects_some_job:',preferred is not None)
+            matching=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='request_series']
+            print('\\nrequest_series_function_present:',len(matching)==1)
+            if len(matching)==1:
+                print('request_series_argument_names:',
+                      ','.join(a.arg for a in matching[0].args.args))
+            print('READ_ONLY: NO REQUEST CREATED; NO JOB CHANGED; NO WORKER RESTARTED')
+        finally:
+            c.close()
 
 
 if __name__=='__main__':
