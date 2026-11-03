@@ -164,6 +164,35 @@ def fingerprint_error_code(error):
     return reasons.get(str(error), 'OTHER')
 
 
+def fingerprint_storage_shape(raw):
+    """Identify JSON container type only; never return content or field names."""
+    if raw is None:
+        return 'NULL'
+    if not isinstance(raw, str):
+        return 'NON_TEXT'
+    if len(raw) > 8640:
+        return 'OVERSIZED_TEXT'
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError):
+        return 'INVALID_JSON'
+    if isinstance(value, list):
+        if not value:
+            return 'EMPTY_LIST'
+        if len(value) > 720:
+            return 'TOO_MANY_WORDS'
+        if all(type(x) is int for x in value):
+            return 'INTEGER_LIST'
+        if all(type(x) is str for x in value):
+            return 'STRING_LIST'
+        return 'MIXED_LIST'
+    if isinstance(value, dict):
+        return 'JSON_OBJECT'
+    if isinstance(value, str):
+        return 'JSON_STRING'
+    return 'OTHER_JSON_TYPE'
+
+
 def cached(con, record, counts):
     """Only use current-duration saved cache windows; no provider fetches."""
     w=con.execute("""
@@ -186,6 +215,7 @@ def cached(con, record, counts):
     except ValueError as exc:
         counts['UNSUPPORTED_OR_INVALID_FINGERPRINT_PAYLOAD']+=1
         counts['FINGERPRINT_FORMAT_'+fingerprint_error_code(exc)]+=1
+        counts['FINGERPRINT_STORAGE_'+fingerprint_storage_shape(w['words_json'])]+=1
         return None
 
 
@@ -349,7 +379,7 @@ def audit():
             for key in sorted(k for k in counts if isinstance(k,str)):
                 if key in ('MISSING_CACHED_AUDIO_WINDOW',
                            'INVALID_CACHED_AUDIO_WINDOW',
-                           'UNSUPPORTED_OR_INVALID_FINGERPRINT_PAYLOAD') or key.startswith('FINGERPRINT_FORMAT_'):
+                           'UNSUPPORTED_OR_INVALID_FINGERPRINT_PAYLOAD') or key.startswith(('FINGERPRINT_FORMAT_', 'FINGERPRINT_STORAGE_')):
                     print('  '+key+':',counts[key])
             print('\nSHADOW_FINGERPRINT_PLUS_MANUAL_NOT_RELEASED is NOT a release approval.')
             print('Do not install any release/worker patch based solely on this diagnostic.')
