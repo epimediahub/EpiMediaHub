@@ -32,22 +32,44 @@ AND ABS(a.duration_ms-r.duration_ms)<=2000"""
 def isolated_launch():
     if not shutil.which('systemd-run'):
         raise SystemExit('ABBRUCH: systemd-run fehlt; keine unsandboxierten Importe.')
+    if not DB.is_file() or DB.is_symlink():
+        raise SystemExit('ABBRUCH: Originaldatenbank fehlt oder ist ein Symlink.')
     props = [
         'PrivateNetwork=yes', 'ProtectSystem=strict', 'ReadWritePaths=/tmp',
         'ProtectHome=yes', 'NoNewPrivileges=yes', 'CapabilityBoundingSet=',
         'PrivateDevices=yes', 'ProtectKernelTunables=yes',
         'ProtectKernelModules=yes', 'ProtectControlGroups=yes',
-        'RestrictAddressFamilies=AF_UNIX', 'TemporaryFileSystem=/run'
+        'RestrictAddressFamilies=AF_UNIX', 'TemporaryFileSystem=/run',
+        'PrivateTmp=no'
     ]
-    cmd = ['systemd-run','--pipe','--wait','--collect']
-    for prop in props:
-        cmd.extend(['-p', prop])
-    cmd.extend(['--setenv=EPISCENE_REPLAY_SANDBOX=YES',
-                sys.executable, '-I', '-B', str(Path(__file__).resolve())])
-    print('Starte nur-lesenden Replay mit Netzwerk- und Dateisystem-Sandbox...', flush=True)
-    rc = subprocess.run(cmd, check=False).returncode
-    if rc:
-        raise SystemExit('Sandbox oder Replay fehlgeschlagen; keine Freigaben: exit '+str(rc))
+    # Take a consistent, transactional SQLite backup BEFORE entering the
+    # sandbox. The sandbox must never access the production DB directly.
+    with tempfile.TemporaryDirectory(prefix='episcene_snapshot_', dir='/tmp') as dirname:
+        snapshot = Path(dirname) / 'snapshot.db'
+        src = sqlite3.connect(DB.resolve().as_uri() + '?mode=ro', uri=True, timeout=60)
+        dst = None
+        try:
+            src.execute('PRAGMA query_only=ON')
+            dst = sqlite3.connect(str(snapshot), timeout=60)
+            src.backup(dst, pages=2048, sleep=0.1)
+        finally:
+            src.close()
+            if dst is not None:
+                dst.close()
+        os.chmod(snapshot, 0o600)
+        cmd = ['systemd-run', '--pipe', '--wait', '--collect']
+        for prop in props:
+            cmd.extend(['-p', prop])
+        cmd.extend([
+            '--setenv=EPISCENE_REPLAY_SANDBOX=YES',
+            '--setenv=EPISCENE_REPLAY_SNAPSHOT=' + str(snapshot),
+            sys.executable, '-I', '-B', str(Path(__file__).resolve())
+        ])
+        print('Datenbank-Snapshot erstellt; starte isolierten Freigabe-Test ...', flush=True)
+        rc = subprocess.run(cmd, check=False).returncode
+        if rc:
+            raise SystemExit('Sandbox oder Replay fehlgeschlagen; keine Freigaben: exit '+str(rc))
+
 
 def parsed(v):
     try:
@@ -75,14 +97,18 @@ def gates(R, con, row):
     return failed,errors
 
 def replay():
-    for f in (DB,APP/'skip_release.py',APP/'skip_automation.py',APP/'skip_scene.py'):
+    raw_snapshot = os.environ.get('EPISCENE_REPLAY_SNAPSHOT', '')
+    snapshot = Path(raw_snapshot)
+    if not raw_snapshot.startswith('/tmp/'):
+        raise SystemExit('ABBRUCH: unerwarteter Snapshot-Pfad')
+    for f in (snapshot,APP/'skip_release.py',APP/'skip_automation.py',APP/'skip_scene.py'):
         if not f.is_file() or f.is_symlink():
             raise SystemExit('ABBRUCH: benötigte Datei fehlt oder Symlink: '+str(f))
     hashes={p.name:hashlib.sha256(p.read_bytes()).hexdigest()[:12]
             for p in (APP/'skip_release.py',APP/'skip_automation.py',APP/'skip_scene.py')}
     temp=tempfile.mkdtemp(prefix='episcene_replay_')
     try:
-        source=sqlite3.connect(DB.resolve().as_uri()+'?mode=ro',uri=True,timeout=60)
+        source=sqlite3.connect(snapshot.resolve().as_uri()+'?mode=ro',uri=True,timeout=60)
         target=sqlite3.connect(str(Path(temp)/'snapshot.db'),timeout=60)
         try:
             source.execute('PRAGMA query_only=ON')
