@@ -48,6 +48,7 @@ class RecoveryRequestTests(unittest.TestCase):
     def test_expired_manual_learning_row_is_retired_only_in_transaction(self):
         c=db()
         c.execute("""INSERT INTO skip_schedule_requests VALUES(8,'series',1,4,'','manual_learning',1,1000)""")
+        c.commit()
         row=target.canary(c)
         self.assertEqual(target.clear_expired_manual_request(c,row,2000),1)
         self.assertEqual(c.execute("SELECT COUNT(*) FROM skip_schedule_requests").fetchone()[0],0)
