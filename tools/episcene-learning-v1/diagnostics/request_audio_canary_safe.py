@@ -103,10 +103,40 @@ def canary(db):
     playlist=db.execute("SELECT archived FROM skip_analysis_playlists WHERE id=?",(PID,)).fetchone()
     if not source or source['enabled']!=1 or not auto or auto['enabled']!=1 or not playlist or playlist['archived']!=0:
         fail('Analysis source no longer enabled')
-    current=db.execute("SELECT 1 FROM skip_schedule_requests WHERE playlist_id=? AND source_key=? LIMIT 1",
+    current=db.execute("""SELECT reason,expires_at FROM skip_schedule_requests
+                          WHERE playlist_id=? AND source_key=? LIMIT 1""",
                        (PID,r['source_key'])).fetchone()
-    if current:fail('Another request for this series exists; do not overwrite')
+    if current:
+        expires=current['expires_at']
+        if (current['reason']!='manual_learning' or type(expires) is not int
+                or expires>int(time.time())):
+            fail('Active or unrecognized same-series request exists; no overwrite')
     return r
+
+
+def clear_expired_manual_request(db,r,now):
+    """Delete only an expired manual_learning row for this exact canary series.
+
+    The scheduler's own request_series() deletes expired rows generally;
+    this narrowly follows that behavior without clearing any other series.
+    """
+    current=db.execute("""SELECT reason,expires_at FROM skip_schedule_requests
+                          WHERE playlist_id=? AND source_key=? LIMIT 1""",
+                       (PID,r['source_key'])).fetchone()
+    if current is None:
+        return 0
+    expires=current['expires_at']
+    if (current['reason']!='manual_learning' or type(expires) is not int
+            or expires>now):
+        fail('Competing active or unexpected request; preserve it')
+    deleted=db.execute("""DELETE FROM skip_schedule_requests
+          WHERE playlist_id=? AND source_key=? AND reason='manual_learning'
+            AND expires_at=? AND expires_at<=?""",
+          (PID,r['source_key'],expires,now))
+    if deleted.rowcount!=1:
+        fail('Expired request changed concurrently; rollback transaction')
+    return 1
+
 
 def insert_request(db,r,now):
     db.execute("""INSERT INTO skip_schedule_requests
@@ -154,12 +184,14 @@ def main():
             check_schema(sim)
             row=canary(sim)
             now=int(time.time())
+            removed=clear_expired_manual_request(sim,row,now)
             insert_request(sim,row,now)
             stage=validate_selected(sim,requester,selector,row['asset_key'])
             sim.rollback()
         finally:
             sim.close()
         print('SIMULATION_OK: German canary selected with existing request mechanism')
+        print('SIMULATED_EXPIRED_MANUAL_REQUEST_CLEANUP:',removed)
         print('SCHEDULER_SHA16:',sha)
         print('REQUEST_REASON:',REASON)
         print('REQUEST_TTL_HOURS:',TTL_SECONDS//3600)
@@ -176,9 +208,14 @@ def main():
             live_row=canary(live)
             if live_row['asset_key']!=row['asset_key']:
                 fail('Canary identity changed during simulation')
-            insert_request(live,live_row,int(time.time()))
+            now=int(time.time())
+            removed_live=clear_expired_manual_request(live,live_row,now)
+            if removed_live!=removed:
+                fail('Expired manual request state changed since simulation')
+            insert_request(live,live_row,now)
             validate_selected(live,requester,selector,live_row['asset_key'])
             live.commit()
+            print('EXPIRED_MANUAL_REQUEST_REMOVED:',removed_live)
             print('REQUEST_COMMITTED: one time-limited 4K ANALYSE series request')
             print('NO JOB RESET; NO MARKER APPROVAL; NO WORKER RESTART')
             print('Normal worker/scheduler will decide when next processing occurs')
