@@ -1,0 +1,24 @@
+name: EpiScene same-season audio peer canary
+on:
+  push:
+    paths:
+      - "tools/episcene-learning-v1/diagnostics/audio_peer_canary_v1.py"
+      - "tools/episcene-learning-v1/diagnostics/test_audio_peer_canary_v1.py"
+      - ".github/workflows/episcene-audio-peer-canary.yml"
+  pull_request:
+    paths:
+      - "tools/episcene-learning-v1/diagnostics/audio_peer_canary_v1.py"
+      - "tools/episcene-learning-v1/diagnostics/test_audio_peer_canary_v1.py"
+      - ".github/workflows/episcene-audio-peer-canary.yml"
+  workflow_dispatch:
+jobs:
+  peer-canary-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and validate canary SQLite rollback and guards
+        working-directory: tools/episcene-learning-v1/diagnostics
+        run: |
+          python3 -m py_compile audio_peer_canary_v1.py test_audio_peer_canary_v1.py
+          python3 -m unittest -v test_audio_peer_canary_v1.py
