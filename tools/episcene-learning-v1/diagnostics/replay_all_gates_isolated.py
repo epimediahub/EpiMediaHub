@@ -91,6 +91,7 @@ def replay():
             source.close()
         try:
             target.row_factory=sqlite3.Row
+            os.chdir(APP.resolve())
             sys.path.insert(0,str(APP.resolve()))
             import skip_automation  # same patch layer as production, ONLY in OS sandbox
             import skip_release as R
