@@ -246,7 +246,12 @@ def selected_peer_profile(con, scene, row):
     except TypeError:
         return 'SELECTOR_RESULT_UNKNOWN'
     distinct=set()
+    own_seen=False
+    window_count=0
     for entry in entries:
+        window_count+=1
+        if window_count>10000:
+            return 'SELECTOR_UNEXPECTED_SIZE'
         if not hasattr(entry,'keys') or 'asset_key' not in entry.keys():
             return 'SELECTOR_UNEXPECTED_CACHE_ROW'
         cache_key=entry['asset_key']
@@ -259,15 +264,20 @@ def selected_peer_profile(con, scene, row):
         if parent['source_key']!=asset['source_key'] or parent['season']!=asset['season']:
             return 'SELECTOR_CROSS_SERIES_OR_SEASON'
         if parent['asset_key']==asset['asset_key'] or parent['episode']==asset['episode']:
-            return 'SELECTOR_INCLUDED_OWN_EPISODE'
+            # Production _compare() filters these out. Counting them as a
+            # fatal selection error hid any valid peers after the own row.
+            own_seen=True
+            continue
         if parent['episode'] is None:
             return 'SELECTOR_PEER_EPISODE_MISSING'
         distinct.add((parent['season'],parent['episode']))
-    if not distinct:return 'SELECTOR_RETURNED_NO_PEERS'
-    if len(distinct)==1:return 'SELECTOR_RETURNED_ONE_PEER'
-    if len(distinct)==2:return 'SELECTOR_RETURNED_TWO_PEERS'
-    if len(distinct)==3:return 'SELECTOR_RETURNED_THREE_PEERS'
-    return 'SELECTOR_RETURNED_FOUR_PLUS_PEERS'
+    # These counts are selected cache peers only, NOT validated frame matches.
+    prefix='SELECTOR_WITH_SELF_' if own_seen else 'SELECTOR_WITHOUT_SELF_'
+    if len(distinct)==0:return prefix+'NO_PEERS'
+    if len(distinct)==1:return prefix+'ONE_PEER'
+    if len(distinct)==2:return prefix+'TWO_PEERS'
+    if len(distinct)==3:return prefix+'THREE_PEERS'
+    return prefix+'FOUR_PLUS_PEERS'
 
 
 def replay():
@@ -437,8 +447,8 @@ def replay():
                     if pid==p:print('    '+status+':',n)
             print('Same-asset proposals are not automatically accepted by the strict original record gate.')
             print('These visual-only candidates are NOT approved visual consensus.')
-            print('REAL _cached_rows cache rows resolved to parent assets as production analyze() does.')
-            print('Analysis/visual_detect not executed; no visual agreement established.')
+            print('Real cache selector rows resolved to parent assets; own rows are skipped for peer count.')
+            print('A selected peer can still fail capture/visual_detect; no visual agreement established.')
             print('SELECTOR PEER COUNT DOES NOT PROVE VISUAL_DETECT MATCH OR APPROVAL.')
             print('PEER REVISION AND GAP RESULTS ARE METADATA ONLY; NOT A RELEASE VALIDATION.')
             print('Peer counts are only cache prerequisites; no release is asserted.')
