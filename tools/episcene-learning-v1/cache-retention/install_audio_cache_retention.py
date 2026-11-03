@@ -240,11 +240,20 @@ def apply(module,original,updated,local_versions,remote_versions,changed):
                     run('systemctl','restart',svc,timeout=90)
                     if not active(svc):
                         raise RuntimeError('Restart health failed for '+svc)
-                new_local,new_remote=versions()
-                if new_local!=new_remote:
-                    differing=sorted(k for k in new_local.keys() | new_remote.keys()
-                                     if new_local.get(k)!=new_remote.get(k))
-                    raise RuntimeError('Worker versions differ after change: '+str(differing))
+                new_local,new_remote=None,None
+                health_error='worker_not_ready'
+                for _attempt in range(12):
+                    try:
+                        new_local,new_remote=versions()
+                        if new_local==new_remote:
+                            health_error=''
+                            break
+                        health_error='versions_differ'
+                    except (RuntimeError, subprocess.SubprocessError):
+                        health_error='health_not_ready'
+                    time.sleep(.8)
+                if health_error:
+                    raise RuntimeError('Worker version/health validation failed: '+health_error)
                 print('CACHE_RETENTION_INSTALLED_OK',flush=True)
                 print('WORKER_VERSION_MATCH_OK',flush=True)
                 print('CURRENT_SHA256: '+digest(updated)[:16],flush=True)
