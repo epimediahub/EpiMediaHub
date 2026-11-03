@@ -5,6 +5,7 @@ import unittest
 from collections import Counter
 from fingerprint_shadow_replay import (
     cached, human_approved, audio_confirmed, valid_asset, is_protected,
+    playlist_summary_lines,
 )
 
 
@@ -40,6 +41,33 @@ def temporary_db():
       CREATE TABLE skip_auto_evidence(record_id INTEGER,human_review INTEGER);
     """)
     return con
+
+
+class SummaryTests(unittest.TestCase):
+    def test_mixed_counter_key_types_do_not_crash(self):
+        counts = Counter({
+            'MISSING_CACHED_AUDIO_WINDOW': 9,
+            'INVALID_CACHED_AUDIO_WINDOW': 2,
+            (8, 'MATCHED_CONTENT_ANY_SHIFT'): 4,
+            (8, 'NO_TARGET_AUDIO_FINGERPRINT'): 3,
+            (10, 'NO_TARGET_AUDIO_FINGERPRINT'): 1,
+        })
+        self.assertEqual(
+            playlist_summary_lines(counts, 8),
+            ['  MATCHED_CONTENT_ANY_SHIFT: 4',
+             '  NO_TARGET_AUDIO_FINGERPRINT: 3'])
+        self.assertEqual(
+            playlist_summary_lines(counts, 10),
+            ['  NO_TARGET_AUDIO_FINGERPRINT: 1'])
+
+    def test_only_expected_tuple_keys_are_reported(self):
+        counts = Counter({
+            'GLOBAL_ONLY': 1,
+            (8, 'SHADOW_MULTIPLE_AUDIO_MATCHES_NOT_RELEASED'): 2,
+            (8, 'extra', 'third'): 100,
+        })
+        self.assertEqual(playlist_summary_lines(counts, 8),
+                         ['  SHADOW_MULTIPLE_AUDIO_MATCHES_NOT_RELEASED: 2'])
 
 
 class CacheTests(unittest.TestCase):
