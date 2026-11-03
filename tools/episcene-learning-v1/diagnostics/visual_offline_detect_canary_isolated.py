@@ -392,11 +392,14 @@ def capture_span_profile(con,row):
     fields={'asset_key','kind','duration_ms','offset_ms','length_ms','step_ms','created_at'}
     if not fields.issubset(cols):
         return 'CACHE_SPAN_SCHEMA_UNAVAILABLE'
+    asset=con.execute('SELECT duration_ms FROM skip_assets WHERE asset_key=?',
+                      (row['asset_key'],)).fetchone()
+    if asset is None:return 'ASSET_MISSING'
     record=con.execute("""SELECT w.offset_ms,w.length_ms,w.step_ms
         FROM skip_scene_windows w WHERE w.asset_key=? AND w.kind=?
         AND w.duration_ms=?
         ORDER BY w.created_at DESC LIMIT 1""",
-        (row['asset_key'],row['segment_type'],row['duration_ms'])).fetchone()
+        (row['asset_key'],row['segment_type'],asset['duration_ms'])).fetchone()
     if not record:
         return 'OWN_VISUAL_WINDOW_MISSING'
     offset,length,step=(record['offset_ms'],record['length_ms'],record['step_ms'])
