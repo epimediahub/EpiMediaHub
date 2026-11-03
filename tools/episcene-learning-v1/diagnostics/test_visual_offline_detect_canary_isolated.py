@@ -139,5 +139,26 @@ class ExplicitVisualImportTests(unittest.TestCase):
             self.assertNotIn(self.MODULE_ALIAS,sys.modules)
 
 
+
+class VisualTraceSafetyTests(unittest.TestCase):
+    def test_trace_rejects_unknown_visual_without_running_detector(self):
+        v=FakeVisual({'status':'AUTO_CONFIRMED'})
+        with self.assertRaisesRegex(RuntimeError,'Visual pair candidate function unavailable'):
+            probe.trace_local_visual(v, (1,1), [(2,2)], 'intro', {})
+        self.assertEqual(v.calls,[])
+
+    def test_trace_rejects_unverified_line_mapping(self):
+        class FakeLocalVisual:
+            __file__=__file__
+            @staticmethod
+            def _pair_candidates(*args):
+                return []
+            @staticmethod
+            def detect(*args,**kwargs):
+                return {'status':'NO_MATCH'}
+        with self.assertRaisesRegex(RuntimeError,'Visual algorithm changed'):
+            probe.trace_local_visual(FakeLocalVisual,(1,1),[(2,2)],'intro',{})
+
+
 if __name__=='__main__':
     unittest.main()
