@@ -205,5 +205,40 @@ class WindowCaptureCoverageTests(unittest.TestCase):
                          'OWN_VISUAL_WINDOW_MISSING')
         c.close()
 
+
+class GapDirectionTests(unittest.TestCase):
+    def _conn(self,offset,length):
+        c=sqlite3.connect(':memory:')
+        c.row_factory=sqlite3.Row
+        c.execute('CREATE TABLE skip_assets(asset_key TEXT,duration_ms INTEGER)')
+        c.execute("INSERT INTO skip_assets VALUES('ep',3600000)")
+        c.execute('''CREATE TABLE skip_scene_windows(
+          asset_key TEXT,kind TEXT,duration_ms INTEGER,offset_ms INTEGER,
+          length_ms INTEGER,created_at INTEGER)''')
+        c.execute("INSERT INTO skip_scene_windows VALUES('ep','outro',3600000,?,?,1)",
+                  (offset,length))
+        return c
+    def test_window_before_audio_marker(self):
+        c=self._conn(2000000,40000)
+        row={'asset_key':'ep','segment_type':'outro',
+             'start_ms':2600000,'end_ms':2660000}
+        self.assertEqual(probe.gap_direction_bucket(c,row),
+                         'WINDOW_BEFORE_AUDIO_GAP_OVER_5MIN')
+        c.close()
+    def test_window_after_audio_marker(self):
+        c=self._conn(2800000,40000)
+        row={'asset_key':'ep','segment_type':'outro',
+             'start_ms':2600000,'end_ms':2660000}
+        self.assertEqual(probe.gap_direction_bucket(c,row),
+                         'WINDOW_AFTER_AUDIO_GAP_1_TO_5MIN')
+        c.close()
+    def test_window_overlap_audio_marker(self):
+        c=self._conn(2580000,80000)
+        row={'asset_key':'ep','segment_type':'outro',
+             'start_ms':2600000,'end_ms':2660000}
+        self.assertEqual(probe.gap_direction_bucket(c,row),
+                         'WINDOW_OVERLAPS_AUDIO')
+        c.close()
+
 if __name__=='__main__':
     unittest.main()
