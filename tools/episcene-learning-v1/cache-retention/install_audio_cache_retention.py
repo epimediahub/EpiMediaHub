@@ -116,9 +116,10 @@ def load_patch(workdir):
 def eligible_environment():
     if os.geteuid()!=0:
         raise RuntimeError('STOP: root required')
-    for path in (SOURCE,VENV,DB,LOCK):
+    for path in (SOURCE,DB,LOCK):
         ensure_file(path, max_size=10000000000 if path==DB else 2000000)
-    if not os.access(VENV,os.X_OK):
+    # Virtualenvs commonly expose bin/python as a legitimate interpreter symlink.
+    if not VENV.is_file() or not os.access(VENV,os.X_OK):
         raise RuntimeError('Missing executable provisioning venv')
     if COMPUTE.is_symlink() or not COMPUTE.is_dir():
         raise RuntimeError('Compute module directory unavailable')
