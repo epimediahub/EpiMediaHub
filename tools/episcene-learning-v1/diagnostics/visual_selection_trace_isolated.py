@@ -229,7 +229,12 @@ def more_visual_evidence(con,row):
 
 
 def selected_peer_profile(con, scene, row):
-    """Read the real cache-selector SQL on the isolated snapshot; no analysis runs."""
+    """Read actual cached-window rows and resolve their parent assets, as analyze() does.
+
+    The production _cached_rows() returns individual sqlite3.Row cache records,
+    NOT (window, parent) pairs. analyze() builds those pairs after resolving
+    skip_assets. Only aggregate counts leave the isolated environment.
+    """
     asset=con.execute('SELECT * FROM skip_assets WHERE asset_key=?',(row['asset_key'],)).fetchone()
     if asset is None:
         return 'ASSET_MISSING'
@@ -238,15 +243,22 @@ def selected_peer_profile(con, scene, row):
         return 'SELECTOR_RESULT_UNKNOWN'
     distinct=set()
     for entry in selection:
-        if not isinstance(entry,(list,tuple)) or len(entry)<2:
-            return 'SELECTOR_UNEXPECTED_ROW_SHAPE'
-        peer=entry[1]
-        if isinstance(peer,dict) or hasattr(peer,'keys'):
-            if peer['source_key']!=asset['source_key'] or peer['season']!=asset['season']:
-                return 'SELECTOR_CROSS_SERIES_OR_SEASON'
-            distinct.add((peer['season'],peer['episode']))
-        else:
-            return 'SELECTOR_UNEXPECTED_ASSET_SHAPE'
+        if not hasattr(entry,'keys') or 'asset_key' not in entry.keys():
+            return 'SELECTOR_UNEXPECTED_CACHE_ROW'
+        cache_key=entry['asset_key']
+        if not isinstance(cache_key,str) or not cache_key:
+            return 'SELECTOR_EMPTY_CACHE_ASSET_KEY'
+        parent=con.execute('SELECT * FROM skip_assets WHERE asset_key=?',
+                           (cache_key,)).fetchone()
+        if parent is None:
+            return 'SELECTOR_PARENT_ASSET_MISSING'
+        if parent['source_key']!=asset['source_key'] or parent['season']!=asset['season']:
+            return 'SELECTOR_CROSS_SERIES_OR_SEASON'
+        if parent['asset_key']==asset['asset_key'] or parent['episode']==asset['episode']:
+            return 'SELECTOR_INCLUDED_OWN_EPISODE'
+        if parent['episode'] is None:
+            return 'SELECTOR_PEER_EPISODE_MISSING'
+        distinct.add((parent['season'],parent['episode']))
     if not distinct:return 'SELECTOR_RETURNED_NO_PEERS'
     if len(distinct)==1:return 'SELECTOR_RETURNED_ONE_PEER'
     if len(distinct)==2:return 'SELECTOR_RETURNED_TWO_PEERS'
@@ -421,7 +433,8 @@ def replay():
                     if pid==p:print('    '+status+':',n)
             print('Same-asset proposals are not automatically accepted by the strict original record gate.')
             print('These visual-only candidates are NOT approved visual consensus.')
-            print('REAL _cached_rows was read on an isolated DB copy; _compare/analyze NOT called.')
+            print('REAL _cached_rows cache rows resolved to parent assets as production analyze() does.')
+            print('Analysis/visual_detect not executed; no visual agreement established.')
             print('SELECTOR PEER COUNT DOES NOT PROVE VISUAL_DETECT MATCH OR APPROVAL.')
             print('PEER REVISION AND GAP RESULTS ARE METADATA ONLY; NOT A RELEASE VALIDATION.')
             print('Peer counts are only cache prerequisites; no release is asserted.')
