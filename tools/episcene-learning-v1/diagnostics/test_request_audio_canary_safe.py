@@ -53,8 +53,9 @@ class RecoveryRequestTests(unittest.TestCase):
         self.assertEqual(target.clear_expired_manual_request(c,row,2000),1)
         self.assertEqual(c.execute("SELECT COUNT(*) FROM skip_schedule_requests").fetchone()[0],0)
         target.insert_request(c,row,2000)
-        self.assertEqual(c.execute("SELECT reason FROM skip_schedule_requests").fetchone()[0],
-                         target.REASON)
+        entry=c.execute("SELECT reason,reference_asset FROM skip_schedule_requests").fetchone()
+        self.assertEqual(entry['reason'],target.REASON)
+        self.assertEqual(entry['reference_asset'],'key')
         c.rollback()
         self.assertEqual(c.execute("SELECT reason FROM skip_schedule_requests").fetchone()[0],
                          'manual_learning')
