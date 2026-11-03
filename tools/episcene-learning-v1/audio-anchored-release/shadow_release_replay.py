@@ -18,6 +18,12 @@ import subprocess
 import sys
 import tempfile
 
+# -I deliberately omits the script directory from sys.path. Load only the
+# companion policy from the exact directory of this pinned downloaded script.
+_POLICY_FILE = Path(__file__).resolve().with_name('audio_anchor_policy.py')
+if not _POLICY_FILE.is_file() or _POLICY_FILE.is_symlink():
+    raise RuntimeError('Shadow-Policy nicht vorhanden oder Symlink')
+sys.path.insert(0, str(_POLICY_FILE.parent))
 from audio_anchor_policy import Evidence, nominate, AUDIO_SOURCES
 
 sys.dont_write_bytecode = True
