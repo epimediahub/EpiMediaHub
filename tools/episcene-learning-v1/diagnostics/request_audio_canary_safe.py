@@ -142,7 +142,8 @@ def insert_request(db,r,now):
     db.execute("""INSERT INTO skip_schedule_requests
         (playlist_id,source_key,season,episode,reference_asset,reason,requested_at,expires_at)
         VALUES(?,?,?,?,?,?,?,?)""",
-        (PID,r['source_key'],r['season'],r['episode'],'',REASON,now,now+TTL_SECONDS))
+        (PID,r['source_key'],r['season'],r['episode'],
+         r['asset_key'],REASON,now,now+TTL_SECONDS))
 
 def validate_selected(db,requests,select_job,asset):
     requested=requests(db,2)
