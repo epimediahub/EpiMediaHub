@@ -1,0 +1,33 @@
+name: EpiScene audio-anchor shadow policy tests
+
+on:
+  pull_request:
+    paths:
+      - "tools/episcene-learning-v1/audio-anchored-release/**"
+      - ".github/workflows/episcene-audio-anchor-shadow-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  policy-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check syntax
+        run: |
+          python -m py_compile tools/episcene-learning-v1/audio-anchored-release/*.py
+      - name: Run synthetic policy tests
+        run: |
+          python -m unittest discover \
+            -s tools/episcene-learning-v1/audio-anchored-release \
+            -p 'test_*.py' -v
+      - name: No production approval or service mutations
+        run: |
+          ! grep -En 'accept_pending\(|approve_rows\(|review_record\(|subprocess\.run\(|systemctl|UPDATE skip_records|DELETE FROM skip_records' \
+            tools/episcene-learning-v1/audio-anchored-release/audio_anchor_policy.py
