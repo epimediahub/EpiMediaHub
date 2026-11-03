@@ -424,6 +424,35 @@ def capture_span_profile(con,row):
     return 'OWN_WINDOW_ENDS_BEFORE_AUDIO_MARKER'
 
 
+
+def gap_direction_bucket(con,row):
+    """Quantify disjoint visual vs audio placement without any raw identifiers."""
+    asset=con.execute('SELECT duration_ms FROM skip_assets WHERE asset_key=?',
+                      (row['asset_key'],)).fetchone()
+    if asset is None:return 'NO_ASSET'
+    w=con.execute("""SELECT offset_ms,length_ms
+       FROM skip_scene_windows WHERE asset_key=? AND kind=? AND duration_ms=?
+       ORDER BY created_at DESC LIMIT 1""",
+       (row['asset_key'],row['segment_type'],asset['duration_ms'])).fetchone()
+    if w is None:return 'OWN_WINDOW_MISSING'
+    pos,length,begin,end=w['offset_ms'],w['length_ms'],row['start_ms'],row['end_ms']
+    if any(type(x) is not int for x in (pos,length,begin,end)) or length<=0 or end<=begin:
+        return 'INVALID_GEOMETRY'
+    visual_end=pos+length
+    if visual_end<=begin:
+        gap=begin-visual_end
+        direction='WINDOW_BEFORE_AUDIO'
+    elif pos>=end:
+        gap=pos-end
+        direction='WINDOW_AFTER_AUDIO'
+    else:
+        return 'WINDOW_OVERLAPS_AUDIO'
+    if gap<10000:return direction+'_GAP_UNDER_10S'
+    if gap<60000:return direction+'_GAP_10_TO_60S'
+    if gap<300000:return direction+'_GAP_1_TO_5MIN'
+    return direction+'_GAP_OVER_5MIN'
+
+
 def offline_detect_from_cache(con,Scene,visual,row,trace_counts=None):
     """Call pure local visual detector over saved cache data; no media requests."""
     asset=con.execute('SELECT * FROM skip_assets WHERE asset_key=?',
@@ -547,6 +576,7 @@ def replay():
             offline_trace_reasons=collections.Counter()
             cached_span_reasons=collections.Counter()
             no_scene_span_reasons=collections.Counter()
+            time_gap_reasons=collections.Counter()
             has_visual_versions=bool(target.execute("""SELECT 1 FROM sqlite_master
                  WHERE type='table' AND name='skip_scene_window_versions'""").fetchone())
             for row in allrows:
@@ -580,6 +610,10 @@ def replay():
                     peer_state,gap,decision,reason=more_visual_evidence(target,row)
                     span_reason=capture_span_profile(target,row)
                     cached_span_reasons[(p,span_reason)]+=1
+                    if span_reason in ('OWN_WINDOW_DISJOINT_FROM_AUDIO_MARKER',
+                                     'OWN_WINDOW_STARTS_AFTER_AUDIO_MARKER',
+                                     'OWN_WINDOW_ENDS_BEFORE_AUDIO_MARKER'):
+                        time_gap_reasons[(p,gap_direction_bucket(target,row))]+=1
                     try:
                         selected_reason=selected_peer_profile(target,Scene,row)
                     except (ValueError,TypeError,KeyError,sqlite3.Error,IndexError) as err:
@@ -660,6 +694,9 @@ def replay():
                     if pid==p:print('    '+reason+':',n)
                 print('  OWN VISUAL WINDOW VS AUDIO MARKER (METADATA ONLY):')
                 for (pid,why),n in sorted(cached_span_reasons.items()):
+                    if pid==p:print('    '+why+':',n)
+                print('  VISUAL/AUDIO WINDOW GAP DIRECTION (BOUNDED METADATA):')
+                for (pid,why),n in sorted(time_gap_reasons.items()):
                     if pid==p:print('    '+why+':',n)
                 print('  OWN VISUAL WINDOW WHEN NO CONSENSUS PROPOSAL EXISTS:')
                 for (pid,why),n in sorted(no_scene_span_reasons.items()):
