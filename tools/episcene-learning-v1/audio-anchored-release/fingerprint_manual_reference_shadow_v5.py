@@ -564,6 +564,8 @@ def audit():
                   counts['OTHER_PLAYLIST_REFERENCES_NOT_MAPPED'])
             print('Unauthenticated positive rows (not used):',
                   feedback_counts['unauthenticated_positive_rows'])
+            print('Legacy device-approved rows (provenance unconfirmed):',
+                  feedback_counts['legacy_device_approved_rows_provenance_unconfirmed'])
             print('Conflicting feedback groups (not used):',
                   feedback_counts['suppressed_conflicting_positive_groups'])
             print('Active-negative feedback groups (not used):',
