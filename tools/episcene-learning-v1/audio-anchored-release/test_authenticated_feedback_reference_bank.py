@@ -78,6 +78,17 @@ class VerifiedHistoryTests(unittest.TestCase):
             self.assertEqual(result["suppressed_conflicting_positive_groups"],1)
             self.assertEqual(result["authenticated_reference_groups"],0)
 
+    def test_unverified_conflicting_positive_is_still_a_veto(self):
+        with tempfile.TemporaryDirectory() as d:
+            fb,prod=fixtures(d)
+            add_asset(prod,"a")
+            feedback(fb,"a",marker_id=1)
+            feedback(fb,"a",marker_id=2,start=90000,end=120000,
+                     provenance="unverified_source_status")
+            result=run(fb,prod)
+            self.assertEqual(result["authenticated_reference_groups"],0)
+            self.assertEqual(result["suppressed_conflicting_positive_groups"],1)
+
     def test_unproven_source_device_claim_does_not_count(self):
         with tempfile.TemporaryDirectory() as d:
             fb,prod=fixtures(d)
