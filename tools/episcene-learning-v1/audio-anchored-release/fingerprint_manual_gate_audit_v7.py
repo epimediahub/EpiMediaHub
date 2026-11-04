@@ -470,7 +470,6 @@ def manually_marked_cohort_funnel(con,release,cohorts,index,asset_cols):
             name='Serie '+review_label(key[1])
         for target in pending[:32]:
             per['pending_audio_confirmed']+=1
-            aggregate['pending_audio_confirmed']+=1
             if is_protected(con,target):
                 per['protected_by_prior_marker_or_correction']+=1
                 continue
