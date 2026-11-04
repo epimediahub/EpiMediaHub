@@ -180,6 +180,13 @@ def select_references(fb,prod):
             counts["analysis_reference_groups"]+=1
         else:
             counts["other_playlist_reference_groups_identity_required"]+=1
+    # Legacy source=device + approved is NOT proof of an authenticated
+    # human review. Count it separately so prior user work is visible for
+    # provenance reconciliation rather than silently discarded or promoted.
+    if {"source","status"}<=_columns(prod,"skip_records"):
+        counts["legacy_device_approved_rows_provenance_unconfirmed"] = prod.execute(
+            "SELECT COUNT(*) FROM skip_records WHERE source='device' AND status='approved'"
+        ).fetchone()[0]
     return [a for group in candidates.values() for a in group],counts
 
 
