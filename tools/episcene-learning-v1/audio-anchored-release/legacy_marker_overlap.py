@@ -54,6 +54,22 @@ def audit_overlap(con, validated_refs):
         else:
             counts["signed_asset_but_different_boundaries"]+=1
             unmatched_series.add((pid,source))
+    # Inner JOIN above intentionally covers only current, unambiguous asset
+    # records. Older feedback may outlive deleted/replaced catalogue assets.
+    # Report that gap instead of making those users' old marks disappear.
+    all_approved=con.execute("""
+      SELECT COUNT(*) FROM skip_records
+      WHERE source='device' AND status='approved'
+    """).fetchone()[0]
+    missing_asset=con.execute("""
+      SELECT COUNT(*) FROM skip_records r
+      WHERE r.source='device' AND r.status='approved'
+        AND NOT EXISTS (
+            SELECT 1 FROM skip_assets a WHERE a.asset_key=r.asset_key)
+    """).fetchone()[0]
+    counts["total_legacy_device_approved_rows_all_assets"]=all_approved
+    counts["legacy_approved_rows_without_current_asset"]=missing_asset
+    counts["legacy_rows_not_in_joined_inventory"]=all_approved-counts["legacy_approved_device_rows"]
     out=dict(sorted(counts.items()))
     out["distinct_series_with_legacy_approved_rows"]=len(distinct_series)
     out["distinct_series_needing_provenance_review"]=len(unmatched_series)
