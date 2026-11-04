@@ -155,6 +155,40 @@ def diagnose(con,feedback):
     return totals,scope,pin_flags,len(pins)
 
 
+def launcher():
+    """Snapshot both databases and invoke V9 itself in a restricted service."""
+    import tempfile
+    import subprocess
+    if not v8.shutil.which("systemd-run"):
+        raise SystemExit("STOP: systemd sandbox missing")
+    if not base.PYTHON.is_file() or not os.access(base.PYTHON,os.X_OK):
+        raise SystemExit("STOP: trusted provisioning Python missing")
+    with tempfile.TemporaryDirectory(prefix="episcene_fp_shadow_",dir="/tmp") as d:
+        snapshot=Path(d)/"snapshot.db"
+        feedback=Path(d)/"feedback.db"
+        base.snapshot_readonly_sqlite(base.DB,snapshot)
+        base.snapshot_readonly_sqlite(base.FEEDBACK,feedback)
+        props=(
+            "PrivateNetwork=yes","ProtectSystem=strict","ReadWritePaths=/tmp",
+            "ProtectHome=yes","NoNewPrivileges=yes","CapabilityBoundingSet=",
+            "PrivateDevices=yes","ProtectKernelTunables=yes",
+            "ProtectKernelModules=yes","ProtectControlGroups=yes",
+            "RestrictAddressFamilies=AF_UNIX","TemporaryFileSystem=/run",
+            "PrivateTmp=no","MemoryMax=1G","CPUQuota=100%","RuntimeMaxSec=180s",
+        )
+        cmd=["systemd-run","--pipe","--wait","--collect"]
+        for prop in props: cmd.extend(("-p",prop))
+        cmd.extend((
+            "--setenv=EPISCENE_FP_SHADOW=YES",
+            "--setenv=EPISCENE_FP_SNAPSHOT="+str(snapshot),
+            "--setenv=EPISCENE_FEEDBACK_SNAPSHOT="+str(feedback),
+            str(base.PYTHON),"-I","-B",str(Path(__file__).resolve()),
+        ))
+        print("V9: Protected SQLite copies, no approvals.",flush=True)
+        rc=subprocess.run(cmd,check=False).returncode
+        if rc: raise SystemExit(f"STOP: sandbox diagnostic failed exit={rc}")
+
+
 def audit():
     snapshot=Path(os.environ.get("EPISCENE_FP_SNAPSHOT",""))
     if (snapshot.is_symlink() or not snapshot.is_file()
@@ -189,4 +223,4 @@ if __name__=="__main__":
     if os.environ.get("EPISCENE_FP_SHADOW")=="YES":
         audit()
     else:
-        v8.launcher()
+        launcher()
