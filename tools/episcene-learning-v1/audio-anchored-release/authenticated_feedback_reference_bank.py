@@ -133,7 +133,9 @@ def select_references(fb,prod):
         counts["unauthenticated_positive_rows"]+=len(positives)-len(authenticated)
         if not authenticated:
             continue
-        if len({(r["start_ms"],r["end_ms"]) for r in authenticated})!=1:
+        # Even an unauthenticated active positive with contradictory bounds
+        # is a conflict: hold the entire asset/kind for review.
+        if len({(r["start_ms"],r["end_ms"]) for r in positives})!=1:
             counts["suppressed_conflicting_positive_groups"]+=1
             continue
         if key[1] not in assets:
