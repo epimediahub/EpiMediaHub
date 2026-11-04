@@ -56,6 +56,20 @@ class VerifiedHistoryTests(unittest.TestCase):
             self.assertEqual(result["automatic_approvals_performed"],0)
             self.assertFalse(result["ready_for_automatic_release"])
 
+    def test_unverified_old_device_approvals_visible_but_not_trusted(self):
+        with tempfile.TemporaryDirectory() as d:
+            fb,prod=fixtures(d)
+            add_asset(prod,"a")
+            with sqlite3.connect(prod) as c:
+                c.execute("CREATE TABLE skip_records(source TEXT,status TEXT)")
+                c.executemany("INSERT INTO skip_records VALUES (?,?)",
+                              [("device","approved"),("device","approved"),
+                               ("audio","approved"),("device","pending")])
+            result=run(fb,prod)
+            self.assertEqual(
+                result["legacy_device_approved_rows_provenance_unconfirmed"],2)
+            self.assertEqual(result["authenticated_reference_groups"],0)
+
     def test_old_revocation_and_active_negative_are_vetoed(self):
         with tempfile.TemporaryDirectory() as d:
             fb,prod=fixtures(d)
