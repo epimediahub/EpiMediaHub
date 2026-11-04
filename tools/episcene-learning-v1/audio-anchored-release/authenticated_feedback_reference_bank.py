@@ -184,6 +184,12 @@ def select_references(fb,prod):
 def summarize(references,counts,prod):
     """Bounded aggregated status only; never print asset IDs or names/URLs."""
     out=dict(sorted(counts.items()))
+    # Stable zero fields: a complete veto must be visible as 0 rather than
+    # masquerading as missing data or crashing audit consumers.
+    for key in ("authenticated_reference_groups", "direct_user_reference_groups",
+                "admin_reviewed_reference_groups", "analysis_reference_groups",
+                "other_playlist_reference_groups_identity_required"):
+        out.setdefault(key,0)
     per_playlist=Counter()
     per_kind=Counter()
     series=defaultdict(set)
