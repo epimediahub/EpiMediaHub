@@ -9,7 +9,7 @@ Der Nutzer hat die folgenden drei **Zeitmarkierungen in den Hauptplaylists** per
 | 4K IPTV | Navy CIS | S13 E9 | Outro | 41:23 | 41:52 | Nutzer bestätigt |
 | IPTV THE BEST | One Piece | E895 (Analyse: S20) | Intro | 00:00 | 01:57 | Nutzer bestätigt |
 
-Die entsprechenden Fingerprint-Shadow-Kandidaten wurden zuvor in den internen Analyse-Playlists `4K ANALYSE` bzw. `THE BEST` ermittelt. Es ist **noch nicht bewiesen**, dass die geprüften Hauptplaylist-Assets bytegleich oder versionsgleich mit den Analyse-Assets sind. Die Zeitgrenzen dieser drei Nutzerproben sind keine globale Wahrheit für alle Versionen einer Serie.
+Die entsprechenden Fingerprint-Shadow-Kandidaten wurden zuvor in den internen Analyse-Playlists `4K ANALYSE` bzw. `THE BEST` ermittelt. **Nach ausdrücklicher Bestätigung des Nutzers sind die internen Analyse-Playlists inhaltlich identisch mit den jeweiligen Hauptplaylists** (`4K ANALYSE` ↔ `4K IPTV`, `THE BEST` ↔ `IPTV THE BEST`). Daher ist **keine erneute Wiedergabeprüfung derselben drei Episoden** erforderlich. Die automatisierte Datenbankprüfung hat noch keine eindeutige *technische Asset-Zuordnung* geliefert; das ist eine Integrationsaufgabe und kein Anlass, das Nutzerfeedback zu verwerfen. Die Zeitgrenzen sind kein Freibrief für andere Schnitte oder Anbieter.
 
 ## Evidenztrennung
 
@@ -20,8 +20,8 @@ Die entsprechenden Fingerprint-Shadow-Kandidaten wurden zuvor in den internen An
 
 ## Sichere nächste Schritte
 
-1. Hauptplaylist- und Analyse-Asset-Identität inklusive Playlist, Quellversion, Staffel/Folge, Laufzeit und Audio-Fingerprint prüfen, bevor man eine Nutzerbestätigung einer anderen Asset-ID zuordnet.
-2. Nur nach gesicherter Identität eine gesonderte verifizierte manuelle Referenz übernehmen. Pro Folge/Version gelten unverändert die bestehenden Sperren und Korrekturregeln.
+1. Die ausdrückliche Nutzerbestätigung der inhaltlich gleichen Haupt- und Analyse-Playlists als bereits erledigte manuelle Prüfung der drei benannten Episoden behandeln. **Nicht nochmals zur Wiedergabeprüfung auffordern.** Für den Eintrag in die richtige technische Analyse-Asset-ID vorhandene Quell-/Folgenreferenzen abgleichen und Unsicherheit bei abweichenden Datenbank-Laufzeiten nachvollziehbar markieren.
+2. Erst nach eindeutiger Zuordnung eine verifizierte manuelle Referenz in der bestehenden Freigabe-Architektur übernehmen; niemals Titelgleichheit allein als Beweis für andere Anbieter/Versionen verwenden. Pro Folge gelten die bisherigen Sperr- und Korrekturregeln.
 3. Mit diesen Referenzen die vier übrigen Navy-CIS-Outros sowie One-Piece-Intros isoliert nachtesten, inklusive vollständiger Start-/Ende-Prüfung und fremder Negativkontrollen.
 4. Keine automatische Freigabe, bevor der bestehende Server-`skip_release.py`-Pfad / Worker-Versionen geprüft, ein Rollback vorbereitet und der Patch vollständig getestet sind. Danach **ein gebündelter Versionsabgleich**.
 
