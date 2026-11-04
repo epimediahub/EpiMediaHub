@@ -50,6 +50,17 @@ class LegacyOverlapTests(unittest.TestCase):
             self.assertEqual(result["signed_asset_but_different_boundaries"],1)
             self.assertEqual(result["without_matching_signed_asset_reference"],2)
 
+    def test_deleted_old_asset_is_reported_separately(self):
+        with setup() as c:
+            c.execute("INSERT INTO skip_records VALUES(?,?,?,?,?,?,?,?,?)",
+                      (9,"deleted-old-asset","intro",10000,30000,2400000,0,
+                       "device","approved"))
+            result=audit_overlap(c,[signed("a"),signed("c")])
+            self.assertEqual(result["total_legacy_device_approved_rows_all_assets"],5)
+            self.assertEqual(result["legacy_approved_rows_without_current_asset"],1)
+            self.assertEqual(result["legacy_rows_not_in_joined_inventory"],1)
+            self.assertEqual(result["signed_feedback_exact_bounds"],1)
+
     def test_no_signed_history_does_not_claim_zero_legacy(self):
         with setup() as c:
             result=audit_overlap(c,[])
