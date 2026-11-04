@@ -153,9 +153,15 @@ def investigate(con,fb):
             if base.is_protected(con,row):
                 local["PROTECTED_REQUIRES_REVIEW"]+=1
                 continue
-            local["HAS_UNBLOCKED_USER_REFERENCE"]+=int(any(
-                ref.episode!=row["episode"] and not base.anchor_is_blocked(con,ref)
-                for ref in reference_index[key]))
+            usable_refs=[
+                ref for ref in reference_index[key]
+                if ref.episode!=row["episode"] and not base.anchor_is_blocked(con,ref)
+            ]
+            local["HAS_UNBLOCKED_TRUSTED_REFERENCE"]+=int(bool(usable_refs))
+            local["HAS_UNBLOCKED_DIRECT_USER_REFERENCE"]+=int(any(
+                ref.is_user_marker for ref in usable_refs))
+            local["HAS_UNBLOCKED_ADMIN_REVIEWED_REFERENCE"]+=int(any(
+                not ref.is_user_marker for ref in usable_refs))
             local[window_reason(con,row)]+=1
             local.update(evidence_window_counts(row))
         totals.update(local)
