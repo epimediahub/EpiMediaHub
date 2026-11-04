@@ -23,7 +23,8 @@ if not (HERE / 'fingerprint_cohort_v2.py').is_file() or (HERE / 'fingerprint_coh
     raise RuntimeError('Fingerprint matcher fehlt oder ist Symlink')
 sys.path.insert(0,str(HERE))
 from fingerprint_cohort_v2 import decode, match, near_record, inspect_cohort, Fingerprint
-for name in ("authenticated_feedback_reference_bank.py", "verified_feedback_audio_peers.py"):
+for name in ("authenticated_feedback_reference_bank.py", "verified_feedback_audio_peers.py",
+             "legacy_marker_overlap.py"):
     if not (HERE/name).is_file() or (HERE/name).is_symlink():
         raise RuntimeError("Trusted feedback reference helper missing")
 from authenticated_feedback_reference_bank import (
@@ -33,6 +34,7 @@ from verified_feedback_audio_peers import (
     reference_index,trusted_peers_for_target,compare_authenticated_mark,
     peer_record_for_cache,anchor_is_blocked,
 )
+from legacy_marker_overlap import audit_overlap
 
 sys.dont_write_bytecode = True
 APP=Path('/opt/epimediahub/provisioning')
@@ -424,6 +426,7 @@ def audit():
             with open_ro(isolated_feedback) as feedback:
                 trusted_references,feedback_counts=select_references(feedback,con)
             verified_index=reference_index(trusted_references)
+            legacy_overlap=audit_overlap(con,trusted_references)
             cohorts=defaultdict(list)
             for row in rows:
                 if valid_asset(row):
@@ -646,6 +649,9 @@ def audit():
                   feedback_counts['unauthenticated_positive_rows'])
             print('Legacy device-approved rows (provenance unconfirmed):',
                   feedback_counts['legacy_device_approved_rows_provenance_unconfirmed'])
+            print('Legacy / signierte Feedback-Referenzen (nur Abgleich, keine Uebernahme)')
+            for name,count in sorted(legacy_overlap.items()):
+                print(f'  {name}: {count}')
             print('Conflicting feedback groups (not used):',
                   feedback_counts['suppressed_conflicting_positive_groups'])
             print('\nMANUELLE REFERENZABDECKUNG DER STARKEN KANDIDATEN')
