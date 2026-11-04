@@ -353,6 +353,44 @@ def safe_title(con, asset_key, cols):
     return None
 
 
+def historical_reference_scope(refs, target):
+    """Why historical user marks are, or are not, strict peers of a target.
+
+    Source keys are compared only within the same playlist. These counts
+    diagnose coverage, never authorize cross-season or provider reuse.
+    """
+    same_source=[r for r in refs if r.is_user_marker
+                 and r.playlist_id==target['playlist_id']
+                 and r.source_key==target['source_key']]
+    same_season=[r for r in same_source if r.season==target['season']]
+    same_kind=[r for r in same_season if r.kind==target['segment_type']]
+    independent={r.episode for r in same_kind
+                 if r.episode!=target['episode']}
+    return {
+        'same_series_all_seasons':len(same_source),
+        'same_series_same_season':len(same_season),
+        'same_series_same_season_same_kind':len(same_kind),
+        'independent_episode_refs':len(independent),
+    }
+
+
+def authenticated_series_overview(refs,con,asset_cols):
+    """Show each distinct personally-marked series; omit source/asset IDs."""
+    grouped=defaultdict(list)
+    for ref in refs:
+        if ref.is_user_marker:
+            grouped[(ref.playlist_id,ref.source_key)].append(ref)
+    result=[]
+    for (playlist,_source),entries in grouped.items():
+        title=next((safe_title(con,r.asset_key,asset_cols) for r in entries
+                    if safe_title(con,r.asset_key,asset_cols)),None)
+        name=title or ('Serie '+review_label(_source))
+        result.append((name,playlist,len(entries),
+                       len({(r.season,r.episode) for r in entries}),
+                       '/'.join(sorted({r.kind for r in entries}))))
+    return sorted(result,key=lambda t:(t[1],t[0].casefold()))
+
+
 def audit():
     raw=os.environ.get('EPISCENE_FP_SNAPSHOT','')
     snapshot=Path(raw)
@@ -395,6 +433,9 @@ def audit():
             sampled=Counter()
             asset_cols={r[1] for r in con.execute("PRAGMA table_info(skip_assets)")}
             report=[]
+            coverage={}
+            user_series=authenticated_series_overview(
+                trusted_references,con,asset_cols)
             cached_by_window={}
             counts["AUTHENTICATED_REFERENCES_FOUND"]=len(trusted_references)
             counts["AUTHENTICATED_USER_REFERENCES_FOUND"]=sum(
@@ -555,6 +596,12 @@ def audit():
                     counts[(playlist,'MATCHED_INDEPENDENT_PEERS_'+str(len(peers)))]+=1
                     if len(peers)>=3:
                         counts[(playlist,'THREE_OR_MORE_PEER_PROOFS')]+=1
+                        scope_key=(playlist,target['source_key'],target['season'],
+                                   target['segment_type'])
+                        coverage[scope_key]=(
+                            safe_title(con,target['asset_key'],asset_cols)
+                            or 'Serie '+review_label(target['source_key']),
+                            historical_reference_scope(trusted_references,target))
                         report.append({
                             "playlist":"4K ANALYSE" if playlist==8 else "THE BEST",
                             "series_code":review_label(target['source_key']),
@@ -588,6 +635,11 @@ def audit():
                        if r.is_user_marker}))
             print('Trusted references in 4K ANALYSE/THE BEST:',
                   counts['ANALYSIS_VERIFIED_REFERENCE_GROUPS'])
+            print('\nBISHERIGE PERSONLICH MARKIERTE SERIEN (aus dieser Feedback-DB)')
+            for name,pid,ref_count,episode_count,kinds in user_series:
+                scope={8:'4K ANALYSE',10:'THE BEST'}.get(pid,'andere Playlist')
+                print(f'  {scope} | {name}: {ref_count} Marker, '
+                      f'{episode_count} Episoden, {kinds}')
             print('Unmapped references from other playlists (NOT transferred):',
                   counts['OTHER_PLAYLIST_REFERENCES_NOT_MAPPED'])
             print('Unauthenticated positive rows (not used):',
@@ -596,6 +648,14 @@ def audit():
                   feedback_counts['legacy_device_approved_rows_provenance_unconfirmed'])
             print('Conflicting feedback groups (not used):',
                   feedback_counts['suppressed_conflicting_positive_groups'])
+            print('\nMANUELLE REFERENZABDECKUNG DER STARKEN KANDIDATEN')
+            for (_pid,_source,season,kind),(name,cov) in sorted(
+                    coverage.items(),key=lambda t:(t[0][0],t[1][0],t[0][2],t[0][3])):
+                print(f'  {name} | S{season} {kind}: '
+                      f'Serie gesamt={cov["same_series_all_seasons"]}, '
+                      f'Staffel={cov["same_series_same_season"]}, '
+                      f'gleiches Segment={cov["same_series_same_season_same_kind"]}, '
+                      f'unabhaengige Referenzfolgen={cov["independent_episode_refs"]}')
             print('Active-negative feedback groups (not used):',
                   feedback_counts['suppressed_active_negative_groups'])
             for pid,name in ((8,'4K ANALYSE'),(10,'THE BEST')):
