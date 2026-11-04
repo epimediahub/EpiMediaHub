@@ -66,6 +66,35 @@ ORDER BY a.playlist_id,r.source_key,r.season,r.segment_type,r.id
 AUDIO_SOURCES=('audio','audio_repetition','auto_audio','episcene')
 
 
+def snapshot_readonly_sqlite(source_path, destination):
+    """Consistent SQLite backup, not an unsafe file copy of a live WAL DB."""
+    if source_path.is_symlink() or not source_path.is_file():
+        raise RuntimeError("STOP: original snapshot source unavailable or symlink")
+    source=sqlite3.connect(source_path.resolve().as_uri()+"?mode=ro",
+                           uri=True,timeout=60)
+    target=None
+    try:
+        source.execute("PRAGMA query_only=ON")
+        target=sqlite3.connect(str(destination),timeout=60)
+        source.backup(target,pages=2048,sleep=0.1)
+    finally:
+        source.close()
+        if target is not None:target.close()
+    os.chmod(destination,0o600)
+
+
+def shadow_feedback_snapshot_path(raw, provision_snapshot):
+    """Accept only the companion copy in the same private temp directory."""
+    if not isinstance(raw,str) or not raw.startswith("/tmp/"):
+        raise RuntimeError("Missing private feedback snapshot")
+    feedback_path=Path(raw)
+    if (feedback_path.name!="feedback.db"
+            or feedback_path.parent != provision_snapshot.parent
+            or feedback_path.is_symlink() or not feedback_path.is_file()):
+        raise RuntimeError("Untrusted feedback snapshot location")
+    return feedback_path
+
+
 def isolated_launch():
     if not shutil.which('systemd-run'):
         raise SystemExit('ABBRUCH: sandbox systemd-run fehlt')
@@ -76,16 +105,12 @@ def isolated_launch():
         raise SystemExit('ABBRUCH: Provisioning-Venv nicht verfügbar')
     with tempfile.TemporaryDirectory(prefix='episcene_fp_shadow_',dir='/tmp') as d:
         snapshot=Path(d)/'snapshot.db'
-        source=sqlite3.connect(DB.resolve().as_uri()+'?mode=ro',uri=True,timeout=60)
-        target=None
-        try:
-            source.execute('PRAGMA query_only=ON')
-            target=sqlite3.connect(snapshot,timeout=60)
-            source.backup(target,pages=2048,sleep=0.1)
-        finally:
-            source.close()
-            if target is not None:target.close()
-        os.chmod(snapshot,0o600)
+        feedback_snapshot=Path(d)/'feedback.db'
+        # The child sandbox intentionally has no access to the protected
+        # EpiScene learning directory. Snapshot both SQLite databases here,
+        # before dropping capabilities; never chmod or edit the originals.
+        snapshot_readonly_sqlite(DB,snapshot)
+        snapshot_readonly_sqlite(FEEDBACK,feedback_snapshot)
         properties=(
             'PrivateNetwork=yes','ProtectSystem=strict','ReadWritePaths=/tmp',
             'ProtectHome=yes','NoNewPrivileges=yes','CapabilityBoundingSet=',
@@ -101,8 +126,9 @@ def isolated_launch():
         command += [
             '--setenv=EPISCENE_FP_SHADOW=YES',
             '--setenv=EPISCENE_FP_SNAPSHOT='+str(snapshot),
+            '--setenv=EPISCENE_FEEDBACK_SNAPSHOT='+str(feedback_snapshot),
             str(PYTHON),'-I','-B',str(Path(__file__).resolve())]
-        print('Fingerprint-Staffelabgleich auf isolierter DB-Kopie. Keine Freigaben.',flush=True)
+        print('Fingerprint-Staffelabgleich auf zwei isolierten DB-Kopien. Keine Freigaben.',flush=True)
         status=subprocess.run(command,check=False).returncode
         if status:raise SystemExit(f'ABBRUCH: Sandbox-Fehler exit={status}')
 
@@ -355,7 +381,9 @@ def audit():
             # Read the existing authenticated user-feedback history instead
             # of assuming an approved skip_records source=device is human truth.
             # A missing feedback store is an explicit stop, never zero markers.
-            with open_ro(FEEDBACK) as feedback:
+            raw_feedback=os.environ.get("EPISCENE_FEEDBACK_SNAPSHOT","")
+            isolated_feedback=shadow_feedback_snapshot_path(raw_feedback,snapshot)
+            with open_ro(isolated_feedback) as feedback:
                 trusted_references,feedback_counts=select_references(feedback,con)
             verified_index=reference_index(trusted_references)
             cohorts=defaultdict(list)
