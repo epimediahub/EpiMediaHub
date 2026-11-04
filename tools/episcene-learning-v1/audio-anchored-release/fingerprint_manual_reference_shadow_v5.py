@@ -555,6 +555,9 @@ def audit():
             print('No media requests, no approvals, no server/worker changes.')
             print('Trusted feedback: active positive, authenticated provenance, exact asset only.')
             print('User references total:',counts['AUTHENTICATED_USER_REFERENCES_FOUND'])
+            print('Different series with authenticated user markers:',
+                  len({(r.playlist_id,r.source_key) for r in trusted_references
+                       if r.is_user_marker}))
             print('Trusted references in 4K ANALYSE/THE BEST:',
                   counts['ANALYSIS_VERIFIED_REFERENCE_GROUPS'])
             print('Unmapped references from other playlists (NOT transferred):',
