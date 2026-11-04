@@ -505,7 +505,19 @@ def audit():
                            'UNSUPPORTED_OR_INVALID_FINGERPRINT_PAYLOAD') or key.startswith(('FINGERPRINT_FORMAT_', 'FINGERPRINT_STORAGE_')):
                     print('  '+key+':',counts[key])
             print('\nSTAERKSTE AUDIOKANDIDATEN – NUR MANUELL PRUEFEN')
-            print(json.dumps(report,ensure_ascii=False,indent=2))
+            for i,entry in enumerate(report,1):
+                name=entry['series_title_if_available'] or ('Serie '+entry['series_code'])
+                print(f"{i}. {entry['playlist']} | {name} | S{entry['season']} E{entry['episode']} "
+                      f"| {entry['segment']} {entry['marker_start']}-{entry['marker_end']}"
+                      f" | Audio-Peers: {entry['independent_audio_peers']}"
+                      f" | Negativtests: {entry['negative_controls']}"
+                      f" | Fremdtreffer: {entry['suspected_cross_series_matches']}"
+                      f" | Manuell bestaetigt: {entry['has_confirmed_manual_anchor']}")
+                positions=', '.join(
+                    f"E{p['episode']} {p['marker_start']}-{p['marker_end']}"
+                    f" (Audio bei {p['audio_position']})"
+                    for p in entry['peer_details'])
+                print('   Vergleichsfolgen: '+positions)
             print('Die Audiofundstelle beweist NICHT automatisch exakte Intro/Outro-Grenzen.')
             print('SHADOW_FINGERPRINT_PLUS_MANUAL_NOT_RELEASED is NOT a release approval.')
             print('Do not install any release/worker patch based solely on this diagnostic.')
