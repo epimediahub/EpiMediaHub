@@ -1,0 +1,34 @@
+name: EpiScene guarded priority and worker coherence
+on:
+  pull_request:
+    paths:
+      - 'tools/episcene-learning-v1/compute-lanes/**'
+      - 'tools/episcene-learning-v1/unified-marker-bridge/bridge.py'
+      - 'tools/episcene-learning-v1/unified-marker-bridge/test_bridge.py'
+      - '.github/workflows/episcene-compute-lane-tests.yml'
+  push:
+    paths:
+      - 'tools/episcene-learning-v1/compute-lanes/**'
+      - '.github/workflows/episcene-compute-lane-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate all implementation files
+        run: python -m compileall -q tools/episcene-learning-v1/compute-lanes
+      - name: Run isolated no-provider unit tests
+        run: |
+          cd tools/episcene-learning-v1/compute-lanes
+          python -m unittest -v test_smart_priority test_worker_version_gate test_offline_capacity test_readonly_server_snapshot test_diagnose_unified_sync test_diagnose_sqlite_wal_gate test_repair_unified_sqlite_wal test_enable_authenticated_all_playlist_bridge test_inspect_pending_manual_ownership test_inspect_manual_marker_lineage test_reconcile_lincoln_lawyer_manual test_audit_asset_key_collision test_audit_global_registration_lineage test_asset_registry_scope test_fix_customer_scope_migration test_verify_customer_markers_live test_scoped_customer_priority test_preflight_worker_cpu_contracts test_apply_customer_priority_requests test_install_customer_priority_timer test_benchmark_real_throughput_cpu test_diagnose_remote_health_gate test_diagnose_local_remote_reconcile test_inspect_local_worker_launch test_repair_local_remote_version_and_bind
+      - name: Test cross-playlist authenticated knowledge import
+        run: |
+          cd tools/episcene-learning-v1/unified-marker-bridge
+          python -m unittest -v test_bridge

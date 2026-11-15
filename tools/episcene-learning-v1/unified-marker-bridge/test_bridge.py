@@ -153,5 +153,46 @@ class KnowledgeTests(unittest.TestCase):
             self.assertIn("intro", response["conflicts"])
             self.assertNotIn("intro", [r["kind"] for r in response["ready_verified"]])
 
+    def test_authenticated_customer_playlist_marker_imports_without_unsafe_reuse(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p, f, k = databases(Path(tmp))
+            with sqlite3.connect(p) as con:
+                con.execute("INSERT INTO skip_assets VALUES(?,?,?,?,?,?,?)",
+                            ("source-55-s4e1", 55, "The Lincoln Lawyer", 4, 1,
+                             3000000, OTHER_CUT))
+            with sqlite3.connect(f) as con:
+                con.executemany("INSERT INTO feedback_versions VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", [
+                    (91, "source-55-s4e1", 55, 4, 1, "intro", "positive", 1,
+                     9000, 57000, "device_authenticated_direct", "2026-10-23T18:00:00Z"),
+                    (92, "source-55-s4e1", 55, 4, 1, "outro", "positive", 1,
+                     2860000, 2990000, "unverified_source_status", "2026-10-23T18:00:00Z"),
+                ])
+            unchanged_p, unchanged_f = p.read_bytes(), f.read_bytes()
+            result = import_authenticated_feedback(f, p, k)
+            self.assertEqual(result["imported_authenticated_markers"], 3)
+            self.assertEqual(result["from_playlists"], [8, 10, 55])
+            self.assertEqual(p.read_bytes(), unchanged_p)
+            self.assertEqual(f.read_bytes(), unchanged_f)
+
+            own = evaluate(episode(
+                playlist_id=55, asset_key="source-55-s4e1", season=4, episode=1,
+                duration_ms=3000000, fingerprint="", title="The Lincoln Lawyer"), k,
+                external=False)
+            self.assertEqual([r["kind"] for r in own["ready_verified"]], ["intro"])
+            self.assertEqual(own["ready_verified"][0]["match"], "same_asset")
+
+            wrong_cut = evaluate(episode(
+                playlist_id=8, asset_key="other-provider-s4e1", season=4, episode=1,
+                duration_ms=3000000, fingerprint=CUT, title="The Lincoln Lawyer"), k,
+                external=False)
+            self.assertEqual(wrong_cut["ready_verified"], [])
+            verified_cut = evaluate(episode(
+                playlist_id=8, asset_key="other-provider-s4e1", season=4, episode=1,
+                duration_ms=3000000, fingerprint=OTHER_CUT, title="The Lincoln Lawyer"),
+                k, external=False)
+            self.assertEqual([r["kind"] for r in verified_cut["ready_verified"]], ["intro"])
+            self.assertEqual(verified_cut["ready_verified"][0]["match"], "same_cut")
+
+
 if __name__ == "__main__":
     unittest.main()
