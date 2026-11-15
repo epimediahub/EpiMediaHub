@@ -1,0 +1,24 @@
+{
+  "source": "https://github.com/sgossner/VSCO-2-CE",
+  "commit": "440300901dfe9275fd84e0b7763af1f8443ae62e",
+  "license": "CC0-1.0",
+  "files": {
+    "Brass/F Horn/sus/MOHorn_sus_A2_v2_1.wav": "8fab29daee8570e8a272b373e7ad906bbe6b4845c1994897e45112e71233c708",
+    "Brass/F Horn/sus/MOHorn_sus_D2_v2_1.wav": "9155ef0c33c06ebe55daeaaaca7dec4090578af6cf3d6a028fbfa7b7f2ec876e",
+    "Brass/F Horn/sus/MOHorn_sus_F2_v2_1.wav": "2e487a49c834ff2d76aff1c9755875fc03013bf202b949a5c5fe354d0c2123c2",
+    "Percussion/BDrumNewhit_v4_rr1_Sum.wav": "7d8603e6802b51bc5acd3f73275f8e6408c7f2ccdd36d1a55b27e74034101589",
+    "Percussion/Timpani/Timpani3_Hit_v3_rr1_Sum.wav": "46cd2ba3798f9e3a6be515b13dbc37d2ef65c82afb0d0e9e34121e4524bfcd3a",
+    "Percussion/susCymb1-cresc-Median_v1.wav": "bb3b6b251b0b9dac23b7b0fae47aab84a70abbefa4a110b05c9f4ad733e70741",
+    "Percussion/susCymb1-hit_mp_rr1.wav": "426238ad2bfadab07895c7b8f89204fed623d865693cc02d72c68627a86df75e",
+    "Strings/Cello Section/susvib/susvib_A2_v1_1.wav": "c97a003184fdcb153d6b6c0bae8d82a90592a1b04b06bd7caaeda8b9776d5284",
+    "Strings/Cello Section/susvib/susvib_C1_v1_1.wav": "abdcea431f384e135c469b0f3e4ac2a437f282f521dc5bcbe22abc221536e8de",
+    "Strings/Cello Section/susvib/susvib_D2_v1_1.wav": "e8640dec9febc6e39fcf06b19d2c95a85d5ff8c38f13c9879e69f551eaf38ab8",
+    "Strings/Cello Section/susvib/susvib_D2_v3_1.wav": "fc946615cd6550570c8f05d61c0d59b9079bf9daba8bf25be7943487fea5a7ae",
+    "Strings/Cello Section/susvib/susvib_F2_v1_1.wav": "162054eab4ba118924f8f8986cf1b17ccfd65211d1945743ffbae30b4953f901",
+    "Strings/Viola Section/susvib/ViolaEns_susvib_A3_v1_1.wav": "7cea6482a8f67536e3108f01b688d54d198e5820ffcd0ac5a49652d38f6ec065",
+    "Strings/Viola Section/susvib/ViolaEns_susvib_D2_v1_1.wav": "49b09bcaec177f67382644913da5ca5582fe1d1d74a9f097edb6e0b5db43d35f",
+    "Strings/Violin Section/susVib/VlnEns_susVib_A3_v1.wav": "72817a53dfd2eb61eca94658c14e1cab6017629ca2f27bab8e394c6675bfaad7",
+    "Strings/Violin Section/susVib/VlnEns_susVib_D3_v1.wav": "583e660bc5daa4e094aef5fc014fbb92751040be8741ed7a16847306a1fe0a99",
+    "Strings/Violin Section/susVib/VlnEns_susVib_D3_v2.wav": "77893dbf1ea1be8c40ad756d16b916298e6b1b0742495e9853e020375592357c"
+  }
+}

@@ -1,0 +1,750 @@
+{
+  "version": "1.0.32",
+  "teamCount": 134,
+  "portraitCount": 536,
+  "historicalMarkCount": 37,
+  "files": {
+    "assets/licenses/skin_artwork_v132_sources.json": "50c6f83638be3b9ecd0cfc1ad45aae5afa44d2850b05b863cd65dc1b16c6d032",
+    "assets/skin_portraits_v132/authentic_arda_guler.webp": "ae86215d275d6bd67bd26c483f943890ea2c65b4be1c1d32bd387b08d3c3e380",
+    "assets/skin_portraits_v132/authentic_barella_inter.webp": "dbf6a14d29b5efffa4c82c0fd0381b41c2360eaf2d79b14d0c769723d776840d",
+    "assets/skin_portraits_v132/authentic_barella_italy.webp": "765e4f03be2428e691b0e34d4430bf590a1ad502142f36e3e5113e022a794c6a",
+    "assets/skin_portraits_v132/authentic_beckham_england.webp": "5c0040d38985f204f3653b8d9ddc2ce3ff5a4f528ff2b7c6b1654c9aeff69e78",
+    "assets/skin_portraits_v132/authentic_gleison_bremer.webp": "4a01ecfee0d3d1726a9006c516f935205915bb28d9bdff21c3588c3d76e17a79",
+    "assets/skin_portraits_v132/authentic_godin_atletico.webp": "7050e1c1a3a3a79fba3e275a37a7b30dfde98a7c842c934d6429268166dc06ae",
+    "assets/skin_portraits_v132/authentic_hakimi_morocco.webp": "0a12865920e68ac7f28e77b12326ff02ea236b1f339da0d4ebb82a11b0ed93eb",
+    "assets/skin_portraits_v132/authentic_hamsik_napoli.webp": "205b75d0a36f518d7997ec5ff3a73096c72d58af151287df32416fda38955456",
+    "assets/skin_portraits_v132/authentic_icardi_galatasaray.webp": "f40bf41bacd5aa426d7faa9b6846643f3566a05ac11d27f7fe72204c928874db",
+    "assets/skin_portraits_v132/authentic_kanoute_sevilla.webp": "4b6df387ddca0f4b258c35cb39395508a2ac5e27658a067b6cc4d098defffac1",
+    "assets/skin_portraits_v132/authentic_kenan_yildiz.webp": "38a3fce24aeb63c7399bb8061926f4ecf047466f9942a5cc99a0e528e369f6a3",
+    "assets/skin_portraits_v132/authentic_mbappe_france.webp": "814946e6838ab3fd70f40f046c68542553d08c730f82627e7f11cc9fdc08b5c3",
+    "assets/skin_portraits_v132/authentic_messi_argentina.webp": "fad80f633bb10acafbac906e055f802f95b235bdc7e411dfe6ae9cebdc741721",
+    "assets/skin_portraits_v132/authentic_messi_barcelona.webp": "bde465e1620e6a72523dbc0aad5d5b577e5186cf254d5b9158b54ef608088eb8",
+    "assets/skin_portraits_v132/authentic_original_046.webp": "bdbb1f40841f66cc8885189cb7bba9a806155ac93789da530352e7fd3ddf3eb3",
+    "assets/skin_portraits_v132/authentic_original_050.webp": "789f8091455c62cb034cc8d9af181bcbf4d9a3b7129b77e5a529b1a11edaad9d",
+    "assets/skin_portraits_v132/authentic_poulsen_leipzig.webp": "adf25ad99127eec21edb222ff1f8a4538674c8bf7f9f22fdf4ea69b47850af91",
+    "assets/skin_portraits_v132/authentic_roberto_fenerbahce.webp": "1f4e70eff137799042e5d4c980784ac69c06a19331b0aed9f928809d852b1301",
+    "assets/skin_portraits_v132/authentic_ronaldinho_barcelona.webp": "8866b360edee7205e43386d653682f334f6039d0479b7ed52ad1f987ee0540d0",
+    "assets/skin_portraits_v132/authentic_ronaldo_real.webp": "eae84ef222400749c4df7d6fd76a3afa688ab2869be0b5621b9eb6e93f219eea",
+    "assets/skin_portraits_v132/authentic_schweinsteiger_germany.webp": "6c95c6308cd46c6326f7656731edb6cf29f761791ce1d8aabd437bc5e7ff351c",
+    "assets/skin_portraits_v132/authentic_suker_croatia.webp": "0ba473c5cceef621113176927284a6e0248983fca7777d5c3bf2a0f9afcb77b1",
+    "assets/skin_portraits_v132/authentic_visca_basaksehir.webp": "e899ef2f82a83dedfba224cc5031939726abd77fc1b857f69418791b252849bd",
+    "assets/skin_portraits_v132/authentic_zidane_real.webp": "f786a1b5164eaa552ca256202badea50acd22d6df9a84da8b76fd1ce41f4b683",
+    "assets/skin_portraits_v132/corrected_00.webp": "0231839de4c36acccbca80a75009de75df881ac350e51ed445d0fbfc9667b698",
+    "assets/skin_portraits_v132/corrected_02.webp": "14fd356709afafd92f8f306d67f3f8e30fbd1061919d7479174614213289a15f",
+    "assets/skin_portraits_v132/corrected_03.webp": "73151b985c7cd0f645b5ff70b282ffe0d0301be7b18d0a9c95746df7c82a026b",
+    "assets/skin_portraits_v132/corrected_04.webp": "7187b46ca98508b54c55787b960c6b51eb4e1a441b16e709af6b4b0fc8208804",
+    "assets/skin_portraits_v132/corrected_05.webp": "c641d4c74f8a46dd25628c37669a35a9db5fafc3654a7c94ec512804875682b1",
+    "assets/skin_portraits_v132/corrected_06.webp": "0390b0c8a4cee8b71ad96cd4d51df320814b132b7ad2b8e5e234871906f0fed6",
+    "assets/skin_portraits_v132/corrected_07.webp": "642a784b902436440f5138a48920f22b25dc596431daa40529dea82f067c8d77",
+    "assets/skin_portraits_v132/corrected_08.webp": "6d03fa19ecd4944e2e94f33a9f686cb974f0831709f359c102d6c77ecc92baab",
+    "assets/skin_portraits_v132/corrected_09.webp": "f670254d3fa69bf848e958938342ece37b3258f0177fb6ac25a9dc566ea9a72f",
+    "assets/skin_portraits_v132/corrected_eusebio_portugal.webp": "5fda4778993c214486a5857388f0a3e4350884546d3e6bce9b0022981c473f02",
+    "assets/skin_portraits_v132/original_f1_ferrari__players.webp": "409abf076c47d5cca844026202047cebc4b248cf29775f3cadb044ce068fd92f",
+    "assets/skin_portraits_v132/original_juventus__legends.webp": "8f8a02e4729e6e1da34e45c9fca42583bc1d1dca29a42315bb3b026d9e9f0def",
+    "assets/skin_portraits_v132/original_nba_los_angeles_lakers__legends.webp": "0f0ecbac2fb9c9d81d3e1770383748d8c19c806c1254c07c8af8ce912f5cbd78",
+    "assets/skin_portraits_v132/recovered_00.webp": "f18416f845148a8a5c55084e8eaed1d09a259176a132b50df0a8e081d227ef27",
+    "assets/skin_portraits_v132/recovered_01.webp": "887129d43e3a5ad604c47cd75a16e3976004798511c0ded59744c2d4d76e489c",
+    "assets/skin_portraits_v132/recovered_02.webp": "ffba1a198623f255d37909db06d8bc6ec8d039973d8eefcfa195f541f5c6ce5b",
+    "assets/skin_portraits_v132/recovered_03.webp": "6d7febdcd0afa8a7ce38c91cbfe3ab221de3fc80b0f2205e71591c7add374625",
+    "assets/skin_portraits_v132/recovered_04.webp": "53ecdffd948f8c79738dffb9b0b8e4a12cb992095a6bddaa5cc8c7c8fea210b5",
+    "assets/skin_portraits_v132/recovered_05.webp": "a5200da69330725c4791e1d7c880513f582f8569765e6532335da3df14586023",
+    "assets/skin_portraits_v132/recovered_06.webp": "c36b1393b24aa4b105e79af2d86079a1663777c6bcd0c8138b5a450931823f30",
+    "assets/skin_portraits_v132/recovered_07.webp": "f40efd4b1bc6f97422471457a82d53b8750fef73d480386f54c195b436d8170d",
+    "assets/skin_portraits_v132/recovered_08.webp": "184b59f3826101aa778e8c3d9ea4c64c2f3c41872d22666637a4c9029c8c2120",
+    "assets/skin_portraits_v132/recovered_09.webp": "cd67eb9c2e0892ad612123688f8c93e10d7713df5cd848396e31ed6f081b3ba7",
+    "assets/skin_portraits_v132/recovered_10.webp": "febd99da45f862dc8f5766b4e710de3e706095b6197e24b00d1738e96044a740",
+    "assets/skin_portraits_v132/recovered_12.webp": "3f98bb4a6b6e661f12a74212bd688967dcd97d43d2bcf16fe6c12b6e2fb6732b",
+    "assets/skin_portraits_v132/recovered_13.webp": "c20d24c517eb38086e67a0a8e34dd8a5e569153e8b597ee11e6605b1c2e472cf",
+    "assets/skin_portraits_v132/recovered_14.webp": "a6f30e694914658c6c234fcb44011c3010004d16d06f227ccf423eed9941a2cd",
+    "assets/skin_portraits_v132/recovered_15.webp": "469ddea9691c42f1e9fa6ee3b5fdf3ed6f68c20d4a9886631c54954e9db192e8",
+    "assets/skin_portraits_v132/recovered_17.webp": "fe8b1d202b5db1e282423e9574f3d82fadd81796a63bda9ab4bfb2eb84a4adb6",
+    "assets/skin_portraits_v132/recovered_18.webp": "19a70a5553484cb7f439cb556c5823b85ca5076cd6cdb3c90ea2cb8c5772a4fd",
+    "assets/skin_portraits_v132/recovered_19.webp": "252b4c43dce00c4858c9bbc19bc72453df971d7e0ce7082d8f40ff73fc35d05d",
+    "assets/skin_portraits_v132/recovered_20.webp": "bec78962d17d0df95ead951068aac33c2965ce400ba7bbb300452eda6cfb3aa4",
+    "assets/skin_portraits_v132/recovered_21.webp": "7c01e79f70635cbfa54d0c3d95ef6cc199a4399da1061cbbfd8c624516839cc0",
+    "assets/skin_portraits_v132/recovered_22.webp": "50a8da3f806c9937b65281b275a805724db35a9be19b81adfc0d530a040d7f21",
+    "assets/skin_portraits_v132/recovered_23.webp": "41ed58c4b01b65c7ac02dfd221a8bf0eacb41460052b788db56e82ef1b0ac04d",
+    "assets/skin_portraits_v132/recovered_24.webp": "6466504d62a588ccf09c531195ac5ffe361bbeae11174e0089b55b61c0bc5c24",
+    "assets/skin_portraits_v132/recovered_25.webp": "00cdf06c45b9b65fd2b686bcf9c96e273625592191e98c964435561cd31000ba",
+    "assets/skin_portraits_v132/recovered_26.webp": "c716039868010a22971e1705037f027d77754d57fa988d25b13ffeb7de44235a",
+    "assets/skin_portraits_v132/recovered_27.webp": "f385da2d0eca853db399178dff9206d865a9536d29d4c453685ab9bb92afd119",
+    "assets/skin_portraits_v132/recovered_28.webp": "12dd5ba35bd028b0151dab07badc28a91a17698e57345fb1986d1493523ba053",
+    "assets/skin_portraits_v132/recovered_29.webp": "8f2e63c9ab35fbf63e7d7a47a5388e1b301430660a851c2d2174a3961fb5564c",
+    "assets/skin_portraits_v132/recovered_30.webp": "1c670afd11312b0cb0bbe543402ad14abbcc36f00c686d73f78e0dde85cf832b",
+    "assets/skin_portraits_v132/recovered_31.webp": "28d324c8f227920a9d877f74adb21977e8979086b0e25b0146d8c67189a33813",
+    "assets/skin_portraits_v132/recovered_32.webp": "a5b477656399f395372016d37a576656a2579e20fd7b48bea25aa84f4fe86f97",
+    "assets/skin_portraits_v132/recovered_33.webp": "a205d36735ea3b9dff1029e7ff5dfd5c863d17e2bb2c65766bd3035bade72ceb",
+    "assets/skin_portraits_v132/recovered_34.webp": "1064693e99632604821aa8a4168400f66c6757143a8d076e52585624fe06da49",
+    "assets/skin_portraits_v132/recovered_35.webp": "fb7d10b623706e59a4cd1bf3d321d493cbfd21de9d25816145dae0d0f65c4057",
+    "assets/skin_portraits_v132/recovered_36.webp": "5049793b06bf00a173ce102422aabe70a2cf13db5e0cf38d75e7052150c50b2c",
+    "assets/skin_portraits_v132/recovered_37.webp": "a60800b2960e1adaa2a88e342163b5b7838176d5b22d86d9563fe2a04ceeab4f",
+    "assets/skin_portraits_v132/recovered_38.webp": "4ac5a41a39a569e6988c5b918fa43d6fb57e8e2f503355ed63263be87893c766",
+    "assets/skin_portraits_v132/recovered_39.webp": "b73c7329106dc1c1cfb43186a77e611cf4ed061a85568c5960e45fe167f0088c",
+    "assets/skin_portraits_v132/recovered_40.webp": "82565480eb9a4d0d247f08a56a22230fd79f2b229eb491273f03408f8b13cd78",
+    "assets/skin_portraits_v132/recovered_41.webp": "999eefb8dd7030078910ddb436b7e9c3914dcaabdd3619e5ed7d9c4a554a2f0e",
+    "assets/skin_portraits_v132/recovered_42.webp": "a2d4578113c2f6a74e86bc7176b14d6b030a3fb92e3682cf2a9cc176e91681c1",
+    "assets/skin_portraits_v132/recovered_43.webp": "604b74c450a19ec40e5f4af317996902258f096de7978c2647678d4462536e03",
+    "assets/skin_portraits_v132/recovered_44.webp": "95b9b44dbf94bfa7dc46cf26af959da24f1796f7938f72d2ac655fc9f9af4129",
+    "assets/skin_portraits_v132/recovered_45.webp": "d23b0bd73ed5c1487a8dd462e8dbc47463ecd7a5bca6d0874158448005f47854",
+    "assets/skin_portraits_v132/recovered_46.webp": "6ee85511aa02720a538eba1e6af484119ce3f9657b21f4b68c64190c34052176",
+    "assets/skin_portraits_v132/recovered_47.webp": "dc377cf1f0ac2f93121fed6827aaf60ddc8466156139e670780de280dddfcaf8",
+    "assets/skin_portraits_v132/recovered_48.webp": "efa5d4de59b1f75bc6ac8e418746b113c22bfa626a25219597be6cc009636f48",
+    "assets/skin_portraits_v132/recovered_49.webp": "58f84575f7550bdfc563bcb7afb674e0a46b98a190fa3686f77cb9e57c7d0484",
+    "assets/skin_portraits_v132/recovered_50.webp": "6c8270e65992cdefaee023e003a3171eb3cf249ddc464032175cee567fcd66a3",
+    "assets/skin_portraits_v132/recovered_51.webp": "38387c0d0ce5a7f66903b62a00e3d94214bedca1fa1cfe751f0ae85816427914",
+    "assets/skin_portraits_v132/recovered_52.webp": "464e4dce8614eff94372f689d472ff65a08eaf7b2292504fefa10fce58ffe971",
+    "assets/skin_portraits_v132/recovered_53.webp": "637ded77fd16960a7cdd8c1a2d249af3ff2e663b8142cffb36d0d676924d2667",
+    "assets/skin_portraits_v132/recovered_54.webp": "b2e2ea9d606f927f6bc67cef1b64f2c5bfd887d6a01fccf13d5804d72e6e1a23",
+    "assets/skin_portraits_v132/source_000.webp": "260ca351c6971c68e060db79e6ccd5a25f2068ec4f255586ef4277d00f0614d9",
+    "assets/skin_portraits_v132/source_001.webp": "75ffbe13807f1e8c6144461cfaa148ede3d25e7abefa37c6af877ed97d308b19",
+    "assets/skin_portraits_v132/source_002.webp": "1218e9b1ce29b259d0ef84f295569c571317b7ffa4bb59456efd93b4547153cf",
+    "assets/skin_portraits_v132/source_004.webp": "715377062a197c7aec0859069fa51dad293f697bfc9b28f865e99849c491b581",
+    "assets/skin_portraits_v132/source_005.webp": "63c86cf096f6650ba848865d1addf2ae852c95590d60527adec1d991402f4c16",
+    "assets/skin_portraits_v132/source_007.webp": "42f6ed43394a37fc4493c1c3f75cbec722d83e961fce4fd244e4b4e0c6a92f63",
+    "assets/skin_portraits_v132/source_008.webp": "7f6e5f6dba0b75968f4c877c9368638475e1bd056f69754c7f251266d0fc4c23",
+    "assets/skin_portraits_v132/source_011.webp": "48019b66d41e3e315218473a4a8032a13038b7efe464ca3e883f5edf26dc2087",
+    "assets/skin_portraits_v132/source_012.webp": "011962a0912ed7c71a4135759ffa329989343a4796abef1950a6adba0bbf277a",
+    "assets/skin_portraits_v132/source_014.webp": "36f6166fbc9e387d04b90297c05dd0f0fc50e1827a137c10c8e560b9515d1653",
+    "assets/skin_portraits_v132/source_015.webp": "e30f6ebfb05b4f0086245d085dea6fc760240b2b92ffec87e312c48946473a0e",
+    "assets/skin_portraits_v132/source_017.webp": "24a7d2919d84bc9718ffeb07993bd5da2f35ce607148a978041f478515dbeb0d",
+    "assets/skin_portraits_v132/source_018.webp": "957a8ca29cea6c4debb7b00b310ee2c3f6efe9b10e0f478ef405e54fbe8c19f4",
+    "assets/skin_portraits_v132/source_020.webp": "4f8ede60f064f07b5252c3658a2cef8a4dc243332d36a654f9e78766cb35f8d5",
+    "assets/skin_portraits_v132/source_021.webp": "85a4076bc6c9c9229b6cba767382e0ebafd512531240e281353043966701780c",
+    "assets/skin_portraits_v132/source_022.webp": "9a4dd9518ddaf256ae1018d34e2b7e142c069fddefbc47664a0c44b849ad2122",
+    "assets/skin_portraits_v132/source_023.webp": "6af0f1a053c2445f28a62b950fd42ad09ba2f1b3148b43350ee5a134357a17f4",
+    "assets/skin_portraits_v132/source_026.webp": "b2bbfacbfabd0f392c6d719b10e3ede002ff68fa2b7c13a28c20b79ad7880119",
+    "assets/skin_portraits_v132/source_027.webp": "8e255362ae17893144d7ac2437ab510e70d2ccbf36277a4cf29df5d26fd4a1a1",
+    "assets/skin_portraits_v132/source_028.webp": "6ebfd289bcfbefbe729617d4823eb6b4923e894066800648c22c9b6379c103cd",
+    "assets/skin_portraits_v132/source_030.webp": "13d0ac21d0442446a253282743fed47e7c56407d9e28e9a5c30b80e2cc71d654",
+    "assets/skin_portraits_v132/source_031.webp": "fdc7c4216be4471fa426eca617d00af0ec4de0bb089e7de13ecc6dc58c0990f4",
+    "assets/skin_portraits_v132/source_033.webp": "166e3e47caed226396c9ad89206c3ea5f2e30854b36646aaae07436490c39128",
+    "assets/skin_portraits_v132/source_034.webp": "54d104b165e8bcab7aa824b7cb527502de60e6ca5b471a41cd56548d717854e0",
+    "assets/skin_portraits_v132/source_035.webp": "bc919bb1ee0da11beefb700b89c19e50d50cbc31bd54c066e5b7693db80821cb",
+    "assets/skin_portraits_v132/source_038.webp": "63ddf141bef91496d2884f26db841fdf6ffb4e576699d118ef5e8c7256ea3539",
+    "assets/skin_portraits_v132/source_039.webp": "14ac9dc3baf72e9bb98ca84a927d9e23327ae3751b7b09b6462b07a759217bad",
+    "assets/skin_portraits_v132/source_040.webp": "c2a8805788b7ffd9016d82edc4e3ac6560f5fe0458ee0c73ae27bc5bf381f111",
+    "assets/skin_portraits_v132/source_041.webp": "d065d50bbb0d72d3ef42faba3afacbd16f39ea38eb02164c78abc7e4b9568b5f",
+    "assets/skin_portraits_v132/source_042.webp": "6a17053fb220de67e305e66aa5bae4bf8017e1f45aac3ca503436aa198a79643",
+    "assets/skin_portraits_v132/source_043.webp": "687b64d8b0a948837bc4098519ab98436b8f48f8102b2340680421547aae385f",
+    "assets/skin_portraits_v132/source_044.webp": "1c7bc30398e501c3cd003756051533393bae2d499ec98fb3096ad67a36e19c89",
+    "assets/skin_portraits_v132/source_045.webp": "cf5a241a35d348c8dee37598c2c868186f983c6ebadcbeec3f600ae67c5453f7",
+    "assets/skin_portraits_v132/source_047.webp": "19a0afb815eb85650283b2e77dd5c4e4452f48f5d0af71c3e7b832276ae177fb",
+    "assets/skin_portraits_v132/source_048.webp": "4d780418c0774908e891e43966f93628d541f1f66a8d1851d684dd66da92be09",
+    "assets/skin_portraits_v132/source_049.webp": "b5d903e712cec05f02a7172672c353b2223e796d766909952c407e07b0edb774",
+    "assets/skin_portraits_v132/source_054.webp": "94fd8adc1ed98c5c2a649f9bca0608e1fb70c8494ace6b2c79aaca074bd58804",
+    "assets/skin_portraits_v132/source_055.webp": "23ab549c6eaac91b2ba0e587becad62223fd8c467c7fb944e18e76c7ea38e075",
+    "assets/skin_portraits_v132/source_056.webp": "9c71c53f5324a9fff8cf8a24448e671d613b5b87b81f833dac6b1b892444d4db",
+    "assets/skin_portraits_v132/source_057.webp": "7c60c63f6044f1fa86ea7b4b86c809eae57589c55e8c07a1edfb7667d3a9e5a5",
+    "assets/skin_portraits_v132/source_058.webp": "ff6409f073f5babc0fb6da12b0b9607c519bf5f62d1b37f39549f3e4d3288477",
+    "assets/skin_portraits_v132/source_060.webp": "992c736de464f60f372c7ea2d3314720e283c347e280aaa4bc1395f1879a3e01",
+    "assets/skin_portraits_v132/source_061.webp": "285edc73440f74ee3500603ff8fb42774548d60b3fccce0fdc44bc752d0ba6c1",
+    "assets/skin_portraits_v132/source_063.webp": "287657a88cb4af655f720015817415fd4ad4abab3b66e75bb5d51e036f4d3330",
+    "assets/skin_portraits_v132/source_069.webp": "bacf272828fbb48f3504a3f722dba8dffc6469006b60e0f1bb087e3418dcf780",
+    "assets/skin_portraits_v132/source_070.webp": "ed6d6f6397d78666bfb9623d2eeb3ca0ca566602a79134755b9a85abb29ed9ae",
+    "assets/skin_portraits_v132/source_078.webp": "bf273052b3ff89882ff1e1e9d9a60723f1f1402a457eaec1ed4e6b21a29b2e21",
+    "assets/skin_portraits_v132/source_087.webp": "57509a23f41ab9bd0c62770205a8404a66f72b6f873a8c761d7c07a2a048d242",
+    "assets/skin_portraits_v132/source_089.webp": "4050e6a96ebc1571fd24b7bdb3a4caed733f2700cbd1cdbeab6935db6fc8809a",
+    "assets/skin_portraits_v132/source_115.webp": "d3f519c03eb479dd816fe8b5225e4beea433bdbc671a8c395fb2b83799a0dc0b",
+    "assets/skin_variants_v131.json": "3026627ec7a8eb064e9c77f2d8c9d80246103af15f4db617ad55bfa8274bf0c4",
+    "res/drawable-nodpi/historical_atletico.webp": "dc0ca903b3819fc432065ba65dcb8e4389b9bf066e5cd63f44b29936fe8f194c",
+    "res/drawable-nodpi/historical_bayern.webp": "934518c3dcc75d1d6f52063e8174986d5d5b4c583f1b515046cdb821ea850473",
+    "res/drawable-nodpi/historical_f1_alpine.webp": "e7853df68c3131ceac825cc8798104a277bed891cdf111592e3febe5235a6fad",
+    "res/drawable-nodpi/historical_f1_aston_martin.webp": "2a534634a4923080dbe49134e48baf8f877a0f185c92bc5e2300fd26b0b27a24",
+    "res/drawable-nodpi/historical_f1_audi.webp": "2d8c5cf4d62f288f130d78428b7baa45dfb87bfc19bafafa5b731368eb75af74",
+    "res/drawable-nodpi/historical_f1_mclaren.webp": "bc3bfa5293ed65dfb4bb78bacc12d0a82b060be8d1ff0356e6d7624ee4e7dcbd",
+    "res/drawable-nodpi/historical_f1_racing_bulls.webp": "85e293f9d40522b1f50c548fb965d29e3672e6a5272c618b6334f2f71fade800",
+    "res/drawable-nodpi/historical_f1_williams.webp": "b27a4878d6551f475ae20e9f06cf1737703cb28a413a1e2910dfbb6f8032e54d",
+    "res/drawable-nodpi/historical_inter.webp": "0db12afc685cdf16dc17d496e0343b35639efab7e4ec3010ef97f4c2ec90e543",
+    "res/drawable-nodpi/historical_juventus.webp": "58d2d7ba83204c305a8e760991c17dd3609dba064b8e2104857f2dede9404d43",
+    "res/drawable-nodpi/historical_man_city.webp": "b5ccfe4e9bdc195e1b13e95408770e8499297ae9f1da56da6767771af3e4d0b6",
+    "res/drawable-nodpi/historical_nba_atlanta_hawks.webp": "ef23ea080e7f1ee689d345dd1f37a3f617c9c0557d84b16e5964a1bb02e5de70",
+    "res/drawable-nodpi/historical_nba_brooklyn_nets.webp": "73fd2357a55ebf1930a767a79c351bdb50e037b4ea43fbc206fe15f2806aba75",
+    "res/drawable-nodpi/historical_nba_charlotte_hornets.webp": "2850e84d7762315ff8b3d98ddae1a5aaa48f3ef59792e70942c5add37111fbc9",
+    "res/drawable-nodpi/historical_nba_cleveland_cavaliers.webp": "b28a17aac3492ebe04bacd415dba0369c28b26cacb577d6104e412b6b2ee5beb",
+    "res/drawable-nodpi/historical_nba_dallas_mavericks.webp": "d9b52f388b436dcc5b2871f3cefc18fdc7e48049e48cd4c3e473aba68eaa9726",
+    "res/drawable-nodpi/historical_nba_denver_nuggets.webp": "76bc9b37c7c5ae14380262542de668cae2c971249eb3e8043a2623cb8e07bcf6",
+    "res/drawable-nodpi/historical_nba_houston_rockets.webp": "4e74cd9aa6c2e92dc54c4f2b087f1b65c940553b4887c522294a527ea40e02d8",
+    "res/drawable-nodpi/historical_nba_indiana_pacers.webp": "abad2cb5c0cef71164bdcd6a0081d8a0329c324f20f865091efe1864c1d6e16f",
+    "res/drawable-nodpi/historical_nba_los_angeles_clippers.webp": "d22663479ffd0ec6fca8214e63c0ad0404444983e4497cab31f05a478a8abeb9",
+    "res/drawable-nodpi/historical_nba_milwaukee_bucks.webp": "1abb108e71fde821f73fa8a118918f20a37387c43d0e1a773e3c750a94f17baa",
+    "res/drawable-nodpi/historical_nba_minnesota_timberwolves.webp": "968352624ac3c987d4de7c9c635bece0c3d06593ee58036399232ec249aac42d",
+    "res/drawable-nodpi/historical_nba_new_orleans_pelicans.webp": "e91c1443036947f5f2b9c5d7182ae28b74863ceca07c7171d11fc963dcfbbdb5",
+    "res/drawable-nodpi/historical_nba_oklahoma_city_thunder.webp": "12702edbd8d789b7fd4ecfb7f3a0254b6859146dede453aab1426282ef55d921",
+    "res/drawable-nodpi/historical_nba_phoenix_suns.webp": "c315473f631fa34098b7ad5bb7467134b6f8416abdf55c7c9fa8ef7d95233e89",
+    "res/drawable-nodpi/historical_nba_portland_trail_blazers.webp": "7429e1e6cd573d91d06a6c9b1c4622cac6546da2de1da6d5ade815ac55f776bd",
+    "res/drawable-nodpi/historical_nba_sacramento_kings.webp": "a01f5ce804a01f531167c62d8c9bc90121f0a8bcf8d6b46a94912bd514702658",
+    "res/drawable-nodpi/historical_nba_san_antonio_spurs.webp": "35fde4b0e94bc8737d2a289a246870ebe36ee240cba9ac1054aae5fc04b8d46e",
+    "res/drawable-nodpi/historical_nba_utah_jazz.webp": "7083acebe1bf9cf72a3a08bbf5a7fc733fc648c3ba59b66f089c42b24cf2909f",
+    "res/drawable-nodpi/historical_nfl_cincinnati_bengals.webp": "324e2603fabb32257bfe07b3a84dbcc3ff6ebfe6b62f47b0487842fb28a72928",
+    "res/drawable-nodpi/historical_nfl_detroit_lions.webp": "5e12f45b8175a7cd79c00e8110f2aa6271a9f11adeda565a711abf81d85a883c",
+    "res/drawable-nodpi/historical_nfl_jacksonville_jaguars.webp": "a53e8560c52de4722bf4f36e45eb28a9d5d6ad82a72654ef32c8188b37fbb0d6",
+    "res/drawable-nodpi/historical_nfl_los_angeles_rams.webp": "8efa67c972b92729f29eb7170fedaf672e8b041275eea0e9c5b68f198f9605c7",
+    "res/drawable-nodpi/historical_nfl_miami_dolphins.webp": "4706c859e227c1896405275d2265d82adfce44a5a171bf3cfce3477ce75fa0ce",
+    "res/drawable-nodpi/historical_nfl_new_york_jets.webp": "d73f77e11c598589678e6671f4ed7794735b9802c1a921087a6a74e0a4a4d1b3",
+    "res/drawable-nodpi/historical_nfl_tampa_bay_buccaneers.webp": "cf6dd1032af54fdbf96e211696b7bbb99e915f5b868dc8e57481dae149d2daf3",
+    "res/drawable-nodpi/historical_roma.webp": "64f76d53882e89122a13e0ca7616cc8816e12f0ddb9a7cf369204afd0ed14b4e"
+  },
+  "imageSizes": {
+    "skin_portraits_v132/recovered_54.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_51.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_53.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_52.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_50.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_49.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_48.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_47.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_46.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_45.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_44.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_43.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_42.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_41.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_39.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_40.webp": [
+      1280,
+      503
+    ],
+    "skin_portraits_v132/recovered_08.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_21.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_20.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_19.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_17.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_18.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_29.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_27.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_26.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_24.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_23.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_25.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_15.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_10.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_12.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_14.webp": [
+      1280,
+      669
+    ],
+    "skin_portraits_v132/recovered_04.webp": [
+      1280,
+      520
+    ],
+    "skin_portraits_v132/recovered_13.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_22.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_07.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_09.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_28.webp": [
+      1280,
+      469
+    ],
+    "skin_portraits_v132/recovered_38.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_37.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_33.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_06.webp": [
+      1280,
+      999
+    ],
+    "skin_portraits_v132/recovered_32.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_34.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_36.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_31.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_00.webp": [
+      1280,
+      999
+    ],
+    "skin_portraits_v132/recovered_01.webp": [
+      1280,
+      999
+    ],
+    "skin_portraits_v132/recovered_03.webp": [
+      1280,
+      999
+    ],
+    "skin_portraits_v132/recovered_05.webp": [
+      1280,
+      999
+    ],
+    "skin_portraits_v132/recovered_30.webp": [
+      1280,
+      1005
+    ],
+    "skin_portraits_v132/recovered_35.webp": [
+      1280,
+      1006
+    ],
+    "skin_portraits_v132/recovered_02.webp": [
+      1280,
+      999
+    ],
+    "skin_portraits_v132/original_juventus__legends.webp": [
+      1280,
+      853
+    ],
+    "skin_portraits_v132/original_f1_ferrari__players.webp": [
+      1280,
+      853
+    ],
+    "skin_portraits_v132/original_nba_los_angeles_lakers__legends.webp": [
+      1280,
+      853
+    ],
+    "skin_portraits_v132/source_000.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_001.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_002.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_004.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_005.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_007.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_008.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_011.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_012.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_014.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_015.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_017.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_018.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_020.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_021.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_022.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_023.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_026.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_027.webp": [
+      500,
+      499
+    ],
+    "skin_portraits_v132/source_028.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_030.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_031.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_033.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_034.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_035.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_038.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_039.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_040.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_041.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_042.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_043.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_044.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_045.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_047.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_048.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_049.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_054.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_055.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_056.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_057.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_058.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_060.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_061.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_063.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_069.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_070.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_078.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_087.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_089.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/source_115.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/corrected_00.webp": [
+      1280,
+      853
+    ],
+    "skin_portraits_v132/corrected_02.webp": [
+      1280,
+      853
+    ],
+    "skin_portraits_v132/corrected_03.webp": [
+      1280,
+      853
+    ],
+    "skin_portraits_v132/corrected_04.webp": [
+      1280,
+      853
+    ],
+    "skin_portraits_v132/corrected_05.webp": [
+      1280,
+      853
+    ],
+    "skin_portraits_v132/corrected_06.webp": [
+      1280,
+      853
+    ],
+    "skin_portraits_v132/corrected_07.webp": [
+      1280,
+      853
+    ],
+    "skin_portraits_v132/corrected_08.webp": [
+      1280,
+      853
+    ],
+    "skin_portraits_v132/corrected_09.webp": [
+      1280,
+      853
+    ],
+    "skin_portraits_v132/authentic_kenan_yildiz.webp": [
+      768,
+      768
+    ],
+    "skin_portraits_v132/authentic_gleison_bremer.webp": [
+      768,
+      768
+    ],
+    "skin_portraits_v132/authentic_barella_inter.webp": [
+      768,
+      768
+    ],
+    "skin_portraits_v132/authentic_barella_italy.webp": [
+      768,
+      768
+    ],
+    "skin_portraits_v132/authentic_ronaldinho_barcelona.webp": [
+      768,
+      942
+    ],
+    "skin_portraits_v132/authentic_zidane_real.webp": [
+      739,
+      1024
+    ],
+    "skin_portraits_v132/authentic_arda_guler.webp": [
+      364,
+      1024
+    ],
+    "skin_portraits_v132/authentic_beckham_england.webp": [
+      768,
+      890
+    ],
+    "skin_portraits_v132/authentic_schweinsteiger_germany.webp": [
+      341,
+      1024
+    ],
+    "skin_portraits_v132/authentic_icardi_galatasaray.webp": [
+      768,
+      808
+    ],
+    "skin_portraits_v132/authentic_roberto_fenerbahce.webp": [
+      768,
+      1005
+    ],
+    "skin_portraits_v132/authentic_visca_basaksehir.webp": [
+      603,
+      1024
+    ],
+    "skin_portraits_v132/authentic_mbappe_france.webp": [
+      748,
+      1024
+    ],
+    "skin_portraits_v132/authentic_messi_argentina.webp": [
+      663,
+      1024
+    ],
+    "skin_portraits_v132/authentic_hamsik_napoli.webp": [
+      683,
+      1024
+    ],
+    "skin_portraits_v132/authentic_ronaldo_real.webp": [
+      671,
+      1024
+    ],
+    "skin_portraits_v132/authentic_suker_croatia.webp": [
+      768,
+      955
+    ],
+    "skin_portraits_v132/authentic_godin_atletico.webp": [
+      768,
+      772
+    ],
+    "skin_portraits_v132/authentic_kanoute_sevilla.webp": [
+      491,
+      1024
+    ],
+    "skin_portraits_v132/authentic_hakimi_morocco.webp": [
+      636,
+      1024
+    ],
+    "skin_portraits_v132/authentic_messi_barcelona.webp": [
+      593,
+      1024
+    ],
+    "skin_portraits_v132/authentic_poulsen_leipzig.webp": [
+      768,
+      953
+    ],
+    "skin_portraits_v132/authentic_original_046.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/authentic_original_050.webp": [
+      500,
+      500
+    ],
+    "skin_portraits_v132/corrected_eusebio_portugal.webp": [
+      768,
+      1019
+    ]
+  },
+  "storage": "git_assets"
+}

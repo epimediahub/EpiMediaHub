@@ -1,0 +1,77 @@
+# EpiMediaHubApp.kt
+51: mutableStateOf(SetupCodeProvisioning.sessionToken(context.applicationContext) != null)
+60: val pairedNow = SetupCodeProvisioning.sessionToken(context.applicationContext) != null
+158: deviceId = de.epimediahub.app.data.V120LicenseManager.deviceId(context.applicationContext),
+196: Screen.Settings -> de.epimediahub.app.vpn.V141VpnSettingsHost(context, u.active?.id?.toString(), accent) { SettingsScreen(vm, accent) }
+197: Screen.ParentalSettings -> V128ParentalSettingsScreen(vm, accent)
+198: Screen.CategorySettings -> V101CategorySettingsScreen(vm, accent, isTv)
+# data/DashboardSyncWorker.kt
+22: if (SetupCodeProvisioning.sessionToken(applicationContext).isNullOrBlank()) {
+38: if (SetupCodeProvisioning.sessionToken(app).isNullOrBlank()) return
+# data/SetupCodeProvisioning.kt
+49: const val PRODUCTION_BASE_URL = "https://api.epimediahub.com"
+53: private const val KEY_DEVICE_ID = "stable_device_id"
+67: fun deviceId(context: Context): String {
+69: prefs.getString(KEY_DEVICE_ID, null)?.takeIf { it.isNotBlank() }?.let { return it }
+71: prefs.edit().putString(KEY_DEVICE_ID, generated).commit()
+84: sessionToken: String? = null
+96: if (!sessionToken.isNullOrBlank()) {
+97: setRequestProperty("Authorization", "Bearer $sessionToken")
+121: .put("device_id", deviceId(context))
+195: .put("device_id", deviceId(context))
+287: fun sessionToken(context: Context): String? =
+288: savedPayload(context)?.optString("session_token")?.takeIf { it.isNotBlank() }
+312: val token = sessionToken(context)
+319: conn = connection("$base/v1/device/config?version=$versionQuery", "GET", token)
+501: conn = connection(base.trimEnd('/') + "/v1/device/sync-result", "POST", token)
+# data/V116SkipRepository.kt
+58: private fun tokenScope(): String = SetupCodeProvisioning.sessionToken(context)?.let(V116SkipKeys::hash).orEmpty()
+64: if (authenticated && SetupCodeProvisioning.sessionToken(context).isNullOrBlank()) return@withContext null
+68: if (authenticated) setRequestProperty("Authorization", "Bearer ${SetupCodeProvisioning.sessionToken(context)}")
+121: playlistId(item) > 0 && !SetupCodeProvisioning.sessionToken(context).isNullOrBlank()
+143: if (SetupCodeProvisioning.sessionToken(context).isNullOrBlank()) return
+205: if (SetupCodeProvisioning.sessionToken(context).isNullOrBlank()) return "Auf diesem Gerät gespeichert · Gerät für die zentrale Nutzung koppeln"
+# data/V120LicenseManager.kt
+24: private const val API_URL = "https://api.epimediahub.com/v1/license/status"
+35: fun trialKey(context: Context): String {
+39: else "install:${SetupCodeProvisioning.deviceId(context)}"
+43: fun deviceId(context: Context): String = SetupCodeProvisioning.deviceId(context)
+58: .put("device_id", deviceId(context))
+59: .put("trial_key", trialKey(context))
+# radio/RadioPlayback.kt
+19: import androidx.media3.session.SessionToken
+125: SessionToken(context, ComponentName(context, RadioPlaybackService::class.java))).buildAsync()
+# ui/Screens.kt
+517: fun SettingsScreen(vm: MainViewModel, accent: Color) {
+# ui/V047WebAdmin.kt
+31: var connected by remember { mutableStateOf(SetupCodeProvisioning.sessionToken(context) != null) }
+120: "Geräte-ID · " + SetupCodeProvisioning.deviceId(context).takeLast(12).uppercase(),
+# ui/V078DashboardPairingGate.kt
+65: if (ticket == null && SetupCodeProvisioning.sessionToken(context.applicationContext) == null) {
+# ui/V101CategorySettings.kt
+15: fun V101CategorySettingsScreen(
+# ui/V120LicenseGate.kt
+51: deviceId: String,
+97: "Geräte-ID · " + deviceId.takeLast(12).uppercase(),
+# ui/V128ParentalUi.kt
+146: fun V128ParentalSettingsScreen(vm: MainViewModel, accent: Color) {
+# vpn/V134VpnRoutingPolicy.kt
+18: data class Entitlement(val deviceId: String, val expiresAtEpochMillis: Long, val enabled: Boolean)
+34: selection: Selection, currentDeviceId: String, nowEpochMillis: Long,
+46: if (currentDeviceId.isBlank() || entitlement.deviceId != currentDeviceId)
+# vpn/V141VpnSettings.kt
+43: V141VpnSettingsScreen(context, playlistId, accent, onBack = { open = false })
+53: text = "Geräte-ID: " + V142VpnAutoProvision.registeredDeviceId(context),
+101: private fun V141VpnSettingsScreen(
+117: val stableDeviceId = V142VpnAutoProvision.registeredDeviceId(context)
+118: LaunchedEffect(stableDeviceId) {
+173: Text("Deine feste Geräte-ID: $stableDeviceId",
+# vpn/V142VpnAutoProvision.kt
+16: private const val ORIGIN = "https://api.epimediahub.com"
+18: data class Status(val deviceId: String, val status: String, val enabled: Boolean,
+23: fun registeredDeviceId(context: Context): String = SetupCodeProvisioning.deviceId(context)
+26: val token = SetupCodeProvisioning.sessionToken(context)
+72: val deviceId = registeredDeviceId(context)
+73: check(data.optString("device_id") == deviceId) { "VPN-Geräte-ID stimmt nicht überein" }
+74: val status = Status(deviceId, data.optString("status", "UNKNOWN"),
+105: .put("device_id", status.deviceId)

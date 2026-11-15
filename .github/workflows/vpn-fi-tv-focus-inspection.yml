@@ -1,0 +1,35 @@
+name: Inspect Fire TV player restore anchors (isolated, read-only)
+on:
+  push:
+    branches: [feature/vpn-finland-foundation]
+    paths: ['.github/workflows/vpn-fi-tv-focus-inspection.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect real V133 app state and player restart methods
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat android/source_parts/source_* | base64 -d > /tmp/source.tar.gz
+          mkdir -p /tmp/src
+          tar -xzf /tmp/source.tar.gz -C /tmp/src
+          PROJECT_ROOT="$(find /tmp/src -maxdepth 5 -name settings.gradle.kts -printf '%h\n' | head -1)"
+          test -n "$PROJECT_ROOT"
+          export PROJECT_ROOT
+          bash build_tools/install_android_v1033_source.sh
+          JAVA="$PROJECT_ROOT/app/src/main/java/de/epimediahub/app"
+          echo '=== MAIN MODEL PLAYBACK METHODS ==='
+          grep -nE -C 8 'fun (play|open|select|navigate|set|reload|start)|data class .*Ui|enum class Screen|LiveTv|LiveTV|Player|player|selectedChannel|currentChannel|activeChannel|isPlaying|playing' "$JAVA/MainViewModel.kt" | head -540 || true
+          echo '=== EPI APP PLAYER HOST ==='
+          grep -nE -C 10 'Screen\.Player|Screen\.Live|PlayerScreen|selected|channel|Player\(|Screen\.Play|LiveTv|V134' "$JAVA/EpiMediaHubApp.kt" | head -380 || true
+          echo '=== PLAYER SOURCE CANDIDATES ==='
+          find "$JAVA" -name '*Player*.kt' -o -name '*LiveTv*.kt' | head -45
+          echo '=== PLAYER SCREEN START ==='
+          P="$(find "$JAVA" -name PlayerScreen.kt | head -1)"
+          if [ -f "$P" ]; then grep -nE -C 12 'fun PlayerScreen|LaunchedEffect|remember\(|DisposableEffect|onDispose|ExoPlayer|mediaItem|prepare\(|playWhenReady|setMediaItem|play\(' "$P" | head -340; fi

@@ -1,0 +1,52 @@
+name: Verify v1.0.32 source reconstruction
+on:
+  push:
+    branches: [android-v1.0.32-skin-polish]
+    paths: ['.github/workflows/android-v1032-source-check.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct pinned project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .source-check
+          cat android/source_parts/source_* | base64 --decode > .source-check/source.tar.gz
+          test "$(sha256sum .source-check/source.tar.gz | cut -d' ' -f1)" = "192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          tar -xzf .source-check/source.tar.gz -C .source-check
+          echo "PROJECT_ROOT=.source-check/EpiMediaHubAndroid" >> "$GITHUB_ENV"
+          cat > .source-check/EpiMediaHubAndroid/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > .source-check/EpiMediaHubAndroid/settings.gradle.kts <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+      - name: Verify existing source chain and new patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash build_tools/install_android_v1031_source.sh
+          python3 android/v1.0.32/patch_v132.py
+          grep -Fq 'versionName = "1.0.32"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'fun clearDeviceConfiguration' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/SetupCodeProvisioning.kt"
+          grep -Fq 'val expiry = v132RememberPlaylistExpiry' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V083Home.kt"
+          mkdir -p source-review
+          tar -czf source-review/v132-source-review.tar.gz -C "$PROJECT_ROOT" app/src/main/java app/src/test app/src/main/AndroidManifest.xml app/build.gradle.kts app/proguard-rules.pro build.gradle.kts settings.gradle.kts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-v1032-source-review
+          path: source-review/
+          if-no-files-found: error

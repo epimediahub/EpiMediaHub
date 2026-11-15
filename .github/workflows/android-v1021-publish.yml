@@ -1,0 +1,117 @@
+name: Publish verified Android v1.0.21 to the in-app updater
+
+on:
+  push:
+    branches: [android-v1.0.21-cinematic-playback]
+    paths:
+      - '.github/workflows/android-v1021-publish.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: epimediahub-android-rolling-updater
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-android-v1021:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require deployed license backend before updating clients
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error
+          base = "https://api.epimediahub.com/v1/license/"
+          req = urllib.request.Request(base + "capabilities", headers={"User-Agent": "EpiMediaHub-Release/1.0.21", "Cache-Control": "no-cache"})
+          try:
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  policy = json.load(response)
+              assert policy.get("licensing_ready") is True
+              assert policy.get("trial_days") == 7
+              assert policy.get("activation_credits") == 1
+              assert policy.get("retail_price_eur_cents") == 1000
+              assert policy.get("manual_reseller_prices") is True
+              probe = urllib.request.Request(base + "status", data=b"{}", headers={"Content-Type": "application/json", "User-Agent": "EpiMediaHub-Release/1.0.21", "Cache-Control": "no-cache"})
+              try:
+                  urllib.request.urlopen(probe, timeout=20)
+                  raise AssertionError("Invalid status request was unexpectedly accepted")
+              except urllib.error.HTTPError as error:
+                  assert error.code == 400, f"License status endpoint returned {error.code}"
+          except Exception as error:
+              raise SystemExit(f"Raspberry license backend is not ready; signed APK artifacts are preserved. Install the verified credit backend first, then rerun this publish job. {type(error).__name__}: {error}")
+          print("Live license backend and pricing policy verified")
+          PY
+      - name: Verify the source of the already signed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PYVERIFY'
+          import json, subprocess
+          prefix = 'repos/epimediahub/EpiMediaHub/actions/runs/37127176066'
+          def fetch(path):
+              return json.loads(subprocess.check_output(['gh', 'api', path], text=True))
+          run = fetch(prefix)
+          assert run['head_sha'] == '324b43c57ef3e255ec6f6819ca809813202bdcf1'
+          assert run['head_branch'] == 'android-v1.0.21-cinematic-playback'
+          jobs = fetch(prefix + '/jobs')['jobs']
+          assert any(j['name'] == 'build-android-v1021-release' and j['conclusion'] == 'success' for j in jobs)
+          artifacts = fetch(prefix + '/artifacts')['artifacts']
+          signed = [a for a in artifacts if a['name'] == 'EpiMediaHub-Android-v1.0.21-signed-test-release']
+          assert len(signed) == 1 and not signed[0]['expired']
+          assert signed[0]['id'] == 11275674034
+          assert signed[0]['digest'] == 'sha256:2c6bd869ad93321bc76f41c3426d4de9b629ae71e8030c0b64ed7e919979bbb7'
+          print('Verified signed release source and artifact digest')
+          PYVERIFY
+      - uses: actions/download-artifact@v4
+        with:
+          name: EpiMediaHub-Android-v1.0.21-signed-test-release
+          path: dist
+          run-id: 37127176066
+          github-token: ${{ github.token }}
+
+      - name: Verify the preserved APKs and updater manifest
+        run: |
+          python3 - <<'PYVERIFY'
+          import hashlib, json, shutil
+          from pathlib import Path
+          manifest = json.loads(Path('dist/android-latest.json').read_text())
+          assert manifest['version'] == '1.0.21' and manifest['versionCode'] == 1021
+          assert json.loads(Path('dist/latest.json').read_text()) == manifest
+          assert set(manifest['apks']) == {'arm64-v8a', 'armeabi-v7a', 'universal'}
+          for abi, entry in manifest['apks'].items():
+              filename = f'EpiMediaHub_Android_v1.0.21-{abi}.apk'
+              assert entry['url'] == 'https://download.epimediahub.com/android/' + filename
+              apk = Path('dist') / filename
+              assert apk.stat().st_size == entry['size']
+              assert hashlib.sha256(apk.read_bytes()).hexdigest() == entry['sha256']
+          shutil.copyfile('dist/EpiMediaHub_Android_v1.0.21-universal.apk', 'dist/EpiMediaHub_Android_v0.7.0-test.apk')
+          assert hashlib.sha256(Path('dist/EpiMediaHub_Android_v0.7.0-test.apk').read_bytes()).hexdigest() == manifest['apks']['universal']['sha256']
+          manifest['notes'] = 'Android 1.0.21: Neues englisches Startintro mit sanften Textpulsen, Herzschlag und cineastischem Logo-Klang. Film- und Serienplayer mit korrigierter Videofläche und automatischer TV-Bildratenanpassung. Bitte bisher ruckelnde Szenen auf euren Geräten erneut testen. TV-Option im Player-Menü: Bildrate an Film anpassen.'
+          for filename in ('android-latest.json', 'latest.json'):
+              (Path('dist') / filename).write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
+          sums = ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n' for p in sorted(Path('dist').glob('*.apk')))
+          Path('dist/SHA256SUMS.txt').write_text(sums)
+          print('All signed APK sizes, hashes and updater entries verified')
+          PYVERIFY
+      - name: Publish rolling updater prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v0.7.0-test"
+          TITLE="EpiMediaHub Android v1.0.21 Test"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TITLE" --notes-file android/release_notes/v1.0.21-rollout.md --prerelease --draft --target "${GITHUB_SHA}"
+          fi
+          for file in dist/*.apk dist/*.mp4 dist/SHA256SUMS.txt; do
+            timeout 15m gh release upload "$TAG" "$file" --clobber
+          done
+          timeout 15m gh release upload "$TAG" dist/android-latest.json dist/latest.json --clobber
+          gh release edit "$TAG" --title "$TITLE" --notes-file android/release_notes/v1.0.21-rollout.md --prerelease --draft=false
+

@@ -1,0 +1,65 @@
+name: v167 isolated direct-download test APK
+on:
+  push:
+    branches: [feature/v167-private-playback-vpn-qa]
+    paths:
+      - '.github/workflows/v167-downloader-test-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-isolated-test-apk:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: epimediahub/EpiMediaHub
+      QA_RUN: '38694984028'
+      QA_SHA: '0e5ae951fd9029ffb102061faddd9588b982ae6f'
+      ARTIFACT: EpiMediaHub-v167-private-epg-recovery-official-signed
+      TAG: v1.0.67-test-20261015
+      APK: EpiMediaHub-Android-v1.0.67-universal.apk
+    steps:
+      - name: Confirm exact signed QA run completed successfully
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(gh api "repos/$REPO/actions/runs/$QA_RUN" --jq '.head_sha+"|"+.status+"|"+.conclusion')"
+          test "$actual" = "$QA_SHA|completed|success" || {
+            echo "::error::Signed QA run commit or conclusion does not match"
+            exit 1
+          }
+          test "${{ github.repository }}" = "$REPO"
+      - name: Download already verified APK artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download "$QA_RUN" --repo "$REPO" --name "$ARTIFACT" --dir qa
+          cd qa
+          sha256sum --check SHA256SUMS.txt
+          test -s "$APK"
+          test "$(find . -maxdepth 1 -name '*.apk' -type f | wc -l)" -eq 3
+      - name: Publish isolated APK without modifying the public updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "::error::Isolated test release already exists; refusing to overwrite an asset"
+            exit 1
+          fi
+          gh release create "$TAG" "qa/$APK" \
+            --repo "$REPO" \
+            --target "$QA_SHA" \
+            --draft \
+            --prerelease \
+            --title "EpiMediaHub 1.0.67 - separate device test APK" \
+            --notes "Separate, manually installed test build only. No updates to latest.json, android-latest.json, official updater, customer rollouts or EpiScene. This prerelease's single APK is publicly downloadable via its URL; the build is not a production approval. Includes seamless video mode requests, grouped VOD history and guarded VPN network binding."
+          asset_size="$(gh release view "$TAG" --repo "$REPO" --json assets --jq ".assets[] | select(.name == \"$APK\") | .size")"
+          test -n "$asset_size"
+          test "$asset_size" -gt 20000000
+          gh release edit "$TAG" --repo "$REPO" --draft=false --prerelease
+          gh release view "$TAG" --repo "$REPO" --json isDraft,isPrerelease,assets --jq '{isDraft,isPrerelease,assets:[.assets[]|{name,size}]}'
+          echo "DIRECT_DOWNLOAD=https://github.com/$REPO/releases/download/$TAG/$APK" >> "$GITHUB_STEP_SUMMARY"

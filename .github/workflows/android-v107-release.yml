@@ -1,0 +1,249 @@
+name: Build signed EpiMediaHub Android v1.0.7 test release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [android-v1.0.7-dev]
+    paths:
+      - '.github/workflows/android-v107-release.yml'
+      - 'android/v1.0.7/**'
+      - 'build_tools/install_android_v107_source.sh'
+      - 'build_tools/prepare_smarttube_core_v100.sh'
+
+concurrency:
+  group: epimediahub-android-v107-release
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-android-v107-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    env:
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require permanent signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+
+      - name: Reconstruct project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* > .ci-android/source.b64
+          base64 --decode .ci-android/source.b64 > .ci-android/source.tar.gz
+          EXPECTED="192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          ACTUAL="$(sha256sum .ci-android/source.tar.gz | awk '{print $1}')"
+          test "$ACTUAL" = "$EXPECTED"
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+
+      - name: Pin Gradle toolchain
+        shell: bash
+        run: |
+          cat > "$PROJECT_ROOT/build.gradle.kts" <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24" apply false
+          }
+          EOF
+          cat > "$PROJECT_ROOT/settings.gradle.kts" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "EpiMediaHubAndroid"
+          include(":app")
+          EOF
+
+      - name: Install v1.0.7 source
+        run: bash build_tools/install_android_v107_source.sh
+
+      - name: Install permanent release signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/epimediahub-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias epimediahub >/dev/null
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_ROOT'])/'app/build.gradle.kts'
+          s=p.read_text()
+          anchor='    buildTypes {\n'
+          signing='''    signingConfigs {
+              create("release") {
+                  storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH"))
+                  storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                  keyAlias = "epimediahub"
+                  keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+              }
+          }
+
+          '''
+          if anchor not in s: raise SystemExit('buildTypes anchor missing')
+          s=s.replace(anchor, signing+anchor, 1)
+          release='        release {\n'
+          if release not in s: raise SystemExit('release build type missing')
+          s=s.replace(release, release+'            signingConfig = signingConfigs.getByName("release")\n', 1)
+          p.write_text(s)
+          PY
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build signed v1.0.7 APKs
+        shell: bash
+        run: |
+          cd "$PROJECT_ROOT"
+          gradle :app:assembleRelease --stacktrace --no-daemon
+
+      - name: Verify Android 1.0.7 release
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'versionName = "1.0.7"' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'versionCode = 1007' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'SmartTube-Core:' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeCore.kt"
+          grep -Fq '.filter { it.categoryId !in u.hiddenCategoryIds }' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          grep -Fq 'minSdk = 25' "$PROJECT_ROOT/app/build.gradle.kts"
+          grep -Fq 'https://download.epimediahub.com/android/latest.json' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/data/UpdateManager.kt"
+          grep -Fq 'internal object V100SmartTubeCore' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeCore.kt"
+          grep -Fq 'YouTubeServiceManager.instance()' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V100SmartTubeCore.kt"
+          grep -Fq 'V100BroadcasterLogo' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/ParityScreens.kt"
+          grep -Fq 'delay(4_000L)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V060CinematicHub.kt"
+          test -f "$PROJECT_ROOT/app/src/main/assets/licenses/SmartTube-MIT.txt"
+          grep -Fq 'V106SmartTubePlayer(' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V104SmartTubeShell.kt"
+          grep -Fq 'DefaultDataSource.Factory(context, http)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V106SmartTubePlayer.kt"
+          grep -Fq 'val playerResult = remember' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V106SmartTubePlayer.kt"
+          grep -Fq 'DashMediaSource.Factory(dataSource)' "$PROJECT_ROOT/app/src/main/java/de/epimediahub/app/ui/V106SmartTubePlayer.kt"
+
+          for APK in "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk"
+          do
+            test -s "$APK"
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > /tmp/apk-badging.txt
+            grep -F "versionCode='1007'" /tmp/apk-badging.txt
+            grep -F "versionName='1.0.7'" /tmp/apk-badging.txt
+            grep -F "sdkVersion:'25'" /tmp/apk-badging.txt
+            "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" dex packages --defined-only "$APK" > /tmp/media3-packages.txt
+            grep -F 'androidx.media3.exoplayer.dash.DashMediaSource$Factory' /tmp/media3-packages.txt
+            grep -F 'androidx.media3.exoplayer.hls.HlsMediaSource$Factory' /tmp/media3-packages.txt
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apk-signature.txt
+            CERT="$(grep -i 'certificate SHA-256 digest:' /tmp/apk-signature.txt | head -n1 | awk -F': ' '{print $2}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+            test "$CERT" = "7939E7DDCBABA56F03D5FB0833D8A580B7797C12C4CCE378CA086C46F1B36D8E"
+          done
+
+      - name: Prepare updater release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-arm64-v8a-release.apk" dist/EpiMediaHub_Android_v1.0.7-arm64-v8a.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-armeabi-v7a-release.apk" dist/EpiMediaHub_Android_v1.0.7-armeabi-v7a.apk
+          cp "$PROJECT_ROOT/app/build/outputs/apk/release/app-universal-release.apk" dist/EpiMediaHub_Android_v1.0.7-universal.apk
+          cp dist/EpiMediaHub_Android_v1.0.7-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+
+          SHA_ARM64="$(sha256sum dist/EpiMediaHub_Android_v1.0.7-arm64-v8a.apk | awk '{print $1}')"
+          SHA_ARMV7="$(sha256sum dist/EpiMediaHub_Android_v1.0.7-armeabi-v7a.apk | awk '{print $1}')"
+          SHA_UNIVERSAL="$(sha256sum dist/EpiMediaHub_Android_v1.0.7-universal.apk | awk '{print $1}')"
+          SIZE_ARM64="$(stat -c %s dist/EpiMediaHub_Android_v1.0.7-arm64-v8a.apk)"
+          SIZE_ARMV7="$(stat -c %s dist/EpiMediaHub_Android_v1.0.7-armeabi-v7a.apk)"
+          SIZE_UNIVERSAL="$(stat -c %s dist/EpiMediaHub_Android_v1.0.7-universal.apk)"
+
+          cat > dist/android-latest.json <<EOF
+          {
+            "version": "1.0.7",
+            "versionCode": 1007,
+            "notes": "Android 1.0.7 Test: fehlendes Media3-DASH-Modul ergänzt; DASH- und HLS-Quellen werden direkt erzeugt und ihre Klassen in allen APKs geprüft.",
+            "apks": {
+              "arm64-v8a": {
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v1.0.7-arm64-v8a.apk",
+                "sha256": "$SHA_ARM64",
+                "size": $SIZE_ARM64
+              },
+              "armeabi-v7a": {
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v1.0.7-armeabi-v7a.apk",
+                "sha256": "$SHA_ARMV7",
+                "size": $SIZE_ARMV7
+              },
+              "universal": {
+                "url": "https://download.epimediahub.com/android/EpiMediaHub_Android_v1.0.7-universal.apk",
+                "sha256": "$SHA_UNIVERSAL",
+                "size": $SIZE_UNIVERSAL
+              }
+            }
+          }
+          EOF
+
+          python3 - <<'PYVERIFY'
+          import hashlib, json, os, re
+          from pathlib import Path
+          build = (Path(os.environ['PROJECT_ROOT']) / 'app/build.gradle.kts').read_text()
+          manifest = json.loads(Path('dist/android-latest.json').read_text())
+          assert manifest['version'] == re.search(r'versionName = "([^"]+)"', build).group(1)
+          assert manifest['versionCode'] == int(re.search(r'versionCode = (\d+)', build).group(1))
+          for apk in manifest['apks'].values():
+              path = Path('dist') / apk['url'].rsplit('/', 1)[-1]
+              assert path.stat().st_size == apk['size']
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == apk['sha256']
+          print('Updater version, APK sizes and SHA-256 verified')
+          PYVERIFY
+
+          cp dist/android-latest.json dist/latest.json
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EpiMediaHub-Android-v1.0.7-signed-test-release
+          path: dist/
+          retention-days: 30
+
+      - name: Publish rolling updater prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v0.7.0-test"
+          TITLE="EpiMediaHub Android v1.0.7 Test"
+          NOTES="Android 1.0.7 Test: behebt die fehlende DashMediaSource-Factory beim SmartTube-Videostart; DASH-Modul ergänzt und fertige APKs auf DASH- und HLS-Klassen geprüft."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
+          else
+            gh release create "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease --target "${GITHUB_SHA}"
+          fi
+          for file in dist/*.apk dist/SHA256SUMS.txt; do
+            timeout 15m gh release upload "$TAG" "$file" --clobber
+          done
+          timeout 15m gh release upload "$TAG" dist/android-latest.json dist/latest.json --clobber
+

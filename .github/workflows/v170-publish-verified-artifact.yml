@@ -1,0 +1,118 @@
+name: v170 publish isolated Live + Cinema pilot from verified signed APKs
+on:
+  push:
+    branches: [feature/v170-live-auto-cadence]
+    paths:
+      - '.github/workflows/v170-publish-verified-artifact.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  verify-and-publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: epimediahub/EpiMediaHub
+      QA_RUN: '38731480686'
+      QA_JOB: '116410057439'
+      QA_SHA: '226e1ae442be65322e85da16309f7233082e5f8b'
+      ARTIFACT: EpiMediaHub-v170-private-epg-recovery-official-signed
+      TAG: v1.0.70-live-cinema-test-20261015
+      APK: EpiMediaHub-Android-v1.0.70-universal.apk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.QA_SHA }}
+
+      - name: Verify immutable signed QA and known obsolete static check
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "$REPO"
+          test "$(git rev-parse HEAD)" = "$QA_SHA"
+          gh api "repos/$REPO/actions/runs/$QA_RUN" > run.json
+          gh api "repos/$REPO/actions/jobs/$QA_JOB" > job.json
+          python3 - <<'PY'
+          import json,os
+          run=json.load(open('run.json'))
+          job=json.load(open('job.json'))
+          assert run['head_sha'] == os.environ['QA_SHA'], "QA revision mismatch"
+          assert run['status'] == 'completed'
+          assert job['id'] == int(os.environ['QA_JOB'])
+          assert job['run_id'] == int(os.environ['QA_RUN'])
+          steps={s['name']:s['conclusion'] for s in job['steps']}
+          for name in [
+              'Apply v164 retained playback and restore v166 EPG',
+              'Check official v1.0.66 Kotlin compilation',
+              'Run complete Android unit tests',
+              'Assemble official signed APKs',
+              'Verify official package and signing identity'
+          ]:
+              assert steps.get(name)=='success', (name,steps.get(name))
+          # The old QA gate still searches for the deliberately REMOVED v169
+          # guard 'if (!television || !cinemaVod || !enabled)'.
+          name='Verify v170 Live 50Hz and VOD 23.976Hz policies with existing recovery and VPN'
+          assert steps.get(name)=='failure', (name,steps.get(name))
+          assert steps.get('Verify exact approved intro through Android resource IDs in every signed APK')=='skipped'
+          assert steps.get('Publish isolated Downloader test APK after all compile, test and signing gates')=='skipped'
+          print("Signed compilation + full unit suite verified; obsolete source grep handled separately.")
+          PY
+          grep -Fq "V170LiveCadencePolicy.matchingMode" android/v1.0.70/patch_v170.py
+          grep -Fq "cinemaVod = true" android/v1.0.69/patch_v169.py
+          grep -Fq "private const val LIVE_FRAME_RATE_KEY" android/v1.0.70/patch_v170.py
+          grep -Fq "europeanLive25Uses50Not25" android/v1.0.70/V170LiveCadencePolicyTest.kt
+          grep -Fq "fiftyFpsLiveStaysAtFifty" android/v1.0.70/V170LiveCadencePolicyTest.kt
+          grep -Fq "if (!cinemaVod) {" android/v1.0.70/patch_v170.py
+
+      - name: Recover exact signed artifacts and check SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa
+          gh run download "$QA_RUN" --repo "$REPO" --name "$ARTIFACT" --dir qa
+          (cd qa && sha256sum --check SHA256SUMS.txt)
+          test "$(find qa -maxdepth 1 -name 'EpiMediaHub-Android-v1.0.70-*.apk' -type f | wc -l)" -eq 3
+          test -s "qa/$APK"
+
+      - name: Compare intro to previously approved signed v1.0.69 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reference
+          gh release download v1.0.69-cinema-test-20261015 --repo "$REPO" \
+            --pattern EpiMediaHub-Android-v1.0.69-universal.apk --dir reference
+          python3 - <<'PY'
+          import hashlib,zipfile
+          from pathlib import Path
+          baseline=Path('reference/EpiMediaHub-Android-v1.0.69-universal.apk')
+          with zipfile.ZipFile(baseline) as z:
+              expected=hashlib.sha256(z.read('res/0I.mp4')).digest()
+              size=z.getinfo('res/0I.mp4').file_size
+          apks=sorted(Path('qa').glob('EpiMediaHub-Android-v1.0.70-*.apk'))
+          assert len(apks)==3
+          for apk in apks:
+              with zipfile.ZipFile(apk) as z:
+                  assert z.getinfo('res/0I.mp4').file_size==size
+                  actual=hashlib.sha256(z.read('res/0I.mp4')).digest()
+                  assert actual==expected,(apk.name,'intro differs from signed approved baseline')
+              print(apk.name,'approved v169 intro unchanged')
+          PY
+
+      - name: Publish isolated signed test APK (never touch in-app updater)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "::error::Test release already exists; refusing to overwrite"
+            exit 1
+          fi
+          gh release create "$TAG" "qa/$APK" \
+            --repo "$REPO" \
+            --target "$QA_SHA" \
+            --prerelease \
+            --title "EpiMediaHub 1.0.70 - Live + Cinema auto-frame-rate PILOT" \
+            --notes "Signed isolated Fire TV pilot: 25/50 fps Live TV -> 50 Hz; 29.97/30 fps -> 59.94/60 Hz; movies/series retain 23.976/24 Hz Cinema output. Live requests supported modes at the existing output resolution. Manual device testing required before in-app updater rollout; no change to TV TruMotion, HDMI ARC, VPN, EPG or public updater. Compile, full unit suite and signature QA passed in run $QA_RUN; the QA workflow stopped at an obsolete pre-v170 static assertion, independently verified here."
+          gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name'
+          echo "Pilot APK: https://github.com/$REPO/releases/download/$TAG/$APK" >> "$GITHUB_STEP_SUMMARY"

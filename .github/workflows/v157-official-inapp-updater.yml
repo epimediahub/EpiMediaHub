@@ -1,0 +1,161 @@
+name: Publish official EpiMediaHub v1.0.57 unified Android TV / Fire TV release
+
+on:
+  push:
+    branches: [release/v157-unified-playback-recent]
+    paths: ['.github/workflows/v157-official-inapp-updater.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: epimediahub-android-rolling-updater
+  cancel-in-progress: false
+
+jobs:
+  publish-tested-apks:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: epimediahub/EpiMediaHub
+      TAG: v0.7.0-test
+      QA_SHA: ${{ github.sha }}
+      QA_ARTIFACT: EpiMediaHub-Official-v1.0.57-unified-signed-qa
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gate publication on two signed-source-matching regression QA results
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This release run and BOTH source/APK QA runs MUST refer to the exact
+          # same immutable commit. Otherwise never advance the in-app updater.
+          BRANCH="release/v157-unified-playback-recent"
+          test "$GITHUB_REF_NAME" = "$BRANCH"
+          test "$(git rev-parse HEAD)" = "$QA_SHA"
+          for workflow in android-v157-official-source-qa.yml android-v157-official-qa.yml; do
+            finished=0
+            for attempt in $(seq 1 110); do
+              if ! gh api "repos/$REPO/actions/workflows/$workflow/runs?branch=$BRANCH&per_page=50" > matching-runs.json; then
+                sleep 20
+                continue
+              fi
+              run=$(jq -r --arg sha "$QA_SHA" '[.workflow_runs[] | select(.head_sha == $sha and .event == "push")][0].id // empty' matching-runs.json)
+              if [ -z "$run" ]; then
+                sleep 20
+                continue
+              fi
+              gh api "repos/$REPO/actions/runs/$run" > verified-run.json
+              jq -e --arg sha "$QA_SHA" --arg branch "$BRANCH" '.head_sha == $sha and .head_branch == $branch' verified-run.json > /dev/null
+              if jq -e '.status == "completed" and .conclusion == "success"' verified-run.json >/dev/null; then
+                if [ "$workflow" = "android-v157-official-qa.yml" ]; then
+                  echo "QA_RUN=$run" >> "$GITHUB_ENV"
+                fi
+                finished=1
+                break
+              fi
+              if jq -e '.status == "completed" and .conclusion != "success"' verified-run.json >/dev/null; then
+                echo "::error::$workflow failed; public updater preserved at previous version"
+                exit 1
+              fi
+              sleep 20
+            done
+            test "$finished" -eq 1 || { echo "::error::QA gate timed out, updater unchanged"; exit 1; }
+          done
+          echo 'v1.0.57 source and signed APK tests passed on identical commit.'
+
+      - name: Download only the artifact from verified official APK build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa dist
+          gh run download "$QA_RUN" --repo "$REPO" --name "$QA_ARTIFACT" --dir qa
+          (cd qa && sha256sum -c SHA256SUMS.txt)
+          for pair in \
+            'arm64-v8a:ARM64' 'armeabi-v7a:ARMv7' 'universal:Universal'; do
+            ABI="${pair%%:*}"
+            LABEL="${pair#*:}"
+            SOURCE="qa/EpiMediaHub-Official-v1.0.57-$LABEL-PILOT.apk"
+            TARGET="dist/EpiMediaHub_Android_v1.0.57-$ABI.apk"
+            test -s "$SOURCE"
+            test "$(stat -c %s "$SOURCE")" -gt 10000000
+            cp "$SOURCE" "$TARGET"
+          done
+          cp dist/EpiMediaHub_Android_v1.0.57-universal.apk dist/EpiMediaHub_Android_v0.7.0-test.apk
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+
+      - name: Refuse downgrades; prepare exact hashes and new updater manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$REPO" >/dev/null
+          mkdir -p previous
+          gh release download "$TAG" --repo "$REPO" --pattern latest.json --dir previous
+          python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          previous=json.loads(Path('previous/latest.json').read_text())
+          existing=int(previous.get('versionCode',0))
+          if existing >= 1057:
+              raise SystemExit(f'Updater already at versionCode {existing}; refusing non-monotonic replacement.')
+          expected = {
+              'arm64-v8a': 'EpiMediaHub_Android_v1.0.57-arm64-v8a.apk',
+              'armeabi-v7a': 'EpiMediaHub_Android_v1.0.57-armeabi-v7a.apk',
+              'universal': 'EpiMediaHub_Android_v1.0.57-universal.apk'
+          }
+          apks={}
+          for abi, filename in expected.items():
+              path=Path('dist')/filename
+              assert path.stat().st_size > 10_000_000
+              apks[abi]={
+                  'url': 'https://download.epimediahub.com/android/'+filename,
+                  'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                  'size': path.stat().st_size
+              }
+          update={
+              'version':'1.0.57',
+              'versionCode':1057,
+              'notes':'v1.0.57: Verbesserte Live-TV-Streamauflösung mit vorbereiteten Anbieteradressen und schnellem Senderwechsel auf Fire TV und Android TV; Filme und Serien zeigen Zuletzt hinzugefügt. 4K IPTV bleibt DIRECT, VPN-Playlists bleiben geschützt. Bestehende Kunden- und Playlist-Daten bleiben erhalten.',
+              'apks':apks
+          }
+          for filename in ('latest.json','android-latest.json'):
+              (Path('dist')/filename).write_text(json.dumps(update,ensure_ascii=False,indent=2)+'\n')
+          print('Publication validated; existing code:',existing,'new: 1057')
+          PY
+
+      - name: Upload three verified APK variants before publishing manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for asset in dist/*.apk; do
+            timeout 20m gh release upload "$TAG" "$asset" --repo "$REPO" --clobber
+          done
+          timeout 5m gh release upload "$TAG" dist/SHA256SUMS.txt --repo "$REPO" --clobber
+          gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' > observed-assets.txt
+          for filename in \
+            EpiMediaHub_Android_v1.0.57-arm64-v8a.apk \
+            EpiMediaHub_Android_v1.0.57-armeabi-v7a.apk \
+            EpiMediaHub_Android_v1.0.57-universal.apk; do
+            grep -Fx "$filename" observed-assets.txt
+          done
+
+      - name: Advance public updater only after assets are live in release
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 5m gh release upload "$TAG" dist/android-latest.json --repo "$REPO" --clobber
+          timeout 5m gh release upload "$TAG" dist/latest.json --repo "$REPO" --clobber
+          gh release edit "$TAG" --repo "$REPO" \
+            --title 'EpiMediaHub Android v1.0.57' \
+            --notes 'EpiMediaHub v1.0.57: vereinheitlichte und optimierte Live-TV-Wiedergabe für Fire TV und Android TV, mit bevorzugten Anbieter-Stream-Adressen, Cache und automatischen Fallbacks bei Schwarzbild. Zuletzt hinzugefügt für Filme und Serien, einschließlich Kategorienansicht. 4K IPTV bleibt DIRECT; VPN-Playlists bleiben geschützt. Speedtest, Wetter, Standort, EpiScene, Registrierungen und Playlist-Einstellungen bleiben erhalten.' \
+            --prerelease
+          gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' > published-assets.txt
+          for filename in EpiMediaHub_Android_v1.0.57-arm64-v8a.apk \
+            EpiMediaHub_Android_v1.0.57-armeabi-v7a.apk \
+            EpiMediaHub_Android_v1.0.57-universal.apk latest.json android-latest.json; do
+            grep -Fx "$filename" published-assets.txt
+          done
+          echo 'EpiMediaHub v1.0.57 now published via official rolling updater.'

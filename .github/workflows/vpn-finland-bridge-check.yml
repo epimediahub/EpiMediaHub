@@ -1,0 +1,131 @@
+name: VPN Finland Android bridge compile (isolated, no release)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/vpn-finland-foundation]
+    paths:
+      - 'android/v1.0.34-vpn/**'
+      - '.github/workflows/vpn-finland-bridge-check.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  compile-bridge:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Prepare Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+      - name: Create self-contained Android test project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-vpn/app/src/main/java/de/epimediahub/app/vpn
+          mkdir -p .ci-vpn/app/src/main
+          printf "android.useAndroidX=true\n" > .ci-vpn/gradle.properties
+          cat > .ci-vpn/settings.gradle.kts <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories { google(); mavenCentral() }
+          }
+          rootProject.name = "EpiVpnFinlandBridgeCheck"
+          include(":app")
+          EOF
+          cat > .ci-vpn/build.gradle.kts <<'EOF'
+          plugins {
+            id("com.android.library") version "8.5.2" apply false
+            id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+          }
+          EOF
+          cat > .ci-vpn/app/build.gradle.kts <<'EOF'
+          plugins { id("com.android.library"); id("org.jetbrains.kotlin.android") }
+          android {
+            namespace = "de.epimediahub.app"
+            compileSdk = 35
+            defaultConfig { minSdk = 25 }
+            compileOptions {
+              sourceCompatibility = JavaVersion.VERSION_17
+              targetCompatibility = JavaVersion.VERSION_17
+              isCoreLibraryDesugaringEnabled = true
+            }
+            kotlinOptions { jvmTarget = "17" }
+          }
+          dependencies {
+            implementation("com.wireguard.android:tunnel:1.0.20260102")
+            coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+          }
+          EOF
+          cat > .ci-vpn/app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <application>
+              <service android:name="com.wireguard.android.backend.GoBackend$VpnService"
+                       android:permission="android.permission.BIND_VPN_SERVICE"
+                       android:exported="true">
+                <intent-filter><action android:name="android.net.VpnService"/></intent-filter>
+              </service>
+            </application>
+          </manifest>
+          EOF
+          cp android/v1.0.34-vpn/V134VpnRoutingPolicy.kt .ci-vpn/app/src/main/java/de/epimediahub/app/vpn/
+          cp android/v1.0.34-vpn/V134WireGuardDeviceTunnel.kt .ci-vpn/app/src/main/java/de/epimediahub/app/vpn/
+      - name: Compile and package non-publishable bridge library
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle -p .ci-vpn :app:assembleDebug --no-daemon --stacktrace -Dorg.gradle.workers.max=2
+          test -s .ci-vpn/app/build/outputs/aar/app-debug.aar
+          echo "Isolated VPN bridge AAR compiled. No EpiMediaHub APK released."
+
+  record-result:
+    name: Publish bridge result (no APK)
+    runs-on: ubuntu-22.04
+    needs: [compile-bridge]
+    if: ${{ always() }}
+    steps:
+      - name: Write verifiable build result to dedicated status file
+        uses: actions/github-script@v7
+        env:
+          BRIDGE_RESULT: ${{ needs.compile-bridge.result }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const path = 'build_status/vpn-finland-bridge.json';
+            const branch = context.ref.replace('refs/heads/', '');
+            const conclusion = process.env.BRIDGE_RESULT;
+            let sha;
+            try {
+              const result = await github.rest.repos.getContent({owner, repo, path, ref: branch});
+              if (!Array.isArray(result.data)) sha = result.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            const body = JSON.stringify({
+              kind: 'isolated-wireguard-android-aar',
+              conclusion,
+              run_id: context.runId,
+              run_url: `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`,
+              workflow_sha: context.sha,
+              updated_at: new Date().toISOString(),
+              note: 'This build only compiles an isolated Android bridge AAR. No EpiMediaHub test APK is produced.'
+            }, null, 2) + '\n';
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch,
+              message: `CI result: WireGuard bridge ${conclusion} (run ${context.runId})`,
+              content: Buffer.from(body, 'utf8').toString('base64'),
+              ...(sha ? {sha} : {})
+            });

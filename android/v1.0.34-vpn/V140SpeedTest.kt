@@ -1,0 +1,621 @@
+package de.epimediahub.app.vpn
+
+import android.content.Context
+import android.os.SystemClock
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Locale
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.min
+
+/**
+ * Real, finite HTTP throughput test. Primary: authenticated EpiMediaHub Hetzner
+ * service; bounded Cloudflare/Hetzner fallbacks only on server rate limits.
+ * No mock readings or credential uploads.
+ * Requires the current playlist's route to remain verified throughout the test.
+ */
+internal object V140SpeedTest {
+    data class Result(val route: String, val ip: String, val latencyMs: Long,
+        val downloadMbps: Double, val uploadMbps: Double?, val bytes: Long,
+        val singleStreamMbps: Double = 0.0, val dualStreamMbps: Double = 0.0,
+        val downloadProvider: String = "EpiMediaHub", val partial: Boolean = false)
+
+    private const val HOST = "https://speed.cloudflare.com"
+    private const val OWN_HOST = "https://speedtest.epimediahub.com"
+    private const val HETZNER_FILE = "https://hel1-speed.hetzner.com/100MB.bin"
+    private const val HETZNER_FSN1_FILE = "https://fsn1-speed.hetzner.com/100MB.bin"
+    private data class DownPlan(
+        val latencyMs: Long,
+        val one: V140SpeedTransfer.Sample,
+        val two: V140SpeedTransfer.Sample,
+        val four: V140SpeedTransfer.Sample,
+        val provider: String
+    )
+    enum class Phase { IDLE, CHECKING, DOWNLOAD, UPLOAD, DONE }
+    data class Live(val phase: Phase, val mbps: Double, val fraction: Float)
+
+    private const val WARMUP_BYTES = 8 * 1024 * 1024
+
+    private fun verifyRoute(context: Context, playlistId: String, vpn: Boolean,
+                            transfer: V140SpeedTransfer) {
+        transfer.checkActive()
+        check(V134VpnSession.usesVpn(context, playlistId) == vpn) {
+            "Playlist-Routing wurde geändert. Messung abgebrochen."
+        }
+        check(V134VpnSession.routeReady(context, playlistId, checkExit = false)) {
+            "VPN-Verbindung nicht bestätigt. Kein automatischer Direkt-Fallback."
+        }
+    }
+
+    fun measure(context: Context, playlistId: String, transfer: V140SpeedTransfer,
+                progress: (String) -> Unit, live: (Live) -> Unit = {}): Result {
+        val vpn = V134VpnSession.usesVpn(context, playlistId)
+        live(Live(Phase.CHECKING, 0.0, 0f))
+        verifyRoute(context, playlistId, vpn, transfer)
+        val verify = { verifyRoute(context, playlistId, vpn, transfer) }
+        val before = V134VpnSession.publicIpv4()
+        check(if (vpn) before == "37.27.42.215" else before != "37.27.42.215") {
+            "IP stimmt nicht mit dem gewählten Routing überein"
+        }
+        verify()
+
+        var ownSession: String? = null
+        fun runDownloads(provider: String): DownPlan {
+            val source = when (provider) {
+                "EpiMediaHub" -> "$OWN_HOST/v1/down"
+                "Cloudflare" -> "$HOST/__down"
+                "Hetzner HEL1" -> HETZNER_FILE
+                "Hetzner FSN1" -> HETZNER_FSN1_FILE
+                else -> error("Unbekannter Speedtest-Anbieter")
+            }
+            val selfHosted = provider == "EpiMediaHub"
+            if (selfHosted) checkNotNull(ownSession) { "Speedtest-Sitzung fehlt" }
+            val fixedFile = provider.startsWith("Hetzner")
+            val singleBytes = if (fixedFile || selfHosted) 4 * 1024 * 1024 else WARMUP_BYTES
+            progress("HTTP-Latenz ($provider) wird gemessen …")
+            val latencyStart = SystemClock.elapsedRealtimeNanos()
+            if (fixedFile) {
+                transfer.downloadFilePrefixLive(source, 32, verify) {}
+            } else {
+                transfer.download(
+                    if (selfHosted) "$source?bytes=32&stream=0" else "$source?bytes=32",
+                    32, verify
+                )
+            }
+            val latency = ((SystemClock.elapsedRealtimeNanos() - latencyStart) / 1_000_000)
+                .coerceAtLeast(1L)
+            progress("Diagnose: 1 HTTPS-Verbindung ($provider) …")
+            val one = if (fixedFile) {
+                transfer.downloadFilePrefixLive(source, singleBytes, verify) {}
+            } else {
+                transfer.download(
+                    if (selfHosted) "$source?bytes=$singleBytes&stream=0"
+                    else "$source?bytes=$singleBytes", singleBytes, verify
+                )
+            }
+            progress("Diagnose: 2 parallele HTTPS-Verbindungen ($provider) …")
+            val two = V144GigabitTransfer.measureWithStreams(
+                transfer, source, singleBytes, false, verify, 2, {}, fixedFile,
+                if (selfHosted) ownSession else null
+            )
+            val fourEach = if (fixedFile) 8 * 1024 * 1024
+                else if (selfHosted) V144GigabitTransfer.downloadBytesPerStream(one.mbps)
+                    .coerceAtMost(32 * 1024 * 1024)
+                else V144GigabitTransfer.downloadBytesPerStream(one.mbps)
+            val total = fourEach.toLong() * 4L
+            live(Live(Phase.DOWNLOAD, 0.0, 0f))
+            progress("Download: 4 parallele HTTPS-Verbindungen ($provider) …")
+            val four = V144GigabitTransfer.measureWithStreams(
+                transfer, source, fourEach, false, verify, 4, { sample ->
+                    live(Live(Phase.DOWNLOAD, sample.mbps,
+                        (sample.bytes.toDouble() / total).toFloat().coerceIn(0f, 1f)))
+                }, fixedFile, if (selfHosted) ownSession else null
+            )
+            return DownPlan(latency, one, two, four, provider)
+        }
+
+        // Primary provider is our own verified HTTPS origin. The short-lived
+        // token is tied to the egress IP and never passed to public backups.
+        fun runBackupDownloads(): DownPlan = try {
+            runDownloads("Cloudflare")
+        } catch (cloudBlocked: V146SpeedServerException) {
+            if (cloudBlocked.httpStatus !in listOf(403, 429)) throw cloudBlocked
+            verify()
+            progress("${cloudBlocked.host}: HTTP ${cloudBlocked.httpStatus}; " +
+                "prüfe alternativen Testserver in Helsinki …")
+            try {
+                runDownloads("Hetzner HEL1")
+            } catch (helBlocked: V146SpeedServerException) {
+                if (helBlocked.httpStatus !in listOf(403, 429)) throw helBlocked
+                verify()
+                progress("${helBlocked.host}: HTTP ${helBlocked.httpStatus}; " +
+                    "prüfe alternativen Testserver in Falkenstein …")
+                try {
+                    runDownloads("Hetzner FSN1")
+                } catch (fsnBlocked: V146SpeedServerException) {
+                    if (fsnBlocked.httpStatus !in listOf(403, 429)) throw fsnBlocked
+                    verify()
+                    throw IllegalStateException(
+                        "Alle drei Download-Testserver haben die Messung begrenzt " +
+                        "(zuletzt ${fsnBlocked.host}: HTTP ${fsnBlocked.httpStatus}). " +
+                        "Das ist kein VPN-Geschwindigkeitswert. Bitte später erneut versuchen."
+                    )
+                }
+            }
+        }
+
+        val download = try {
+            ownSession = transfer.openSelfHostedSession(verify)
+            runDownloads("EpiMediaHub")
+        } catch (ownBusy: V146SpeedServerException) {
+            // Rate-limited or temporarily overloaded: existing public fallbacks
+            // remain available, but a VPN/route failure is NEVER a fallback.
+            if (ownBusy.httpStatus !in listOf(429, 503)) throw ownBusy
+            verify()
+            progress("EpiMediaHub-Speedtest HTTP ${ownBusy.httpStatus}; alternativer Testserver …")
+            runBackupDownloads()
+        }
+        verify()
+        live(Live(Phase.UPLOAD, 0.0, 0f))
+        val uploadOwn = download.provider == "EpiMediaHub"
+        val uploadProvider = if (uploadOwn) "EpiMediaHub" else "Cloudflare"
+        val uploadUrl = if (uploadOwn) "$OWN_HOST/v1/up" else "$HOST/__up"
+        progress("Upload: 4 parallele HTTPS-Verbindungen ($uploadProvider) …")
+        val uploadEach = V144GigabitTransfer.uploadBytesPerStream(download.four.mbps)
+        // Each upload request fits the self-hosted 16 MiB limit; 4 streams fit
+        // the 64 MiB session budget. Upload failure is never displayed as 0.
+        val up: V140SpeedTransfer.Sample? = try {
+            V144GigabitTransfer.measureWithStreams(
+                transfer, uploadUrl, uploadEach, true, verify, 4, { sample ->
+                    live(Live(Phase.UPLOAD, sample.mbps,
+                        (sample.bytes.toDouble() / (uploadEach.toLong() * 4L))
+                            .toFloat().coerceIn(0f, 1f)))
+                }, false, if (uploadOwn) ownSession else null
+            )
+        } catch (blocked: V146SpeedServerException) {
+            if (blocked.httpStatus !in listOf(403, 429, 503)) throw blocked
+            verify()
+            progress("Upload von $uploadProvider abgewiesen (HTTP ${blocked.httpStatus}); " +
+                "Downloadmessung ist gültig, Upload nicht verfügbar.")
+            null
+        }
+
+        progress("VPN-Ausgang wird nochmals geprüft …")
+        verify()
+        val after = V134VpnSession.publicIpv4()
+        check(before == after) { "Öffentliche IP hat sich während des Tests geändert" }
+        verify()
+        return Result(
+            if (vpn) "VPN FINNLAND" else "DIREKT",
+            after, download.latencyMs, download.four.mbps, up?.mbps,
+            download.one.bytes + download.two.bytes + download.four.bytes + (up?.bytes ?: 0L),
+            download.one.mbps, download.two.mbps, download.provider,
+            partial = up == null
+        )
+    }
+}
+
+/** Small, focusable shortcut beside the existing Radio and Playlist actions. */
+@Composable
+internal fun V140SpeedShortcutButton(accent: Color, isTv: Boolean, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Surface(
+        modifier = Modifier.size(if (isTv) 44.dp else 40.dp)
+            .onFocusChanged { focused = it.hasFocus }
+            .semantics { contentDescription = "Speedtest" }
+            .testTag("home-speedtest")
+            .clickable(role = Role.Button, onClick = onClick),
+        color = if (focused) accent else Color(0xF51A222C),
+        contentColor = Color.White,
+        shape = CircleShape,
+        border = BorderStroke(if (focused) 3.dp else 1.dp,
+            if (focused) Color.White else Color.White.copy(.3f))
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("⇅", fontSize = if (isTv) 25.sp else 22.sp, fontWeight = FontWeight.Black)
+        }
+    }
+}
+
+/**
+ * Full-screen TV-friendly instrument cluster, fed solely by actual byte counts.
+ * The animated needle never invents measurements and never opens a network route.
+ */
+@Composable
+private fun V143SpeedGauge(speedMbps: Double, stage: V140SpeedTest.Phase,
+                           tint: Color, isTv: Boolean) {
+    val safeSpeed = speedMbps.coerceIn(0.0, 10_000.0).toFloat()
+    val animated by animateFloatAsState(
+        targetValue = safeSpeed, animationSpec = tween(durationMillis = 230),
+        label = "genuine-network-throughput"
+    )
+    // A real gigabit-capable gauge: 250 is a measured value, never its limit.
+    // Preserve the full 0..1000 scale at all normal home broadband speeds.
+    val ceiling = when {
+        animated <= 1000f -> 1000f
+        animated <= 2500f -> 2500f
+        animated <= 5000f -> 5000f
+        else -> 10000f
+    }
+    val fraction = (animated / ceiling).coerceIn(0f, 1f)
+    val dialHeight = if (isTv) 186.dp else 156.dp
+    Column(horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth().testTag("speedtest-live-gauge")) {
+        Box(Modifier.fillMaxWidth().height(dialHeight)) {
+            Canvas(Modifier.fillMaxSize()) {
+                val radius = min(size.width * .41f, size.height * .65f)
+                val center = Offset(size.width * .5f, size.height * .67f)
+                val topLeft = Offset(center.x - radius, center.y - radius)
+                val bounds = Size(radius * 2, radius * 2)
+                val thickness = if (isTv) 15.dp.toPx() else 12.dp.toPx()
+                drawArc(Color(0xFF293951), 150f, 240f, false, topLeft, bounds,
+                    style = Stroke(width = thickness, cap = StrokeCap.Round))
+                if (fraction > 0f) {
+                    drawArc(tint, 150f, 240f * fraction, false, topLeft, bounds,
+                        style = Stroke(width = thickness, cap = StrokeCap.Round))
+                }
+                for (mark in 0..12) {
+                    val angle = Math.toRadians((150f + mark * 20f).toDouble())
+                    val inner = radius * if (mark % 3 == 0) .75f else .81f
+                    val outer = radius * .88f
+                    drawLine(
+                        color = if (mark * (1f / 12f) <= fraction) tint
+                            else Color(0xFF65758A),
+                        start = Offset(center.x + cos(angle).toFloat() * inner,
+                            center.y + sin(angle).toFloat() * inner),
+                        end = Offset(center.x + cos(angle).toFloat() * outer,
+                            center.y + sin(angle).toFloat() * outer),
+                        strokeWidth = if (mark % 3 == 0) 2.5.dp.toPx() else 1.5.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                }
+                val angle = Math.toRadians((150f + 240f * fraction).toDouble())
+                val needle = Offset(center.x + cos(angle).toFloat() * radius * .70f,
+                    center.y + sin(angle).toFloat() * radius * .70f)
+                drawLine(color = Color.White.copy(alpha = .85f), start = center, end = needle,
+                    strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
+                drawCircle(tint, radius = 6.dp.toPx(), center = center)
+                drawCircle(Color.White, radius = 2.5.dp.toPx(), center = center)
+            }
+            Text("0", color = Color(0xFF9EADC3),
+                fontSize = 13.sp, modifier = Modifier.align(Alignment.BottomStart)
+                    .padding(start = if (isTv) 38.dp else 16.dp))
+            Text(String.format(Locale.GERMANY, "%.0f", ceiling / 2f),
+                color = Color(0xFF9EADC3), fontSize = 13.sp,
+                modifier = Modifier.align(Alignment.TopCenter)
+                    .padding(top = if (isTv) 12.dp else 9.dp))
+            Text(String.format(Locale.GERMANY, "%.0f", ceiling),
+                color = Color(0xFF9EADC3), fontSize = 13.sp,
+                modifier = Modifier.align(Alignment.BottomEnd)
+                    .padding(end = if (isTv) 38.dp else 16.dp))
+        }
+        Text(
+            if (stage == V140SpeedTest.Phase.CHECKING) "VERBINDUNG PRÜFEN"
+            else if (stage == V140SpeedTest.Phase.DOWNLOAD) "LIVE DOWNLOAD"
+            else if (stage == V140SpeedTest.Phase.UPLOAD) "LIVE UPLOAD"
+            else if (stage == V140SpeedTest.Phase.DONE) "LETZTE MESSUNG"
+            else "BEREIT ZUM TEST",
+            color = tint.copy(alpha = .85f), fontWeight = FontWeight.Bold, fontSize = 14.sp
+        )
+        Row(verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.testTag("speedtest-live-mbps")) {
+            Text(String.format(Locale.GERMANY, "%.1f", animated),
+                color = Color.White, fontSize = if (isTv) 56.sp else 43.sp,
+                fontWeight = FontWeight.Black)
+            Text("Mbit/s", color = Color(0xFFB7CAE1), fontSize = 18.sp,
+                modifier = Modifier.padding(bottom = 11.dp, start = 9.dp))
+        }
+    }
+}
+
+@Composable
+private fun V143SpeedMetric(title: String, speed: Double?, tint: Color, isTv: Boolean) {
+    Surface(modifier = Modifier.fillMaxWidth(), color = Color(0xFF172A43),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = .10f))) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = if (isTv) 14.dp else 11.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, color = Color(0xFFC3D2E4), fontSize = 13.sp,
+                fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(if (speed == null) "—" else
+                    String.format(Locale.GERMANY, "%.1f", speed),
+                    color = tint, fontSize = if (isTv) 27.sp else 23.sp,
+                    fontWeight = FontWeight.Bold)
+                if (speed != null) Text(" Mbit/s", color = Color.White.copy(alpha = .75f),
+                    fontSize = 13.sp, modifier = Modifier.padding(bottom = 5.dp))
+            }
+        }
+    }
+}
+
+@Composable
+internal fun V140SpeedTestScreen(context: Context, playlistId: String?, isTv: Boolean,
+                                 accent: Color, onBack: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val firstFocus = remember { FocusRequester() }
+    var busy by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("Bereit für den Live-Speedtest.") }
+    var result by remember { mutableStateOf<V140SpeedTest.Result?>(null) }
+    var phase by remember { mutableStateOf(V140SpeedTest.Phase.IDLE) }
+    var speed by remember { mutableStateOf(0.0) }
+    var completed by remember { mutableFloatStateOf(0f) }
+    var downloadResult by remember { mutableStateOf<Double?>(null) }
+    var uploadResult by remember { mutableStateOf<Double?>(null) }
+    var transfer by remember { mutableStateOf<V140SpeedTransfer?>(null) }
+    var job by remember { mutableStateOf<Job?>(null) }
+    var startFocused by remember { mutableStateOf(false) }
+    var cancelFocused by remember { mutableStateOf(false) }
+    var backFocused by remember { mutableStateOf(false) }
+    val routeViaVpn = playlistId != null && V134VpnSession.usesVpn(context, playlistId)
+    val liveTint = if (phase == V140SpeedTest.Phase.UPLOAD) Color(0xFFFFC46A)
+        else Color(0xFF4EDCFF)
+    val failed = status.startsWith("Fehler") || status.contains("abgebrochen")
+
+    fun stop() {
+        if (!busy) return
+        transfer?.cancel()
+        job?.cancel()
+        status = "Messung abgebrochen."
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) stop()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            transfer?.cancel()
+            job?.cancel()
+        }
+    }
+    LaunchedEffect(Unit) { if (playlistId != null) firstFocus.requestFocus() }
+    BackHandler { stop(); onBack() }
+
+    Column(
+        Modifier.fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Color(0xFF061221), Color(0xFF0C2137),
+                Color(0xFF08111E))))
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = if (isTv) 48.dp else 18.dp,
+                vertical = if (isTv) 20.dp else 14.dp)
+            .testTag("speedtest-screen"),
+        verticalArrangement = Arrangement.spacedBy(if (isTv) 13.dp else 11.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically) {
+            Column {
+                Text("E P I M E D I A H U B   /   N E T W O R K",
+                    fontSize = 11.sp, color = Color(0xFF83A3C6),
+                    fontWeight = FontWeight.Bold)
+                Text("SPEEDTEST", fontSize = if (isTv) 30.sp else 24.sp,
+                    color = Color.White, fontWeight = FontWeight.Black)
+            }
+            Surface(shape = RoundedCornerShape(50),
+                color = if (routeViaVpn) Color(0xFF153B42) else Color(0xFF243347),
+                border = BorderStroke(1.dp, if (routeViaVpn) Color(0xFF39DDBF)
+                    else Color(0xFF7895B4))) {
+                Text(if (routeViaVpn) "● VPN FINNLAND" else "● DIREKT",
+                    modifier = Modifier.padding(horizontal = 15.dp, vertical = 9.dp),
+                    color = if (routeViaVpn) Color(0xFF65E8D0) else Color.White,
+                    fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        Surface(Modifier.fillMaxWidth(), color = Color(0xFF101F34),
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(1.dp, Color(0xFF304660))) {
+            Column(Modifier.padding(if (isTv) 22.dp else 15.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    when (phase) {
+                        V140SpeedTest.Phase.CHECKING -> "● Netzwerk und öffentliche IP werden geprüft"
+                        V140SpeedTest.Phase.DOWNLOAD -> "↓  DOWNLOAD LÄUFT"
+                        V140SpeedTest.Phase.UPLOAD -> "↑  UPLOAD LÄUFT"
+                        V140SpeedTest.Phase.DONE -> if (result?.partial == true)
+                             "✓  DOWNLOAD GEMESSEN · UPLOAD NICHT VERFÜGBAR"
+                             else "✓  TEST ERFOLGREICH ABGESCHLOSSEN"
+                        else -> "BEREIT  •  ECHTE DATENÜBERTRAGUNG"
+                    },
+                    color = liveTint, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                if (isTv) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                        Box(Modifier.weight(1.2f)) {
+                            V143SpeedGauge(speed, phase, liveTint, isTv)
+                        }
+                        Column(Modifier.weight(.85f),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            V143SpeedMetric("↓  DOWNLOAD",
+                                downloadResult ?: if (phase == V140SpeedTest.Phase.DOWNLOAD) speed else null,
+                                Color(0xFF4EDCFF), isTv)
+                            V143SpeedMetric("↑  UPLOAD",
+                                uploadResult ?: if (phase == V140SpeedTest.Phase.UPLOAD) speed else null,
+                                Color(0xFFFFC46A), isTv)
+                            Text(result?.let { "HTTP-Latenz ${it.latencyMs} ms  •  ${it.bytes / 1_048_576} MiB" }
+                                ?: "GIGABIT-MESSUNG • 4 Streams • dynamisches Datenvolumen",
+                                color = Color(0xFFB3C4D9), fontSize = 13.sp)
+                        }
+                    }
+                } else {
+                    V143SpeedGauge(speed, phase, liveTint, isTv)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(Modifier.weight(1f)) {
+                            V143SpeedMetric("↓  DOWNLOAD",
+                                downloadResult ?: if (phase == V140SpeedTest.Phase.DOWNLOAD) speed else null,
+                                Color(0xFF4EDCFF), isTv)
+                        }
+                        Box(Modifier.weight(1f)) {
+                            V143SpeedMetric("↑  UPLOAD",
+                                uploadResult ?: if (phase == V140SpeedTest.Phase.UPLOAD) speed else null,
+                                Color(0xFFFFC46A), isTv)
+                        }
+                    }
+                }
+                Box(Modifier.fillMaxWidth().height(6.dp)
+                    .clip(RoundedCornerShape(4.dp)).background(Color(0xFF30425A))) {
+                    Box(Modifier.fillMaxWidth(completed.coerceIn(0f, 1f)).fillMaxHeight()
+                        .background(liveTint))
+                }
+                Text(status, color = if (failed) Color(0xFFFFAFA9) else Color(0xFFDCE7F4),
+                    fontSize = if (isTv) 15.sp else 13.sp)
+                result?.let {
+                    Text("TESTSERVER DOWNLOAD: ${it.downloadProvider}" +
+                            if (it.partial) " · Upload beim Testserver blockiert" else "",
+                        color = Color(0xFFB3C4D9), fontSize = if (isTv) 13.sp else 12.sp)
+                    Text(
+                        "DOWNLOAD-VERGLEICH  •  1 Stream: " +
+                            String.format(Locale.GERMANY, "%.1f", it.singleStreamMbps) +
+                            "  |  2 Streams: " +
+                            String.format(Locale.GERMANY, "%.1f", it.dualStreamMbps) +
+                            "  |  4 Streams: " +
+                            String.format(Locale.GERMANY, "%.1f", it.downloadMbps) +
+                            " Mbit/s",
+                        color = Color(0xFFD5E7FC), fontSize = if (isTv) 14.sp else 12.sp,
+                        modifier = Modifier.testTag("speedtest-stream-diagnostic")
+                    )
+                    Text("AUSGANG  ${it.route}   •   IP  ${it.ip}",
+                        color = Color(0xFF86E8D4), fontWeight = FontWeight.Bold,
+                        fontSize = if (isTv) 15.sp else 13.sp)
+                }
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(
+                onClick = {
+                    if (busy || playlistId == null) return@Button
+                    val current = V140SpeedTransfer()
+                    transfer = current
+                    busy = true
+                    status = "Verbindung wird geprüft …"
+                    result = null
+                    downloadResult = null
+                    uploadResult = null
+                    speed = 0.0
+                    completed = 0f
+                    phase = V140SpeedTest.Phase.CHECKING
+                    job = scope.launch {
+                        try {
+                            val measured = withContext(Dispatchers.IO) {
+                                V140SpeedTest.measure(context, playlistId, current, { message ->
+                                    scope.launch {
+                                        if (transfer === current && busy && !current.isCancelled())
+                                            status = message
+                                    }
+                                }, { live ->
+                                    scope.launch {
+                                        if (transfer === current && busy && !current.isCancelled()
+                                            && phase != V140SpeedTest.Phase.DONE) {
+                                            if (phase == V140SpeedTest.Phase.DOWNLOAD &&
+                                                live.phase == V140SpeedTest.Phase.UPLOAD)
+                                                downloadResult = speed
+                                            phase = live.phase
+                                            speed = live.mbps.coerceAtLeast(0.0)
+                                            completed = live.fraction
+                                        }
+                                    }
+                                })
+                            }
+                            if (!current.isCancelled()) {
+                                downloadResult = measured.downloadMbps
+                                uploadResult = measured.uploadMbps
+                                result = measured
+                                phase = V140SpeedTest.Phase.DONE
+                                completed = 1f
+                                speed = measured.downloadMbps
+                                status = if (measured.partial)
+                                    "Download erfolgreich. Upload vom Testserver nicht verfügbar."
+                                else "Messung erfolgreich abgeschlossen."
+                            }
+                        } catch (e: CancellationException) {
+                            status = "Messung abgebrochen."
+                        } catch (e: Exception) {
+                            status = if (current.isCancelled()) "Messung abgebrochen."
+                                else "Fehler: ${e.message ?: "Netzwerk nicht verfügbar"}"
+                        } finally { if (transfer === current) busy = false }
+                    }
+                },
+                enabled = !busy && playlistId != null,
+                modifier = Modifier.focusRequester(firstFocus).testTag("speedtest-start")
+                    .onFocusChanged { startFocused = it.hasFocus }
+                    .border(BorderStroke(if (startFocused) 4.dp else 1.dp,
+                        if (startFocused) Color.White else Color.Gray),
+                        RoundedCornerShape(12.dp)),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF4EDCFF),
+                    contentColor = Color(0xFF051827),
+                    disabledContainerColor = Color(0xFF426578),
+                    disabledContentColor = Color.White
+                )
+            ) { Text(if (busy) "MESSUNG LÄUFT" else "▶  SPEEDTEST STARTEN") }
+            if (busy) OutlinedButton(
+                onClick = { stop() },
+                modifier = Modifier.testTag("speedtest-cancel")
+                    .onFocusChanged { cancelFocused = it.hasFocus }
+                    .border(BorderStroke(if (cancelFocused) 4.dp else 1.dp,
+                        if (cancelFocused) Color.White else Color.Gray), RoundedCornerShape(12.dp))
+            ) { Text("Abbrechen") }
+            OutlinedButton(
+                onClick = { stop(); onBack() },
+                modifier = Modifier.testTag("speedtest-back")
+                    .onFocusChanged { backFocused = it.hasFocus }
+                    .border(BorderStroke(if (backFocused) 4.dp else 1.dp,
+                        if (backFocused) Color.White else Color.Gray), RoundedCornerShape(12.dp))
+            ) { Text("Zurück") }
+        }
+        if (playlistId == null)
+            Text("Bitte zuerst eine Playlist auswählen.", color = Color(0xFFFFAFA9))
+        Text("Speedtest über eigenen EpiMediaHub-Hetzner-Server; bei HTTP 429/503 " +
+            "alternative Testserver Cloudflare, Hetzner HEL1 und FSN1. " +
+            "4 Streams plus 1-/2-Stream-Vergleich, begrenztes Testvolumen. " +
+            "HTTPS-Latenz inklusive TLS, kein ICMP-Ping. " +
+            "Ohne bestätigte VPN-Route kein ungeschützter Fallback. " +
+            "Speedtest-Werte entsprechen nicht zwingend der Geschwindigkeit eines IPTV-Anbieters.",
+            color = Color(0xFF8BA0B9), fontSize = 12.sp)
+    }
+}

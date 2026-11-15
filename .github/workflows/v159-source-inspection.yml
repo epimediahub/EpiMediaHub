@@ -1,0 +1,81 @@
+name: v159 Player source inspection (development only)
+on:
+  push:
+    branches: [feature/v159-live-remote-hold-seek]
+    paths:
+      - '.github/workflows/v159-source-inspection.yml'
+  workflow_dispatch:
+  pull_request:
+    branches: [release/v157-unified-playback-recent]
+    paths:
+      - '.github/workflows/v159-source-inspection.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct patched Android source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-android
+          cat android/source_parts/source_* | base64 -d > .ci-android/source.tar.gz
+          test "$(sha256sum .ci-android/source.tar.gz | cut -d' ' -f1)" = "192960b4363b3b9db132442d003717d3767f5c56e1b20b996cfb67e41656808c"
+          tar -xzf .ci-android/source.tar.gz -C .ci-android
+          PROJECT_ROOT="$(find .ci-android -maxdepth 4 -name settings.gradle.kts -printf '%h\n' | head -n1)"
+          test -n "$PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+      - name: Run existing source patches
+        shell: bash
+        env:
+          EPIMEDIAHUB_OFFICIAL_CANDIDATE: '1'
+        run: |
+          set -euo pipefail
+          bash build_tools/install_android_v1033_source.sh
+          python3 android/v1.0.34-vpn/patch_wireguard_spike.py
+          python3 android/v1.0.34-vpn/patch_playlist_routing.py
+          for v in 149 150 151 152 153 154 155 156 157 158; do
+            python3 "android/v1.0.$((10#$v - 100))/patch_v$v.py"
+          done
+          python3 android/v1.0.59/patch_v159.py
+          python3 -m py_compile android/v1.0.59/patch_v159.py
+      - name: Print key event source sections
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          root=Path(os.environ["PROJECT_ROOT"])/"app/src/main/java/de/epimediahub/app"
+          paths=["ui/PlayerScreen.kt","EpiMediaHubApp.kt","ui/V115PlayerChrome.kt"] + [str(f.relative_to(root)) for f in (root/"ui").glob("*Vod*.kt")] + [str(f.relative_to(root)) for f in (root/"ui").glob("*Live*.kt")] + [str(f.relative_to(root)) for f in (root/"ui").glob("*Settings*.kt")] + [str(f.relative_to(root)) for f in root.glob("*Activity.kt")]
+          tokens=re.compile(r'onKey|KEYCODE|Key\.|keyDown|keyUp|onPreviewKey|seek|seekTo|channel|Channel|player.*Key|Dpad|isLive|MediaKind\.LIVE|Slider|onBack',re.I)
+          for name in paths:
+              p=root/name
+              if not p.exists(): print("MISSING",name);continue
+              lines=p.read_text().splitlines()
+              print("##########",name,"LINES",len(lines),"##########")
+              matches=[n for n,v in enumerate(lines) if tokens.search(v)]
+              spans=[]
+              for n in matches:
+                  lo=max(0,n-12);hi=min(len(lines),n+22)
+                  if spans and lo<=spans[-1][1]:spans[-1]=(spans[-1][0],max(hi,spans[-1][1]))
+                  else:spans.append((lo,hi))
+              for a,b in spans:
+                  print(f"--- {a+1}-{b} ---")
+                  for n in range(a,b): print(f"{n+1:04d}: {lines[n]}")
+          for f in root.rglob("*.kt"):
+              s=f.read_text()
+              if "fun SettingsScreen(" in s:
+                  lines=s.splitlines()
+                  idx=next(i for i,line in enumerate(lines) if "fun SettingsScreen(" in line)
+                  print("########## settings function",f.relative_to(root),"##########")
+                  for n in range(max(0,idx-30),min(len(lines),idx+190)): print(f"{n+1:04d}: {lines[n]}")
+          manifest=(Path(os.environ["PROJECT_ROOT"])/"app/src/main/AndroidManifest.xml").read_text()
+          print("########## AndroidManifest.xml ##########")
+          print(manifest[:25000])
+          gradle = Path(os.environ["PROJECT_ROOT"])/"app/build.gradle.kts"
+          print("########## app/build.gradle.kts ##########")
+          print(gradle.read_text()[:25000])
+          PY

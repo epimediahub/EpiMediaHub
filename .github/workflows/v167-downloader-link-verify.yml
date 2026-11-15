@@ -1,0 +1,50 @@
+name: v167 direct Downloader APK link verification
+on:
+  pull_request:
+    branches: [fix/v166-epg-now-parsing-full-fallback]
+    paths:
+      - '.github/workflows/v167-downloader-link-verify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-public-direct-apk:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: epimediahub/EpiMediaHub
+      TAG: v1.0.67-test-20261015
+      APK: EpiMediaHub-Android-v1.0.67-universal.apk
+      SOURCE_SHA: 0e5ae951fd9029ffb102061faddd9588b982ae6f
+    steps:
+      - name: Verify published separate prerelease and genuine direct APK URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            if gh api "repos/$REPO/releases/tags/$TAG" > /tmp/v167-release.json 2>/dev/null; then
+              draft="$(jq -r '.draft' /tmp/v167-release.json)"
+              prerelease="$(jq -r '.prerelease' /tmp/v167-release.json)"
+              url="$(jq -r --arg apk "$APK" '.assets[] | select(.name==$apk and .state=="uploaded" and .size>20000000) | .browser_download_url' /tmp/v167-release.json)"
+              if [[ "$draft" == false && "$prerelease" == true && "$url" == https://github.com/"$REPO"/releases/download/"$TAG"/"$APK" ]]; then
+                tag_sha="$(gh api "repos/$REPO/git/ref/tags/$TAG" --jq '.object.sha')"
+                test "$tag_sha" = "$SOURCE_SHA"
+                echo "Published asset and tagged signed QA source verified: $url"
+                status="$(curl -sSIL --max-time 45 --output /dev/null --write-out '%{http_code}' "$url")"
+                echo "Anonymous download HTTP status: $status"
+                test "$status" = 200 || {
+                  echo "::error::Download URL not accessible without credentials"
+                  exit 1
+                }
+                echo "Validated direct APK: $url" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+            fi
+            echo "Waiting for separate, published test release (attempt $attempt/24)"
+            sleep 10
+          done
+          echo "::error::No verified published download for the signed v167 APK"
+          exit 1

@@ -1,0 +1,84 @@
+name: Verify published Android 1.0.31 updater and downloads
+on:
+  push:
+    branches: [android-v1.0.31-skin-variants]
+    paths: ['.github/workflows/android-v1031-live-check.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify-live-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Read completed release regression reports
+        uses: actions/download-artifact@v4
+        with:
+          name: android-v1031-release-test-reports
+          run-id: 37230162507
+          github-token: ${{ github.token }}
+          path: reports
+      - name: Verify current public updater and stream all three APK digests
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import concurrent.futures, hashlib, json, time, urllib.request, xml.etree.ElementTree as ET
+          from pathlib import Path
+          counts = {'unit_tests': 0, 'native_tests': 0, 'failures': 0, 'errors': 0, 'skipped': 0}
+          for file in Path('reports').rglob('TEST-*.xml'):
+              root = ET.parse(file).getroot()
+              kind = 'native_tests' if 'androidTest-results' in str(file) else 'unit_tests'
+              counts[kind] += int(root.attrib.get('tests', 0))
+              for name in ['failures', 'errors', 'skipped']:
+                  counts[name] += int(root.attrib.get(name, 0))
+          assert counts['unit_tests'] > 150 and counts['native_tests'] >= 9, counts
+          assert counts['failures'] == counts['errors'] == 0, counts
+          print('RELEASE TESTS:', json.dumps(counts), flush=True)
+          expected = {
+              'arm64-v8a': ('5972a4da0929272bd598d78a59bea03b1bcefccffb9feecdc30f6ae67cba7abb', 76871425),
+              'armeabi-v7a': ('2e1c0c90e45d29d90f9e9499cc3c430fc5796eb8b6828fad189d439b362d6cc6', 74896309),
+              'universal': ('584ca7921846ab2705ed135f2361fdc48397d959bfa8548266efd6294505d2b2', 170856353),
+          }
+          url = 'https://download.epimediahub.com/android/latest.json'
+          headers = {'Cache-Control': 'no-cache', 'User-Agent': 'EpiMediaHub-Release-Verification/1.0.31'}
+          for attempt in range(30):
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=25) as response:
+                      manifest = json.load(response)
+                  if manifest.get('version') == '1.0.31' and manifest.get('versionCode') == 1031:
+                      break
+                  print('Waiting for download mirror:', manifest.get('version'), flush=True)
+              except Exception as error:
+                  print('Waiting for download mirror:', type(error).__name__, flush=True)
+              time.sleep(5)
+          else:
+              raise SystemExit('Public updater has not reached 1.0.31')
+          def check(abi):
+              item = manifest['apks'][abi]
+              digest, size = expected[abi]
+              assert item['sha256'] == digest and item['size'] == size, abi
+              assert item['url'].startswith('https://download.epimediahub.com/android/EpiMediaHub_Android_v1.0.31-'), abi
+              calculated = hashlib.sha256()
+              received = 0
+              with urllib.request.urlopen(urllib.request.Request(item['url'], headers=headers), timeout=45) as response:
+                  assert response.status == 200
+                  while True:
+                      block = response.read(1024 * 1024)
+                      if not block:
+                          break
+                      calculated.update(block)
+                      received += len(block)
+              assert received == size and calculated.hexdigest() == digest, abi
+              print('LIVE APK VERIFIED:', abi, received, digest, flush=True)
+              return {'abi': abi, 'bytes': received, 'sha256': digest, 'http': 200}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+              verified = list(pool.map(check, expected))
+          report = {'version': '1.0.31', 'versionCode': 1031, 'tests': counts, 'downloads': verified}
+          Path('android-v1031-live-verification.json').write_text(json.dumps(report, indent=2))
+          print('LIVE UPDATER VERIFIED:', json.dumps(report), flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-v1031-live-verification
+          path: android-v1031-live-verification.json
