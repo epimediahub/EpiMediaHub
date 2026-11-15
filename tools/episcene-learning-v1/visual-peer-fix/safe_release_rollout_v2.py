@@ -20,9 +20,11 @@ import time
 import safe_release_rollout as original
 
 LEARNING=Path('/var/lib/episcene-learning/reference-round-40/feedback.sqlite3')
-MAX_NEW_PER_RUN=4
-MAX_DAILY=8
-MAX_PER_PLAYLIST=2
+MAX_NEW_PER_RUN=6
+MAX_DAILY=16
+MAX_PER_PLAYLIST=3
+MAX_PER_FAMILY_PER_RUN=2
+MAX_PER_FAMILY_PER_DAY=4
 
 
 def verified_feedback_models():
@@ -47,7 +49,9 @@ def protected(con,record):
     e=record['evidence']
     if not isinstance(e,dict):return True
     if e.get('audio_visual_disagreement') is True:return True
-    if isinstance(e.get('decision'),dict) and e['decision'].get('status')=='NO_MATCH':
+    # An already visually confirmed candidate needs the ORIGINAL release gates,
+    # not another expensive provider read. NO_MATCH needs human review.
+    if isinstance(e.get('decision'),dict) and e['decision'].get('status') in ('NO_MATCH','AUTO_CONFIRMED'):
         return True
     if not (e.get('episcene_required') is True or e.get('method')=='episcene_consensus'):
         return True
@@ -116,16 +120,48 @@ def collect(con):
         d['evidence']=e
         if not protected(con,d):
             by_asset[d['asset_key']].append(d)
-    # If two kinds share a file, analyze one at a time; never choose
-    # a convenient machine alternative among disagreeing proposals.
+    # The read-only live audit found most pending markers lack a saved visual
+    # window. A file can have an already captured intro AND a missing outro;
+    # picking the first alphabetically wastes the sole bounded asset retry.
+    # Use the existing independent cache by exact asset, kind and runtime,
+    # never by title/source metadata, and never infer matching video editions.
+    has_windows=bool(con.execute("""SELECT 1 FROM sqlite_master
+        WHERE type='table' AND name='skip_scene_windows'""").fetchone())
+    windows=set()
+    if has_windows:
+        required={'asset_key','kind','duration_ms'}
+        cols={row[1] for row in con.execute('PRAGMA table_info(skip_scene_windows)')}
+        if not required<=cols:
+            # Unexpected live visual-cache contract: do not schedule retries.
+            return []
+        keys=list(by_asset)
+        for start in range(0,len(keys),300):
+            batch=keys[start:start+300]
+            query="""SELECT DISTINCT asset_key,kind,duration_ms FROM skip_scene_windows
+                WHERE asset_key IN ("""+','.join('?' for _ in batch)+')'
+            for asset,kind,duration in con.execute(query,batch):
+                windows.add((asset,kind,duration))
+    # A matching duration only establishes cache presence; it does not prove
+    # visual consensus or evidence eligibility. The original release gate stays
+    # authoritative.
     chosen=[]
     for entries in by_asset.values():
         kind_counts=Counter(x['kind'] for x in entries)
+        choices=[]
         for kind in sorted(kind_counts):
             group=[x for x in entries if x['kind']==kind]
             if len(group)!=1:continue
-            chosen.append(group[0])
-            break
+            record=group[0]
+            matching=any(a==record['asset_key'] and k==kind and
+                         abs((d or 0)-record['duration_ms'])<=2000
+                         for a,k,d in windows)
+            record['missing_visual_window']=not matching if has_windows else False
+            choices.append(record)
+        if choices:
+            # Prefer filling missing intro/recap/outro evidence before
+            # consuming a retry for another kind with existing image windows.
+            chosen.append(min(choices,key=lambda r:(
+                not r['missing_visual_window'],r['language_priority'],r['kind'])))
     return chosen
 
 
@@ -174,23 +210,43 @@ def plan(con, candidates, max_jobs=MAX_NEW_PER_RUN, *, models=None):
                 epis[r['episode']]=r
         if len(set(epis)|seeded[key])<3 and key not in references:
             continue
-        roster=sorted(epis.values(),key=lambda x:(x['language_priority'],x['episode'],x['job_id']))
-        priority=(not bool(seeded[key]),key not in models,key not in references,
+        roster=sorted(epis.values(),key=lambda x:(not x['missing_visual_window'],x['language_priority'],x['episode'],x['job_id']))
+        priority=(not any(r['missing_visual_window'] for r in roster),
+                  not bool(seeded[key]),key not in models,key not in references,
                   -len(set(epis)|seeded[key]),min(r['language_priority'] for r in roster),
                   key[0],roster[0]['job_id'])
         queue.append((priority,key,roster))
     queue.sort(key=lambda x:x[0])
-    output=[];taken=set();by_playlist=Counter()
-    # Round robin across families, cap two per playlist per hourly run.
-    for _,key,roster in queue:
-        for r in roster[:3]:
-            if len(output)>=cap:return output
-            if by_playlist[r['playlist_id']]>=MAX_PER_PLAYLIST:break
-            if r['asset_key'] in taken:continue
-            output.append(r);taken.add(r['asset_key'])
-            by_playlist[r['playlist_id']]+=1
-    return output
+    # Limit expensive retries of a dominant season (e.g. a long-running anime)
+    # without limiting the normal analyzer, its original release checks, or the
+    # provider's maximum one active stream per source.
+    per_family_today=Counter()
+    for pid,source,season,count in con.execute("""
+        SELECT a.playlist_id,a.source_key,a.season,COUNT(*)
+        FROM episcene_safe_release_retries z
+        JOIN skip_assets a ON a.asset_key=z.asset_key
+        WHERE substr(z.last_requeued_utc,1,10)=?
+        GROUP BY a.playlist_id,a.source_key,a.season
+    """,(today,)):
+        per_family_today[(pid,source,season)]=count
 
+    output=[];taken=set();by_playlist=Counter()
+    # First pass distributes work across independent series before giving
+    # any one series a second slot. Only retry tasks are counted here;
+    # original source scheduling and automatic acceptance remain unchanged.
+    for _ in range(MAX_PER_FAMILY_PER_RUN):
+        for _,key,roster in queue:
+            if len(output)>=cap:return output
+            if by_playlist[key[0]]>=MAX_PER_PLAYLIST:continue
+            family=key[:3]
+            if per_family_today[family]>=MAX_PER_FAMILY_PER_DAY:continue
+            candidate=next((r for r in roster if r['asset_key'] not in taken),None)
+            if candidate is None:continue
+            output.append(candidate)
+            taken.add(candidate['asset_key'])
+            by_playlist[candidate['playlist_id']]+=1
+            per_family_today[family]+=1
+    return output
 
 def requeue(con,limit=MAX_NEW_PER_RUN):
     original.ensure_retry_table(con)
