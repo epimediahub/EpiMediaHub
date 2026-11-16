@@ -10,6 +10,7 @@ Only the separate root-protected trusted source cache stores cursor progress.
 from __future__ import annotations
 
 from collections import Counter
+from contextlib import closing
 import sqlite3
 from pathlib import Path
 
@@ -68,7 +69,7 @@ def catalog_batch(prod, cache, limit=40):
            "next_playlist_id":8,"per_playlist_candidates":{}}
     if p.is_symlink() or not p.is_file():
         return [],"production_db_unavailable",empty
-    with sqlite3.connect(p.resolve().as_uri()+"?mode=ro",uri=True,timeout=6) as db:
+    with closing(sqlite3.connect(p.resolve().as_uri()+"?mode=ro",uri=True,timeout=6)) as db:
         db.row_factory=sqlite3.Row
         db.execute("PRAGMA query_only=ON")
         columns=_columns(db,"skip_assets")
@@ -78,7 +79,7 @@ def catalog_batch(prod, cache, limit=40):
         if not sources:
             return [],"missing_canonical_external_ids",empty
         where=_selection_sql(sources)
-        with sqlite3.connect(_cache_path(cache),timeout=6) as private:
+        with closing(sqlite3.connect(_cache_path(cache),timeout=6)) as private:
             private.executescript(STATE)
             current={int(pid):key for pid,key in private.execute(
                 "SELECT playlist_id,asset_key FROM trusted_source_balanced_cursor")}
@@ -135,7 +136,10 @@ def catalog_batch(prod, cache, limit=40):
             if len(assets)!=1:
                 conflicts+=1
                 continue
-            item,reason=_asset_identity(db,assets[0],sources)
+            asset = assets[0]
+            if "media_type" in asset.keys() and asset["media_type"] != "episode":
+                continue
+            item,reason=_asset_identity(db,asset,sources)
             if reason!="ok" or item is None:
                 conflicts+=1
                 continue

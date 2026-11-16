@@ -13,6 +13,7 @@ import json
 import math
 import sqlite3
 import time
+from contextlib import closing
 from pathlib import Path
 
 from bridge import Episode, KINDS, _get_json, parse_introdb, parse_theintrodb
@@ -171,7 +172,7 @@ def resolve_external(ep: Episode, cache: Path, *, fetch=_get_json, now=None,
                             "theintrodb": "missing_external_id"},
                 "cached": False}
     cache = _cache_path(cache)
-    with sqlite3.connect(cache, timeout=5) as db:
+    with closing(sqlite3.connect(cache, timeout=5)) as db:
         with db:
             db.executescript(SCHEMA)
         k = _key(ep)

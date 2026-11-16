@@ -15,7 +15,7 @@ release="$1"
 target=/opt/episcene-learning/unified
 service=episcene-trusted-sources.service
 timer=episcene-trusted-sources.timer
-files=(catalogue_sources.py trusted_external.py trusted_external_sync.py)
+files=(analysis_identity_balanced.py catalogue_sources.py trusted_external.py trusted_external_sync.py)
 tests=(test_bridge.py test_trusted_external.py test_trusted_external_sync.py)
 source_url="https://raw.githubusercontent.com/epimediahub/EpiMediaHub/$release/tools/episcene-learning-v1/unified-marker-bridge"
 
@@ -70,6 +70,7 @@ import sys
 
 target, stage = map(Path, sys.argv[1:])
 baseline = {
+    "analysis_identity_balanced.py": "05723a405cc2a85a1b57f4c7030e67c7dfcff979",
     "trusted_external.py": "c3a7cef17d65a0a3d34bcf0026838d163e3a16d6",
     "trusted_external_sync.py": "7f00334ed9140d5b7b8ab1a3f67522f9306e5c21",
 }

@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from catalogue_sources import CatalogueSources, load_introdb_export
+from production_lookup_cache import augment_authorized_segments
 from trusted_external_sync import catalog_batch, scan_catalogue, sync
 from test_trusted_external import fake_fetch
 
@@ -137,6 +138,13 @@ class CatalogueSourcesTests(unittest.TestCase):
                 cached = [json.loads(row[0]) for row in db.execute(
                     "SELECT response FROM trusted_external_cache")]
             self.assertEqual(len(cached), 4)
+            served = augment_authorized_segments(
+                [], descriptor={"media_type": "episode", "season": 2,
+                                "episode": 1, "duration_ms": 2700000},
+                persisted_identity={"imdb_id": "tt0903747", "tvdb_id": 81189},
+                cache=cache)
+            self.assertEqual([(m["source"], m["segment_type"], m["status"]) for m in served],
+                             [("introdb", "intro", "approved")])
 
     def test_rate_limit_keeps_the_incomplete_batch_available_for_retry(self):
         with tempfile.TemporaryDirectory() as td:
