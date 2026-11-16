@@ -251,3 +251,19 @@ prefetch before reporting success. On failure it restores both.
 This enables the external marker **cache** read path only. Confirm the actual
 skip/lookup response in a Fire TV playback test before treating a source
 marker as validated end-to-end.
+
+## Catalogue-wide online marker sync
+
+The existing hourly trusted-source job walks both analysis playlists. It reads
+the IntroDB daily export, including explicit no-segment entries, and uses the
+TheIntroDB series response to avoid version lookups for uncovered episodes.
+The detailed TheIntroDB lookup still uses the stored playback duration. Each
+completed batch advances the existing playlist cursors. A rate-limited batch
+can be retried on the next run. Published markers use the existing trusted
+lookup and its first-party marker priority.
+
+Use `sudo bash install_catalogue_sync.sh <commit>` on the existing Hetzner setup.
+The installer runs the source and catalogue tests, updates the trusted-source
+modules, and runs the first batch through the existing systemd service.
+
+Contains data from IntroDB (introdb.app), available under the ODbL.

@@ -26,6 +26,9 @@ CREATE TABLE IF NOT EXISTS trusted_external_cache (
  response TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS trusted_cache_expiry ON trusted_external_cache(expires_at);
+CREATE INDEX IF NOT EXISTS trusted_cache_episode
+ON trusted_external_cache(json_extract(identity,'$[4]'),
+                          json_extract(identity,'$[5]'),expires_at);
 """
 
 
@@ -156,8 +159,8 @@ def _key(ep):
 
 
 def resolve_external(ep: Episode, cache: Path, *, fetch=_get_json, now=None,
-                     offline=False):
-    """Cache by metadata identity, shared by playlists, with 6h freshness.
+                     offline=False, cache_ttl=21600):
+    """Cache by canonical episode and cut duration, shared by playlists.
 
     Never stores customer credentials, device identifiers or provider URLs.
     """
@@ -193,7 +196,12 @@ def resolve_external(ep: Episode, cache: Path, *, fetch=_get_json, now=None,
             previous = json.loads(row[0])
             return dict(previous, cached=True, stale=True,
                         source_refresh_failed=True)
-        ttl = 900 if failed else 21600
+        if "rate_limited" in sources.values():
+            # The catalogue cursor will retry this episode after the reset.
+            return output
+        ttl = 900 if failed else cache_ttl
+        if not ready:
+            ttl = min(ttl, 86400)
         with db:
             db.execute("INSERT INTO trusted_external_cache VALUES(?,?,?,?) "
                        "ON CONFLICT(identity) DO UPDATE SET expires_at=excluded.expires_at,"
