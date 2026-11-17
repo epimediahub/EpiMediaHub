@@ -1,0 +1,398 @@
+#!/usr/bin/env python3
+"""Complete local series IDs and run the official IntroDB catalogue through EpiScene."""
+from __future__ import annotations
+
+import argparse
+import csv
+import gzip
+import hashlib
+import importlib.util
+import io
+import json
+import re
+import sqlite3
+import time
+import unicodedata
+from collections import Counter, defaultdict
+from contextlib import closing
+from datetime import datetime, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from urllib.error import HTTPError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
+from analysis_identity import _asset_identity, _clean_id, _columns, _source_list
+from runtime_integration import _cache_path
+from trusted_external import SCHEMA
+from trusted_external_sync import CACHE, PRODUCTION
+
+PLAYLISTS = {8: "4K ANALYSE", 10: "THE BEST"}
+SNAPSHOT = Path("/var/lib/episcene-learning/introdb-open-catalogue.sqlite3")
+IDS = ("imdb_id", "tmdb_id", "tvdb_id")
+PUBLIC_QUERY = "SELECT DISTINCT ?tmdb ?imdb WHERE { ?s wdt:P4983 ?tmdb; wdt:P345 ?imdb . }"
+WIKIDATA = "https://query.wikidata.org/sparql?" + urlencode({"query": PUBLIC_QUERY})
+TVMAZE = "https://api.tvmaze.com/shows?page="
+RAW_ROOT = "https://raw.githubusercontent.com/epimediahub/EpiMediaHub/"
+HELPERS = (
+    ("stage_introdb_catalogue", "1c37221a9f1c80c93d9552eddbe9e2b47a9d07c2",
+     "3c4d5cd8c6e49308b258b0d2f4ae83222820754f21d1e78e215d87abc4415626"),
+    ("check_introdb_catalogue_release", "38c7bed41d88d9677f5f949fbb85e196430ed5e6",
+     "16a4f3bde35d2072bb7d65cd923cc2b817fd6d7e5aa3a3d57fa9e52ed8bcede8"),
+)
+
+
+def fetch(url, accept):
+    limit = 16 * 1024 * 1024
+    headers = {"Accept": accept, "Accept-Encoding": "gzip",
+               "User-Agent": "EpiMediaHub-Catalogue/1.0 (https://github.com/epimediahub/EpiMediaHub)"}
+    for attempt in range(3):
+        try:
+            with urlopen(Request(url, headers=headers), timeout=20) as response:
+                stream = gzip.GzipFile(fileobj=response) if response.headers.get("Content-Encoding") == "gzip" else response
+                result = stream.read(limit + 1)
+                if len(result) > limit:
+                    raise ValueError("Antwort überschreitet das Größenlimit")
+                return result
+        except HTTPError as error:
+            if error.code not in (408, 429, 502, 503, 504) or attempt == 2:
+                raise
+            retry_after = error.headers.get("Retry-After", "5")
+            if not retry_after.isdecimal() or int(retry_after) > 30:
+                raise
+            time.sleep(max(1, int(retry_after)))
+
+
+def load_helpers(directory):
+    modules = []
+    for name, commit, digest in HELPERS:
+        url = RAW_ROOT + commit + "/tools/episcene-learning-v1/unified-marker-bridge/" + name + ".py"
+        data = fetch(url, "text/plain")
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError("Prüfsumme für ein EpiScene-Modul stimmt nicht")
+        path = directory / (name + ".py")
+        path.write_bytes(data)
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        modules.append(module)
+    return modules
+
+
+def title_year(title, year):
+    if not isinstance(title, str):
+        return None
+    title = unicodedata.normalize("NFKC", title).casefold()
+    year = str(year or "").strip()
+    suffix = re.search(r"\s*(?:\(((?:19|20)\d{2})\)|\[((?:19|20)\d{2})\])\s*$", title)
+    if suffix:
+        embedded = suffix.group(1) or suffix.group(2)
+        if year and year != embedded:
+            return None
+        year = embedded
+        title = title[:suffix.start()]
+    title = " ".join(re.findall(r"[^\W_]+", title))
+    return (title, int(year)) if title and re.fullmatch(r"(?:19|20)\d{2}", year) else None
+
+
+def wikidata_ids():
+    by_tmdb, by_imdb = defaultdict(set), defaultdict(set)
+    rows = csv.DictReader(io.StringIO(fetch(WIKIDATA, "text/csv").decode("utf-8-sig")))
+    if not {"tmdb", "imdb"} <= set(rows.fieldnames or ()):
+        raise ValueError("Wikidata-Zuordnung hat ein anderes Format")
+    for row in rows:
+        tmdb, imdb = _clean_id("tmdb_id", row["tmdb"]), _clean_id("imdb_id", row["imdb"])
+        if imdb and tmdb:
+            by_tmdb[tmdb].add(imdb)
+            by_imdb[imdb].add(tmdb)
+    if not by_tmdb:
+        raise ValueError("Wikidata-Zuordnung ist leer")
+    print(f"Wikidata | {len(by_tmdb)} öffentliche TMDB-Serien-IDs", flush=True)
+    return by_tmdb, by_imdb
+
+
+def tvmaze_index():
+    by_title, by_tvdb = defaultdict(set), defaultdict(set)
+    page = 0
+    while True:
+        try:
+            rows = json.loads(fetch(TVMAZE + str(page), "application/json"))
+        except HTTPError as error:
+            if error.code == 404 and page:
+                break
+            raise
+        if not isinstance(rows, list) or len(rows) > 250:
+            raise ValueError("TVmaze-Index hat ein anderes Format")
+        for row in rows:
+            show_id = row["id"]
+            if type(show_id) is not int or show_id // 250 != page:
+                raise ValueError("TVmaze-Index hat eine unerwartete Seitennummer")
+            external = row["externals"]
+            imdb = _clean_id("imdb_id", external.get("imdb"))
+            tvdb = _clean_id("tvdb_id", external.get("thetvdb"))
+            premiere = title_year(row.get("name"), str(row.get("premiered") or "")[:4])
+            if premiere:
+                by_title[premiere].add((show_id, imdb, tvdb))
+            if tvdb and imdb:
+                by_tvdb[tvdb].add(imdb)
+        page += 1
+        if page % 50 == 0:
+            print(f"TVmaze-Serienindex | {page} Seiten geladen", flush=True)
+        time.sleep(.6)
+    print("Seriendaten: TVmaze, CC BY-SA, https://www.tvmaze.com/api", flush=True)
+    return by_title, by_tvdb
+
+
+def connect(path, mode):
+    db = sqlite3.connect(path.resolve().as_uri() + "?mode=" + mode, uri=True, timeout=12)
+    db.row_factory = sqlite3.Row
+    if mode == "ro":
+        db.execute("PRAGMA query_only=ON")
+    return db
+
+
+def catalogue_groups(path):
+    groups = {}
+    with closing(connect(path, "ro")) as db:
+        columns = _columns(db, "skip_assets")
+        if not {"source_key", "asset_key", "playlist_id", "media_type", "title",
+                "year", "season", "episode", "duration_ms"} <= columns:
+            raise ValueError("Die EpiScene-Serienmetadaten haben ein anderes Schema")
+        sources = _source_list(db, columns)
+        shared = {row[0] for row in db.execute("""
+            SELECT DISTINCT source_key FROM skip_assets
+            WHERE playlist_id NOT IN (8,10) OR media_type <> 'episode'
+        """)}
+        for asset in db.execute("""
+            SELECT * FROM skip_assets WHERE media_type='episode' AND playlist_id IN (8,10)
+        """):
+            source_key = asset["source_key"]
+            group = groups.setdefault(source_key, {
+                "ids": {field: set() for field in IDS}, "titles": set(), "missing": Counter(),
+                "ambiguous": not source_key or source_key in shared,
+            })
+            group.setdefault("asset", dict(asset))
+            title = title_year(asset["title"], asset["year"])
+            if title:
+                group["titles"].add(title)
+            identity, status = _asset_identity(db, asset, sources)
+            group["ambiguous"] |= status == "conflicting_ids"
+            if not identity or not identity["imdb_id"]:
+                group["missing"][asset["playlist_id"]] += 1
+            if identity:
+                for field in IDS:
+                    if identity[field]:
+                        group["ids"][field].add(identity[field])
+    return groups
+
+
+def local_index(groups):
+    references = defaultdict(set)
+    for group in groups.values():
+        ids = group["ids"]
+        if group["ambiguous"] or any(len(ids[field]) > 1 for field in IDS):
+            continue
+        for field in ("tmdb_id", "tvdb_id"):
+            for reference in ids[field]:
+                references[field, reference].update(ids["imdb_id"])
+    return references
+
+
+def match_group(group, local, wd_tmdb, wd_imdb, maze_title, maze_tvdb):
+    ids = group["ids"]
+    if group["ambiguous"] or any(len(ids[field]) > 1 for field in IDS):
+        return None
+    tmdb = next(iter(ids["tmdb_id"]), 0)
+    tvdb = next(iter(ids["tvdb_id"]), 0)
+    choices = (ids["imdb_id"] | local.get(("tmdb_id", tmdb), set())
+               | local.get(("tvdb_id", tvdb), set()) | wd_tmdb.get(tmdb, set())
+               | maze_tvdb.get(tvdb, set()))
+    method = "catalogue_external_id"
+    if not choices and len(group["titles"]) == 1:
+        titles = maze_title.get(next(iter(group["titles"])), set())
+        if len(titles) == 1:
+            _, imdb, external_tvdb = next(iter(titles))
+            tmdb_options = wd_imdb.get(imdb, set())
+            if (imdb and (not tvdb or external_tvdb == tvdb)
+                    and (not tmdb or not tmdb_options or tmdb in tmdb_options)):
+                choices = {imdb}
+                method = "catalogue_exact_title_year"
+    if len(choices) != 1:
+        return None
+    imdb = next(iter(choices))
+    tmdb_options = wd_imdb.get(imdb, set())
+    if not tmdb and len(tmdb_options) == 1:
+        tmdb = next(iter(tmdb_options))
+    return imdb, tmdb, method
+
+
+def save_ids(path, groups, mapping):
+    added = Counter()
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with closing(connect(path, "rw")) as db:
+        required = {"source_key", "imdb_id", "tmdb_id", "method", "updated_at"}
+        if not required <= _columns(db, "skip_auto_identities"):
+            raise ValueError("Die EpiScene-Tabelle für automatische IDs hat ein anderes Schema")
+        sources = _source_list(db, _columns(db, "skip_assets"))
+        shared = {row[0] for row in db.execute("""
+            SELECT DISTINCT source_key FROM skip_assets
+            WHERE playlist_id NOT IN (8,10) OR media_type <> 'episode'
+        """)}
+        for source_key, (imdb, tmdb, method) in mapping.items():
+            group = groups[source_key]
+            asset = group["asset"]
+            if source_key in shared:
+                continue
+            with db:
+                db.execute("BEGIN IMMEDIATE")
+                current = db.execute("SELECT * FROM skip_assets WHERE asset_key=?",
+                                     (asset["asset_key"],)).fetchone()
+                if not current or any(current[field] != asset[field] for field in
+                                      ("source_key", "playlist_id", "media_type", "title", "year")):
+                    continue
+                identity, status = _asset_identity(db, current, sources)
+                if status == "conflicting_ids" or identity and (
+                    identity["imdb_id"] not in ("", imdb)
+                    or tmdb and identity["tmdb_id"] not in (0, tmdb)
+                ):
+                    continue
+                changed = db.execute("""
+                    INSERT INTO skip_auto_identities(source_key,imdb_id,tmdb_id,method,updated_at)
+                    VALUES (?,?,?,?,?)
+                    ON CONFLICT(source_key) DO UPDATE SET imdb_id=excluded.imdb_id,
+                      tmdb_id=CASE WHEN skip_auto_identities.tmdb_id IS NULL
+                                  OR skip_auto_identities.tmdb_id=0 THEN excluded.tmdb_id
+                                  ELSE skip_auto_identities.tmdb_id END,
+                      updated_at=excluded.updated_at
+                    WHERE COALESCE(TRIM(skip_auto_identities.imdb_id),'')=''
+                      AND (excluded.tmdb_id=0 OR COALESCE(skip_auto_identities.tmdb_id,0)
+                           IN (0,excluded.tmdb_id))
+                """, (source_key, imdb, tmdb, method, now)).rowcount
+                if changed:
+                    check, state = _asset_identity(db, current, sources)
+                    if state != "ok" or check["imdb_id"] != imdb:
+                        db.rollback()
+                        continue
+                    added.update(group["missing"])
+    return added
+
+
+def seed_open_cache(path, snapshot, entries, valid_range):
+    now = int(time.time())
+    rows = []
+    for identity, markers in entries.items():
+        duration = json.loads(identity)[6]
+        valid = [marker for marker in markers
+                 if valid_range(marker["segment_type"], marker["start_ms"], marker["end_ms"], duration)]
+        if valid:
+            rows.append((identity, now + 7 * 86400, now,
+                         json.dumps({"trusted_segments": valid, "conflicts": [],
+                                     "sources": {"introdb": "ok"}, "introdb_export": snapshot})))
+    with closing(sqlite3.connect(_cache_path(path), timeout=12)) as db:
+        db.executescript(SCHEMA)
+        with db:
+            updated = db.executemany("""
+                INSERT INTO trusted_external_cache(identity,expires_at,created_at,response)
+                VALUES (?,?,?,?)
+                ON CONFLICT(identity) DO UPDATE SET expires_at=excluded.expires_at,
+                    created_at=excluded.created_at,response=excluded.response
+                WHERE trusted_external_cache.expires_at<=excluded.created_at
+                  AND CASE WHEN json_valid(trusted_external_cache.response)
+                    THEN COALESCE(json_array_length(trusted_external_cache.response,'$.conflicts'),0)=0
+                    ELSE 0 END
+            """, rows).rowcount
+    return updated
+
+
+def release_staged(catalogue, snapshot, cache, entries, export_date, gate, automation, release, runtime):
+    previous_cache = runtime.CACHE
+    with TemporaryDirectory(prefix="episcene-open-markers-") as temporary:
+        work_cache = Path(temporary) / "trusted-sources.sqlite3"
+        try:
+            if cache.is_file():
+                with closing(connect(cache, "ro")) as original, closing(
+                    sqlite3.connect(_cache_path(work_cache))
+                ) as copied:
+                    original.backup(copied)
+            refreshed = seed_open_cache(work_cache, export_date, entries, automation.valid_range)
+            runtime.CACHE = work_cache
+            print(f"IntroDB | {len(entries)} Folgenfassungen mit Kandidaten | "
+                  f"{refreshed} Cache-Einträge für die Freigabe ergänzt", flush=True)
+        except (OSError, sqlite3.Error, ValueError) as error:
+            print(f"Cache-Ergänzung vorübergehend fehlgeschlagen ({type(error).__name__}). "
+                  "Die Freigabe prüft den vorhandenen Live-Cache.", flush=True)
+        try:
+            _, staged = gate.staged_markers(snapshot)
+            confirmed = []
+            report, _ = gate.inspect_catalogue(
+                catalogue, staged, online_enabled=automation.enabled, release_enabled=release.enabled,
+                trusted_online_markers=automation.trusted_online_markers, confirmed=confirmed,
+            )
+            releases = gate.apply_release(catalogue, confirmed, automation, release)
+        finally:
+            runtime.CACHE = previous_cache
+    return report, releases
+
+
+def update_catalogue(catalogue, snapshot, cache, stage, gate, automation, release, runtime):
+    wd_tmdb, wd_imdb, maze_title, maze_tvdb = {}, {}, {}, {}
+    try:
+        print("Lade öffentliche Wikidata-Zuordnung von TMDB zu IMDb ...", flush=True)
+        wd_tmdb, wd_imdb = wikidata_ids()
+    except (OSError, EOFError, ValueError) as error:
+        print(f"Wikidata-Index vorübergehend nicht verfügbar ({type(error).__name__})", flush=True)
+    try:
+        print("Lade öffentlichen TVmaze-Serienindex für den lokalen Abgleich ...", flush=True)
+        maze_title, maze_tvdb = tvmaze_index()
+    except (OSError, EOFError, ValueError, KeyError, TypeError) as error:
+        print(f"TVmaze-Index vorübergehend nicht vollständig ({type(error).__name__})", flush=True)
+    print("Lese die aktuellen Serienmetadaten beider Analyse-Playlists ...", flush=True)
+    groups = catalogue_groups(catalogue)
+    local = local_index(groups)
+    missing = {key: group for key, group in groups.items() if group["missing"]}
+    mapping = {}
+    for key, group in missing.items():
+        if match := match_group(group, local, wd_tmdb, wd_imdb, maze_title, maze_tvdb):
+            mapping[key] = match
+    added = save_ids(catalogue, groups, mapping) if mapping else Counter()
+    print(f"Serienzuordnungen gefunden | {len(mapping)}/{len(missing)}", flush=True)
+
+    print("Gleiche den vollständigen IntroDB-Export mit dem aktuellen Katalog ab ...", flush=True)
+    manifest, index = stage.load_snapshot()
+    staged_report, entries = stage.match_catalogue(catalogue, index)
+    stage.save_snapshot(snapshot, manifest, entries)
+    print(stage.INTRODB_ATTRIBUTION, flush=True)
+    report, releases = release_staged(catalogue, snapshot, cache, entries, manifest["generated_at"],
+                                      gate, automation, release, runtime)
+    for lane, name in PLAYLISTS.items():
+        still_missing = staged_report[name].get("IMDb-ID fehlt", 0)
+        checked = report[lane]["Marker geprüft"]
+        approved = releases[lane]["neu freigegeben"]
+        open_markers = checked - (report[lane]["bereits freigegeben"] + approved)
+        print(f"{name} | IMDb für {added[lane]} Folgen ergänzt | IMDb weiterhin offen {still_missing} | "
+              f"Marker geprüft {checked} | neu freigegeben {approved} | "
+              f"offene oder bestehende Prüfentscheidungen {open_markers}", flush=True)
+
+
+def main():
+    import episcene_knowledge_first_runtime
+    import skip_automation
+    import skip_release
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--catalog", type=Path, default=PRODUCTION)
+    parser.add_argument("--snapshot", type=Path, default=SNAPSHOT)
+    parser.add_argument("--cache", type=Path, default=CACHE)
+    args = parser.parse_args()
+    with TemporaryDirectory(prefix="episcene-catalogue-") as temporary:
+        stage, gate = load_helpers(Path(temporary))
+        update_catalogue(args.catalog, args.snapshot, args.cache, stage, gate,
+                         skip_automation, skip_release, episcene_knowledge_first_runtime)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, EOFError, ValueError, sqlite3.Error, ImportError, AttributeError,
+            KeyError, TypeError, RuntimeError) as error:
+        raise SystemExit(f"EpiScene-Kataloglauf abgebrochen ({type(error).__name__}): {error}") from None
