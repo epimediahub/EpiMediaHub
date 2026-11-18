@@ -9,12 +9,14 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import re
 import sqlite3
+import stat
 import time
 import unicodedata
 from collections import Counter, defaultdict
-from contextlib import closing, contextmanager
+from contextlib import closing, contextmanager, nullcontext
 from datetime import datetime, timezone
 from itertools import zip_longest
 from pathlib import Path
@@ -345,8 +347,8 @@ def release_staged(catalogue, snapshot, cache, entries, export_date, gate, autom
 
 
 def report_rows(path):
-    with path.open(encoding="utf-8") as source:
-        report = json.load(source)
+    raw = path.read_bytes()
+    report = json.loads(raw)
     if (not isinstance(report, dict) or report.get("format") != RUNTIME_REPORT_FORMAT
             or not isinstance(report.get("episodes"), list)):
         raise ValueError("Datei ist keine Kandidatenliste aus dem IntroDB-Laufzeitprüflauf")
@@ -358,7 +360,7 @@ def report_rows(path):
                 or any(type(row[field]) is not int or row[field] < 0 for field in ("season", "episode"))):
             raise ValueError("Kandidatenliste enthält eine ungültige oder doppelte Folgenzuordnung")
         rows[key] = row
-    return rows.values()
+    return rows.values(), hashlib.sha256(raw).hexdigest()
 
 
 def report_asset(db, row, sources):
@@ -568,24 +570,56 @@ def measure_episode(catalogue, row, automation, release, deadline, *, compare_co
     return episode, "Laufzeit gemessen"
 
 
-def sample_runtimes(catalogue, pending, limit, automation, release, ready, stats):
+@contextmanager
+def probe_history(path):
+    # The checkpoint beside the report stores only playlist IDs and opaque asset keys.
+    descriptor = os.open(path, os.O_CREAT | os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    try:
+        mode = os.fstat(descriptor).st_mode
+        if not stat.S_ISREG(mode) or mode & 0o077:
+            raise ValueError("Prüfverlauf ist keine private reguläre Datei")
+    finally:
+        os.close(descriptor)
+    with closing(connect(path, "rw")) as db:
+        with db:
+            db.execute("""CREATE TABLE IF NOT EXISTS checked (
+                playlist_id INTEGER NOT NULL, asset_key TEXT NOT NULL, PRIMARY KEY(playlist_id, asset_key))""")
+        yield db
+
+
+def measurement_batches(pending, limit, history, offset):
+    if not limit or not any(pending.values()):
+        return
+    if history is None:
+        yield {lane: sorted(items)[:limit] for lane, items in pending.items()}
+        return
+
+    (lane, candidates), = pending.items()
+    checked = {row[0] for row in history.execute("SELECT asset_key FROM checked WHERE playlist_id=?", (lane,))}
+    ordered = sorted(candidates)
+    start = offset % len(ordered)
+    ordered = [item for item in ordered[start:] + ordered[:start] if item[2] not in checked]
+    print(f"{PLAYLISTS[lane]} | {len(ordered)} messbare Folgen stehen in diesem Durchlauf noch aus", flush=True)
+    for position in range(0, len(ordered), limit):
+        yield {lane: ordered[position:position + limit]}
+
+
+def sample_runtimes(catalogue, pending, automation, release, ready, stats, history=None):
     from skip_remote_client import RemoteDeferred, configured, health
 
     lock = catalogue.with_name("skip-analysis.lock")
     if lock.is_symlink() or not lock.is_file() or not configured():
         print("Messung zurückgestellt | Worker-Konfiguration oder Analysesperre fehlt.", flush=True)
-        return
+        return False
     try:
         health()
     except RemoteDeferred:
         print("Messung zurückgestellt | Hetzner-Worker nicht erreichbar oder Versionen unterschiedlich.", flush=True)
-        return
-    print(f"Laufzeitmessung | bis zu {limit} Folgen je Playlist, nacheinander im regulären Analyse-Slot ...", flush=True)
+        return False
     deadline = time.monotonic() + MEASUREMENT_SECONDS
-    queues = [sorted(pending[lane])[:limit] for lane in PLAYLISTS]
     paused = set()
     unavailable_states = ("HTTP 404", "HTTP 405", "Anbieterdatei nicht mehr eindeutig")
-    for batch in zip_longest(*queues):
+    for batch in zip_longest(*pending.values()):
         for item in batch:
             if item is None:
                 continue
@@ -593,10 +627,17 @@ def sample_runtimes(catalogue, pending, limit, automation, release, ready, stats
             lane = row["playlist_id"]
             if lane in paused:
                 continue
+            if history is not None:
+                # A long sweep yields the slot after each file. Bound the wait for each available slot.
+                deadline = time.monotonic() + MEASUREMENT_SECONDS
             with analysis_slot(lock, deadline) as acquired:
                 if not acquired:
                     print("Zeitbudget der Messung erreicht | vorhandene Ergebnisse gehen in die Freigabeprüfung.", flush=True)
-                    return
+                    return False
+                if history is not None and history.execute(
+                    "SELECT 1 FROM checked WHERE playlist_id=? AND asset_key=?", (lane, row["asset_key"])
+                ).fetchone():
+                    continue
                 started = time.monotonic()
                 try:
                     inspect_catalogue = sum(stats[lane][state] for state in unavailable_states) < 2
@@ -611,13 +652,18 @@ def sample_runtimes(catalogue, pending, limit, automation, release, ready, stats
                     episode, state = None, "Datenbank beschäftigt"
                 stats[lane]["Messzeit"] += time.monotonic() - started
                 stats[lane]["Messversuche"] += 1
+                if history is not None and (episode is not None or state in unavailable_states):
+                    with history:
+                        history.execute("INSERT OR IGNORE INTO checked(playlist_id,asset_key) VALUES(?,?)",
+                                        (lane, row["asset_key"]))
             stats[lane][state] += 1
             if episode:
                 ready.append((episode, payload))
             else:
-                print(f"{PLAYLISTS[lane]} | Messung S{row['season']:02}E{row['episode']:02} | {state}", flush=True)
+                if history is None or stats[lane][state] <= 2:
+                    print(f"{PLAYLISTS[lane]} | Messung S{row['season']:02}E{row['episode']:02} | {state}", flush=True)
                 if state in ("Analysezugang oder Online-Freigabe pausiert", "Laufzeitmessung zurückgestellt",
-                             "HTTP 401", "HTTP 429"):
+                             "HTTP 401", "HTTP 403", "HTTP 429"):
                     paused.add(lane)
                 if not stats[lane]["Laufzeit gemessen"] and (
                     stats[lane]["HTTP 404"] + stats[lane]["Anbieterdatei nicht mehr eindeutig"] >= 4
@@ -627,16 +673,10 @@ def sample_runtimes(catalogue, pending, limit, automation, release, ready, stats
                           flush=True)
             if state == "Laufzeit gemessen" and stats[lane][state] % 10 == 0:
                 print(f"{PLAYLISTS[lane]} | {stats[lane]['Laufzeit gemessen']} Laufzeiten gemessen", flush=True)
+    return not paused
 
 
-def recover_runtime_report(catalogue, report, cache, stage, gate, automation, release, runtime, limit):
-    rows = report_rows(report)
-    print("Lade den IntroDB-Export und prüfe die gespeicherte Kandidatenliste ...", flush=True)
-    manifest, export = stage.load_snapshot()
-    print(stage.INTRODB_ATTRIBUTION, flush=True)
-    ready, pending, stats = collect_runtimes(catalogue, rows, export)
-    if limit and any(pending.values()):
-        sample_runtimes(catalogue, pending, limit, automation, release, ready, stats)
+def release_runtime_markers(catalogue, ready, cache, exported_at, gate, automation, release, runtime):
     entries, confirmed = {}, []
     for episode, payload in ready:
         markers, _ = _promote(parse_introdb(payload, episode), {kind for kind in KINDS if payload.get("no_" + kind)})
@@ -647,16 +687,59 @@ def recover_runtime_report(catalogue, report, cache, stage, gate, automation, re
             key = _key(episode)
             entries[key] = markers
             confirmed.append((episode.playlist_id, episode.asset_key, key, candidates))
-    results = {lane: Counter() for lane in PLAYLISTS}
-    if confirmed:
-        with release_cache(cache, entries, manifest["generated_at"], automation, runtime):
-            results = gate.apply_release(catalogue, confirmed, automation, release)
-    for lane, name in PLAYLISTS.items():
+    if not confirmed:
+        return {}
+    with release_cache(cache, entries, exported_at, automation, runtime):
+        return gate.apply_release(catalogue, confirmed, automation, release)
+
+
+def recover_runtime_report(catalogue, report, cache, stage, gate, automation, release, runtime, limit, *,
+                           playlist=None, sweep=False, offset=0):
+    rows, report_hash = report_rows(report)
+    playlists = PLAYLISTS if playlist is None else {playlist: PLAYLISTS[playlist]}
+    selected_rows = (row for row in rows if row["playlist_id"] in playlists)
+    print("Lade den IntroDB-Export und prüfe die gespeicherte Kandidatenliste ...", flush=True)
+    manifest, export = stage.load_snapshot()
+    print(stage.INTRODB_ATTRIBUTION, flush=True)
+    ready, pending, stats = collect_runtimes(catalogue, selected_rows, export)
+    pending = {lane: pending[lane] for lane in playlists}
+    approvals = Counter()
+
+    def release_ready():
+        if ready:
+            results = release_runtime_markers(catalogue, ready, cache, manifest["generated_at"],
+                                              gate, automation, release, runtime)
+            for lane in playlists:
+                approvals[lane] += results.get(lane, {}).get("neu freigegeben", 0)
+            ready.clear()
+
+    history_path = report.with_name(f"{report.stem}.{report_hash[:24]}.progress.sqlite3")
+    history_context = probe_history(history_path) if sweep else nullcontext(None)
+    with history_context as history:
+        for batch in measurement_batches(pending, limit, history, offset):
+            print("Laufzeitmessung im regulären Analyse-Slot | " +
+                  " | ".join(f"{PLAYLISTS[lane]} bis zu {len(items)} Folgen" for lane, items in batch.items()),
+                  flush=True)
+            block_stats = {lane: Counter() for lane in batch}
+            finished = sample_runtimes(catalogue, batch, automation, release, ready, block_stats, history)
+            for lane, counts in block_stats.items():
+                stats[lane].update(counts)
+            release_ready()
+            if sweep:
+                print(f"{PLAYLISTS[playlist]} | bisher {stats[playlist]['Messversuche']} Messversuche | "
+                      f"HTTP 405 bei {stats[playlist]['HTTP 405']} | "
+                      f"{approvals[playlist]} Marker neu freigegeben", flush=True)
+            if not finished:
+                if sweep:
+                    print("Nachlauf pausiert | gleicher Aufruf setzt mit dem gespeicherten Stand fort.", flush=True)
+                break
+    release_ready()
+    for lane, name in playlists.items():
         counts = stats[lane]
         measured = counts["Laufzeit gemessen"]
         concurrent = counts["Durch Worker nachgemessen"]
         open_episodes = counts["ohne Laufzeit"] - measured - concurrent
-        approved = results[lane]["neu freigegeben"]
+        approved = approvals[lane]
         print(f"{name} | nachgemessen {measured} | seit Prüflauf bereits mit Laufzeit "
               f"{counts['inzwischen mit Laufzeit'] + concurrent} | Marker neu freigegeben {approved} "
               f"| weiterhin ohne Laufzeit {open_episodes} | Messzeit {counts['Messzeit']:.1f} s",
@@ -714,15 +797,29 @@ def main():
     parser.add_argument("--cache", type=Path, default=CACHE)
     parser.add_argument("--runtime-report", type=Path, help="Kandidatenliste aus --missing-runtimes nachprüfen")
     parser.add_argument("--measure", type=int, default=0, metavar="FOLGEN_PRO_PLAYLIST",
-                        help="Zusätzlich bis zu so viele fehlende Laufzeiten je Playlist messen")
+                        help="Maximale Folgenzahl je Playlist, im Nachlauf je Block (Standard dort 64)")
+    parser.add_argument("--playlist", type=int, choices=tuple(PLAYLISTS),
+                        help="Nur diese Analyse-Playlist bearbeiten (8 = 4K ANALYSE, 10 = THE BEST)")
+    parser.add_argument("--sweep", action="store_true",
+                        help="Alle messbaren Kandidaten einer Playlist blockweise mit Prüfverlauf bearbeiten")
+    parser.add_argument("--offset", type=int, default=0,
+                        help="Die sortierte Kandidatenliste für den Nachlauf um diese Anzahl drehen")
     args = parser.parse_args()
     if args.measure and (not args.runtime_report or not 1 <= args.measure <= 64):
         parser.error("--measure braucht --runtime-report sowie einen Wert zwischen 1 und 64")
+    if args.playlist is not None and not args.runtime_report:
+        parser.error("--playlist braucht --runtime-report")
+    if args.sweep and args.playlist is None:
+        parser.error("--sweep braucht --playlist")
+    if args.offset < 0 or (args.offset and not args.sweep):
+        parser.error("--offset braucht --sweep und einen nichtnegativen Wert")
     with TemporaryDirectory(prefix="episcene-catalogue-") as temporary:
         stage, gate = load_helpers(Path(temporary))
         if args.runtime_report:
             recover_runtime_report(args.catalog, args.runtime_report, args.cache, stage, gate,
-                                   skip_automation, skip_release, episcene_knowledge_first_runtime, args.measure)
+                                   skip_automation, skip_release, episcene_knowledge_first_runtime,
+                                   (args.measure or 64) if args.sweep else args.measure,
+                                   playlist=args.playlist, sweep=args.sweep, offset=args.offset)
         else:
             update_catalogue(args.catalog, args.snapshot, args.cache, stage, gate,
                              skip_automation, skip_release, episcene_knowledge_first_runtime)
