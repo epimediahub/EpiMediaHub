@@ -14,8 +14,9 @@ import sqlite3
 import time
 import unicodedata
 from collections import Counter, defaultdict
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
+from itertools import zip_longest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.error import HTTPError
@@ -23,12 +24,15 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from analysis_identity import _asset_identity, _clean_id, _columns, _source_list
+from bridge import Episode, KINDS, parse_introdb
 from runtime_integration import _cache_path
-from trusted_external import SCHEMA
+from trusted_external import SCHEMA, _key, _promote
 from trusted_external_sync import CACHE, PRODUCTION
 
 PLAYLISTS = {8: "4K ANALYSE", 10: "THE BEST"}
 SNAPSHOT = Path("/var/lib/episcene-learning/introdb-open-catalogue.sqlite3")
+RUNTIME_REPORT_FORMAT = "episcene_introdb_missing_runtimes_v1"
+MEASUREMENT_SECONDS = 480
 IDS = ("imdb_id", "tmdb_id", "tvdb_id")
 PUBLIC_QUERY = "SELECT DISTINCT ?tmdb ?imdb WHERE { ?s wdt:P4983 ?tmdb; wdt:P345 ?imdb . }"
 WIKIDATA = "https://query.wikidata.org/sparql?" + urlencode({"query": PUBLIC_QUERY})
@@ -304,7 +308,8 @@ def seed_open_cache(path, snapshot, entries, valid_range):
     return updated
 
 
-def release_staged(catalogue, snapshot, cache, entries, export_date, gate, automation, release, runtime):
+@contextmanager
+def release_cache(cache, entries, export_date, automation, runtime):
     previous_cache = runtime.CACHE
     with TemporaryDirectory(prefix="episcene-open-markers-") as temporary:
         work_cache = Path(temporary) / "trusted-sources.sqlite3"
@@ -322,16 +327,266 @@ def release_staged(catalogue, snapshot, cache, entries, export_date, gate, autom
             print(f"Cache-Ergänzung vorübergehend fehlgeschlagen ({type(error).__name__}). "
                   "Die Freigabe prüft den vorhandenen Live-Cache.", flush=True)
         try:
-            _, staged = gate.staged_markers(snapshot)
-            confirmed = []
-            report, _ = gate.inspect_catalogue(
-                catalogue, staged, online_enabled=automation.enabled, release_enabled=release.enabled,
-                trusted_online_markers=automation.trusted_online_markers, confirmed=confirmed,
-            )
-            releases = gate.apply_release(catalogue, confirmed, automation, release)
+            yield
         finally:
             runtime.CACHE = previous_cache
+
+
+def release_staged(catalogue, snapshot, cache, entries, export_date, gate, automation, release, runtime):
+    with release_cache(cache, entries, export_date, automation, runtime):
+        _, staged = gate.staged_markers(snapshot)
+        confirmed = []
+        report, _ = gate.inspect_catalogue(
+            catalogue, staged, online_enabled=automation.enabled, release_enabled=release.enabled,
+            trusted_online_markers=automation.trusted_online_markers, confirmed=confirmed,
+        )
+        releases = gate.apply_release(catalogue, confirmed, automation, release)
     return report, releases
+
+
+def report_rows(path):
+    with path.open(encoding="utf-8") as source:
+        report = json.load(source)
+    if (not isinstance(report, dict) or report.get("format") != RUNTIME_REPORT_FORMAT
+            or not isinstance(report.get("episodes"), list)):
+        raise ValueError("Datei ist keine Kandidatenliste aus dem IntroDB-Laufzeitprüflauf")
+    rows = {}
+    for row in report["episodes"]:
+        key = row["asset_key"]
+        if (not isinstance(key, str) or not 0 < len(key) <= 240 or row["playlist_id"] not in PLAYLISTS
+                or not _clean_id("imdb_id", row["imdb_id"]) or key in rows
+                or any(type(row[field]) is not int or row[field] < 0 for field in ("season", "episode"))):
+            raise ValueError("Kandidatenliste enthält eine ungültige oder doppelte Folgenzuordnung")
+        rows[key] = row
+    return rows.values()
+
+
+def report_asset(db, row, sources):
+    assets = db.execute("SELECT * FROM skip_assets WHERE asset_key=? LIMIT 2", (row["asset_key"],)).fetchall()
+    if len(assets) != 1:
+        return None, None
+    asset = assets[0]
+    if asset["playlist_id"] != row["playlist_id"] or asset["media_type"] != "episode":
+        return None, None
+    identity, state = _asset_identity(db, asset, sources)
+    if state != "ok" or any(str(identity[key]) != str(row[key]) for key in ("imdb_id", "season", "episode")):
+        return None, None
+    return asset, identity
+
+
+def collect_runtimes(catalogue, rows, export):
+    stats = {lane: Counter() for lane in PLAYLISTS}
+    pending = {lane: [] for lane in PLAYLISTS}
+    ready = []
+    with closing(connect(catalogue, "ro")) as db:
+        db.execute("BEGIN")
+        sources = _source_list(db, _columns(db, "skip_assets"))
+        for row in rows:
+            lane = row["playlist_id"]
+            asset, identity = report_asset(db, row, sources)
+            if asset is None:
+                stats[lane]["Zuordnung geändert"] += 1
+                continue
+            payload = export.get((identity["imdb_id"], int(identity["season"]), int(identity["episode"])), {})
+            kinds = [kind for kind in KINDS if kind in payload and not payload.get("no_" + kind)
+                     and 0 <= payload[kind]["start_ms"] < payload[kind]["end_ms"] <= 86_400_000]
+            if not kinds:
+                stats[lane]["Treffer im Export entfallen"] += 1
+                continue
+            try:
+                episode = Episode.from_dict(identity)
+            except (TypeError, ValueError, OverflowError):
+                stats[lane]["ohne Laufzeit"] += 1
+                status = ready_to_measure(db, asset)
+                if status:
+                    pending[lane].append((status != "queued", -len(kinds), row["asset_key"], row, payload))
+                continue
+            stats[lane]["inzwischen mit Laufzeit"] += 1
+            ready.append((episode, payload))
+    return ready, pending, stats
+
+
+def ready_to_measure(db, asset):
+    if asset["duration_ms"] != 0:
+        return None
+    key = asset["asset_key"]
+    jobs = db.execute("SELECT status FROM skip_jobs WHERE asset_key=? LIMIT 2", (key,)).fetchall()
+    if len(jobs) == 1 and jobs[0]["status"] in ("queued", "failed") and db.execute(
+        "SELECT 1 FROM skip_auto_assets WHERE asset_key=?", (key,)
+    ).fetchone():
+        return jobs[0]["status"]
+    return None
+
+
+@contextmanager
+def analysis_slot(lock_path, deadline):
+    import fcntl
+
+    with lock_path.open("rb") as handle:
+        next_message = time.monotonic()
+        while time.monotonic() < deadline:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                now = time.monotonic()
+                if now >= next_message:
+                    print("Reguläre Analyse läuft | warte auf den freien Analyseslot ...", flush=True)
+                    next_message = now + 60
+                time.sleep(min(1, max(0, deadline - time.monotonic())))
+                continue
+            try:
+                yield True
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+            return
+        yield False
+
+
+def measure_episode(catalogue, row, automation, release, deadline):
+    from skip_analysis import probe, provider_asset_key, provider_proxy, source_url
+    from skip_analysis_accounts import unavailable
+    from skip_analysis_worker import busy_check
+
+    lane, key = row["playlist_id"], row["asset_key"]
+
+    def read_catalogue():
+        return closing(connect(catalogue, "ro"))
+
+    with read_catalogue() as db:
+        sources = _source_list(db, _columns(db, "skip_assets"))
+        asset, identity = report_asset(db, row, sources)
+        if asset is None:
+            return None, "Folge inzwischen geändert"
+        try:
+            return Episode.from_dict(identity), "Durch Worker nachgemessen"
+        except (TypeError, ValueError, OverflowError):
+            pass
+        if not ready_to_measure(db, asset):
+            return None, "Folge inzwischen geändert"
+        if (not automation.enabled(db, lane, online=True) or not release.enabled(db, lane)
+                or lane in unavailable(db)):
+            return None, "Analysezugang oder Online-Freigabe pausiert"
+        playlist = db.execute("SELECT * FROM skip_analysis_playlists WHERE id=?", (lane,)).fetchone()
+
+    source_busy = busy_check(read_catalogue, [playlist])
+
+    def busy():
+        return time.monotonic() >= deadline or source_busy()
+
+    try:
+        url = source_url(playlist, asset)
+        if provider_asset_key(url, "episode") != key:
+            return None, "Anbieterdatei nicht mehr eindeutig"
+        if busy():
+            return None, "Laufzeitmessung zurückgestellt"
+        with provider_proxy(url, busy) as source:
+            duration, _ = probe(source, busy)
+        if type(duration) is not int:
+            raise ValueError("duration_unknown")
+        episode = Episode.from_dict(dict(identity, duration_ms=duration))
+        if busy_check(read_catalogue, [playlist])():
+            return None, "Analysezugang oder Online-Freigabe pausiert"
+    except ValueError as error:
+        code = str(error)
+        if code == "analysis_deferred":
+            return None, "Laufzeitmessung zurückgestellt"
+        match = re.fullmatch(r"provider_http_([45]\d{2})", code)
+        return None, f"HTTP {match[1]}" if match else "Laufzeit nicht ermittelt"
+    except OSError:
+        return None, "Dateizugriff fehlgeschlagen"
+
+    with closing(connect(catalogue, "rw")) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        current, current_identity = report_asset(db, row, sources)
+        if current != asset or current_identity != identity or not ready_to_measure(db, current):
+            return None, "Folge inzwischen geändert"
+        if not automation.enabled(db, lane, online=True) or not release.enabled(db, lane):
+            return None, "Analysezugang oder Online-Freigabe pausiert"
+        db.execute("UPDATE skip_assets SET duration_ms=? WHERE asset_key=? AND duration_ms=0", (duration, key))
+    return episode, "Laufzeit gemessen"
+
+
+def sample_runtimes(catalogue, pending, limit, automation, release, ready, stats):
+    from skip_remote_client import RemoteDeferred, configured, health
+
+    lock = catalogue.with_name("skip-analysis.lock")
+    if lock.is_symlink() or not lock.is_file() or not configured():
+        print("Messung zurückgestellt | Worker-Konfiguration oder Analysesperre fehlt.", flush=True)
+        return
+    try:
+        health()
+    except RemoteDeferred:
+        print("Messung zurückgestellt | Hetzner-Worker nicht erreichbar oder Versionen unterschiedlich.", flush=True)
+        return
+    print(f"Laufzeitmessung | bis zu {limit} Folgen je Playlist, nacheinander im regulären Analyse-Slot ...", flush=True)
+    deadline = time.monotonic() + MEASUREMENT_SECONDS
+    queues = [sorted(pending[lane])[:limit] for lane in PLAYLISTS]
+    paused = set()
+    for batch in zip_longest(*queues):
+        for item in batch:
+            if item is None:
+                continue
+            _, _, _, row, payload = item
+            lane = row["playlist_id"]
+            if lane in paused:
+                continue
+            with analysis_slot(lock, deadline) as acquired:
+                if not acquired:
+                    print("Zeitbudget der Messung erreicht | vorhandene Ergebnisse gehen in die Freigabeprüfung.", flush=True)
+                    return
+                started = time.monotonic()
+                try:
+                    episode, state = measure_episode(catalogue, row, automation, release, deadline)
+                except sqlite3.OperationalError as error:
+                    error_code = getattr(error, "sqlite_errorcode", sqlite3.SQLITE_ERROR) & 0xff
+                    if error_code not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                        raise
+                    episode, state = None, "Datenbank beschäftigt"
+                stats[lane]["Messzeit"] += time.monotonic() - started
+            stats[lane][state] += 1
+            if episode:
+                ready.append((episode, payload))
+            else:
+                print(f"{PLAYLISTS[lane]} | Messung S{row['season']:02}E{row['episode']:02} | {state}", flush=True)
+                if state in ("Analysezugang oder Online-Freigabe pausiert", "Laufzeitmessung zurückgestellt",
+                             "HTTP 401", "HTTP 429"):
+                    paused.add(lane)
+            if state == "Laufzeit gemessen" and stats[lane][state] % 10 == 0:
+                print(f"{PLAYLISTS[lane]} | {stats[lane]['Laufzeit gemessen']} Laufzeiten gemessen", flush=True)
+
+
+def recover_runtime_report(catalogue, report, cache, stage, gate, automation, release, runtime, limit):
+    rows = report_rows(report)
+    print("Lade den IntroDB-Export und prüfe die gespeicherte Kandidatenliste ...", flush=True)
+    manifest, export = stage.load_snapshot()
+    print(stage.INTRODB_ATTRIBUTION, flush=True)
+    ready, pending, stats = collect_runtimes(catalogue, rows, export)
+    if limit and any(pending.values()):
+        sample_runtimes(catalogue, pending, limit, automation, release, ready, stats)
+    entries, confirmed = {}, []
+    for episode, payload in ready:
+        markers, _ = _promote(parse_introdb(payload, episode), {kind for kind in KINDS if payload.get("no_" + kind)})
+        candidates = {gate.stamp(marker) for marker in markers if automation.valid_range(
+            marker["segment_type"], marker["start_ms"], marker["end_ms"], episode.duration_ms
+        )}
+        if candidates:
+            key = _key(episode)
+            entries[key] = markers
+            confirmed.append((episode.playlist_id, episode.asset_key, key, candidates))
+    results = {lane: Counter() for lane in PLAYLISTS}
+    if confirmed:
+        with release_cache(cache, entries, manifest["generated_at"], automation, runtime):
+            results = gate.apply_release(catalogue, confirmed, automation, release)
+    for lane, name in PLAYLISTS.items():
+        counts = stats[lane]
+        measured = counts["Laufzeit gemessen"]
+        concurrent = counts["Durch Worker nachgemessen"]
+        open_episodes = counts["ohne Laufzeit"] - measured - concurrent
+        approved = results[lane]["neu freigegeben"]
+        print(f"{name} | nachgemessen {measured} | seit Prüflauf bereits mit Laufzeit "
+              f"{counts['inzwischen mit Laufzeit'] + concurrent} | Marker neu freigegeben {approved} "
+              f"| weiterhin ohne Laufzeit {open_episodes} | Messzeit {counts['Messzeit']:.1f} s",
+              flush=True)
 
 
 def update_catalogue(catalogue, snapshot, cache, stage, gate, automation, release, runtime):
@@ -383,11 +638,20 @@ def main():
     parser.add_argument("--catalog", type=Path, default=PRODUCTION)
     parser.add_argument("--snapshot", type=Path, default=SNAPSHOT)
     parser.add_argument("--cache", type=Path, default=CACHE)
+    parser.add_argument("--runtime-report", type=Path, help="Kandidatenliste aus --missing-runtimes nachprüfen")
+    parser.add_argument("--measure", type=int, default=0, metavar="FOLGEN_PRO_PLAYLIST",
+                        help="Zusätzlich bis zu so viele fehlende Laufzeiten je Playlist messen")
     args = parser.parse_args()
+    if args.measure and (not args.runtime_report or not 1 <= args.measure <= 64):
+        parser.error("--measure braucht --runtime-report sowie einen Wert zwischen 1 und 64")
     with TemporaryDirectory(prefix="episcene-catalogue-") as temporary:
         stage, gate = load_helpers(Path(temporary))
-        update_catalogue(args.catalog, args.snapshot, args.cache, stage, gate,
-                         skip_automation, skip_release, episcene_knowledge_first_runtime)
+        if args.runtime_report:
+            recover_runtime_report(args.catalog, args.runtime_report, args.cache, stage, gate,
+                                   skip_automation, skip_release, episcene_knowledge_first_runtime, args.measure)
+        else:
+            update_catalogue(args.catalog, args.snapshot, args.cache, stage, gate,
+                             skip_automation, skip_release, episcene_knowledge_first_runtime)
 
 
 if __name__ == "__main__":
