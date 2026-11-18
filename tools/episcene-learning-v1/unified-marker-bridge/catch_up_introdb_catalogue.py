@@ -442,9 +442,47 @@ def analysis_slot(lock_path, deadline):
         yield False
 
 
-def measure_episode(catalogue, row, automation, release, deadline):
+def catalogue_file_state(read_catalogue, playlist, asset, automation, busy):
+    with read_catalogue() as db:
+        identifiers = db.execute("""SELECT DISTINCT series_id FROM skip_catalogue_episodes
+            WHERE playlist_id=? AND asset_key=? LIMIT 2""", (playlist["id"], asset["asset_key"])).fetchall()
+        if not identifiers:
+            identifiers = db.execute("""SELECT series_id FROM skip_auto_series
+                WHERE playlist_id=? AND source_key=? AND season=? AND series_id<>'' LIMIT 2""",
+                (playlist["id"], asset["source_key"], asset["season"])).fetchall()
+    if len(identifiers) != 1 or automation.number(identifiers[0][0]) is None:
+        return "keine eindeutige Anbieter-Serienzuordnung"
+    series_id = identifiers[0][0]
+    if automation.series_key(playlist, asset, series_id) != asset["source_key"]:
+        return "gespeicherte Serienzuordnung passt nicht zum aktiven Anbieterpfad"
+    try:
+        body = automation.provider_api(playlist, "get_series_info", busy, series_id=series_id)
+    except ValueError as error:
+        match = re.fullmatch(r"provider_http_([45]\d{2})", str(error))
+        return f"Katalog-API HTTP {match[1]}" if match else "Katalog-API nicht auswertbar"
+    except OSError:
+        return "Katalog-API nicht erreichbar"
+    seasons = body.get("episodes") if isinstance(body, dict) else None
+    if not isinstance(seasons, dict):
+        return "Katalog-API liefert keine Episodenliste"
+    if str(asset["season"]) not in seasons or seasons[str(asset["season"])] == []:
+        return "Staffel fehlt in der aktuellen Anbieterantwort"
+    episodes = automation.season_entries(body, asset["season"])
+    if not episodes:
+        return "Staffel in der Anbieterantwort nicht eindeutig"
+    for episode in episodes:
+        if episode["episode"] != asset["episode"]:
+            continue
+        if episode["stream_id"] == str(asset["stream_id"]) and episode["extension"] == asset["extension"]:
+            return "Datei im aktuellen Anbieterkatalog unverändert"
+        return "Anbieterkatalog nennt eine andere Stream-ID oder Dateiendung"
+    return "Folge fehlt in der aktuellen Anbieterantwort"
+
+
+def measure_episode(catalogue, row, automation, release, deadline, *, compare_context=False,
+                    inspect_catalogue=False):
     from skip_analysis import probe, provider_asset_key, provider_proxy, source_url
-    from skip_analysis_accounts import unavailable
+    from skip_analysis_accounts import unavailable, using
     from skip_analysis_worker import busy_check
 
     lane, key = row["playlist_id"], row["asset_key"]
@@ -468,32 +506,56 @@ def measure_episode(catalogue, row, automation, release, deadline):
             return None, "Analysezugang oder Online-Freigabe pausiert"
         playlist = db.execute("SELECT * FROM skip_analysis_playlists WHERE id=?", (lane,)).fetchone()
 
-    source_busy = busy_check(read_catalogue, [playlist])
+    previous_url = None
+    if compare_context:
+        try:
+            previous_url = source_url(playlist, asset)
+        except (OSError, ValueError, KeyError):
+            pass
+    with using(read_catalogue):
+        source_busy = busy_check(read_catalogue, [playlist])
 
-    def busy():
-        return time.monotonic() >= deadline or source_busy()
+        def busy():
+            return time.monotonic() >= deadline or source_busy()
 
-    try:
-        url = source_url(playlist, asset)
-        if provider_asset_key(url, "episode") != key:
-            return None, "Anbieterdatei nicht mehr eindeutig"
-        if busy():
-            return None, "Laufzeitmessung zurückgestellt"
-        with provider_proxy(url, busy) as source:
-            duration, _ = probe(source, busy)
-        if type(duration) is not int:
-            raise ValueError("duration_unknown")
-        episode = Episode.from_dict(dict(identity, duration_ms=duration))
-        if busy_check(read_catalogue, [playlist])():
-            return None, "Analysezugang oder Online-Freigabe pausiert"
-    except ValueError as error:
-        code = str(error)
-        if code == "analysis_deferred":
-            return None, "Laufzeitmessung zurückgestellt"
-        match = re.fullmatch(r"provider_http_([45]\d{2})", code)
-        return None, f"HTTP {match[1]}" if match else "Laufzeit nicht ermittelt"
-    except OSError:
-        return None, "Dateizugriff fehlgeschlagen"
+        def describe_catalogue():
+            if inspect_catalogue and not busy():
+                try:
+                    state = catalogue_file_state(read_catalogue, playlist, asset, automation, busy)
+                except (sqlite3.Error, OSError, ValueError, KeyError, TypeError):
+                    state = "Anbieterabgleich nicht auswertbar"
+                print(f"{PLAYLISTS[lane]} | Anbieterabgleich S{row['season']:02}E{row['episode']:02} | {state}",
+                      flush=True)
+
+        try:
+            if busy():
+                return None, "Laufzeitmessung zurückgestellt"
+            url = source_url(playlist, asset)
+            if compare_context:
+                comparison = "gleicher Dateiaufruf" if url == previous_url else "anderer Dateiaufruf"
+                if previous_url is None:
+                    comparison = "bisheriger Dateiaufruf nicht ermittelbar"
+                print(f"{PLAYLISTS[lane]} | regulärer Analysezugang | {comparison}", flush=True)
+            if provider_asset_key(url, "episode") != key:
+                describe_catalogue()
+                return None, "Anbieterdatei nicht mehr eindeutig"
+            with provider_proxy(url, busy) as source:
+                duration, _ = probe(source, busy)
+            if type(duration) is not int:
+                raise ValueError("duration_unknown")
+            episode = Episode.from_dict(dict(identity, duration_ms=duration))
+            if busy_check(read_catalogue, [playlist])():
+                return None, "Analysezugang oder Online-Freigabe pausiert"
+        except ValueError as error:
+            code = str(error)
+            if code == "analysis_deferred":
+                return None, "Laufzeitmessung zurückgestellt"
+            match = re.fullmatch(r"provider_http_([45]\d{2})", code)
+            if match and match[1] in ("404", "405"):
+                describe_catalogue()
+            return None, f"HTTP {match[1]}" if match else "Laufzeit nicht ermittelt"
+        except OSError:
+            return None, "Dateizugriff fehlgeschlagen"
 
     with closing(connect(catalogue, "rw")) as db, db:
         db.execute("BEGIN IMMEDIATE")
@@ -522,6 +584,7 @@ def sample_runtimes(catalogue, pending, limit, automation, release, ready, stats
     deadline = time.monotonic() + MEASUREMENT_SECONDS
     queues = [sorted(pending[lane])[:limit] for lane in PLAYLISTS]
     paused = set()
+    unavailable_states = ("HTTP 404", "HTTP 405", "Anbieterdatei nicht mehr eindeutig")
     for batch in zip_longest(*queues):
         for item in batch:
             if item is None:
@@ -536,13 +599,18 @@ def sample_runtimes(catalogue, pending, limit, automation, release, ready, stats
                     return
                 started = time.monotonic()
                 try:
-                    episode, state = measure_episode(catalogue, row, automation, release, deadline)
+                    inspect_catalogue = sum(stats[lane][state] for state in unavailable_states) < 2
+                    episode, state = measure_episode(
+                        catalogue, row, automation, release, deadline,
+                        compare_context=stats[lane]["Messversuche"] == 0, inspect_catalogue=inspect_catalogue,
+                    )
                 except sqlite3.OperationalError as error:
                     error_code = getattr(error, "sqlite_errorcode", sqlite3.SQLITE_ERROR) & 0xff
                     if error_code not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
                         raise
                     episode, state = None, "Datenbank beschäftigt"
                 stats[lane]["Messzeit"] += time.monotonic() - started
+                stats[lane]["Messversuche"] += 1
             stats[lane][state] += 1
             if episode:
                 ready.append((episode, payload))
@@ -551,6 +619,12 @@ def sample_runtimes(catalogue, pending, limit, automation, release, ready, stats
                 if state in ("Analysezugang oder Online-Freigabe pausiert", "Laufzeitmessung zurückgestellt",
                              "HTTP 401", "HTTP 429"):
                     paused.add(lane)
+                if not stats[lane]["Laufzeit gemessen"] and (
+                    stats[lane]["HTTP 404"] + stats[lane]["Anbieterdatei nicht mehr eindeutig"] >= 4
+                ):
+                    paused.add(lane)
+                    print(f"{PLAYLISTS[lane]} | Nachmessung nach vier HTTP-404- oder Zuordnungsfehlern pausiert",
+                          flush=True)
             if state == "Laufzeit gemessen" and stats[lane][state] % 10 == 0:
                 print(f"{PLAYLISTS[lane]} | {stats[lane]['Laufzeit gemessen']} Laufzeiten gemessen", flush=True)
 
