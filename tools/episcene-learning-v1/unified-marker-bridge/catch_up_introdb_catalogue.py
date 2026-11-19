@@ -421,7 +421,7 @@ def ready_to_measure(db, asset):
 
 
 @contextmanager
-def analysis_slot(lock_path, deadline):
+def analysis_slot(lock_path, deadline, *, on_timeout=None):
     import fcntl
 
     with lock_path.open("rb") as handle:
@@ -436,12 +436,19 @@ def analysis_slot(lock_path, deadline):
                     next_message = now + 60
                 time.sleep(min(1, max(0, deadline - time.monotonic())))
                 continue
-            try:
-                yield True
-            finally:
-                fcntl.flock(handle, fcntl.LOCK_UN)
-            return
-        yield False
+            break
+        else:
+            if on_timeout is None:
+                yield False
+                return
+            on_timeout()
+            print("Analyseslot weiter belegt | Nachlauf bleibt aktiv und setzt beim nächsten freien Slot fort.",
+                  flush=True)
+            fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield True
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def catalogue_file_state(read_catalogue, playlist, asset, automation, busy):
@@ -588,34 +595,45 @@ def probe_history(path):
 
 
 def measurement_batches(pending, limit, history, offset):
-    if not limit or not any(pending.values()):
-        return
-    if history is None:
-        yield {lane: sorted(items)[:limit] for lane, items in pending.items()}
+    if not limit:
         return
 
-    (lane, candidates), = pending.items()
-    checked = {row[0] for row in history.execute("SELECT asset_key FROM checked WHERE playlist_id=?", (lane,))}
-    ordered = sorted(candidates)
-    start = offset % len(ordered)
-    ordered = [item for item in ordered[start:] + ordered[:start] if item[2] not in checked]
-    print(f"{PLAYLISTS[lane]} | {len(ordered)} messbare Folgen stehen in diesem Durchlauf noch aus", flush=True)
-    for position in range(0, len(ordered), limit):
-        yield {lane: ordered[position:position + limit]}
+    queues = {}
+    for lane, candidates in pending.items():
+        ordered = sorted(candidates)
+        if history is None:
+            queues[lane] = ordered[:limit]
+            continue
+        checked = {row[0] for row in history.execute("SELECT asset_key FROM checked WHERE playlist_id=?", (lane,))}
+        if ordered:
+            start = offset % len(ordered)
+            ordered = ordered[start:] + ordered[:start]
+        queues[lane] = [item for item in ordered if item[2] not in checked]
+        print(f"{PLAYLISTS[lane]} | {len(queues[lane])} messbare Folgen stehen in diesem Durchlauf noch aus",
+              flush=True)
+    longest = max((len(items) for items in queues.values()), default=0)
+    for start in range(0, longest, limit):
+        yield {lane: items[start:start + limit] for lane, items in queues.items() if start < len(items)}
 
 
-def sample_runtimes(catalogue, pending, automation, release, ready, stats, history=None):
+def sample_runtimes(catalogue, pending, automation, release, ready, stats, history=None, *, release_on_wait=None):
     from skip_remote_client import RemoteDeferred, configured, health
 
     lock = catalogue.with_name("skip-analysis.lock")
     if lock.is_symlink() or not lock.is_file() or not configured():
         print("Messung zurückgestellt | Worker-Konfiguration oder Analysesperre fehlt.", flush=True)
-        return False
-    try:
-        health()
-    except RemoteDeferred:
-        print("Messung zurückgestellt | Hetzner-Worker nicht erreichbar oder Versionen unterschiedlich.", flush=True)
-        return False
+        return set(pending)
+
+    def worker_ready():
+        try:
+            health()
+        except RemoteDeferred:
+            print("Messung zurückgestellt | Hetzner-Worker nicht erreichbar oder Versionen unterschiedlich.", flush=True)
+            return False
+        return True
+
+    if not worker_ready():
+        return set(pending)
     deadline = time.monotonic() + MEASUREMENT_SECONDS
     paused = set()
     unavailable_states = ("HTTP 404", "HTTP 405", "Anbieterdatei nicht mehr eindeutig")
@@ -627,22 +645,23 @@ def sample_runtimes(catalogue, pending, automation, release, ready, stats, histo
             lane = row["playlist_id"]
             if lane in paused:
                 continue
-            if history is not None:
-                # A long sweep yields the slot after each file. Bound the wait for each available slot.
-                deadline = time.monotonic() + MEASUREMENT_SECONDS
-            with analysis_slot(lock, deadline) as acquired:
+            slot_deadline = time.monotonic() + MEASUREMENT_SECONDS if history is not None else deadline
+            with analysis_slot(lock, slot_deadline, on_timeout=release_on_wait) as acquired:
                 if not acquired:
                     print("Zeitbudget der Messung erreicht | vorhandene Ergebnisse gehen in die Freigabeprüfung.", flush=True)
-                    return False
+                    return set(pending)
                 if history is not None and history.execute(
                     "SELECT 1 FROM checked WHERE playlist_id=? AND asset_key=?", (lane, row["asset_key"])
                 ).fetchone():
                     continue
+                if history is not None and time.monotonic() >= slot_deadline and not worker_ready():
+                    return set(pending)
                 started = time.monotonic()
+                probe_deadline = started + MEASUREMENT_SECONDS if history is not None else deadline
                 try:
                     inspect_catalogue = sum(stats[lane][state] for state in unavailable_states) < 2
                     episode, state = measure_episode(
-                        catalogue, row, automation, release, deadline,
+                        catalogue, row, automation, release, probe_deadline,
                         compare_context=stats[lane]["Messversuche"] == 0, inspect_catalogue=inspect_catalogue,
                     )
                 except sqlite3.OperationalError as error:
@@ -671,9 +690,13 @@ def sample_runtimes(catalogue, pending, automation, release, ready, stats, histo
                     paused.add(lane)
                     print(f"{PLAYLISTS[lane]} | Nachmessung nach vier HTTP-404- oder Zuordnungsfehlern pausiert",
                           flush=True)
-            if state == "Laufzeit gemessen" and stats[lane][state] % 10 == 0:
-                print(f"{PLAYLISTS[lane]} | {stats[lane]['Laufzeit gemessen']} Laufzeiten gemessen", flush=True)
-    return not paused
+            if state == "Laufzeit gemessen":
+                if stats[lane][state] == 1:
+                    print(f"{PLAYLISTS[lane]} | Laufzeit für S{row['season']:02}E{row['episode']:02} gemessen",
+                          flush=True)
+                elif stats[lane][state] % 10 == 0:
+                    print(f"{PLAYLISTS[lane]} | {stats[lane][state]} Laufzeiten gemessen", flush=True)
+    return paused
 
 
 def release_runtime_markers(catalogue, ready, cache, exported_at, gate, automation, release, runtime):
@@ -696,7 +719,8 @@ def release_runtime_markers(catalogue, ready, cache, exported_at, gate, automati
 def recover_runtime_report(catalogue, report, cache, stage, gate, automation, release, runtime, limit, *,
                            playlist=None, sweep=False, offset=0):
     rows, report_hash = report_rows(report)
-    playlists = PLAYLISTS if playlist is None else {playlist: PLAYLISTS[playlist]}
+    selected = [playlist] if isinstance(playlist, int) else playlist
+    playlists = {lane: PLAYLISTS[lane] for lane in (selected or PLAYLISTS)}
     selected_rows = (row for row in rows if row["playlist_id"] in playlists)
     print("Lade den IntroDB-Export und prüfe die gespeicherte Kandidatenliste ...", flush=True)
     manifest, export = stage.load_snapshot()
@@ -715,24 +739,31 @@ def recover_runtime_report(catalogue, report, cache, stage, gate, automation, re
 
     history_path = report.with_name(f"{report.stem}.{report_hash[:24]}.progress.sqlite3")
     history_context = probe_history(history_path) if sweep else nullcontext(None)
+    paused = set()
     with history_context as history:
+        if sweep:
+            release_ready()
         for batch in measurement_batches(pending, limit, history, offset):
+            batch = {lane: items for lane, items in batch.items() if lane not in paused}
+            if not batch:
+                break
             print("Laufzeitmessung im regulären Analyse-Slot | " +
                   " | ".join(f"{PLAYLISTS[lane]} bis zu {len(items)} Folgen" for lane, items in batch.items()),
                   flush=True)
             block_stats = {lane: Counter() for lane in batch}
-            finished = sample_runtimes(catalogue, batch, automation, release, ready, block_stats, history)
+            interrupted = sample_runtimes(catalogue, batch, automation, release, ready, block_stats, history,
+                                          release_on_wait=release_ready if sweep else None)
+            paused.update(interrupted)
             for lane, counts in block_stats.items():
                 stats[lane].update(counts)
             release_ready()
             if sweep:
-                print(f"{PLAYLISTS[playlist]} | bisher {stats[playlist]['Messversuche']} Messversuche | "
-                      f"HTTP 405 bei {stats[playlist]['HTTP 405']} | "
-                      f"{approvals[playlist]} Marker neu freigegeben", flush=True)
-            if not finished:
-                if sweep:
-                    print("Nachlauf pausiert | gleicher Aufruf setzt mit dem gespeicherten Stand fort.", flush=True)
-                break
+                for lane in batch:
+                    print(f"{PLAYLISTS[lane]} | bisher {stats[lane]['Messversuche']} Messversuche | "
+                          f"HTTP 404 bei {stats[lane]['HTTP 404']} | HTTP 405 bei {stats[lane]['HTTP 405']} | "
+                          f"{approvals[lane]} Marker neu freigegeben", flush=True)
+                    if lane in interrupted:
+                        print(f"{PLAYLISTS[lane]} | Nachlauf pausiert | Prüfstand gespeichert.", flush=True)
     release_ready()
     for lane, name in playlists.items():
         counts = stats[lane]
@@ -798,10 +829,10 @@ def main():
     parser.add_argument("--runtime-report", type=Path, help="Kandidatenliste aus --missing-runtimes nachprüfen")
     parser.add_argument("--measure", type=int, default=0, metavar="FOLGEN_PRO_PLAYLIST",
                         help="Maximale Folgenzahl je Playlist, im Nachlauf je Block (Standard dort 64)")
-    parser.add_argument("--playlist", type=int, choices=tuple(PLAYLISTS),
-                        help="Nur diese Analyse-Playlist bearbeiten (8 = 4K ANALYSE, 10 = THE BEST)")
+    parser.add_argument("--playlist", type=int, nargs="+", choices=tuple(PLAYLISTS),
+                        help="Ausgewählte Analyse-Playlists bearbeiten (8 = 4K ANALYSE, 10 = THE BEST)")
     parser.add_argument("--sweep", action="store_true",
-                        help="Alle messbaren Kandidaten einer Playlist blockweise mit Prüfverlauf bearbeiten")
+                        help="Alle messbaren Kandidaten der gewählten Playlists abwechselnd mit Prüfverlauf bearbeiten")
     parser.add_argument("--offset", type=int, default=0,
                         help="Die sortierte Kandidatenliste für den Nachlauf um diese Anzahl drehen")
     args = parser.parse_args()
