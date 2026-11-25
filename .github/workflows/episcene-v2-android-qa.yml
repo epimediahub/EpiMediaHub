@@ -208,6 +208,11 @@ jobs:
               return s.replace(a,b,1)
           repo,player,vlc=map(find,("V116SkipRepository.kt","V116VodPlayer.kt","V168VlcVodPlayer.kt"))
           a,b,c=[p.read_text() for p in (repo,player,vlc)]
+          package=next(line.split()[1] for line in a.splitlines() if line.startswith("package "))
+          vlc_package=next(line.split()[1] for line in c.splitlines() if line.startswith("package "))
+          import_line=f"import {package}.V116SkipRepository"
+          if package != vlc_package and import_line not in c.splitlines():
+              c=replace(c,f"package {vlc_package}\n",f"package {vlc_package}\n\n{import_line}\n")
           load='val remote = request("${SetupCodeProvisioning.provisioningBaseUrl(context)}/v1/device/skip/lookup", payload(item, duration), true)'
           a=replace(a,load,load.replace('payload(item, duration), true)', 'payload(item, duration).put("playback_started", false), true)'))
           anchor='    suspend fun load(item: MediaEntry, duration: Long): V116SkipResult = supervisorScope {'
